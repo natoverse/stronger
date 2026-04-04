@@ -25,45 +25,27 @@ describe('nameToId', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  isCardioExercise – detect cardio exercises                         */
+/*  isCardioExercise – always returns false (no exercise-level cardio) */
 /* ------------------------------------------------------------------ */
 
 describe('isCardioExercise', () => {
-	const strengthExercise: LiftConfig = {
-		id: 'bench',
-		name: 'Bench Press',
-		topSetWeight: 200,
-		backoffWeight: 170,
-		increment: 2.5,
-		minimumWeight: 95,
-		roundingFactor: 5,
-		barWeight: 45,
-		gear: 'barbell',
-	};
-
 	it('returns false for a typical strength exercise', () => {
+		const strengthExercise: LiftConfig = {
+			id: 'bench',
+			name: 'Bench Press',
+			topSetWeight: 200,
+			backoffWeight: 170,
+			increment: 2.5,
+			minimumWeight: 95,
+			roundingFactor: 5,
+			barWeight: 45,
+			gear: 'barbell',
+		};
 		expect(isCardioExercise(strengthExercise)).toBe(false);
 	});
 
-	it('returns true for a bodyweight exercise with all-zero weights', () => {
-		const cardioExercise: LiftConfig = {
-			id: 'running',
-			name: 'Running',
-			topSetWeight: 0,
-			backoffWeight: 0,
-			increment: 0,
-			minimumWeight: 0,
-			roundingFactor: 0,
-			barWeight: 0,
-			gear: 'bodyweight',
-		};
-		expect(isCardioExercise(cardioExercise)).toBe(true);
-	});
-
-	it('returns false for bodyweight exercise with non-zero weights (e.g. chin-ups)', () => {
-		// Chin-ups are bodyweight but have zero weights — they ARE considered cardio by this heuristic.
-		// This is acceptable since chin-ups with all zeros behave like cardio.
-		const chinUp: LiftConfig = {
+	it('returns false for a bodyweight exercise with all-zero weights', () => {
+		const bodyweightExercise: LiftConfig = {
 			id: 'chin-up',
 			name: 'Chin-up',
 			topSetWeight: 0,
@@ -74,22 +56,7 @@ describe('isCardioExercise', () => {
 			barWeight: 0,
 			gear: 'bodyweight',
 		};
-		expect(isCardioExercise(chinUp)).toBe(true);
-	});
-
-	it('returns false for bodyweight with some non-zero weights', () => {
-		const weighted: LiftConfig = {
-			id: 'pull-up',
-			name: 'Weighted Pull-up',
-			topSetWeight: 25,
-			backoffWeight: 0,
-			increment: 5,
-			minimumWeight: 0,
-			roundingFactor: 5,
-			barWeight: 0,
-			gear: 'bodyweight',
-		};
-		expect(isCardioExercise(weighted)).toBe(false);
+		expect(isCardioExercise(bodyweightExercise)).toBe(false);
 	});
 });
 

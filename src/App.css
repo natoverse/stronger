@@ -242,12 +242,12 @@ body {
 	white-space: nowrap;
 }
 
-/* Exercise card */
-.exercise-card {
+/* Exercise section in workout view */
+.exercise-section {
 	margin-bottom: 1.5rem;
 }
 
-.exercise-name {
+.exercise-section-name {
 	font-size: 1rem;
 	font-weight: 600;
 	padding: 0.5rem 0;
