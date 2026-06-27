@@ -630,6 +630,7 @@ const WORKOUT_DEFS_HEADER: string[] = [
  * - `{ kind: 'backoff' }`                     → `"backoff"`
  * - `{ kind: 'crossReference', liftId: 'x' }` → `"crossReference:x"`
  * - `{ kind: 'fixed', weight: 45 }`           → `"fixed:45"`
+ * - `{ kind: 'relative', reference: 'backoff', offset: -20 }` → `"relative:backoff:-20"`
  */
 export function encodeWeightBasis(wb: WeightBasis): string {
 	switch (wb.kind) {
@@ -643,6 +644,8 @@ export function encodeWeightBasis(wb: WeightBasis): string {
 			return `crossReference:${wb.liftId}`
 		case 'fixed':
 			return `fixed:${wb.weight}`
+		case 'relative':
+			return `relative:${wb.reference}:${wb.offset}`
 	}
 }
 
@@ -662,6 +665,17 @@ export function decodeWeightBasis(raw: string): WeightBasis | null {
 	if (s.startsWith('fixed:')) {
 		const n = Number(s.slice('fixed:'.length).trim())
 		return Number.isFinite(n) && n >= 0 ? { kind: 'fixed', weight: n } : null
+	}
+	if (s.startsWith('relative:')) {
+		const rest = s.slice('relative:'.length)
+		const sep = rest.indexOf(':')
+		if (sep < 0) return null
+		const reference = rest.slice(0, sep).trim()
+		const offset = Number(rest.slice(sep + 1).trim())
+		if ((reference === 'topSet' || reference === 'backoff') && Number.isFinite(offset)) {
+			return { kind: 'relative', reference, offset }
+		}
+		return null
 	}
 	return null
 }

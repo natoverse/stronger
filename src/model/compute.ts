@@ -86,6 +86,18 @@ export function computeSetWeight(
 				liftConfig.minimumWeight,
 			);
 		}
+
+		case 'relative': {
+			const base =
+				set.weightBasis.reference === 'topSet'
+					? liftConfig.topSetWeight
+					: liftConfig.backoffWeight;
+			const rounded = roundToNearest(
+				base + set.weightBasis.offset,
+				liftConfig.roundingFactor,
+			);
+			return Math.max(rounded, liftConfig.minimumWeight);
+		}
 	}
 }
 

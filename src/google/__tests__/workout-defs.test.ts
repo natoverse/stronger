@@ -52,6 +52,18 @@ describe('encodeWeightBasis', () => {
 	it('encodes barWeight', () => {
 		expect(encodeWeightBasis({ kind: 'barWeight' })).toBe('barWeight');
 	});
+
+	it('encodes relative to top set with a negative offset', () => {
+		expect(
+			encodeWeightBasis({ kind: 'relative', reference: 'topSet', offset: -20 }),
+		).toBe('relative:topSet:-20');
+	});
+
+	it('encodes relative to backoff with a positive offset', () => {
+		expect(
+			encodeWeightBasis({ kind: 'relative', reference: 'backoff', offset: 10 }),
+		).toBe('relative:backoff:10');
+	});
 });
 
 /* ------------------------------------------------------------------ */
@@ -102,17 +114,47 @@ describe('decodeWeightBasis', () => {
 		expect(decodeWeightBasis('fixed:-10')).toBeNull();
 	});
 
+	it('decodes relative to top set with a negative offset', () => {
+		expect(decodeWeightBasis('relative:topSet:-20')).toEqual({
+			kind: 'relative',
+			reference: 'topSet',
+			offset: -20,
+		});
+	});
+
+	it('decodes relative to backoff with a positive offset', () => {
+		expect(decodeWeightBasis('relative:backoff:10')).toEqual({
+			kind: 'relative',
+			reference: 'backoff',
+			offset: 10,
+		});
+	});
+
+	it('returns null for relative with an unknown reference', () => {
+		expect(decodeWeightBasis('relative:bogus:5')).toBeNull();
+	});
+
+	it('returns null for relative with a non-numeric offset', () => {
+		expect(decodeWeightBasis('relative:topSet:abc')).toBeNull();
+	});
+
+	it('returns null for relative missing the offset', () => {
+		expect(decodeWeightBasis('relative:topSet')).toBeNull();
+	});
+
 	it('handles whitespace around value', () => {
 		expect(decodeWeightBasis('  topSet  ')).toEqual({ kind: 'topSet' });
 	});
 
-	it('round-trips all five variants', () => {
+	it('round-trips all variants', () => {
 		const cases: WeightBasis[] = [
 			{ kind: 'topSet' },
 			{ kind: 'backoff' },
 			{ kind: 'crossReference', liftId: 'bench' },
 			{ kind: 'fixed', weight: 45 },
 			{ kind: 'barWeight' },
+			{ kind: 'relative', reference: 'topSet', offset: -20 },
+			{ kind: 'relative', reference: 'backoff', offset: 10 },
 		];
 		for (const wb of cases) {
 			expect(decodeWeightBasis(encodeWeightBasis(wb))).toEqual(wb);
