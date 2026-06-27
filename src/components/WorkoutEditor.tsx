@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowLeft, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import type { SetTemplate, WeightBasis, SetType, LiftConfig, ExerciseRole } from '../model/index.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
@@ -48,6 +48,50 @@ function roleLabel(role: ExerciseRole): string {
 		case 'secondary': return 'Secondary';
 		case 'assistance': return 'Assistance';
 	}
+}
+
+/**
+ * Offset input for a `relative` weight basis. Uses local text state so that
+ * an in-progress negative value (a lone "-") is not coerced to 0 mid-typing,
+ * committing only when the text parses to a finite number.
+ */
+function RelativeOffsetInput({
+	offset,
+	onCommit,
+}: {
+	offset: number;
+	onCommit: (value: number) => void;
+}) {
+	const [text, setText] = useState(String(offset));
+
+	// Re-sync only when the committed `offset` prop changes externally
+	// (e.g. switching the reference). `text` is intentionally excluded from
+	// the dependency array: depending on it would re-run this effect on every
+	// keystroke and clobber a valid in-progress entry such as a lone "-".
+	// The guard skips the reset when the text already represents the offset.
+	useEffect(() => {
+		const parsed = Number(text);
+		if (Number.isFinite(parsed) && parsed === offset) return;
+		setText(String(offset));
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [offset]);
+
+	return (
+		<input
+			type="text"
+			inputMode="decimal"
+			className="editor-basis-extra-input"
+			value={text}
+			placeholder="± lbs"
+			onFocus={(e) => e.target.select()}
+			onChange={(e) => {
+				const raw = e.target.value;
+				setText(raw);
+				const n = Number(raw);
+				if (raw.trim() !== '' && Number.isFinite(n)) onCommit(n);
+			}}
+		/>
+	);
 }
 
 /** Generate a kebab-case ID from a workout name. */
@@ -258,6 +302,12 @@ export function WorkoutEditor({
 				case 'fixed':
 					wb = { kind: 'fixed', weight: Number(extraValue) || 0 };
 					break;
+				case 'relative:topSet':
+					wb = { kind: 'relative', reference: 'topSet', offset: Number(extraValue) || 0 };
+					break;
+				case 'relative:backoff':
+					wb = { kind: 'relative', reference: 'backoff', offset: Number(extraValue) || 0 };
+					break;
 				default:
 					wb = { kind: 'topSet' };
 					break;
@@ -424,9 +474,9 @@ export function WorkoutEditor({
 											type="text"
 											inputMode="decimal"
 											className="editor-pct-input"
-											value={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' ? '' : Math.round(set.percentage * 100)}
-											placeholder={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' ? '—' : ''}
-											disabled={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed'}
+											value={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative' ? '' : Math.round(set.percentage * 100)}
+											placeholder={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative' ? '—' : ''}
+											disabled={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative'}
 											onFocus={(e) => e.target.select()}
 											onChange={(e) =>
 												updateSet(exerciseIdx, setIdx, {
@@ -437,12 +487,13 @@ export function WorkoutEditor({
 										<div className="editor-basis-group">
 											<select
 												className="editor-basis-select"
-												value={set.weightBasis.kind}
+												value={set.weightBasis.kind === 'relative' ? `relative:${set.weightBasis.reference}` : set.weightBasis.kind}
 												onChange={(e) => {
 													const wb = set.weightBasis;
 													const prevValue =
 														wb.kind === 'crossReference' ? wb.liftId
 														: wb.kind === 'fixed' ? String(wb.weight)
+														: wb.kind === 'relative' ? String(wb.offset)
 														: undefined;
 													updateWeightBasis(
 														exerciseIdx,
@@ -453,8 +504,12 @@ export function WorkoutEditor({
 												}}
 											>
 												<option value="topSet">Top set</option>
-												<option value="backoff">Backoff</option>										<option value="barWeight">Bar weight</option>												<option value="crossReference">Cross-ref</option>
+												<option value="backoff">Backoff</option>
+												<option value="barWeight">Bar weight</option>
+												<option value="crossReference">Cross-ref</option>
 												<option value="fixed">Fixed</option>
+												<option value="relative:topSet">Top set ±</option>
+												<option value="relative:backoff">Backoff ±</option>
 											</select>
 											{set.weightBasis.kind === 'crossReference' && (
 												<select
@@ -494,6 +549,22 @@ export function WorkoutEditor({
 													}
 												/>
 											)}
+											{set.weightBasis.kind === 'relative' && (() => {
+												const wb = set.weightBasis;
+												return (
+													<RelativeOffsetInput
+														offset={wb.offset}
+														onCommit={(n) =>
+															updateWeightBasis(
+																exerciseIdx,
+																setIdx,
+																`relative:${wb.reference}`,
+																String(n),
+															)
+														}
+													/>
+												);
+											})()}
 										</div>
 										<input
 											type="text"

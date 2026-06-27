@@ -237,6 +237,58 @@ describe('computeSetWeight', () => {
 		};
 		expect(computeSetWeight(set, benchConfig, configs)).toBeNull();
 	});
+
+	it('computes a relative-to-top-set set (top set minus 20)', () => {
+		const set: SetTemplate = {
+			setType: 'backoff',
+			percentage: 1.0,
+			weightBasis: { kind: 'relative', reference: 'topSet', offset: -20 },
+			minReps: 5,
+			maxReps: 8,
+			amrap: false,
+		};
+		// 200 - 20 = 180, rounded to 5 = 180, min 95 → 180
+		expect(computeSetWeight(set, benchConfig, configs)).toBe(180);
+	});
+
+	it('computes a relative-to-backoff set (backoff plus 10)', () => {
+		const set: SetTemplate = {
+			setType: 'work',
+			percentage: 1.0,
+			weightBasis: { kind: 'relative', reference: 'backoff', offset: 10 },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		// 170 + 10 = 180, rounded to 5 = 180, min 95 → 180
+		expect(computeSetWeight(set, benchConfig, configs)).toBe(180);
+	});
+
+	it('rounds a relative result to the rounding factor', () => {
+		const set: SetTemplate = {
+			setType: 'work',
+			percentage: 1.0,
+			weightBasis: { kind: 'relative', reference: 'topSet', offset: -1 },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		// press top set 140 - 1 = 139, nearest 2.5 = 140
+		expect(computeSetWeight(set, pressConfig, configs)).toBe(140);
+	});
+
+	it('clamps a relative result to the minimum weight', () => {
+		const set: SetTemplate = {
+			setType: 'warmup',
+			percentage: 1.0,
+			weightBasis: { kind: 'relative', reference: 'backoff', offset: -200 },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		// 170 - 200 = -30 → clamped to min 95
+		expect(computeSetWeight(set, benchConfig, configs)).toBe(95);
+	});
 });
 
 // ---------------------------------------------------------------------------

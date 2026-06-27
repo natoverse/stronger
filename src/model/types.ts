@@ -60,13 +60,17 @@ export type SetType = 'warmup' | 'work' | 'backoff' | 'joker';
  *                      bar warmup at 45 lbs)
  * - `barWeight`     → the lift's configured bar weight (minimum allowable
  *                      weight for the equipment)
+ * - `relative`      → a fixed offset (plus or minus) applied to this lift's
+ *                      own top-set or backoff weight (e.g. backoff minus
+ *                      20 lbs). The set's percentage is ignored.
  */
 export type WeightBasis =
 	| { kind: 'topSet' }
 	| { kind: 'backoff' }
 	| { kind: 'crossReference'; liftId: string }
 	| { kind: 'fixed'; weight: number }
-	| { kind: 'barWeight' };
+	| { kind: 'barWeight' }
+	| { kind: 'relative'; reference: 'topSet' | 'backoff'; offset: number };
 
 /** A single set within an exercise template. */
 export interface SetTemplate {
