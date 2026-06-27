@@ -64,9 +64,11 @@ function RelativeOffsetInput({
 }) {
 	const [text, setText] = useState(String(offset));
 
-	// Re-sync when the offset changes externally (e.g. switching reference).
-	// Skip when the text already represents the current offset so an
-	// in-progress entry (such as a lone "-") is never clobbered.
+	// Re-sync only when the committed `offset` prop changes externally
+	// (e.g. switching the reference). `text` is intentionally excluded from
+	// the dependency array: depending on it would re-run this effect on every
+	// keystroke and clobber a valid in-progress entry such as a lone "-".
+	// The guard skips the reset when the text already represents the offset.
 	useEffect(() => {
 		const parsed = Number(text);
 		if (Number.isFinite(parsed) && parsed === offset) return;
@@ -547,19 +549,22 @@ export function WorkoutEditor({
 													}
 												/>
 											)}
-											{set.weightBasis.kind === 'relative' && (
-												<RelativeOffsetInput
-													offset={set.weightBasis.offset}
-													onCommit={(n) =>
-														updateWeightBasis(
-															exerciseIdx,
-															setIdx,
-															`relative:${(set.weightBasis as Extract<WeightBasis, { kind: 'relative' }>).reference}`,
-															String(n),
-														)
-													}
-												/>
-											)}
+											{set.weightBasis.kind === 'relative' && (() => {
+												const wb = set.weightBasis;
+												return (
+													<RelativeOffsetInput
+														offset={wb.offset}
+														onCommit={(n) =>
+															updateWeightBasis(
+																exerciseIdx,
+																setIdx,
+																`relative:${wb.reference}`,
+																String(n),
+															)
+														}
+													/>
+												);
+											})()}
 										</div>
 										<input
 											type="text"
