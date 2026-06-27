@@ -65,8 +65,12 @@ function RelativeOffsetInput({
 	const [text, setText] = useState(String(offset));
 
 	// Re-sync when the offset changes externally (e.g. switching reference).
+	// Skip when the text already represents the current offset so an
+	// in-progress entry (such as a lone "-") is never clobbered.
 	useEffect(() => {
-		if (Number(text) !== offset) setText(String(offset));
+		const parsed = Number(text);
+		if (Number.isFinite(parsed) && parsed === offset) return;
+		setText(String(offset));
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [offset]);
 
@@ -498,7 +502,9 @@ export function WorkoutEditor({
 												}}
 											>
 												<option value="topSet">Top set</option>
-												<option value="backoff">Backoff</option>										<option value="barWeight">Bar weight</option>												<option value="crossReference">Cross-ref</option>
+												<option value="backoff">Backoff</option>
+												<option value="barWeight">Bar weight</option>
+												<option value="crossReference">Cross-ref</option>
 												<option value="fixed">Fixed</option>
 												<option value="relative:topSet">Top set ±</option>
 												<option value="relative:backoff">Backoff ±</option>
