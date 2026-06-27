@@ -79,7 +79,7 @@ function RelativeOffsetInput({
 	return (
 		<input
 			type="text"
-			inputMode="decimal"
+			inputMode="text"
 			className="editor-basis-extra-input"
 			value={text}
 			placeholder="± lbs"
