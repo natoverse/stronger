@@ -389,7 +389,7 @@ function App() {
 
   const handleUpdateFlags = useCallback(
     (date: string, flags: DayFlags) => {
-      const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.blocked;
+      const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.alcohol || flags.blocked;
       // Flags live in their own dedicated row with FLAG_SENTINEL.
       const flagIdx = schedule.findIndex((e) => e.date === date && e.workoutId === FLAG_SENTINEL);
       let updated: ScheduleEntry[];

@@ -1150,15 +1150,15 @@ export async function readLogZone(
 /* ------------------------------------------------------------------ */
 
 /** A1 range for the schedule header (row 1). */
-const SCHEDULE_HEADER_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:I1`
+const SCHEDULE_HEADER_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:J1`
 
 /** A1 range for reading all schedule data (row 2 onward, generous upper bound). */
-const SCHEDULE_READ_RANGE = `'${SCHEDULE_TAB_NAME}'!A2:I10000`
+const SCHEDULE_READ_RANGE = `'${SCHEDULE_TAB_NAME}'!A2:J10000`
 
 /** A1 range covering the full schedule tab for clearing. */
-const SCHEDULE_FULL_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:I10000`
+const SCHEDULE_FULL_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:J10000`
 
-const SCHEDULE_HEADER: string[] = ['date', 'workoutId', 'home', 'elsewhere', 'travel', 'visitors', 'blocked', 'calendarEventId', 'strongerId']
+const SCHEDULE_HEADER: string[] = ['date', 'workoutId', 'home', 'elsewhere', 'travel', 'visitors', 'alcohol', 'blocked', 'calendarEventId', 'strongerId']
 
 /* ------------------------------------------------------------------ */
 /*  Schedule tab – serialization                                       */
@@ -1179,19 +1179,20 @@ export function parseScheduleRow(row: string[]): ScheduleEntry | null {
 	// Basic date format validation: YYYY-MM-DD
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
 
-	// Parse flag columns (columns 2-6, TRUE/FALSE strings)
+	// Parse flag columns (columns 2-7, TRUE/FALSE strings)
 	const flags: DayFlags = {
 		home: (row[2] ?? '').trim().toUpperCase() === 'TRUE',
 		elsewhere: (row[3] ?? '').trim().toUpperCase() === 'TRUE',
 		travel: (row[4] ?? '').trim().toUpperCase() === 'TRUE',
 		visitors: (row[5] ?? '').trim().toUpperCase() === 'TRUE',
-		blocked: (row[6] ?? '').trim().toUpperCase() === 'TRUE',
+		alcohol: (row[6] ?? '').trim().toUpperCase() === 'TRUE',
+		blocked: (row[7] ?? '').trim().toUpperCase() === 'TRUE',
 	}
 
-	const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.blocked
+	const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.alcohol || flags.blocked
 
-	const calendarEventId = (row[7] ?? '').trim() || undefined
-	const strongerId = (row[8] ?? '').trim() || undefined
+	const calendarEventId = (row[8] ?? '').trim() || undefined
+	const strongerId = (row[9] ?? '').trim() || undefined
 
 	// Must have either a workoutId, at least one flag, a calendarEventId, or a strongerId
 	if (!workoutId && !hasFlags && !calendarEventId && !strongerId) return null
@@ -1215,6 +1216,7 @@ export function scheduleEntryToRow(entry: ScheduleEntry): string[] {
 		f?.elsewhere ? 'TRUE' : '',
 		f?.travel ? 'TRUE' : '',
 		f?.visitors ? 'TRUE' : '',
+		f?.alcohol ? 'TRUE' : '',
 		f?.blocked ? 'TRUE' : '',
 		entry.calendarEventId ?? '',
 		entry.strongerId ?? '',

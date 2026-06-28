@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, ScheduleEntry, SetType, CardioActivity, DayFlags } from '../model/index.js';
 import { FLAG_SENTINEL } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 
@@ -555,9 +555,10 @@ export function CalendarView({
 										['elsewhere', Palmtree],
 										['travel', Plane],
 										['visitors', Users],
+										['alcohol', Martini],
 										['blocked', Ban],
 									] as [keyof DayFlags, typeof House][]).map(([key, Icon]) => {
-										const currentFlags: DayFlags = dayInfo.flags ?? { home: false, elsewhere: false, travel: false, visitors: false, blocked: false };
+										const currentFlags: DayFlags = dayInfo.flags ?? { home: false, elsewhere: false, travel: false, visitors: false, alcohol: false, blocked: false };
 										const active = currentFlags[key];
 										return (
 											<button
