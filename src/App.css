@@ -774,6 +774,23 @@ body {
 	text-align: left;
 }
 
+.github-link {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	margin-top: 2rem;
+	font-size: 0.8rem;
+	color: var(--color-muted);
+	text-decoration: none;
+	opacity: 0.6;
+	transition: opacity 0.2s;
+}
+
+.github-link:hover {
+	opacity: 1;
+	color: var(--color-primary);
+}
+
 .btn-google {
 	padding: 0.875rem 2rem;
 	font-size: 1rem;
