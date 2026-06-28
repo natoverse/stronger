@@ -1462,6 +1462,11 @@ body {
 	opacity: 1;
 }
 
+.calendar-flag-active.calendar-flag-alcohol {
+	color: #1565c0;
+	opacity: 1;
+}
+
 .calendar-flag-active.calendar-flag-blocked {
 	color: #ff1744;
 	opacity: 1;

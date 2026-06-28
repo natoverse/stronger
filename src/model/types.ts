@@ -192,6 +192,8 @@ export interface DayFlags {
 	travel: boolean;
 	/** Have visitors. */
 	visitors: boolean;
+	/** Had alcohol. */
+	alcohol: boolean;
 	/** Blocked – all-day or firm commitment, unavailable. */
 	blocked: boolean;
 }
