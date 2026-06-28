@@ -55,6 +55,11 @@ function App() {
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const settingsRef = useRef(new Map<string, string>());
 
+  // Lazy-loading flags: track whether secondary data has been fetched
+  const scheduleLoadedRef = useRef(false);
+  const logLoadedRef = useRef(false);
+  const stravaLoadedRef = useRef(false);
+
   const handleConnected = useCallback(
     (loadedWorkouts: Workout[], loadedConfigs: LiftConfig[], sheetId: string, defs: WorkoutDefinition[], cardio: CardioActivity[]) => {
       setWorkouts(loadedWorkouts);
@@ -64,10 +69,10 @@ function App() {
       setSheetConnected(true);
       setNeedsSetup(false);
       setCardioActivities(cardio);
-      // Fire-and-forget: load schedule and log data
-      void loadScheduleData(sheetId);
-      void loadLogData(sheetId);
-      void loadStravaData(sheetId);
+      // Reset lazy-loading flags for new connection
+      scheduleLoadedRef.current = false;
+      logLoadedRef.current = false;
+      stravaLoadedRef.current = false;
     },
     [],
   );
@@ -107,11 +112,6 @@ function App() {
       const builtWorkouts = buildWorkoutsFromConfigs(configs, defs);
       setWorkouts(builtWorkouts);
       setNeedsSetup(false);
-
-      // Fire-and-forget: load schedule and log data
-      void loadScheduleData(spreadsheetId);
-      void loadLogData(spreadsheetId);
-      void loadStravaData(spreadsheetId);
     },
     [spreadsheetId],
   );
@@ -131,22 +131,35 @@ function App() {
     setNeedsSetup(false);
     setCardioActivities([]);
     setStravaActivities([]);
+    // Reset lazy-loading flags
+    scheduleLoadedRef.current = false;
+    logLoadedRef.current = false;
+    stravaLoadedRef.current = false;
     replaceTo({ view: 'list' });
   }, [replaceTo]);
 
   const loadPreviousSets = useCallback(
     async (sheetId: string, workoutId: string) => {
       try {
-        await withAuthRetry(async () => {
-          const logRows = await readLogZone(sheetId);
+        // If log data is already loaded, use it directly
+        if (logLoadedRef.current && logRows.length > 0) {
           const prev = findPreviousWorkoutSets(logRows, workoutId);
+          setPreviousSets(prev);
+          return;
+        }
+        // Otherwise fetch from sheet
+        await withAuthRetry(async () => {
+          const rows = await readLogZone(sheetId);
+          setLogRows(rows);
+          logLoadedRef.current = true;
+          const prev = findPreviousWorkoutSets(rows, workoutId);
           setPreviousSets(prev);
         });
       } catch {
         // Silently ignore — previous data is optional context
       }
     },
-    [],
+    [logRows],
   );
 
   const handleSelectWorkout = useCallback((workout: Workout) => {
@@ -283,6 +296,7 @@ function App() {
       await withAuthRetry(async () => {
         const rows = await readLogZone(sheetId);
         setLogRows(rows);
+        logLoadedRef.current = true;
       });
     } catch {
       // Silently ignore — log data is optional for calendar history
@@ -771,6 +785,30 @@ function App() {
     }
   }, [route, activeWorkout, progressionProposals]);
 
+  // Lazy-load schedule data when calendar view is first visited
+  useEffect(() => {
+    if (route.view === 'calendar' && spreadsheetId && !scheduleLoadedRef.current) {
+      scheduleLoadedRef.current = true;
+      void loadScheduleData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadScheduleData]);
+
+  // Lazy-load log data when calendar or progress view is first visited
+  useEffect(() => {
+    if ((route.view === 'calendar' || route.view === 'progress') && spreadsheetId && !logLoadedRef.current) {
+      logLoadedRef.current = true;
+      void loadLogData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadLogData]);
+
+  // Lazy-load Strava activities and settings when strava, progress, or settings view is first visited
+  useEffect(() => {
+    if ((route.view === 'strava' || route.view === 'progress' || route.view === 'settings') && spreadsheetId && !stravaLoadedRef.current) {
+      stravaLoadedRef.current = true;
+      void loadStravaData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadStravaData]);
+
   // Gate: require auth + sheet connection before showing workouts
   if (!sheetConnected) {
     return (
@@ -791,7 +829,7 @@ function App() {
     );
   }
 
-  const onOpenStrava = stravaActivities.length > 0 ? handleOpenStrava : undefined;
+  const onOpenStrava = handleOpenStrava;
 
   // Show progression review / confirm page after clicking Finish
   if (progressionProposals && pendingFinish) {
