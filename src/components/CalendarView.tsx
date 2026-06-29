@@ -568,8 +568,7 @@ export function CalendarView({
 							<div className="calendar-day-header">
 								<div className="calendar-day-date">
 									<span className="calendar-weekday">{weekday}</span>
-									<span className="calendar-display-date">{display}</span>
-									{today && <span className="calendar-today-badge">Today</span>}
+									<span className={`calendar-display-date${today ? ' calendar-display-date-today' : ''}`}>{display}</span>
 								</div>
 								<div className="calendar-day-actions">
 									{([
