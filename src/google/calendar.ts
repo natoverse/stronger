@@ -7,8 +7,7 @@
  */
 
 import type { CalendarListEntry, CalendarEventResource, CalendarEventItem } from './types.ts'
-import type { ScheduleEntry } from '../model/types.ts'
-import { FLAG_SENTINEL } from '../model/types.ts'
+import type { WorkoutScheduleEntry } from '../model/types.ts'
 
 /* ------------------------------------------------------------------ */
 /*  Stronger ID generation                                             */
@@ -410,14 +409,13 @@ export function getEventDate(event: CalendarEventItem): string | undefined {
 }
 
 /**
- * Perform a two-way sync between the schedule (sheet) and Google Calendar.
+ * Perform a two-way sync between the workout schedule (sheet) and Google Calendar.
  *
  * Uses the Stronger ID (`strongerId`) as the primary matching key between
  * sheet rows and calendar events. The stronger ID is embedded in the
  * event description as `[stronger:<id>]`.
  *
  * Sync rules:
- * - Flag rows (workoutId === FLAG_SENTINEL) are never synced.
  * - Sheet rows with strongerId but no calendarEventId → push to calendar.
  * - Sheet rows with both strongerId and calendarEventId → reconcile
  *   (detect date moves, deletions in either direction).
@@ -427,10 +425,10 @@ export function getEventDate(event: CalendarEventItem): string | undefined {
  */
 export async function syncScheduleWithCalendar(
 	calendarId: string,
-	schedule: ScheduleEntry[],
+	schedule: WorkoutScheduleEntry[],
 	resolveWorkoutName: WorkoutNameResolver,
 	resolveWorkoutId?: WorkoutIdResolver,
-): Promise<{ updatedSchedule: ScheduleEntry[]; result: CalendarSyncResult }> {
+): Promise<{ updatedSchedule: WorkoutScheduleEntry[]; result: CalendarSyncResult }> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
 
@@ -445,11 +443,8 @@ export async function syncScheduleWithCalendar(
 	}
 
 	// --- Classify schedule entries ---
-	// Flag rows are never synced with Google Calendar
-	const flagRows = schedule.filter((e) => e.workoutId === FLAG_SENTINEL)
-
-	// Syncable: has a real workoutId (not sentinel, not blank)
-	const syncable = schedule.filter((e) => e.workoutId && e.workoutId !== FLAG_SENTINEL)
+	// Syncable: has a real workoutId
+	const syncable = schedule.filter((e) => e.workoutId)
 	// Blanked: had a calendar event but workout was removed
 	const blanked = schedule.filter((e) => !e.workoutId && e.calendarEventId)
 	// Inactive: no workoutId, no calendarEventId (orphan/empty rows)
@@ -464,10 +459,6 @@ export async function syncScheduleWithCalendar(
 
 	// Compute date range for the calendar query
 	const allDates = [...syncableWithIds, ...blanked].map((e) => e.date).sort()
-	if (allDates.length === 0 && flagRows.length === schedule.length) {
-		// Only flag rows, nothing to sync
-		return { updatedSchedule: schedule, result }
-	}
 	if (allDates.length === 0) {
 		return { updatedSchedule: schedule, result }
 	}
@@ -503,7 +494,7 @@ export async function syncScheduleWithCalendar(
 	const accountedEventIds = new Set<string>()
 
 	// --- Phase 1: Delete calendar events for blanked entries ---
-	const updatedBlanked: ScheduleEntry[] = []
+	const updatedBlanked: WorkoutScheduleEntry[] = []
 	for (const entry of blanked) {
 		if (entry.calendarEventId) {
 			const calEvent = eventMap.get(entry.calendarEventId)
@@ -528,7 +519,7 @@ export async function syncScheduleWithCalendar(
 	}
 
 	// --- Phase 2: Reconcile syncable entries ---
-	const updatedSyncable: ScheduleEntry[] = []
+	const updatedSyncable: WorkoutScheduleEntry[] = []
 
 	for (const entry of syncableWithIds) {
 		const sid = entry.strongerId!
@@ -626,7 +617,7 @@ export async function syncScheduleWithCalendar(
 
 			// Create a new schedule entry and stamp the event with a strongerId
 			const newSid = generateStrongerId()
-			const newEntry: ScheduleEntry = {
+			const newEntry: WorkoutScheduleEntry = {
 				date: calDate,
 				workoutId,
 				calendarEventId: calEvent.id,
@@ -665,7 +656,7 @@ export async function syncScheduleWithCalendar(
 	// Entries without a strongerId are only deduped by date+workoutId.
 	const seenStrongerIds = new Set<string>()
 	const seenDateWorkoutKeys = new Set<string>()
-	const dedupedSyncable: ScheduleEntry[] = []
+	const dedupedSyncable: WorkoutScheduleEntry[] = []
 	for (const entry of updatedSyncable) {
 		if (entry.strongerId) {
 			if (seenStrongerIds.has(entry.strongerId)) continue
@@ -678,8 +669,8 @@ export async function syncScheduleWithCalendar(
 		dedupedSyncable.push(entry)
 	}
 
-	// Reassemble: flag rows + inactive + blanked + synced
-	const updatedSchedule = [...flagRows, ...inactive, ...updatedBlanked, ...dedupedSyncable]
+	// Reassemble: inactive + blanked + synced
+	const updatedSchedule = [...inactive, ...updatedBlanked, ...dedupedSyncable]
 
 	return { updatedSchedule, result }
 }

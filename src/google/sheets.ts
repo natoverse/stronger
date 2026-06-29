@@ -5,8 +5,8 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, CardioActivity, StravaActivity, AppSettings } from '../model/types.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, AppSettings } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 
@@ -1149,22 +1149,123 @@ export async function readLogZone(
 /*  Schedule tab – constants                                           */
 /* ------------------------------------------------------------------ */
 
-/** A1 range for the schedule header (row 1). */
-const SCHEDULE_HEADER_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:J1`
+/** A1 range for the schedule (flags) header (row 1). */
+const SCHEDULE_HEADER_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:G1`
 
-/** A1 range for reading all schedule data (row 2 onward, generous upper bound). */
-const SCHEDULE_READ_RANGE = `'${SCHEDULE_TAB_NAME}'!A2:J10000`
+/** A1 range for reading all schedule (flags) data (row 2 onward, generous upper bound). */
+const SCHEDULE_READ_RANGE = `'${SCHEDULE_TAB_NAME}'!A2:G10000`
 
-/** A1 range covering the full schedule tab for clearing. */
-const SCHEDULE_FULL_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:J10000`
+/** A1 range covering the full schedule (flags) tab for clearing. */
+const SCHEDULE_FULL_RANGE = `'${SCHEDULE_TAB_NAME}'!A1:G10000`
 
-const SCHEDULE_HEADER: string[] = ['date', 'workoutId', 'home', 'elsewhere', 'travel', 'visitors', 'alcohol', 'blocked', 'calendarEventId', 'strongerId']
+const SCHEDULE_HEADER: string[] = ['date', 'home', 'elsewhere', 'travel', 'visitors', 'alcohol', 'blocked']
 
 /* ------------------------------------------------------------------ */
-/*  Schedule tab – serialization                                       */
+/*  Workout Schedule tab – constants                                    */
+/* ------------------------------------------------------------------ */
+
+/** A1 range for the workout schedule header (row 1). */
+const WORKOUT_SCHEDULE_HEADER_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A1:D1`
+
+/** A1 range for reading all workout schedule data (row 2 onward). */
+const WORKOUT_SCHEDULE_READ_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A2:D10000`
+
+/** A1 range covering the full workout schedule tab for clearing. */
+const WORKOUT_SCHEDULE_FULL_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A1:D10000`
+
+const WORKOUT_SCHEDULE_HEADER: string[] = ['date', 'workoutId', 'calendarEventId', 'strongerId']
+
+/* ------------------------------------------------------------------ */
+/*  Schedule (flags) tab – serialization                                */
 /* ------------------------------------------------------------------ */
 
 /**
+ * Parse a single raw schedule (flags) row into a {@link DayFlagEntry}.
+ * Returns `null` for incomplete or invalid rows.
+ */
+export function parseFlagRow(row: string[]): DayFlagEntry | null {
+	if (!row || row.length < 1) return null
+
+	const date = (row[0] ?? '').trim()
+	if (!date) return null
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+
+	const flags: DayFlags = {
+		home: (row[1] ?? '').trim().toUpperCase() === 'TRUE',
+		elsewhere: (row[2] ?? '').trim().toUpperCase() === 'TRUE',
+		travel: (row[3] ?? '').trim().toUpperCase() === 'TRUE',
+		visitors: (row[4] ?? '').trim().toUpperCase() === 'TRUE',
+		alcohol: (row[5] ?? '').trim().toUpperCase() === 'TRUE',
+		blocked: (row[6] ?? '').trim().toUpperCase() === 'TRUE',
+	}
+
+	const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.alcohol || flags.blocked
+	if (!hasFlags) return null
+
+	return { date, flags }
+}
+
+/** Convert a {@link DayFlagEntry} to a spreadsheet row. */
+export function flagEntryToRow(entry: DayFlagEntry): string[] {
+	const f = entry.flags
+	return [
+		entry.date,
+		f.home ? 'TRUE' : '',
+		f.elsewhere ? 'TRUE' : '',
+		f.travel ? 'TRUE' : '',
+		f.visitors ? 'TRUE' : '',
+		f.alcohol ? 'TRUE' : '',
+		f.blocked ? 'TRUE' : '',
+	]
+}
+
+/* ------------------------------------------------------------------ */
+/*  Workout Schedule tab – serialization                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Parse a single raw workout schedule row into a {@link WorkoutScheduleEntry}.
+ * Returns `null` for incomplete or invalid rows.
+ */
+export function parseWorkoutScheduleRow(row: string[]): WorkoutScheduleEntry | null {
+	if (!row || row.length < 1) return null
+
+	const date = (row[0] ?? '').trim()
+	const workoutId = (row[1] ?? '').trim()
+
+	if (!date) return null
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+
+	const calendarEventId = (row[2] ?? '').trim() || undefined
+	const strongerId = (row[3] ?? '').trim() || undefined
+
+	// Must have either a workoutId, a calendarEventId, or a strongerId
+	if (!workoutId && !calendarEventId && !strongerId) return null
+
+	return {
+		date,
+		workoutId,
+		...(calendarEventId ? { calendarEventId } : {}),
+		...(strongerId ? { strongerId } : {}),
+	}
+}
+
+/** Convert a {@link WorkoutScheduleEntry} to a spreadsheet row. */
+export function workoutScheduleEntryToRow(entry: WorkoutScheduleEntry): string[] {
+	return [
+		entry.date,
+		entry.workoutId,
+		entry.calendarEventId ?? '',
+		entry.strongerId ?? '',
+	]
+}
+
+/* ------------------------------------------------------------------ */
+/*  Legacy schedule serialization (kept for backward compat/migration)  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * @deprecated Use {@link parseFlagRow} and {@link parseWorkoutScheduleRow} instead.
  * Parse a single raw schedule row (string array) into a {@link ScheduleEntry}.
  * Returns `null` for incomplete or invalid rows.
  * A row with the FLAG_SENTINEL workoutId is a dedicated flag row.
@@ -1206,7 +1307,7 @@ export function parseScheduleRow(row: string[]): ScheduleEntry | null {
 	}
 }
 
-/** Convert a {@link ScheduleEntry} to a spreadsheet row. */
+/** @deprecated Use {@link flagEntryToRow} and {@link workoutScheduleEntryToRow} instead. */
 export function scheduleEntryToRow(entry: ScheduleEntry): string[] {
 	const f = entry.flags
 	return [
@@ -1224,11 +1325,11 @@ export function scheduleEntryToRow(entry: ScheduleEntry): string[] {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Schedule tab – read/write                                          */
+/*  Schedule (flags) tab – read/write                                   */
 /* ------------------------------------------------------------------ */
 
 /**
- * Check if the schedule tab exists in the spreadsheet.
+ * Check if the schedule (flags) tab exists in the spreadsheet.
  */
 export async function verifyScheduleTab(
 	spreadsheetId: string,
@@ -1246,7 +1347,7 @@ export async function verifyScheduleTab(
 }
 
 /**
- * Create the schedule tab and write the header row.
+ * Create the schedule (flags) tab and write the header row.
  */
 export async function createScheduleTab(
 	spreadsheetId: string,
@@ -1261,7 +1362,6 @@ export async function createScheduleTab(
 		},
 	})
 
-	// Write schedule header to row 1
 	await gapi.client.sheets.spreadsheets.values.update({
 		spreadsheetId,
 		range: SCHEDULE_HEADER_RANGE,
@@ -1271,12 +1371,12 @@ export async function createScheduleTab(
 }
 
 /**
- * Read the schedule tab and return parsed schedule entries.
+ * Read the schedule (flags) tab and return parsed day flag entries.
  * Returns an empty array if there are no entries yet.
  */
-export async function readSchedule(
+export async function readFlags(
 	spreadsheetId: string,
-): Promise<ScheduleEntry[]> {
+): Promise<DayFlagEntry[]> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
 
@@ -1289,18 +1389,174 @@ export async function readSchedule(
 	if (!rawRows || rawRows.length === 0) return []
 
 	return rawRows
+		.map(parseFlagRow)
+		.filter((r): r is DayFlagEntry => r !== null)
+}
+
+/**
+ * Write the full flags to the sheet (header + all entries).
+ * This overwrites all existing flag data.
+ */
+export async function writeFlags(
+	spreadsheetId: string,
+	entries: DayFlagEntry[],
+): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const rows: string[][] = [
+		SCHEDULE_HEADER,
+		...entries.map(flagEntryToRow),
+	]
+
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId,
+		range: SCHEDULE_FULL_RANGE,
+		valueInputOption: 'RAW',
+		resource: { values: rows },
+	})
+
+	const tailStartRow = rows.length + 1
+	const SCHEDULE_MAX_ROW = 10000
+	if (tailStartRow <= SCHEDULE_MAX_ROW) {
+		const tailRange = `'${SCHEDULE_TAB_NAME}'!A${tailStartRow}:G${SCHEDULE_MAX_ROW}`
+		await gapi.client.sheets.spreadsheets.values.clear({
+			spreadsheetId,
+			range: tailRange,
+		})
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Workout Schedule tab – read/write                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Check if the workout schedule tab exists in the spreadsheet.
+ */
+export async function verifyWorkoutScheduleTab(
+	spreadsheetId: string,
+): Promise<boolean> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.get({
+		spreadsheetId,
+	})
+	const sheets = response.result.sheets ?? []
+	return sheets.some(
+		(s) => s.properties.title === WORKOUT_SCHEDULE_TAB_NAME,
+	)
+}
+
+/**
+ * Create the workout schedule tab and write the header row.
+ */
+export async function createWorkoutScheduleTab(
+	spreadsheetId: string,
+): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	await gapi.client.sheets.spreadsheets.batchUpdate({
+		spreadsheetId,
+		resource: {
+			requests: [{ addSheet: { properties: { title: WORKOUT_SCHEDULE_TAB_NAME } } }],
+		},
+	})
+
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId,
+		range: WORKOUT_SCHEDULE_HEADER_RANGE,
+		valueInputOption: 'RAW',
+		resource: { values: [WORKOUT_SCHEDULE_HEADER] },
+	})
+}
+
+/**
+ * Read the workout schedule tab and return parsed entries.
+ * Returns an empty array if there are no entries yet.
+ */
+export async function readWorkoutSchedule(
+	spreadsheetId: string,
+): Promise<WorkoutScheduleEntry[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: WORKOUT_SCHEDULE_READ_RANGE,
+	})
+
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return []
+
+	return rawRows
+		.map(parseWorkoutScheduleRow)
+		.filter((r): r is WorkoutScheduleEntry => r !== null)
+}
+
+/**
+ * Write the full workout schedule to the sheet (header + all entries).
+ * This overwrites all existing workout schedule data.
+ */
+export async function writeWorkoutSchedule(
+	spreadsheetId: string,
+	entries: WorkoutScheduleEntry[],
+): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const rows: string[][] = [
+		WORKOUT_SCHEDULE_HEADER,
+		...entries.map(workoutScheduleEntryToRow),
+	]
+
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId,
+		range: WORKOUT_SCHEDULE_FULL_RANGE,
+		valueInputOption: 'RAW',
+		resource: { values: rows },
+	})
+
+	const tailStartRow = rows.length + 1
+	const MAX_ROW = 10000
+	if (tailStartRow <= MAX_ROW) {
+		const tailRange = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A${tailStartRow}:D${MAX_ROW}`
+		await gapi.client.sheets.spreadsheets.values.clear({
+			spreadsheetId,
+			range: tailRange,
+		})
+	}
+}
+
+/**
+ * @deprecated Use {@link readFlags} and {@link readWorkoutSchedule} instead.
+ * Read the legacy combined schedule tab and return parsed schedule entries.
+ */
+export async function readSchedule(
+	spreadsheetId: string,
+): Promise<ScheduleEntry[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const legacyRange = `'${SCHEDULE_TAB_NAME}'!A2:J10000`
+	const response = await gapi.client.sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: legacyRange,
+	})
+
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return []
+
+	return rawRows
 		.map(parseScheduleRow)
 		.filter((r): r is ScheduleEntry => r !== null)
 }
 
 /**
- * Write the full schedule to the sheet (header + all entries).
- * This overwrites all existing schedule data.
- *
- * Uses a write-first approach: we update the data in place, then clear
- * only the leftover rows below the new data. This prevents data loss if
- * the clear or tail-clear call fails — the worst case is stale trailing
- * rows rather than an empty sheet.
+ * @deprecated Use {@link writeFlags} and {@link writeWorkoutSchedule} instead.
+ * Write the full legacy combined schedule to the sheet.
  */
 export async function writeSchedule(
 	spreadsheetId: string,
@@ -1309,25 +1565,25 @@ export async function writeSchedule(
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
 
+	const legacyHeader: string[] = ['date', 'workoutId', 'home', 'elsewhere', 'travel', 'visitors', 'alcohol', 'blocked', 'calendarEventId', 'strongerId']
+	const legacyFullRange = `'${SCHEDULE_TAB_NAME}'!A1:J10000`
+
 	const rows: string[][] = [
-		SCHEDULE_HEADER,
+		legacyHeader,
 		...entries.map(scheduleEntryToRow),
 	]
 
-	// Write data first — this overwrites cells in place without clearing.
 	await gapi.client.sheets.spreadsheets.values.update({
 		spreadsheetId,
-		range: SCHEDULE_FULL_RANGE,
+		range: legacyFullRange,
 		valueInputOption: 'RAW',
 		resource: { values: rows },
 	})
 
-	// Clear any leftover rows below the new data.
-	// Row 1 is the header, rows 2..N are data, so the tail starts at row N+1.
 	const tailStartRow = rows.length + 1
 	const SCHEDULE_MAX_ROW = 10000
 	if (tailStartRow <= SCHEDULE_MAX_ROW) {
-		const tailRange = `'${SCHEDULE_TAB_NAME}'!A${tailStartRow}:I${SCHEDULE_MAX_ROW}`
+		const tailRange = `'${SCHEDULE_TAB_NAME}'!A${tailStartRow}:J${SCHEDULE_MAX_ROW}`
 		await gapi.client.sheets.spreadsheets.values.clear({
 			spreadsheetId,
 			range: tailRange,

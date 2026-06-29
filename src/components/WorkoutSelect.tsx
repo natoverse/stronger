@@ -1,5 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
-import type { Workout, ScheduleEntry, CardioActivity } from '../model/index.js';
+import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import type { ParsedLogRow } from '../google/index.js';
 import type { LogSession } from './CalendarView.js';
 import { groupLogByDate } from './CalendarView.js';
@@ -10,7 +10,7 @@ import { BicepsFlexed, ChevronDown, Pencil, Plus, Star, Bike, Trash2, Check, X, 
 interface WorkoutSelectProps {
 	workouts: Workout[];
 	missingLiftIds?: string[];
-	schedule?: ScheduleEntry[];
+	workoutSchedule?: WorkoutScheduleEntry[];
 	logRows?: ParsedLogRow[];
 	onSelect: (workout: Workout) => void;
 	onViewSession?: (session: LogSession) => void;
@@ -114,7 +114,7 @@ function todayDateString(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function WorkoutSelect({ workouts, missingLiftIds, schedule, logRows, onSelect, onViewSession, onEdit, onDuplicate, onDelete, onNew, onToggleFavorite, cardioActivities, onCardioSave }: WorkoutSelectProps) {
+export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRows, onSelect, onViewSession, onEdit, onDuplicate, onDelete, onNew, onToggleFavorite, cardioActivities, onCardioSave }: WorkoutSelectProps) {
 	const { favorites, others } = useMemo(() => {
 		const favorites: Workout[] = [];
 		const others: Workout[] = [];
@@ -129,8 +129,8 @@ export function WorkoutSelect({ workouts, missingLiftIds, schedule, logRows, onS
 
 	/** Workouts scheduled for today, with completion status. */
 	const todaysPlan = useMemo(() => {
-		if (!schedule) return [];
-		const todayEntries = schedule.filter((e) => e.date === today);
+		if (!workoutSchedule) return [];
+		const todayEntries = workoutSchedule.filter((e) => e.date === today);
 		if (todayEntries.length === 0) return [];
 
 		const workoutMap = new Map(workouts.map((w) => [w.id, w]));
@@ -152,7 +152,7 @@ export function WorkoutSelect({ workouts, missingLiftIds, schedule, logRows, onS
 				return { workout, done: completedIds.has(e.workoutId) };
 			})
 			.filter((x): x is { workout: Workout; done: boolean } => x !== null);
-	}, [schedule, logRows, workouts, today]);
+	}, [workoutSchedule, logRows, workouts, today]);
 
 	/** Build a map of today's sessions for completed workouts. */
 	const todaySessions = useMemo(() => {

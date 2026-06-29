@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import type { Workout, ScheduleEntry, SetType, CardioActivity, DayFlags } from '../model/index.js';
-import { FLAG_SENTINEL } from '../model/index.js';
+import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
 import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
@@ -9,7 +8,8 @@ import { CalendarSync } from './CalendarSync.js';
 interface CalendarViewProps {
 	workouts: Workout[];
 	cardioActivities: CardioActivity[];
-	schedule: ScheduleEntry[];
+	workoutSchedule: WorkoutScheduleEntry[];
+	dayFlags: DayFlagEntry[];
 	logRows: ParsedLogRow[];
 	onAssign: (date: string, workoutId: string) => void;
 	onRemove: (date: string, workoutId: string) => void;
@@ -25,7 +25,7 @@ interface CalendarViewProps {
 		sessionWorkoutId: string,
 		sessionStartTime: string,
 	) => void;
-	onBulkSchedule: (entries: ScheduleEntry[]) => void;
+	onBulkSchedule: (entries: WorkoutScheduleEntry[]) => void;
 	onUpdateFlags: (date: string, flags: DayFlags) => void;
 	onSyncCalendar: (calendarId: string) => Promise<CalendarSyncResult>;
 }
@@ -290,7 +290,8 @@ export function SessionDetail({
 export function CalendarView({
 	workouts,
 	cardioActivities,
-	schedule,
+	workoutSchedule,
+	dayFlags,
 	logRows,
 	onAssign,
 	onRemove,
@@ -317,25 +318,23 @@ export function CalendarView({
 	// Build a map of date → workoutIds for fast lookup
 	const scheduleMap = useMemo(() => {
 		const map = new Map<string, string[]>();
-		for (const entry of schedule) {
-			if (!entry.workoutId || entry.workoutId === FLAG_SENTINEL) continue; // skip flag/sentinel rows
+		for (const entry of workoutSchedule) {
+			if (!entry.workoutId) continue;
 			const existing = map.get(entry.date) ?? [];
 			existing.push(entry.workoutId);
 			map.set(entry.date, existing);
 		}
 		return map;
-	}, [schedule]);
+	}, [workoutSchedule]);
 
-	// Build a map of date → DayFlags from dedicated FLAG_SENTINEL rows
+	// Build a map of date → DayFlags from the flags tab
 	const flagsMap = useMemo(() => {
 		const map = new Map<string, DayFlags>();
-		for (const entry of schedule) {
-			if (entry.workoutId === FLAG_SENTINEL && entry.flags) {
-				map.set(entry.date, entry.flags);
-			}
+		for (const entry of dayFlags) {
+			map.set(entry.date, entry.flags);
 		}
 		return map;
-	}, [schedule]);
+	}, [dayFlags]);
 
 	// Build a map of workoutId → workout name for display
 	const workoutNames = useMemo(() => {

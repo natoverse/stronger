@@ -179,7 +179,7 @@ export interface SetResult {
 }
 
 // ---------------------------------------------------------------------------
-// Layer 6 – Schedule (day→workout mapping for calendar planning)
+// Layer 6 – Day flags (calendar annotations)
 // ---------------------------------------------------------------------------
 
 /** Boolean flags that can be applied to any calendar day. */
@@ -198,24 +198,24 @@ export interface DayFlags {
 	blocked: boolean;
 }
 
-/**
- * Sentinel value used as workoutId for flag-only rows.
- * Flag rows always get their own dedicated row so they never interfere
- * with workout scheduling or calendar sync.
- */
-export const FLAG_SENTINEL = '__flags__';
-
-/** A single schedule entry mapping a date to a workout. */
-export interface ScheduleEntry {
+/** A single day-flags entry stored in the Schedule (flags) tab. */
+export interface DayFlagEntry {
 	/** Date in YYYY-MM-DD format. */
 	date: string;
-	/**
-	 * References a Workout.id (e.g. "A", "B"), or {@link FLAG_SENTINEL}
-	 * for flag-only rows. Empty string for blanked-out entries.
-	 */
+	/** Day-level flags for this date. */
+	flags: DayFlags;
+}
+
+// ---------------------------------------------------------------------------
+// Layer 6b – Workout schedule (date→workout mapping for calendar planning)
+// ---------------------------------------------------------------------------
+
+/** A single workout schedule entry stored in the Workout Schedule tab. */
+export interface WorkoutScheduleEntry {
+	/** Date in YYYY-MM-DD format. */
+	date: string;
+	/** References a Workout.id (e.g. "A", "B"). Empty string for blanked-out entries. */
 	workoutId: string;
-	/** Day-level flags. Only present on rows where workoutId === FLAG_SENTINEL. */
-	flags?: DayFlags;
 	/** Google Calendar event ID linking this entry to a calendar event. */
 	calendarEventId?: string;
 	/**
@@ -223,6 +223,25 @@ export interface ScheduleEntry {
 	 * Written to the Google Calendar event's description/notes so we can
 	 * match sheet rows ↔ calendar events regardless of direction.
 	 */
+	strongerId?: string;
+}
+
+/**
+ * @deprecated Use {@link WorkoutScheduleEntry} instead. Kept for backward compatibility during migration.
+ * Sentinel value used as workoutId for flag-only rows in the old combined schedule.
+ */
+export const FLAG_SENTINEL = '__flags__';
+
+/**
+ * @deprecated Use {@link WorkoutScheduleEntry} and {@link DayFlagEntry} separately.
+ * Legacy combined schedule entry type.
+ */
+export interface ScheduleEntry {
+	/** Date in YYYY-MM-DD format. */
+	date: string;
+	workoutId: string;
+	flags?: DayFlags;
+	calendarEventId?: string;
 	strongerId?: string;
 }
 
