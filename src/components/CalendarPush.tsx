@@ -73,7 +73,7 @@ export function CalendarPush({ workouts, cardioActivities, onClose, onUpdateSche
   return (
     <div className="calendar-push">
       <div className="calendar-push-header">
-        <h3>Planner</h3>
+        <h3>Plan</h3>
         <button className="calendar-push-close" onClick={onClose} aria-label="Close">
           <X size={18} />
         </button>
