@@ -58,7 +58,8 @@ function App() {
   const settingsRef = useRef(new Map<string, string>());
 
   // Lazy-loading flags: track whether secondary data has been fetched
-  const scheduleLoadedRef = useRef(false);
+  const flagsLoadedRef = useRef(false);
+  const workoutScheduleLoadedRef = useRef(false);
   const logLoadedRef = useRef(false);
   const stravaLoadedRef = useRef(false);
 
@@ -72,7 +73,8 @@ function App() {
       setNeedsSetup(false);
       setCardioActivities(cardio);
       // Reset lazy-loading flags for new connection
-      scheduleLoadedRef.current = false;
+      flagsLoadedRef.current = false;
+      workoutScheduleLoadedRef.current = false;
       logLoadedRef.current = false;
       stravaLoadedRef.current = false;
     },
@@ -135,7 +137,8 @@ function App() {
     setCardioActivities([]);
     setStravaActivities([]);
     // Reset lazy-loading flags
-    scheduleLoadedRef.current = false;
+    flagsLoadedRef.current = false;
+    workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
     stravaLoadedRef.current = false;
     replaceTo({ view: 'list' });
@@ -279,24 +282,29 @@ function App() {
   }, [navigateTo]);
 
   // Schedule handlers
-  const loadScheduleData = useCallback(async (sheetId: string) => {
+  const loadFlagsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        // Ensure flags tab exists
         const flagsTabExists = await verifyScheduleTab(sheetId);
         if (!flagsTabExists) {
           await createScheduleTab(sheetId);
         }
-        // Ensure workout schedule tab exists
+        const flags = await readFlags(sheetId);
+        setDayFlags(flags);
+      });
+    } catch {
+      // Silently ignore — flags data is optional
+    }
+  }, []);
+
+  const loadWorkoutScheduleData = useCallback(async (sheetId: string) => {
+    try {
+      await withAuthRetry(async () => {
         const wsTabExists = await verifyWorkoutScheduleTab(sheetId);
         if (!wsTabExists) {
           await createWorkoutScheduleTab(sheetId);
         }
-        const [flags, schedule] = await Promise.all([
-          readFlags(sheetId),
-          readWorkoutSchedule(sheetId),
-        ]);
-        setDayFlags(flags);
+        const schedule = await readWorkoutSchedule(sheetId);
         setWorkoutSchedule(schedule);
       });
     } catch {
@@ -918,13 +926,21 @@ function App() {
     }
   }, [route, activeWorkout, progressionProposals]);
 
-  // Lazy-load schedule data when calendar view is first visited
+  // Load workout schedule on home (list) or calendar view
   useEffect(() => {
-    if (route.view === 'calendar' && spreadsheetId && !scheduleLoadedRef.current) {
-      scheduleLoadedRef.current = true;
-      void loadScheduleData(spreadsheetId);
+    if ((route.view === 'list' || route.view === 'calendar') && spreadsheetId && !workoutScheduleLoadedRef.current) {
+      workoutScheduleLoadedRef.current = true;
+      void loadWorkoutScheduleData(spreadsheetId);
     }
-  }, [route.view, spreadsheetId, loadScheduleData]);
+  }, [route.view, spreadsheetId, loadWorkoutScheduleData]);
+
+  // Load day flags when calendar view is first visited
+  useEffect(() => {
+    if (route.view === 'calendar' && spreadsheetId && !flagsLoadedRef.current) {
+      flagsLoadedRef.current = true;
+      void loadFlagsData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadFlagsData]);
 
   // Lazy-load log data when calendar or progress view is first visited
   useEffect(() => {
