@@ -1,9 +1,11 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
+import { CalendarClear } from './CalendarClear.js';
+import type { ClearOptions, ClearResult } from './CalendarClear.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
@@ -28,6 +30,7 @@ interface CalendarViewProps {
 	onBulkSchedule: (entries: WorkoutScheduleEntry[]) => void;
 	onUpdateFlags: (date: string, flags: DayFlags) => void;
 	onSyncCalendar: (calendarId: string) => Promise<CalendarSyncResult>;
+	onClearSchedule: (options: ClearOptions) => Promise<ClearResult>;
 }
 
 /** Format a YYYY-MM-DD string for display. */
@@ -301,10 +304,12 @@ export function CalendarView({
 	onBulkSchedule,
 	onUpdateFlags,
 	onSyncCalendar,
+	onClearSchedule,
 }: CalendarViewProps) {
 	const [addingForDate, setAddingForDate] = useState<string | null>(null);
 	const [showPush, setShowPush] = useState(false);
 	const [showSync, setShowSync] = useState(false);
+	const [showClear, setShowClear] = useState(false);
 	const [historyMode, setHistoryMode] = useState(false);
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
@@ -463,13 +468,19 @@ export function CalendarView({
 	const handleTogglePush = () => {
 		const opening = !showPush;
 		setShowPush(opening);
-		if (opening) setShowSync(false);
+		if (opening) { setShowSync(false); setShowClear(false); }
 	};
 
 	const handleToggleSync = () => {
 		const opening = !showSync;
 		setShowSync(opening);
-		if (opening) setShowPush(false);
+		if (opening) { setShowPush(false); setShowClear(false); }
+	};
+
+	const handleToggleClear = () => {
+		const opening = !showClear;
+		setShowClear(opening);
+		if (opening) { setShowPush(false); setShowSync(false); }
 	};
 
 	return (
@@ -494,6 +505,12 @@ export function CalendarView({
 					<History size={16} />
 					{historyMode ? 'Hide History' : 'History'}
 				</button>
+				<button
+					className={`calendar-toolbar-btn${showClear ? ' calendar-toolbar-btn-active' : ''}`}
+					onClick={handleToggleClear}
+				>
+					<Trash2 size={16} /> Clear
+				</button>
 			</div>
 			{showPush && (
 				<CalendarPush
@@ -507,6 +524,12 @@ export function CalendarView({
 				<CalendarSync
 					onSync={onSyncCalendar}
 					onClose={() => setShowSync(false)}
+				/>
+			)}
+			{showClear && (
+				<CalendarClear
+					onClear={onClearSchedule}
+					onClose={() => setShowClear(false)}
 				/>
 			)}
 

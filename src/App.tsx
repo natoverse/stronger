@@ -3,7 +3,7 @@ import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, Prog
 import { computeProgression } from './model/index.js';
 import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
-import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY } from './google/index.js';
+import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY, loadCalendarId } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -16,6 +16,7 @@ import { ExerciseEditor } from './components/ExerciseEditor.js';
 import { ProgressionReview } from './components/ProgressionReview.js';
 import { CalendarView, SessionDetail } from './components/CalendarView.js';
 import type { LogSession } from './components/CalendarView.js';
+import type { ClearOptions, ClearResult } from './components/CalendarClear.js';
 import { ProgressView } from './components/ProgressView.js';
 import { StravaView } from './components/StravaView.js';
 import { SettingsView } from './components/SettingsView.js';
@@ -484,6 +485,97 @@ function App() {
       return result;
     },
     [workoutSchedule, workouts, cardioActivities, spreadsheetId],
+  );
+
+  const handleClearSchedule = useCallback(
+    async (options: ClearOptions): Promise<ClearResult> => {
+      const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
+      const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
+
+      // Compute date range
+      const [sy, sm, sd] = startDate.split('-').map(Number);
+      const start = new Date(sy, sm - 1, sd);
+      const dateSet = new Set<string>();
+      for (let i = 0; i < weeks * 7; i++) {
+        const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        dateSet.add(dateStr);
+      }
+
+      // Clear flags
+      if (shouldClearFlags) {
+        const before = dayFlags.length;
+        const updatedFlags = dayFlags.filter((e) => !dateSet.has(e.date));
+        result.flagsCleared = before - updatedFlags.length;
+        setDayFlags(updatedFlags);
+        if (spreadsheetId) {
+          try {
+            await withAuthRetry(() => writeFlags(spreadsheetId, updatedFlags));
+          } catch (err) {
+            result.errors.push(`Failed to write flags: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+
+      // Clear workout schedule
+      if (shouldClearSchedule) {
+        // Collect entries in the date range that have workoutIds
+        const entriesToClear = workoutSchedule.filter((e) => dateSet.has(e.date) && e.workoutId);
+        result.scheduleCleared = entriesToClear.length;
+
+        // Blank out workoutIds (preserves calendarEventId/strongerId for cleanup)
+        const updatedSchedule = workoutSchedule.map((e) => {
+          if (dateSet.has(e.date) && e.workoutId) {
+            return { ...e, workoutId: '' };
+          }
+          return e;
+        });
+
+        // Try to delete Google Calendar events for cleared entries
+        const calendarId = loadCalendarId();
+        if (calendarId) {
+          const gapi = window.gapi;
+          if (gapi) {
+            for (const entry of entriesToClear) {
+              if (entry.calendarEventId) {
+                try {
+                  await gapi.client.calendar.events.delete({
+                    calendarId,
+                    eventId: entry.calendarEventId,
+                  });
+                  result.calendarEventsDeleted++;
+                } catch (err) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  result.errors.push(`Delete event ${entry.calendarEventId}: ${msg}`);
+                }
+              }
+            }
+          }
+        }
+
+        // After deleting calendar events, remove entries that no longer serve a purpose
+        // (those with no workoutId and whose calendar events were deleted or had none)
+        const finalSchedule = updatedSchedule.filter((e) => {
+          if (!dateSet.has(e.date)) return true; // keep entries outside range
+          if (e.workoutId) return true; // keep entries with workoutIds
+          // In range + blanked: only keep if calendarEventId and we didn't delete it
+          if (e.calendarEventId && !calendarId) return true; // keep for future sync
+          return false;
+        });
+
+        setWorkoutSchedule(finalSchedule);
+        if (spreadsheetId) {
+          try {
+            await withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, finalSchedule));
+          } catch (err) {
+            result.errors.push(`Failed to write schedule: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+
+      return result;
+    },
+    [workoutSchedule, dayFlags, spreadsheetId],
   );
 
   const handleUpdateLogRows = useCallback(
@@ -973,6 +1065,7 @@ function App() {
           onBulkSchedule={handleBulkSchedule}
           onUpdateFlags={handleUpdateFlags}
           onSyncCalendar={handleSyncCalendar}
+          onClearSchedule={handleClearSchedule}
         />
       </>
     );
