@@ -3,7 +3,7 @@ import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, Prog
 import { computeProgression } from './model/index.js';
 import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
-import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY, loadCalendarId } from './google/index.js';
+import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -501,6 +501,9 @@ function App() {
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         dateSet.add(dateStr);
       }
+      // End date for calendar API queries (one day past the range)
+      const rangeEnd = new Date(sy, sm - 1, sd + weeks * 7);
+      const endDate = `${rangeEnd.getFullYear()}-${String(rangeEnd.getMonth() + 1).padStart(2, '0')}-${String(rangeEnd.getDate()).padStart(2, '0')}`;
 
       // Clear flags
       if (shouldClearFlags) {
@@ -536,6 +539,8 @@ function App() {
         if (calendarId) {
           const gapi = window.gapi;
           if (gapi) {
+            // Delete events we have direct references to
+            const deletedEventIds = new Set<string>();
             for (const entry of entriesToClear) {
               if (entry.calendarEventId) {
                 try {
@@ -543,12 +548,39 @@ function App() {
                     calendarId,
                     eventId: entry.calendarEventId,
                   });
+                  deletedEventIds.add(entry.calendarEventId);
                   result.calendarEventsDeleted++;
                 } catch (err) {
                   const msg = err instanceof Error ? err.message : String(err);
                   result.errors.push(`Delete event ${entry.calendarEventId}: ${msg}`);
                 }
               }
+            }
+
+            // Also delete orphaned Stronger events in the date range that have
+            // no schedule entry (e.g., pushed from Planner without sync)
+            try {
+              const allEvents = await listEventsInRange(calendarId, startDate, endDate);
+              for (const calEvent of allEvents) {
+                if (!calEvent.id || deletedEventIds.has(calEvent.id)) continue;
+                if (calEvent.status === 'cancelled') continue;
+                const eventDate = getEventDate(calEvent);
+                if (!eventDate || !dateSet.has(eventDate)) continue;
+                if (!isStrongerEvent(calEvent)) continue;
+                try {
+                  await gapi.client.calendar.events.delete({
+                    calendarId,
+                    eventId: calEvent.id,
+                  });
+                  result.calendarEventsDeleted++;
+                } catch (err) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  result.errors.push(`Delete orphaned event ${calEvent.id}: ${msg}`);
+                }
+              }
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              result.errors.push(`Failed to list calendar events for orphan cleanup: ${msg}`);
             }
           }
         }

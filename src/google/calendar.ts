@@ -52,6 +52,17 @@ export function extractStrongerId(description: string | undefined): string | und
 	return id || undefined
 }
 
+/**
+ * Returns true if a calendar event was created by Stronger.
+ * Checks for a [stronger:...] ID tag or a deep link in the description.
+ */
+export function isStrongerEvent(event: CalendarEventItem): boolean {
+	const desc = event.description ?? ''
+	if (extractStrongerId(desc)) return true
+	if (desc.includes('#/workout/')) return true
+	return false
+}
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -107,7 +118,7 @@ export async function listWritableCalendars(): Promise<CalendarListEntry[]> {
  *
  * Returns the raw event items so the caller can check for duplicates.
  */
-async function listEventsInRange(
+export async function listEventsInRange(
 	calendarId: string,
 	startDate: string,
 	endDate: string,

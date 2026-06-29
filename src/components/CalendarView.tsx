@@ -490,7 +490,7 @@ export function CalendarView({
 					className={`calendar-toolbar-btn${showPush ? ' calendar-toolbar-btn-active' : ''}`}
 					onClick={handleTogglePush}
 				>
-					<CalendarCog size={16} /> Planner
+					<CalendarCog size={16} /> Plan
 				</button>
 				<button
 					className={`calendar-toolbar-btn${showSync ? ' calendar-toolbar-btn-active' : ''}`}
