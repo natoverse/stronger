@@ -1885,6 +1885,90 @@ body {
 	opacity: 0.85;
 }
 
+.calendar-push-feedback {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	padding: 0.625rem 0.75rem;
+	border-radius: 8px;
+	font-size: 0.8125rem;
+	line-height: 1.4;
+	margin-top: 0.5rem;
+}
+
+.calendar-push-feedback-success {
+	color: #4caf50;
+	background: rgba(76, 175, 80, 0.08);
+	border: 1px solid rgba(76, 175, 80, 0.2);
+}
+
+.calendar-push-feedback-error {
+	color: var(--color-accent);
+	background: rgba(255, 45, 123, 0.08);
+	border: 1px solid rgba(255, 45, 123, 0.2);
+}
+
+.calendar-push-error-detail {
+	font-size: 0.75rem;
+	opacity: 0.7;
+	margin: 0.25rem 0 0;
+}
+
+.calendar-push-loading,
+.calendar-push-error {
+	display: flex;
+	align-items: center;
+	gap: 0.375rem;
+	font-size: 0.8125rem;
+	color: var(--color-text-muted);
+}
+
+.calendar-clear-checks {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.calendar-clear-check {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	font-size: 0.875rem;
+	color: var(--color-text);
+	cursor: pointer;
+}
+
+.calendar-clear-check input[type="checkbox"] {
+	accent-color: var(--color-primary);
+	width: 1rem;
+	height: 1rem;
+}
+
+.calendar-clear-range {
+	font-size: 0.8125rem;
+	color: var(--color-text-muted);
+}
+
+.calendar-clear-actions {
+	display: flex;
+	gap: 0.5rem;
+}
+
+.calendar-clear-actions .calendar-push-btn {
+	flex: 1;
+}
+
+.calendar-clear-btn {
+	background: var(--color-accent) !important;
+	border-color: var(--color-accent) !important;
+}
+
+.calendar-clear-cancel-btn {
+	background: var(--color-surface) !important;
+	border-color: var(--color-border) !important;
+	color: var(--color-text) !important;
+}
+
 .calendar-sync-description {
 	font-size: 0.8125rem;
 	color: rgba(255, 255, 255, 0.5);
