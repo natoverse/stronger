@@ -38,6 +38,9 @@ export const LOG_TAB_NAME = 'Stronger - Log'
 /** Name of the tab that holds the workout schedule (date→workoutId mapping). */
 export const SCHEDULE_TAB_NAME = 'Stronger - Schedule'
 
+/** Name of the tab that holds the workout schedule (date→workoutId + calendar sync fields). */
+export const WORKOUT_SCHEDULE_TAB_NAME = 'Stronger - Workout Schedule'
+
 /** Name of the tab that holds cardio activity definitions (id + name). */
 export const CARDIO_TAB_NAME = 'Stronger - Cardio'
 

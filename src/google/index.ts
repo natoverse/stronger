@@ -44,10 +44,20 @@ export {
 	deleteLogSession,
 	parseScheduleRow,
 	scheduleEntryToRow,
+	parseFlagRow,
+	flagEntryToRow,
+	parseWorkoutScheduleRow,
+	workoutScheduleEntryToRow,
 	verifyScheduleTab,
 	createScheduleTab,
 	readSchedule,
 	writeSchedule,
+	readFlags,
+	writeFlags,
+	verifyWorkoutScheduleTab,
+	createWorkoutScheduleTab,
+	readWorkoutSchedule,
+	writeWorkoutSchedule,
 	cardioActivityToRow,
 	parseCardioRow,
 	verifyCardioTab,
@@ -78,7 +88,7 @@ export type { SheetInfo, LogContext, ParsedLogRow, LiftGoal } from './sheets.ts'
 export { performBackup, BACKUP_SETTING_KEY } from './backup.ts'
 export type { CalendarListEntry } from './types.ts'
 export { GOOGLE_CLIENT_ID } from './config.ts'
-export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
 export {
 	listWritableCalendars,
 	buildDeepLink,

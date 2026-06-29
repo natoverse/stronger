@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, ScheduleEntry, DayFlags, CardioActivity, AppSettings } from './model/index.js';
-import { computeProgression, FLAG_SENTINEL } from './model/index.js';
-import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readSchedule, writeSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings } from './model/index.js';
+import { computeProgression } from './model/index.js';
+import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
@@ -38,7 +38,8 @@ function App() {
   const [configs, setConfigs] = useState<LiftConfig[]>([]);
   const [definitions, setDefinitions] = useState<WorkoutDefinition[]>([]);
   const [progressionProposals, setProgressionProposals] = useState<ProgressionProposal[] | null>(null);
-  const [schedule, setSchedule] = useState<ScheduleEntry[]>([]);
+  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>([]);
+  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>([]);
   const [logRows, setLogRows] = useState<ParsedLogRow[]>([]);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
@@ -126,7 +127,8 @@ function App() {
     setSpreadsheetId(null);
     setStartTime(null);
     setProgressionProposals(null);
-    setSchedule([]);
+    setWorkoutSchedule([]);
+    setDayFlags([]);
     setLogRows([]);
     setNeedsSetup(false);
     setCardioActivities([]);
@@ -279,12 +281,22 @@ function App() {
   const loadScheduleData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyScheduleTab(sheetId);
-        if (!tabExists) {
+        // Ensure flags tab exists
+        const flagsTabExists = await verifyScheduleTab(sheetId);
+        if (!flagsTabExists) {
           await createScheduleTab(sheetId);
         }
-        const entries = await readSchedule(sheetId);
-        setSchedule(entries);
+        // Ensure workout schedule tab exists
+        const wsTabExists = await verifyWorkoutScheduleTab(sheetId);
+        if (!wsTabExists) {
+          await createWorkoutScheduleTab(sheetId);
+        }
+        const [flags, schedule] = await Promise.all([
+          readFlags(sheetId),
+          readWorkoutSchedule(sheetId),
+        ]);
+        setDayFlags(flags);
+        setWorkoutSchedule(schedule);
       });
     } catch {
       // Silently ignore — schedule data is optional
@@ -335,17 +347,17 @@ function App() {
 
   const handleScheduleAssign = useCallback(
     (date: string, workoutId: string) => {
-      const updated = [...schedule, { date, workoutId, strongerId: generateStrongerId() }];
-      setSchedule(updated);
+      const updated = [...workoutSchedule, { date, workoutId, strongerId: generateStrongerId() }];
+      setWorkoutSchedule(updated);
       if (spreadsheetId) {
-        void withAuthRetry(() => writeSchedule(spreadsheetId, updated));
+        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updated));
       }
     },
-    [schedule, spreadsheetId],
+    [workoutSchedule, spreadsheetId],
   );
 
   const handleBulkSchedule = useCallback(
-    (entries: ScheduleEntry[]) => {
+    (entries: WorkoutScheduleEntry[]) => {
       // Separate rest signals from actual additions
       const datesToRest = new Set(
         entries.filter((e) => e.workoutId === '__rest__').map((e) => e.date),
@@ -354,9 +366,8 @@ function App() {
 
       // For rest dates: blank out workoutIds instead of deleting rows
       // (preserves calendarEventIds and strongerIds for sync cleanup)
-      // Skip flag sentinel rows — those are independent of workout scheduling.
-      let updated = schedule.map((e) => {
-        if (datesToRest.has(e.date) && e.workoutId && e.workoutId !== FLAG_SENTINEL) {
+      let updated = workoutSchedule.map((e) => {
+        if (datesToRest.has(e.date) && e.workoutId) {
           return { ...e, workoutId: '' };
         }
         return e;
@@ -372,61 +383,59 @@ function App() {
         }
       }
 
-      setSchedule(updated);
+      setWorkoutSchedule(updated);
       if (spreadsheetId) {
-        void withAuthRetry(() => writeSchedule(spreadsheetId, updated));
+        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updated));
       }
     },
-    [schedule, spreadsheetId],
+    [workoutSchedule, spreadsheetId],
   );
 
   const handleScheduleRemove = useCallback(
     (date: string, workoutId: string) => {
       // Blank out the workoutId instead of deleting the row.
       // This preserves calendarEventId and strongerId for calendar sync cleanup.
-      // Never touch flag sentinel rows.
       let blanked = false;
-      const updated = schedule.map((e) => {
-        if (!blanked && e.date === date && e.workoutId === workoutId && e.workoutId !== FLAG_SENTINEL) {
+      const updated = workoutSchedule.map((e) => {
+        if (!blanked && e.date === date && e.workoutId === workoutId) {
           blanked = true;
           return { ...e, workoutId: '' };
         }
         return e;
       });
-      setSchedule(updated);
+      setWorkoutSchedule(updated);
       if (spreadsheetId) {
-        void withAuthRetry(() => writeSchedule(spreadsheetId, updated));
+        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updated));
       }
     },
-    [schedule, spreadsheetId],
+    [workoutSchedule, spreadsheetId],
   );
 
   const handleUpdateFlags = useCallback(
     (date: string, flags: DayFlags) => {
       const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.alcohol || flags.blocked;
-      // Flags live in their own dedicated row with FLAG_SENTINEL.
-      const flagIdx = schedule.findIndex((e) => e.date === date && e.workoutId === FLAG_SENTINEL);
-      let updated: ScheduleEntry[];
+      const flagIdx = dayFlags.findIndex((e) => e.date === date);
+      let updated: DayFlagEntry[];
       if (flagIdx >= 0) {
         if (hasFlags) {
-          updated = schedule.map((e, i) =>
+          updated = dayFlags.map((e, i) =>
             i === flagIdx ? { ...e, flags } : e,
           );
         } else {
-          // Remove the flag row entirely (no flags left)
-          updated = schedule.filter((_, i) => i !== flagIdx);
+          // Remove the flag entry entirely (no flags left)
+          updated = dayFlags.filter((_, i) => i !== flagIdx);
         }
       } else if (hasFlags) {
-        updated = [...schedule, { date, workoutId: FLAG_SENTINEL, flags }];
+        updated = [...dayFlags, { date, flags }];
       } else {
         return; // Nothing to do
       }
-      setSchedule(updated);
+      setDayFlags(updated);
       if (spreadsheetId) {
-        void withAuthRetry(() => writeSchedule(spreadsheetId, updated));
+        void withAuthRetry(() => writeFlags(spreadsheetId, updated));
       }
     },
-    [schedule, spreadsheetId],
+    [dayFlags, spreadsheetId],
   );
 
   const handleCalendarOpenWorkout = useCallback(
@@ -463,18 +472,18 @@ function App() {
 
       const { updatedSchedule, result } = await withAuthRetry(() => syncScheduleWithCalendar(
         calendarId,
-        schedule,
+        workoutSchedule,
         resolveWorkoutName,
         resolveWorkoutId,
       ));
 
-      setSchedule(updatedSchedule);
+      setWorkoutSchedule(updatedSchedule);
       if (spreadsheetId) {
-        void withAuthRetry(() => writeSchedule(spreadsheetId, updatedSchedule));
+        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updatedSchedule));
       }
       return result;
     },
-    [schedule, workouts, cardioActivities, spreadsheetId],
+    [workoutSchedule, workouts, cardioActivities, spreadsheetId],
   );
 
   const handleUpdateLogRows = useCallback(
@@ -953,7 +962,8 @@ function App() {
         <CalendarView
           workouts={workouts}
           cardioActivities={cardioActivities}
-          schedule={schedule}
+          workoutSchedule={workoutSchedule}
+          dayFlags={dayFlags}
           logRows={logRows}
           onAssign={handleScheduleAssign}
           onRemove={handleScheduleRemove}
@@ -1080,7 +1090,7 @@ function App() {
       <WorkoutSelect
         workouts={workouts}
         missingLiftIds={missingLiftIds}
-        schedule={schedule}
+        workoutSchedule={workoutSchedule}
         logRows={logRows}
         onSelect={handleSelectWorkout}
         onViewSession={handleViewSession}

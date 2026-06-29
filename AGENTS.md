@@ -34,22 +34,24 @@ Core types, each building on the previous:
 4. **Workout** — a named collection of computed exercises with a `favorite` flag.
 5. **PreviousSetData** — previous-session weight/reps for comparison. Ephemeral.
 6. **SetResult** — execution-time tracking of what the user actually did. Logged to the "Log" sheet tab.
-7. **DayFlags** — boolean flags for calendar days (`home`, `elsewhere`, `travel`, `visitors`, `blocked`).
-8. **ScheduleEntry** — date→workoutId mapping with optional `flags`. Stored in the "Schedule" sheet tab.
+7. **DayFlags** — boolean flags for calendar days (`home`, `elsewhere`, `travel`, `visitors`, `alcohol`, `blocked`).
+8. **DayFlagEntry** — date + DayFlags. Stored in the "Schedule" sheet tab (flags only).
+9. **WorkoutScheduleEntry** — date→workoutId mapping with calendar sync fields (`calendarEventId`, `strongerId`). Stored in the "Workout Schedule" sheet tab.
 9. **CardioActivity** — simple `{id, name}` for cardio activities. Stored in the "Cardio" sheet tab.
 10. **StravaActivity** — synced Strava activity data (date, type, duration, distance, elevation, HR, etc.). Stored in the "Strava" sheet tab.
 11. **ProgressionProposal** — post-workout weight-change suggestions. Ephemeral, never stored.
 
 ### Google Sheets tabs and ranges (`src/google/sheets.ts`, `src/google/config.ts`)
 
-The app uses six tabs in the user's spreadsheet. Each tab has a header constant, a range constant, and serialization/deserialization functions.
+The app uses seven tabs in the user's spreadsheet. Each tab has a header constant, a range constant, and serialization/deserialization functions.
 
 | Tab name                | Range constant(s)     | Header columns | Column span |
 |-------------------------|-----------------------|----------------|-------------|
 | `Stronger - Exercises`  | `CONFIG_RANGE = A:I`  | 9 (`id` → `gear`) | A–I |
 | `Stronger - Workouts`   | `WORKOUT_DEFS_RANGE = A:M` | 13 (`workoutId` → `favorite`) | A–M |
 | `Stronger - Log`        | `LOG_READ_RANGE = A2:M`, `LOG_HEADER_RANGE = A1:M1`, `LOG_APPEND_RANGE = A2:M2` | 13 (`date` → `completed`) | A–M |
-| `Stronger - Schedule`   | `SCHEDULE_READ_RANGE = A2:G10000`, `SCHEDULE_FULL_RANGE = A1:G10000` | 7 (`date`, `workoutId`, `home`, `elsewhere`, `travel`, `visitors`, `blocked`) | A–G |
+| `Stronger - Schedule`   | `SCHEDULE_READ_RANGE = A2:G10000`, `SCHEDULE_FULL_RANGE = A1:G10000` | 7 (`date`, `home`, `elsewhere`, `travel`, `visitors`, `alcohol`, `blocked`) | A–G |
+| `Stronger - Workout Schedule` | `WORKOUT_SCHEDULE_READ_RANGE = A2:D10000`, `WORKOUT_SCHEDULE_FULL_RANGE = A1:D10000` | 4 (`date`, `workoutId`, `calendarEventId`, `strongerId`) | A–D |
 | `Stronger - Cardio`     | `CARDIO_RANGE = A:B`  | 2 (`id`, `name`) | A–B |
 | `Stronger - Strava`     | `STRAVA_SYNC_RANGE = A:J`, `STRAVA_HEADER_RANGE = A1:J1`, `STRAVA_READ_RANGE = A2:J` | 10 (`date` → `maxHR`) | A–J |
 

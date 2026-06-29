@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react';
-import type { Workout, ScheduleEntry, CardioActivity } from '../model/index.js';
+import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { CheckCircle, X, CalendarCheck } from 'lucide-react';
 
 interface CalendarPushProps {
   workouts: Workout[];
   cardioActivities: CardioActivity[];
   onClose: () => void;
-  onUpdateSchedule: (entries: ScheduleEntry[]) => void;
+  onUpdateSchedule: (entries: WorkoutScheduleEntry[]) => void;
 }
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -37,12 +37,12 @@ export function CalendarPush({ workouts, cardioActivities, onClose, onUpdateSche
 
   const hasSlots = daySlots.some((id) => id !== '');
 
-  // Generate ScheduleEntry[] from the weekly planner.
+  // Generate WorkoutScheduleEntry[] from the weekly planner.
   // Additive: only emits entries for days with a selection (skips empty/no-action days).
   // __rest__ signals clearing all workouts for that date.
   // Aligns each day-of-week to its correct calendar date regardless of start date.
-  const generateScheduleEntries = useCallback((): ScheduleEntry[] => {
-    const entries: ScheduleEntry[] = [];
+  const generateScheduleEntries = useCallback((): WorkoutScheduleEntry[] => {
+    const entries: WorkoutScheduleEntry[] = [];
     const [sy, sm, sd] = startDate.split('-').map(Number);
     const start = new Date(sy, sm - 1, sd);
     const startDow = start.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat

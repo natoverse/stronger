@@ -3,6 +3,7 @@ export type {
 	CardioActivity,
 	ComputedExercise,
 	ComputedSet,
+	DayFlagEntry,
 	DayFlags,
 	ExerciseRole,
 	ExerciseTemplate,
@@ -16,6 +17,7 @@ export type {
 	SetType,
 	WeightBasis,
 	Workout,
+	WorkoutScheduleEntry,
 } from './types.js';
 
 export { FLAG_SENTINEL } from './types.js';

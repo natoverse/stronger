@@ -8,7 +8,7 @@
  * a new one is created and the setting is updated.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -25,6 +25,7 @@ const TABS_TO_BACKUP: string[] = [
 	WORKOUT_DEFS_TAB_NAME,
 	LOG_TAB_NAME,
 	SCHEDULE_TAB_NAME,
+	WORKOUT_SCHEDULE_TAB_NAME,
 	CARDIO_TAB_NAME,
 	STRAVA_TAB_NAME,
 	SETTINGS_TAB_NAME,
