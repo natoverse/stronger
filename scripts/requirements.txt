@@ -1,0 +1,10 @@
+# Dependencies for scripts/garmin-sync.py
+#
+# garth       – Garmin Connect auth + API client (the engine GarminDB uses).
+#               Deprecated upstream but still works for token refresh + reads
+#               from a saved token dump. See specs/031-garmin-direct-sync.spec.md.
+# google-auth – Google service-account OAuth for Sheets API access.
+# requests    – HTTP client for the Sheets REST calls (also a garth dependency).
+garth>=0.5.0
+google-auth>=2.0.0
+requests>=2.32.2

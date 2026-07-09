@@ -116,14 +116,14 @@ Default data loaded from JSON files in `lib/` and used as seed data when a user 
 - `lib/cardio.json` — cardio activity definitions
 - `lib/quotes.json` — motivational quotes
 
-### Strava sync (`scripts/strava-sync.mjs`)
+### Garmin sync (`scripts/garmin-sync.py`)
 
-A Node.js script run by the `strava-sync.yml` GitHub Actions workflow on a daily cron. It fetches recent activities from the Strava API (which receives data from Garmin Connect auto-sync), then appends new rows to the "Stronger - Strava" sheet tab via a Google service account. See [STRAVA_SYNC_SETUP.md](STRAVA_SYNC_SETUP.md) for configuration.
+A Python script run by the `garmin-sync.yml` GitHub Actions workflow on a daily cron (also runnable on any machine with `python`). It authenticates to Garmin Connect using a saved `garth` token dump (`GARMIN_TOKENS` secret, minted once via browser login), fetches recent activities, then appends new rows to the "Stronger - Strava" sheet tab via a Google service account. The sheet tab keeps its legacy `Stronger - Strava` name and columns for backward compatibility — only the data source changed (Garmin instead of Strava, which dropped its free API). See [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) and `specs/031-garmin-direct-sync.spec.md` for details. Deps in `scripts/requirements.txt`; offline mapping tests in `scripts/test_garmin_sync.py`.
 
 ### GitHub Actions (`.github/workflows/`)
 
 - `deploy.yml` — builds and deploys to GitHub Pages on push to main
-- `strava-sync.yml` — daily Strava → Google Sheets sync
+- `garmin-sync.yml` — daily Garmin Connect → Google Sheets sync
 - `auto-spec-issues.yml` — creates GitHub issues from new spec files
 - `auto-archive-specs.yml` — moves spec files to `.archive/specs/` when their issue is closed
 
