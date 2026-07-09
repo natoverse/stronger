@@ -72,12 +72,21 @@ export {
 	readStravaActivities,
 	STRAVA_SYNC_RANGE,
 	STRAVA_HEADER,
+	withingsMeasurementToRow,
+	parseWithingsRow,
+	verifyWithingsTab,
+	createWithingsTab,
+	readWithingsMeasurements,
+	WITHINGS_SYNC_RANGE,
+	WITHINGS_HEADER,
 	verifySettingsTab,
 	createSettingsTab,
 	readSettings,
 	writeSettings,
 	goalsFromSettings,
 	goalsToSettings,
+	bodyGoalsFromSettings,
+	bodyGoalsToSettings,
 	liftGoalsFromSettings,
 	liftGoalsToSettings,
 	DEFAULT_APP_SETTINGS,
@@ -88,7 +97,7 @@ export type { SheetInfo, LogContext, ParsedLogRow, LiftGoal } from './sheets.ts'
 export { performBackup, BACKUP_SETTING_KEY } from './backup.ts'
 export type { CalendarListEntry } from './types.ts'
 export { GOOGLE_CLIENT_ID } from './config.ts'
-export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
 export {
 	listWritableCalendars,
 	listEventsInRange,

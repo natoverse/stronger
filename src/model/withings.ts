@@ -1,0 +1,264 @@
+/**
+ * Withings body-composition chart data model and aggregation logic.
+ *
+ * Consumes measurement data from the "Stronger - Withings" sheet tab and
+ * produces chart-ready data. Unlike Strava activities (which are summed into
+ * totals per bucket), body-composition metrics are point-in-time samples: a
+ * bucket's value is the average of the measurements that fall in it, and the
+ * series is a trend line over time rather than a cumulative total.
+ */
+
+import type { WithingsMeasurement } from './types.js';
+import {
+  getRangeStart,
+  getRangeEnd,
+  generateBucketSlots,
+  getTimeRangeOptions,
+} from './strava.js';
+import type { StravaTimeRange, StravaAggregation } from './strava.js';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                              */
+/* ------------------------------------------------------------------ */
+
+/** Body-composition metrics tracked from Withings. */
+export type WithingsMetric =
+  | 'weight'
+  | 'fatMass'
+  | 'fatRatio'
+  | 'muscleMass'
+  | 'boneMass'
+  | 'hydration';
+
+/** Reuse Strava's range and aggregation vocabulary for a consistent UI. */
+export type WithingsTimeRange = StravaTimeRange;
+export type WithingsAggregation = StravaAggregation;
+
+/** A single point in a metric trend line (one time bucket). */
+export interface TrendPoint {
+  /** Human-readable label for the bucket (e.g. "Mon", "W3", "Jan"). */
+  label: string;
+  /**
+   * Averaged metric value for the bucket in display units, or null if the
+   * bucket had no measurement for this metric (renders as a gap in the line).
+   */
+  value: number | null;
+}
+
+/** A single metric's target (e.g. a goal weight). */
+export interface WithingsGoal {
+  metric: WithingsMetric;
+  /** Target value in display units. */
+  value: number;
+}
+
+/** Complete chart data for a single metric. */
+export interface MetricTrendData {
+  metric: WithingsMetric;
+  points: TrendPoint[];
+  /** Target value for this metric, or null if none set. */
+  goal: number | null;
+  /** Display unit label. */
+  unit: string;
+  /** Most recent (latest by date) value across the filtered range, or null. */
+  latest: number | null;
+  /**
+   * Change from the first non-null point to the latest non-null point in the
+   * range (latest − first), or null if fewer than two points have data.
+   */
+  delta: number | null;
+  /** Minimum non-null value in the range (for axis scaling), or null. */
+  min: number | null;
+  /** Maximum non-null value in the range (for axis scaling), or null. */
+  max: number | null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Metric metadata                                                    */
+/* ------------------------------------------------------------------ */
+
+export const WITHINGS_METRICS: WithingsMetric[] = [
+  'weight',
+  'fatRatio',
+  'fatMass',
+  'muscleMass',
+  'boneMass',
+  'hydration',
+];
+
+export const METRIC_UNITS: Record<WithingsMetric, string> = {
+  weight: 'kg',
+  fatMass: 'kg',
+  fatRatio: '%',
+  muscleMass: 'kg',
+  boneMass: 'kg',
+  hydration: 'kg',
+};
+
+export const METRIC_LABELS: Record<WithingsMetric, string> = {
+  weight: 'Weight',
+  fatMass: 'Fat Mass',
+  fatRatio: 'Body Fat',
+  muscleMass: 'Muscle Mass',
+  boneMass: 'Bone Mass',
+  hydration: 'Hydration',
+};
+
+/** Whether lower values are "better" for this metric — used only for delta coloring. */
+export const METRIC_LOWER_IS_BETTER: Record<WithingsMetric, boolean> = {
+  weight: true,
+  fatMass: true,
+  fatRatio: true,
+  muscleMass: false,
+  boneMass: false,
+  hydration: false,
+};
+
+/* ------------------------------------------------------------------ */
+/*  Time range options (re-exported for a self-contained view import)  */
+/* ------------------------------------------------------------------ */
+
+export { getTimeRangeOptions };
+
+/* ------------------------------------------------------------------ */
+/*  Filtering                                                          */
+/* ------------------------------------------------------------------ */
+
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Filter measurements to those within the selected time range. */
+export function filterMeasurements(
+  measurements: WithingsMeasurement[],
+  range: WithingsTimeRange,
+  today: Date = new Date(),
+): WithingsMeasurement[] {
+  const startStr = toISODate(getRangeStart(range, today));
+  const endStr = toISODate(getRangeEnd(range, today));
+  return measurements.filter((m) => m.date >= startStr && m.date <= endStr);
+}
+
+/** Get the numeric value of a metric on a measurement, or null if absent. */
+function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
+  const v = m[metric];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Bucketing                                                          */
+/* ------------------------------------------------------------------ */
+
+/** Get ISO week number for a date (mirrors strava.ts). */
+function getISOWeek(d: Date): number {
+  const tmp = new Date(d.getTime());
+  tmp.setHours(0, 0, 0, 0);
+  tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
+  const jan4 = new Date(tmp.getFullYear(), 0, 4);
+  return 1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+}
+
+function getBucketKey(dateStr: string, aggregation: WithingsAggregation): string {
+  if (aggregation === 'day') return dateStr;
+  const d = new Date(dateStr + 'T00:00:00');
+  return aggregation === 'week' ? `W${getISOWeek(d)}` : String(d.getMonth());
+}
+
+/* ------------------------------------------------------------------ */
+/*  Trend data builder                                                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Build trend data for a single metric from filtered measurements.
+ *
+ * @param measurements - Already filtered by date range
+ * @param metric - Which metric to chart
+ * @param range - Time range (determines bucket slots)
+ * @param goal - Target value in display units, or null
+ * @param today - Reference date for range calculations
+ * @param aggregation - Bucket granularity (day/week/month)
+ */
+export function buildMetricTrendData(
+  measurements: WithingsMeasurement[],
+  metric: WithingsMetric,
+  range: WithingsTimeRange,
+  goal: number | null = null,
+  today: Date = new Date(),
+  aggregation: WithingsAggregation = 'week',
+): MetricTrendData {
+  const slots = generateBucketSlots(range, aggregation, today);
+
+  // Accumulate sum + count per bucket so we can average.
+  const sums = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const { key } of slots) {
+    sums.set(key, 0);
+    counts.set(key, 0);
+  }
+
+  // Track latest measurement (by date) with a value, for the headline figure.
+  let latest: number | null = null;
+  let latestDate = '';
+  let earliest: number | null = null;
+  let earliestDate = '';
+  let min: number | null = null;
+  let max: number | null = null;
+
+  for (const m of measurements) {
+    const v = metricValue(m, metric);
+    if (v === null) continue;
+
+    const key = getBucketKey(m.date, aggregation);
+    if (sums.has(key)) {
+      sums.set(key, (sums.get(key) ?? 0) + v);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    if (min === null || v < min) min = v;
+    if (max === null || v > max) max = v;
+    if (latest === null || m.date > latestDate) {
+      latest = v;
+      latestDate = m.date;
+    }
+    if (earliest === null || m.date < earliestDate) {
+      earliest = v;
+      earliestDate = m.date;
+    }
+  }
+
+  const points: TrendPoint[] = slots.map(({ key, label }) => {
+    const count = counts.get(key) ?? 0;
+    return {
+      label,
+      value: count > 0 ? (sums.get(key) ?? 0) / count : null,
+    };
+  });
+
+  const delta =
+    latest !== null && earliest !== null && latestDate !== earliestDate
+      ? latest - earliest
+      : null;
+
+  return {
+    metric,
+    points,
+    goal,
+    unit: METRIC_UNITS[metric],
+    latest,
+    delta,
+    min,
+    max,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Value formatting                                                   */
+/* ------------------------------------------------------------------ */
+
+/** Format a display-unit value for axis labels and headline figures. */
+export function formatMetricValue(v: number, metric: WithingsMetric): string {
+  if (metric === 'fatRatio') return v.toFixed(1);
+  // Mass metrics: one decimal below 100, whole numbers above.
+  if (v >= 100) return v.toFixed(0);
+  return v.toFixed(1);
+}

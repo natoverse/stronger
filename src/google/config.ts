@@ -47,5 +47,8 @@ export const CARDIO_TAB_NAME = 'Stronger - Cardio'
 /** Name of the tab that holds Strava synced activity data. */
 export const STRAVA_TAB_NAME = 'Stronger - Strava'
 
+/** Name of the tab that holds Withings synced body-composition data. */
+export const WITHINGS_TAB_NAME = 'Stronger - Withings'
+
 /** Name of the tab that holds app settings as key/value pairs. */
 export const SETTINGS_TAB_NAME = 'Stronger - Settings'

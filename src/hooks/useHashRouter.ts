@@ -9,7 +9,8 @@ export type Route =
   | { view: 'exerciseEditor'; exerciseId?: string }
   | { view: 'progress' }
   | { view: 'settings' }
-  | { view: 'strava' };
+  | { view: 'strava' }
+  | { view: 'withings' };
 
 /**
  * Parse the current `window.location.hash` into a Route.
@@ -33,6 +34,7 @@ export function parseHash(hash: string = window.location.hash): Route {
   if (stripped === 'progress') return { view: 'progress' };
   if (stripped === 'settings') return { view: 'settings' };
   if (stripped === 'strava') return { view: 'strava' };
+  if (stripped === 'withings') return { view: 'withings' };
 
   if (stripped === 'edit/new') return { view: 'editor' };
   const editMatch = stripped.match(/^edit\/([^/]+)$/);
@@ -57,6 +59,7 @@ export function routeToHash(route: Route): string {
   if (route.view === 'progress') return '/progress';
   if (route.view === 'settings') return '/settings';
   if (route.view === 'strava') return '/strava';
+  if (route.view === 'withings') return '/withings';
   if (route.view === 'exerciseEditor') return route.exerciseId ? `/exercise/${encodeURIComponent(route.exerciseId)}` : '/exercise/new';
   return '/';
 }

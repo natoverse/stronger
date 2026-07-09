@@ -16,6 +16,7 @@ export type {
 	SetTemplate,
 	SetType,
 	WeightBasis,
+	WithingsMeasurement,
 	Workout,
 	WorkoutScheduleEntry,
 } from './types.js';

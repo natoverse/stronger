@@ -1,0 +1,31 @@
+name: Withings Sync (Withings → Google Sheets)
+
+on:
+  schedule:
+    # Run daily at 06:30 UTC (offset from the Strava sync at 06:00)
+    - cron: '30 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Withings sync script
+        env:
+          WITHINGS_CLIENT_ID: ${{ secrets.WITHINGS_CLIENT_ID }}
+          WITHINGS_CLIENT_SECRET: ${{ secrets.WITHINGS_CLIENT_SECRET }}
+          WITHINGS_REFRESH_TOKEN: ${{ secrets.WITHINGS_REFRESH_TOKEN }}
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+        run: node scripts/withings-sync.mjs

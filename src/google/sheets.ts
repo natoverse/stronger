@@ -5,9 +5,10 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, AppSettings } from '../model/types.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, WithingsMeasurement, AppSettings } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
+import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 
 /* ------------------------------------------------------------------ */
@@ -1894,6 +1895,168 @@ export async function readStravaActivities(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Withings tab – constants                                           */
+/* ------------------------------------------------------------------ */
+
+/** A1 range for the Withings tab (open-ended rows, 8 columns). */
+export const WITHINGS_SYNC_RANGE = `'${WITHINGS_TAB_NAME}'!A:H`
+
+/** A1 range for the Withings tab header (row 1). */
+const WITHINGS_HEADER_RANGE = `'${WITHINGS_TAB_NAME}'!A1:H1`
+
+/** A1 range for reading Withings data (row 2 onward, open-ended). */
+const WITHINGS_READ_RANGE = `'${WITHINGS_TAB_NAME}'!A2:H`
+
+export const WITHINGS_HEADER: string[] = [
+	'date',
+	'grpId',
+	'weight',
+	'fatMass',
+	'fatRatio',
+	'muscleMass',
+	'boneMass',
+	'hydration',
+]
+
+/* ------------------------------------------------------------------ */
+/*  Withings tab – serialization                                       */
+/* ------------------------------------------------------------------ */
+
+/** Serialize an optional numeric field: null → empty cell. */
+function optionalNumToCell(v: number | null): string {
+	return v == null ? '' : String(v)
+}
+
+/** Convert a {@link WithingsMeasurement} to a spreadsheet row. */
+export function withingsMeasurementToRow(m: WithingsMeasurement): string[] {
+	return [
+		m.date,
+		m.grpId,
+		String(m.weight),
+		optionalNumToCell(m.fatMass),
+		optionalNumToCell(m.fatRatio),
+		optionalNumToCell(m.muscleMass),
+		optionalNumToCell(m.boneMass),
+		optionalNumToCell(m.hydration),
+	]
+}
+
+/**
+ * Parse an optional numeric cell. Blank/whitespace → null. An invalid or
+ * negative number is treated as absent (null) rather than failing the row,
+ * since body-composition fields are secondary to weight.
+ */
+function parseOptionalNum(raw: string): number | null {
+	const trimmed = (raw ?? '').trim()
+	if (!trimmed) return null
+	const n = Number(trimmed)
+	if (!Number.isFinite(n) || n < 0) return null
+	return n
+}
+
+/**
+ * Parse a single raw Withings row (string array) into a {@link WithingsMeasurement}.
+ * Returns `null` for incomplete or invalid rows (missing date/grpId, bad date
+ * format, or a missing/invalid weight — weight is the one required metric).
+ */
+export function parseWithingsRow(row: string[]): WithingsMeasurement | null {
+	if (!row || row.length < 3) return null
+
+	const date = (row[0] ?? '').trim()
+	const grpId = (row[1] ?? '').trim()
+	const rawWeight = (row[2] ?? '').trim()
+
+	if (!date || !grpId) return null
+	// Basic date format validation: YYYY-MM-DD
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+
+	const weight = Number(rawWeight)
+	if (!Number.isFinite(weight) || weight <= 0) return null
+
+	return {
+		date,
+		grpId,
+		weight,
+		fatMass: parseOptionalNum(row[3]),
+		fatRatio: parseOptionalNum(row[4]),
+		muscleMass: parseOptionalNum(row[5]),
+		boneMass: parseOptionalNum(row[6]),
+		hydration: parseOptionalNum(row[7]),
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Withings tab – read/write                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Check if the Withings tab exists in the spreadsheet.
+ */
+export async function verifyWithingsTab(
+	spreadsheetId: string,
+): Promise<boolean> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.get({
+		spreadsheetId,
+	})
+	const sheets = response.result.sheets ?? []
+	return sheets.some(
+		(s) => s.properties.title === WITHINGS_TAB_NAME,
+	)
+}
+
+/**
+ * Create the Withings tab inside the given spreadsheet and write the header row.
+ */
+export async function createWithingsTab(
+	spreadsheetId: string,
+): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	await gapi.client.sheets.spreadsheets.batchUpdate({
+		spreadsheetId,
+		resource: {
+			requests: [{ addSheet: { properties: { title: WITHINGS_TAB_NAME } } }],
+		},
+	})
+
+	// Write header to row 1
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId,
+		range: WITHINGS_HEADER_RANGE,
+		valueInputOption: 'RAW',
+		resource: { values: [WITHINGS_HEADER] },
+	})
+}
+
+/**
+ * Read the Withings tab and return parsed measurements.
+ * Returns an empty array if no valid rows exist.
+ */
+export async function readWithingsMeasurements(
+	spreadsheetId: string,
+): Promise<WithingsMeasurement[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: WITHINGS_READ_RANGE,
+	})
+
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return []
+
+	return rawRows
+		.map(parseWithingsRow)
+		.filter((r): r is WithingsMeasurement => r !== null)
+}
+
+
+/* ------------------------------------------------------------------ */
 /*  Settings tab – constants                                           */
 /* ------------------------------------------------------------------ */
 
@@ -2043,6 +2206,60 @@ export function goalsToSettings(
 	// Add new goal keys
 	for (const g of goals) {
 		settings.set(`${GOAL_KEY_PREFIX}${g.metric}`, String(g.value))
+	}
+	return settings
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings tab – Withings goal helpers                               */
+/* ------------------------------------------------------------------ */
+
+/** Key prefix used for Withings body-composition goal entries. */
+const BODY_GOAL_KEY_PREFIX = 'bodyGoal.'
+
+/** Valid Withings goal metric values. */
+const VALID_BODY_GOAL_METRICS = new Set([
+	'weight',
+	'fatMass',
+	'fatRatio',
+	'muscleMass',
+	'boneMass',
+	'hydration',
+])
+
+/**
+ * Extract {@link WithingsGoal} entries from a settings map.
+ * Goal keys use the format `bodyGoal.<metric>` (e.g. `bodyGoal.weight`).
+ */
+export function bodyGoalsFromSettings(settings: Map<string, string>): WithingsGoal[] {
+	const goals: WithingsGoal[] = []
+	for (const [key, raw] of settings) {
+		if (!key.startsWith(BODY_GOAL_KEY_PREFIX)) continue
+		const metric = key.slice(BODY_GOAL_KEY_PREFIX.length)
+		if (!VALID_BODY_GOAL_METRICS.has(metric)) continue
+		const value = Number(raw)
+		if (!isFinite(value) || value <= 0) continue
+		goals.push({ metric: metric as WithingsMetric, value })
+	}
+	return goals
+}
+
+/**
+ * Merge {@link WithingsGoal} entries into a settings map.
+ * Removes any existing `bodyGoal.*` keys and replaces them with the new goals.
+ * Returns the updated map (mutates the input).
+ */
+export function bodyGoalsToSettings(
+	goals: WithingsGoal[],
+	settings: Map<string, string>,
+): Map<string, string> {
+	for (const key of [...settings.keys()]) {
+		if (key.startsWith(BODY_GOAL_KEY_PREFIX)) {
+			settings.delete(key)
+		}
+	}
+	for (const g of goals) {
+		settings.set(`${BODY_GOAL_KEY_PREFIX}${g.metric}`, String(g.value))
 	}
 	return settings
 }

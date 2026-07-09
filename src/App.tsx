@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings } from './model/index.js';
 import { computeProgression } from './model/index.js';
-import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
@@ -26,6 +26,9 @@ import { useHashRouter } from './hooks/useHashRouter.js';
 import { loadDraft, saveDraft, clearDraft } from './hooks/useWorkoutDraft.js';
 import { clearSentinel as clearTimerSentinel } from './hooks/useRestTimer.js';
 import type { StravaActivity, StravaGoal, StravaMetric } from './model/strava.js';
+import type { WithingsMeasurement } from './model/types.js';
+import type { WithingsGoal, WithingsMetric } from './model/withings.js';
+import { WithingsView } from './components/WithingsView.js';
 import './App.css';
 
 function App() {
@@ -47,6 +50,8 @@ function App() {
   const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>([]);
   const [stravaActivities, setStravaActivities] = useState<StravaActivity[]>([]);
   const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
+  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
+  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
   const [liftGoals, setLiftGoals] = useState<LiftGoal[]>([]);
   const [draftResults, setDraftResults] = useState<SetResult[][] | null>(null);
   const [pendingFinish, setPendingFinish] = useState<{
@@ -62,6 +67,7 @@ function App() {
   const workoutScheduleLoadedRef = useRef(false);
   const logLoadedRef = useRef(false);
   const stravaLoadedRef = useRef(false);
+  const withingsLoadedRef = useRef(false);
 
   const handleConnected = useCallback(
     (loadedWorkouts: Workout[], loadedConfigs: LiftConfig[], sheetId: string, defs: WorkoutDefinition[], cardio: CardioActivity[]) => {
@@ -77,6 +83,7 @@ function App() {
       workoutScheduleLoadedRef.current = false;
       logLoadedRef.current = false;
       stravaLoadedRef.current = false;
+      withingsLoadedRef.current = false;
     },
     [],
   );
@@ -136,11 +143,14 @@ function App() {
     setNeedsSetup(false);
     setCardioActivities([]);
     setStravaActivities([]);
+    setWithingsMeasurements([]);
+    setWithingsGoals([]);
     // Reset lazy-loading flags
     flagsLoadedRef.current = false;
     workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
     stravaLoadedRef.current = false;
+    withingsLoadedRef.current = false;
     replaceTo({ view: 'list' });
   }, [replaceTo]);
 
@@ -346,11 +356,27 @@ function App() {
         const settings = await readSettings(sheetId);
         settingsRef.current = settings;
         setStravaGoals(goalsFromSettings(settings));
+        setWithingsGoals(bodyGoalsFromSettings(settings));
         setLiftGoals(liftGoalsFromSettings(settings));
         setAppSettings(appSettingsFromMap(settings));
       });
     } catch {
       // Silently ignore — settings data is optional
+    }
+  }, []);
+
+  const loadWithingsData = useCallback(async (sheetId: string) => {
+    try {
+      await withAuthRetry(async () => {
+        const tabExists = await verifyWithingsTab(sheetId);
+        if (!tabExists) {
+          await createWithingsTab(sheetId);
+        }
+        const measurements = await readWithingsMeasurements(sheetId);
+        setWithingsMeasurements(measurements);
+      });
+    } catch {
+      // Silently ignore — Withings data is optional
     }
   }, []);
 
@@ -704,6 +730,24 @@ function App() {
     navigateTo({ view: 'strava' });
   }, [navigateTo]);
 
+  const handleOpenWithings = useCallback(() => {
+    navigateTo({ view: 'withings' });
+  }, [navigateTo]);
+
+  const handleWithingsGoalChange = useCallback((metric: WithingsMetric, value: number | null) => {
+    setWithingsGoals((prev) => {
+      const updated = prev.filter((g) => g.metric !== metric);
+      if (value !== null) {
+        updated.push({ metric, value });
+      }
+      if (spreadsheetId) {
+        bodyGoalsToSettings(updated, settingsRef.current);
+        void withAuthRetry(() => writeSettings(spreadsheetId, settingsRef.current)).catch(() => {});
+      }
+      return updated;
+    });
+  }, [spreadsheetId]);
+
   const handleStravaGoalChange = useCallback((metric: StravaMetric, value: number | null) => {
     setStravaGoals((prev) => {
       const updated = prev.filter((g) => g.metric !== metric);
@@ -958,6 +1002,15 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadStravaData]);
 
+  // Lazy-load Withings measurements when the withings view is first visited.
+  // (Body-composition goals arrive via the settings read in loadStravaData.)
+  useEffect(() => {
+    if (route.view === 'withings' && spreadsheetId && !withingsLoadedRef.current) {
+      withingsLoadedRef.current = true;
+      void loadWithingsData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadWithingsData]);
+
   // Gate: require auth + sheet connection before showing workouts
   if (!sheetConnected) {
     return (
@@ -979,6 +1032,7 @@ function App() {
   }
 
   const onOpenStrava = handleOpenStrava;
+  const onOpenWithings = handleOpenWithings;
 
   // Show progression review / confirm page after clicking Finish
   if (progressionProposals && pendingFinish) {
@@ -1024,6 +1078,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseEditor
@@ -1047,6 +1102,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseLibrary
@@ -1072,6 +1128,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <WorkoutEditor
@@ -1097,6 +1154,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <CalendarView
@@ -1130,6 +1188,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <ProgressView logRows={logRows} liftGoals={liftGoals} onLiftGoalChange={handleLiftGoalChange} />
@@ -1148,12 +1207,36 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <StravaView
           activities={stravaActivities}
           goals={stravaGoals}
           onGoalChange={handleStravaGoalChange}
+        />
+      </>
+    );
+  }
+
+  if (route.view === 'withings') {
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onGoToList={handleGoToList}
+          onOpenCalendar={handleOpenCalendar}
+          onOpenExercises={handleOpenExercises}
+          onOpenProgress={handleOpenProgress}
+          onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
+          onOpenSettings={handleOpenSettings}
+        />
+        <WithingsView
+          measurements={withingsMeasurements}
+          goals={withingsGoals}
+          onGoalChange={handleWithingsGoalChange}
         />
       </>
     );
@@ -1170,6 +1253,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <SettingsView
@@ -1204,6 +1288,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
         <SessionDetail
@@ -1226,6 +1311,7 @@ function App() {
         onOpenExercises={handleOpenExercises}
         onOpenProgress={handleOpenProgress}
         onOpenStrava={onOpenStrava}
+        onOpenWithings={onOpenWithings}
         onOpenSettings={handleOpenSettings}
       />
       <WorkoutSelect

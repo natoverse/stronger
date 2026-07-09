@@ -3602,6 +3602,20 @@ body {
 	font-weight: 400;
 }
 
+.withings-delta {
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: rgba(255, 255, 255, 0.5);
+}
+
+.withings-delta.good {
+	color: #4ade80;
+}
+
+.withings-delta.bad {
+	color: #f87171;
+}
+
 .strava-goal-btn {
 	background: none;
 	border: none;
