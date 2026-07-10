@@ -3,7 +3,7 @@ import { Upload, FileText, AlertTriangle, Check, Loader, Unlink, Sliders } from 
 import { parseHevyCsv, convertHevyRows, computeImportSummary } from '../model/hevy-import.js';
 import { clearSheetId } from '../google/storage.js';
 import type { ImportSummary } from '../model/hevy-import.js';
-import type { AppSettings, AppBooleanSettingKey } from '../model/index.js';
+import type { AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/index.js';
 
 interface Props {
   spreadsheetId: string;
@@ -12,11 +12,12 @@ interface Props {
   onDisconnectSheet: () => void;
   appSettings: AppSettings;
   onAppSettingChange: (key: AppBooleanSettingKey, value: boolean) => void;
+  onAppPercentSettingChange: (key: AppPercentSettingKey, value: number) => void;
 }
 
 type ImportPhase = 'idle' | 'preview' | 'importing' | 'done' | 'error';
 
-export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, onDisconnectSheet, appSettings, onAppSettingChange }: Props) {
+export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, onDisconnectSheet, appSettings, onAppSettingChange, onAppPercentSettingChange }: Props) {
   const [phase, setPhase] = useState<ImportPhase>('idle');
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [convertedRows, setConvertedRows] = useState<(string | number | boolean)[][] | null>(null);
@@ -126,6 +127,49 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
           <span className="settings-toggle-switch" />
         </label>
 
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Body Comp Dip Filter</span>
+            <span className="settings-toggle-description">Skip upward spikes above this % in Withings charts</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0.1}
+              max={20}
+              step={0.5}
+              value={appSettings.withingsDipThresholdPercent}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v > 0 && v <= 100) onAppPercentSettingChange('withingsDipThresholdPercent', v);
+              }}
+            />
+            <span className="settings-percent-unit">%</span>
+          </div>
+        </div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Progress Dip Filter</span>
+            <span className="settings-toggle-description">Skip deload dips below this % in progress charts</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0.1}
+              max={50}
+              step={1}
+              value={appSettings.progressDipThresholdPercent}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v > 0 && v <= 100) onAppPercentSettingChange('progressDipThresholdPercent', v);
+              }}
+            />
+            <span className="settings-percent-unit">%</span>
+          </div>
+        </div>
 
       </div>
 

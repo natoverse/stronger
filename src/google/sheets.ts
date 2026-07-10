@@ -2334,7 +2334,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	showRestTimer: true,
 	showSetComments: true,
 	keepScreenOn: true,
-	withingsDipThresholdPercent: 5,
+	withingsDipThresholdPercent: 2,
 	progressDipThresholdPercent: 10,
 }
 
