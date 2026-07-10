@@ -10,7 +10,7 @@ import type { WithingsGoal } from '../../model/withings.ts'
 describe('parseWithingsRow', () => {
 	it('parses a full row', () => {
 		expect(
-			parseWithingsRow(['2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45']),
+			parseWithingsRow(['2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45', '64', '58']),
 		).toEqual({
 			date: '2026-06-15',
 			grpId: '1000',
@@ -20,11 +20,13 @@ describe('parseWithingsRow', () => {
 			muscleMass: 60,
 			boneMass: 3,
 			hydration: 45,
+			fatFreeMass: 64,
+			heartRate: 58,
 		})
 	})
 
 	it('trims whitespace', () => {
-		const result = parseWithingsRow([' 2026-06-15 ', ' 1000 ', ' 80.2 ', '', '', '', '', ''])
+		const result = parseWithingsRow([' 2026-06-15 ', ' 1000 ', ' 80.2 ', '', '', '', '', '', '', ''])
 		expect(result).not.toBeNull()
 		expect(result!.date).toBe('2026-06-15')
 		expect(result!.grpId).toBe('1000')
@@ -32,13 +34,15 @@ describe('parseWithingsRow', () => {
 	})
 
 	it('treats blank body-composition cells as null', () => {
-		const result = parseWithingsRow(['2026-06-15', '1000', '80', '', '', '', '', ''])
+		const result = parseWithingsRow(['2026-06-15', '1000', '80', '', '', '', '', '', '', ''])
 		expect(result).not.toBeNull()
 		expect(result!.fatMass).toBeNull()
 		expect(result!.fatRatio).toBeNull()
 		expect(result!.muscleMass).toBeNull()
 		expect(result!.boneMass).toBeNull()
 		expect(result!.hydration).toBeNull()
+		expect(result!.fatFreeMass).toBeNull()
+		expect(result!.heartRate).toBeNull()
 	})
 
 	it('parses a weight-only row (short array)', () => {
@@ -46,6 +50,15 @@ describe('parseWithingsRow', () => {
 		expect(result).not.toBeNull()
 		expect(result!.weight).toBe(80)
 		expect(result!.fatMass).toBeNull()
+		expect(result!.fatFreeMass).toBeNull()
+		expect(result!.heartRate).toBeNull()
+	})
+
+	it('parses fat-free mass and heart rate when present', () => {
+		const result = parseWithingsRow(['2026-06-15', '1000', '80', '', '', '', '', '', '64.5', '57'])
+		expect(result).not.toBeNull()
+		expect(result!.fatFreeMass).toBe(64.5)
+		expect(result!.heartRate).toBe(57)
 	})
 
 	it('rejects a row with no weight', () => {
@@ -54,16 +67,16 @@ describe('parseWithingsRow', () => {
 	})
 
 	it('rejects a row missing date or grpId', () => {
-		expect(parseWithingsRow(['', '1000', '80', '', '', '', '', ''])).toBeNull()
-		expect(parseWithingsRow(['2026-06-15', '', '80', '', '', '', '', ''])).toBeNull()
+		expect(parseWithingsRow(['', '1000', '80', '', '', '', '', '', '', ''])).toBeNull()
+		expect(parseWithingsRow(['2026-06-15', '', '80', '', '', '', '', '', '', ''])).toBeNull()
 	})
 
 	it('rejects a malformed date', () => {
-		expect(parseWithingsRow(['06/15/2026', '1000', '80', '', '', '', '', ''])).toBeNull()
+		expect(parseWithingsRow(['06/15/2026', '1000', '80', '', '', '', '', '', '', ''])).toBeNull()
 	})
 
 	it('treats a negative body-composition value as absent', () => {
-		const result = parseWithingsRow(['2026-06-15', '1000', '80', '-5', '20', '', '', ''])
+		const result = parseWithingsRow(['2026-06-15', '1000', '80', '-5', '20', '', '', '', '', ''])
 		expect(result).not.toBeNull()
 		expect(result!.fatMass).toBeNull()
 		expect(result!.fatRatio).toBe(20)
@@ -85,9 +98,11 @@ describe('withingsMeasurementToRow', () => {
 			muscleMass: 60,
 			boneMass: 3,
 			hydration: 45,
+			fatFreeMass: 64,
+			heartRate: 58,
 		}
 		expect(withingsMeasurementToRow(m)).toEqual([
-			'2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45',
+			'2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45', '64', '58',
 		])
 	})
 
@@ -101,9 +116,11 @@ describe('withingsMeasurementToRow', () => {
 			muscleMass: null,
 			boneMass: null,
 			hydration: null,
+			fatFreeMass: null,
+			heartRate: null,
 		}
 		expect(withingsMeasurementToRow(m)).toEqual([
-			'2026-06-15', '1000', '80', '', '', '', '', '',
+			'2026-06-15', '1000', '80', '', '', '', '', '', '', '',
 		])
 	})
 
@@ -117,6 +134,8 @@ describe('withingsMeasurementToRow', () => {
 			muscleMass: 61,
 			boneMass: null,
 			hydration: 44,
+			fatFreeMass: 64,
+			heartRate: null,
 		}
 		expect(parseWithingsRow(withingsMeasurementToRow(m))).toEqual(m)
 	})

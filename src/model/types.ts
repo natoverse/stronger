@@ -312,6 +312,10 @@ export interface WithingsMeasurement {
 	boneMass: number | null;
 	/** Body water in kg, or null if not measured. */
 	hydration: number | null;
+	/** Fat-free (lean) mass in kg, or null if not measured. */
+	fatFreeMass: number | null;
+	/** Resting heart rate in bpm at weigh-in, or null if not measured. */
+	heartRate: number | null;
 }
 
 // ---------------------------------------------------------------------------

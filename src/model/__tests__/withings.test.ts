@@ -3,6 +3,8 @@ import {
   filterMeasurements,
   buildMetricTrendData,
   formatMetricValue,
+  toDisplayUnit,
+  fromDisplayUnit,
   METRIC_UNITS,
   METRIC_LABELS,
   METRIC_LOWER_IS_BETTER,
@@ -24,11 +26,14 @@ function makeMeasurement(overrides: Partial<WithingsMeasurement> = {}): Withings
     muscleMass: 60,
     boneMass: 3,
     hydration: 45,
+    fatFreeMass: 64,
+    heartRate: 58,
     ...overrides,
   };
 }
 
 const TODAY = new Date('2026-06-20T12:00:00');
+const KG_TO_LB = 2.2046226218;
 
 /* ------------------------------------------------------------------ */
 /*  Metadata                                                           */
@@ -43,12 +48,43 @@ describe('metric metadata', () => {
     }
   });
 
-  it('weight is measured in kg', () => {
-    expect(METRIC_UNITS.weight).toBe('kg');
+  it('displays weight in pounds', () => {
+    expect(METRIC_UNITS.weight).toBe('lb');
   });
 
   it('body fat is a percentage', () => {
     expect(METRIC_UNITS.fatRatio).toBe('%');
+  });
+
+  it('resting heart rate is in bpm', () => {
+    expect(METRIC_UNITS.heartRate).toBe('bpm');
+  });
+
+  it('includes fat-free (lean) mass and resting heart rate', () => {
+    expect(WITHINGS_METRICS).toContain('fatFreeMass');
+    expect(WITHINGS_METRICS).toContain('heartRate');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  Unit conversion                                                    */
+/* ------------------------------------------------------------------ */
+
+describe('toDisplayUnit / fromDisplayUnit', () => {
+  it('converts mass metrics from kg to lb for display', () => {
+    expect(toDisplayUnit('weight', 80)).toBeCloseTo(176.37, 2);
+    expect(toDisplayUnit('fatMass', 16)).toBeCloseTo(35.27, 2);
+    expect(toDisplayUnit('fatFreeMass', 64)).toBeCloseTo(141.10, 2);
+  });
+
+  it('leaves non-mass metrics unchanged', () => {
+    expect(toDisplayUnit('fatRatio', 20)).toBe(20);
+    expect(toDisplayUnit('heartRate', 58)).toBe(58);
+  });
+
+  it('round-trips through fromDisplayUnit', () => {
+    expect(fromDisplayUnit('weight', toDisplayUnit('weight', 80))).toBeCloseTo(80, 6);
+    expect(fromDisplayUnit('heartRate', 58)).toBe(58);
   });
 });
 
@@ -85,71 +121,78 @@ describe('filterMeasurements', () => {
 describe('buildMetricTrendData', () => {
   it('reports the latest value by date', () => {
     const measurements = [
-      makeMeasurement({ date: '2026-06-01', grpId: 'a', weight: 82 }),
-      makeMeasurement({ date: '2026-06-15', grpId: 'b', weight: 80 }),
-      makeMeasurement({ date: '2026-06-10', grpId: 'c', weight: 81 }),
+      makeMeasurement({ date: '2026-06-01', grpId: 'a', fatRatio: 22 }),
+      makeMeasurement({ date: '2026-06-15', grpId: 'b', fatRatio: 20 }),
+      makeMeasurement({ date: '2026-06-10', grpId: 'c', fatRatio: 21 }),
     ];
-    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
-    expect(data.latest).toBe(80);
+    const data = buildMetricTrendData(measurements, 'fatRatio', '2026', null, TODAY, 'month');
+    expect(data.latest).toBe(20);
   });
 
   it('computes delta as latest minus earliest', () => {
     const measurements = [
-      makeMeasurement({ date: '2026-06-01', grpId: 'a', weight: 82 }),
-      makeMeasurement({ date: '2026-06-15', grpId: 'b', weight: 79 }),
+      makeMeasurement({ date: '2026-06-01', grpId: 'a', fatRatio: 22 }),
+      makeMeasurement({ date: '2026-06-15', grpId: 'b', fatRatio: 19 }),
     ];
-    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
+    const data = buildMetricTrendData(measurements, 'fatRatio', '2026', null, TODAY, 'month');
     expect(data.delta).toBe(-3);
   });
 
   it('returns null delta when only one measurement exists', () => {
-    const measurements = [makeMeasurement({ date: '2026-06-01', weight: 82 })];
-    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
+    const measurements = [makeMeasurement({ date: '2026-06-01', fatRatio: 22 })];
+    const data = buildMetricTrendData(measurements, 'fatRatio', '2026', null, TODAY, 'month');
     expect(data.delta).toBeNull();
   });
 
   it('averages multiple measurements in the same bucket', () => {
     const measurements = [
-      makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80 }),
-      makeMeasurement({ date: '2026-03-20', grpId: 'b', weight: 84 }),
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', fatRatio: 20 }),
+      makeMeasurement({ date: '2026-03-20', grpId: 'b', fatRatio: 24 }),
     ];
-    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
+    const data = buildMetricTrendData(measurements, 'fatRatio', '2026', null, TODAY, 'month');
     // March is bucket index 2
-    expect(data.points[2].value).toBe(82);
+    expect(data.points[2].value).toBe(22);
+  });
+
+  it('converts weight buckets to pounds', () => {
+    const measurements = [makeMeasurement({ date: '2026-03-01', weight: 80 })];
+    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBeCloseTo(176.37, 2); // 80 kg → lb
+    expect(data.latest).toBeCloseTo(176.37, 2);
   });
 
   it('leaves buckets with no measurement as null (line gap)', () => {
-    const measurements = [makeMeasurement({ date: '2026-03-01', weight: 80 })];
-    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
+    const measurements = [makeMeasurement({ date: '2026-03-01', fatRatio: 20 })];
+    const data = buildMetricTrendData(measurements, 'fatRatio', '2026', null, TODAY, 'month');
     expect(data.points[0].value).toBeNull(); // January
-    expect(data.points[2].value).toBe(80); // March
+    expect(data.points[2].value).toBe(20); // March
   });
 
   it('ignores null metric fields when building a trend', () => {
     const measurements = [
-      makeMeasurement({ date: '2026-03-01', grpId: 'a', muscleMass: null }),
-      makeMeasurement({ date: '2026-04-01', grpId: 'b', muscleMass: 61 }),
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', heartRate: null }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', heartRate: 61 }),
     ];
-    const data = buildMetricTrendData(measurements, 'muscleMass', '2026', null, TODAY, 'month');
-    expect(data.points[2].value).toBeNull(); // March had no muscle reading
-    expect(data.points[3].value).toBe(61); // April
+    const data = buildMetricTrendData(measurements, 'heartRate', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBeNull(); // March had no HR reading
+    expect(data.points[3].value).toBe(61); // April (bpm, unconverted)
     expect(data.latest).toBe(61);
   });
 
   it('tracks min and max across the range', () => {
     const measurements = [
-      makeMeasurement({ date: '2026-02-01', weight: 78 }),
-      makeMeasurement({ date: '2026-05-01', weight: 85 }),
-      makeMeasurement({ date: '2026-06-01', weight: 80 }),
+      makeMeasurement({ date: '2026-02-01', fatRatio: 18 }),
+      makeMeasurement({ date: '2026-05-01', fatRatio: 25 }),
+      makeMeasurement({ date: '2026-06-01', fatRatio: 20 }),
     ];
-    const data = buildMetricTrendData(measurements, 'weight', '2026', null, TODAY, 'month');
-    expect(data.min).toBe(78);
-    expect(data.max).toBe(85);
+    const data = buildMetricTrendData(measurements, 'fatRatio', '2026', null, TODAY, 'month');
+    expect(data.min).toBe(18);
+    expect(data.max).toBe(25);
   });
 
-  it('carries the goal through', () => {
-    const data = buildMetricTrendData([makeMeasurement()], 'weight', '2026', 75, TODAY, 'month');
-    expect(data.goal).toBe(75);
+  it('carries the goal through (already in display units)', () => {
+    const data = buildMetricTrendData([makeMeasurement()], 'weight', '2026', 165, TODAY, 'month');
+    expect(data.goal).toBe(165);
   });
 });
 
@@ -162,11 +205,15 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue(19.47, 'fatRatio')).toBe('19.5');
   });
 
+  it('formats resting heart rate as a whole number', () => {
+    expect(formatMetricValue(57.6, 'heartRate')).toBe('58');
+  });
+
   it('formats mass under 100 with one decimal', () => {
     expect(formatMetricValue(80.25, 'weight')).toBe('80.3');
   });
 
   it('formats mass at or above 100 as a whole number', () => {
-    expect(formatMetricValue(101.6, 'weight')).toBe('102');
+    expect(formatMetricValue(176.4, 'weight')).toBe('176');
   });
 });

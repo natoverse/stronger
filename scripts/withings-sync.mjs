@@ -29,8 +29,8 @@ const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure'
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 const TAB_NAME = 'Stronger - Withings'
-const HEADER = ['date', 'grpId', 'weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration']
-const COLUMN_COUNT = HEADER.length // 8 → columns A:H
+const HEADER = ['date', 'grpId', 'weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate']
+const COLUMN_COUNT = HEADER.length // 10 → columns A:J
 
 // Infra tab: internal key/value store for rotating credentials.
 const INFRA_TAB_NAME = 'Stronger - Infra'
@@ -45,15 +45,21 @@ const MEASTYPE = {
 	muscleMass: 76,
 	boneMass: 88,
 	hydration: 77,
+	fatFreeMass: 5,
+	heartRate: 11,
 }
 // Order matters — this is the column order after date/grpId.
-const METRIC_KEYS = ['weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration']
+const METRIC_KEYS = ['weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate']
 const MEASTYPES_PARAM = METRIC_KEYS.map((k) => MEASTYPE[k]).join(',')
 
 // How far back to fetch on each run. Withings measurements are sparse (one
 // weigh-in per day at most), so 60 days is plenty of overlap for idempotency
 // while keeping the payload small.
 const LOOKBACK_DAYS = 60
+
+// One-time backfill window (used only with the --backfill flag): 2021-01-01 UTC.
+// Matches the earliest year selectable in the in-app year picker.
+const BACKFILL_START = Math.floor(Date.UTC(2021, 0, 1) / 1000)
 
 // ---------------------------------------------------------------------------
 // Withings OAuth2 (rotating refresh token)
@@ -147,16 +153,7 @@ function groupToRow(grp) {
 		return v == null ? '' : String(Math.round(v * 100) / 100)
 	}
 
-	return [
-		dateStr,
-		grpId,
-		cell('weight'),
-		cell('fatMass'),
-		cell('fatRatio'),
-		cell('muscleMass'),
-		cell('boneMass'),
-		cell('hydration'),
-	]
+	return [dateStr, grpId, ...METRIC_KEYS.map(cell)]
 }
 
 // ---------------------------------------------------------------------------
@@ -415,9 +412,18 @@ async function main() {
 	await writeInfraValue(SPREADSHEET_ID, googleToken, INFRA_TOKEN_KEY, rotatedToken)
 	console.log('Persisted rotated refresh token to Infra tab.')
 
-	// 5. Fetch recent measurements.
-	const startdate = Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86400
-	console.log(`Fetching measurements from Withings (last ${LOOKBACK_DAYS} days)...`)
+	// 5. Fetch measurements. Normally a rolling 60-day window (ample overlap for
+	//    idempotency); with --backfill, everything since BACKFILL_START instead,
+	//    for a one-time import of full history. Dedup by grpId makes both safe.
+	const backfill = process.argv.includes('--backfill')
+	const startdate = backfill
+		? BACKFILL_START
+		: Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86400
+	console.log(
+		backfill
+			? `Backfilling all measurements since ${new Date(BACKFILL_START * 1000).toISOString().slice(0, 10)}...`
+			: `Fetching measurements from Withings (last ${LOOKBACK_DAYS} days)...`,
+	)
 	const groups = await fetchMeasurements(accessToken, startdate)
 	console.log(`Fetched ${groups.length} measurement groups from Withings.`)
 
