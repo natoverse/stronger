@@ -28,7 +28,9 @@ export type WithingsMetric =
   | 'fatRatio'
   | 'muscleMass'
   | 'boneMass'
-  | 'hydration';
+  | 'hydration'
+  | 'fatFreeMass'
+  | 'heartRate';
 
 /** Reuse Strava's range and aggregation vocabulary for a consistent UI. */
 export type WithingsTimeRange = StravaTimeRange;
@@ -81,18 +83,53 @@ export const WITHINGS_METRICS: WithingsMetric[] = [
   'weight',
   'fatRatio',
   'fatMass',
+  'fatFreeMass',
   'muscleMass',
   'boneMass',
   'hydration',
+  'heartRate',
 ];
 
+/* ------------------------------------------------------------------ */
+/*  Unit conversion (storage kg → display lb)                          */
+/* ------------------------------------------------------------------ */
+
+const KG_TO_LB = 2.2046226218;
+
+/**
+ * Metrics stored in kilograms. These are converted to pounds for display —
+ * the sheet stays canonical (kg, matching the Withings API), and the UI only
+ * ever shows imperial units. Body fat (%) and heart rate (bpm) are not masses
+ * and pass through unchanged.
+ */
+const MASS_METRICS: ReadonlySet<WithingsMetric> = new Set([
+  'weight',
+  'fatMass',
+  'fatFreeMass',
+  'muscleMass',
+  'boneMass',
+  'hydration',
+]);
+
+/** Convert a raw stored value (kg for masses) into its display value (lb). */
+export function toDisplayUnit(metric: WithingsMetric, value: number): number {
+  return MASS_METRICS.has(metric) ? value * KG_TO_LB : value;
+}
+
+/** Convert a display value (lb for masses) back into stored units (kg). */
+export function fromDisplayUnit(metric: WithingsMetric, value: number): number {
+  return MASS_METRICS.has(metric) ? value / KG_TO_LB : value;
+}
+
 export const METRIC_UNITS: Record<WithingsMetric, string> = {
-  weight: 'kg',
-  fatMass: 'kg',
+  weight: 'lb',
+  fatMass: 'lb',
   fatRatio: '%',
-  muscleMass: 'kg',
-  boneMass: 'kg',
-  hydration: 'kg',
+  muscleMass: 'lb',
+  boneMass: 'lb',
+  hydration: 'lb',
+  fatFreeMass: 'lb',
+  heartRate: 'bpm',
 };
 
 export const METRIC_LABELS: Record<WithingsMetric, string> = {
@@ -102,6 +139,8 @@ export const METRIC_LABELS: Record<WithingsMetric, string> = {
   muscleMass: 'Muscle Mass',
   boneMass: 'Bone Mass',
   hydration: 'Hydration',
+  fatFreeMass: 'Lean Mass',
+  heartRate: 'Resting Heart Rate',
 };
 
 /** Whether lower values are "better" for this metric — used only for delta coloring. */
@@ -112,6 +151,8 @@ export const METRIC_LOWER_IS_BETTER: Record<WithingsMetric, boolean> = {
   muscleMass: false,
   boneMass: false,
   hydration: false,
+  fatFreeMass: false,
+  heartRate: true,
 };
 
 /* ------------------------------------------------------------------ */
@@ -205,8 +246,9 @@ export function buildMetricTrendData(
   let max: number | null = null;
 
   for (const m of measurements) {
-    const v = metricValue(m, metric);
-    if (v === null) continue;
+    const raw = metricValue(m, metric);
+    if (raw === null) continue;
+    const v = toDisplayUnit(metric, raw);
 
     const key = getBucketKey(m.date, aggregation);
     if (sums.has(key)) {
@@ -258,7 +300,8 @@ export function buildMetricTrendData(
 /** Format a display-unit value for axis labels and headline figures. */
 export function formatMetricValue(v: number, metric: WithingsMetric): string {
   if (metric === 'fatRatio') return v.toFixed(1);
-  // Mass metrics: one decimal below 100, whole numbers above.
+  if (metric === 'heartRate') return v.toFixed(0);
+  // Mass metrics (lb): one decimal below 100, whole numbers above.
   if (v >= 100) return v.toFixed(0);
   return v.toFixed(1);
 }

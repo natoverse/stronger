@@ -1898,14 +1898,14 @@ export async function readStravaActivities(
 /*  Withings tab – constants                                           */
 /* ------------------------------------------------------------------ */
 
-/** A1 range for the Withings tab (open-ended rows, 8 columns). */
-export const WITHINGS_SYNC_RANGE = `'${WITHINGS_TAB_NAME}'!A:H`
+/** A1 range for the Withings tab (open-ended rows, 10 columns). */
+export const WITHINGS_SYNC_RANGE = `'${WITHINGS_TAB_NAME}'!A:J`
 
 /** A1 range for the Withings tab header (row 1). */
-const WITHINGS_HEADER_RANGE = `'${WITHINGS_TAB_NAME}'!A1:H1`
+const WITHINGS_HEADER_RANGE = `'${WITHINGS_TAB_NAME}'!A1:J1`
 
 /** A1 range for reading Withings data (row 2 onward, open-ended). */
-const WITHINGS_READ_RANGE = `'${WITHINGS_TAB_NAME}'!A2:H`
+const WITHINGS_READ_RANGE = `'${WITHINGS_TAB_NAME}'!A2:J`
 
 export const WITHINGS_HEADER: string[] = [
 	'date',
@@ -1916,6 +1916,8 @@ export const WITHINGS_HEADER: string[] = [
 	'muscleMass',
 	'boneMass',
 	'hydration',
+	'fatFreeMass',
+	'heartRate',
 ]
 
 /* ------------------------------------------------------------------ */
@@ -1938,6 +1940,8 @@ export function withingsMeasurementToRow(m: WithingsMeasurement): string[] {
 		optionalNumToCell(m.muscleMass),
 		optionalNumToCell(m.boneMass),
 		optionalNumToCell(m.hydration),
+		optionalNumToCell(m.fatFreeMass),
+		optionalNumToCell(m.heartRate),
 	]
 }
 
@@ -1982,6 +1986,8 @@ export function parseWithingsRow(row: string[]): WithingsMeasurement | null {
 		muscleMass: parseOptionalNum(row[5]),
 		boneMass: parseOptionalNum(row[6]),
 		hydration: parseOptionalNum(row[7]),
+		fatFreeMass: parseOptionalNum(row[8]),
+		heartRate: parseOptionalNum(row[9]),
 	}
 }
 
@@ -2225,6 +2231,8 @@ const VALID_BODY_GOAL_METRICS = new Set([
 	'muscleMass',
 	'boneMass',
 	'hydration',
+	'fatFreeMass',
+	'heartRate',
 ])
 
 /**

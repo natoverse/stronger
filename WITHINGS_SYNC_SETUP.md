@@ -32,8 +32,12 @@ Each row in the "Stronger - Withings" tab is one weigh-in and contains:
 | `muscleMass` | Muscle mass in kg (blank if not measured) |
 | `boneMass` | Bone mass in kg (blank if not measured) |
 | `hydration` | Body water in kg (blank if not measured) |
+| `fatFreeMass` | Fat-free (lean) mass in kg (blank if not measured) |
+| `heartRate` | Resting heart rate in bpm at weigh-in (blank if not measured) |
 
 Cells are blank when a given weigh-in didn't capture that metric (e.g. a scale without body-composition sensors reports only `weight`).
+
+> **Units:** the sheet stores masses in **kilograms** (matching the Withings API). The app converts to **pounds** for display — you'll only ever see lb in the Body Composition view. Body fat is a percentage and heart rate is bpm; neither is converted.
 
 ## Prerequisites
 
@@ -116,6 +120,21 @@ Go to your GitHub repo → **Settings → Secrets and variables → Actions** an
 4. Open your spreadsheet — you should see a new "Stronger - Withings" tab with your recent measurements (and a "Stronger - Infra" tab holding the rotated token).
 
 After verifying, the daily cron at 06:30 UTC will keep it updated automatically.
+
+## Backfilling history
+
+The daily sync only fetches the last 60 days each run — enough to catch new weigh-ins, but it won't reach back over your full history. To import everything since **2021-01-01** (matching the earliest year in the app's year picker), run the script once with the `--backfill` flag:
+
+```bash
+WITHINGS_CLIENT_ID=... \
+WITHINGS_CLIENT_SECRET=... \
+WITHINGS_REFRESH_TOKEN=... \
+GOOGLE_SERVICE_ACCOUNT_KEY="$(cat service-account.json)" \
+SPREADSHEET_ID=... \
+node scripts/withings-sync.mjs --backfill
+```
+
+This is a one-time operation. Deduplication by measurement group ID means it's safe to run over data that's already in the sheet — it only appends what's missing. After the backfill, the normal daily cron takes over with its incremental 60-day window. (You can also trigger it from the GitHub Actions UI if you temporarily add `--backfill` to the workflow's `run:` line, but running locally is simpler for a one-off.)
 
 ## Troubleshooting
 
