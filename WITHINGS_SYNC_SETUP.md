@@ -123,7 +123,19 @@ After verifying, the daily cron at 06:30 UTC will keep it updated automatically.
 
 ## Backfilling history
 
-The daily sync only fetches the last 60 days each run — enough to catch new weigh-ins, but it won't reach back over your full history. To import everything since **2021-01-01** (matching the earliest year in the app's year picker), run the script once with the `--backfill` flag:
+The daily sync only fetches the last 60 days each run — enough to catch new weigh-ins, but it won't reach back over your full history. To import everything since **2021-01-01** (matching the earliest year in the app's year picker), run a one-time backfill.
+
+### From GitHub Actions (recommended)
+
+1. Go to **Actions → Withings Sync (Withings → Google Sheets)**.
+2. Click **Run workflow**.
+3. Check the **Backfill full history** box, then **Run workflow**.
+
+This reuses the secrets already stored in the repo, so nothing sensitive touches your machine. Run it **off-schedule** (not right around the 06:30 UTC cron) — the backfill rotates your Withings refresh token, and two overlapping runs could invalidate each other's token.
+
+### From the command line
+
+Alternatively, run the script directly with the `--backfill` flag:
 
 ```bash
 WITHINGS_CLIENT_ID=... \
@@ -134,7 +146,7 @@ SPREADSHEET_ID=... \
 node scripts/withings-sync.mjs --backfill
 ```
 
-This is a one-time operation. Deduplication by measurement group ID means it's safe to run over data that's already in the sheet — it only appends what's missing. After the backfill, the normal daily cron takes over with its incremental 60-day window. (You can also trigger it from the GitHub Actions UI if you temporarily add `--backfill` to the workflow's `run:` line, but running locally is simpler for a one-off.)
+Either way, this is a one-time operation. Deduplication by measurement group ID means it's safe to run over data that's already in the sheet — it only appends what's missing. After the backfill, the normal daily cron takes over with its incremental 60-day window.
 
 ## Troubleshooting
 
