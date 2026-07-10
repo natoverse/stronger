@@ -229,15 +229,21 @@ function MetricTrendChart({
     }
   }
 
-  // Build line segments, breaking the line where a bucket has no data.
+  // Build line segments, breaking the line only where a bucket has no
+  // underlying data. Points hidden by dip-filtering (value nulled here but
+  // present in rawPoints) are simply skipped as vertices so the line stays
+  // continuous between the surrounding real points, instead of breaking.
   const segments: string[] = [];
   let current: string[] = [];
   points.forEach((p, i) => {
+    const hasRawData = rawPoints[i]?.value !== null;
     if (p.value === null) {
-      if (current.length > 0) {
+      if (!hasRawData && current.length > 0) {
         segments.push(current.join(' '));
         current = [];
       }
+      // Dip-filtered point with real underlying data: skip the vertex but
+      // keep the current segment open so the line connects across it.
     } else {
       current.push(`${xCenter(i)},${yVal(p.value)}`);
     }
