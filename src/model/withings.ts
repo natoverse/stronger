@@ -294,6 +294,43 @@ export function buildMetricTrendData(
 }
 
 /* ------------------------------------------------------------------ */
+/*  Dip filtering                                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Filter out short-term regressions from a trend-point series.
+ *
+ * For lower-is-better metrics (weight, fat): removes upward spikes more than
+ * `threshold` (default 5%) above the previous kept point.
+ * For higher-is-better metrics (muscle, bone): removes downward dips more than
+ * `threshold` (default 5%) below the previous kept point.
+ *
+ * Null (empty) buckets pass through unchanged so chart gaps are preserved.
+ */
+export function filterTrendDips(
+  points: TrendPoint[],
+  lowerIsBetter: boolean,
+  threshold = 0.05,
+): TrendPoint[] {
+  let prevValue: number | null = null;
+  return points.map((p) => {
+    if (p.value === null) return p;
+    if (prevValue === null) {
+      prevValue = p.value;
+      return p;
+    }
+    const isRegression = lowerIsBetter
+      ? p.value > prevValue * (1 + threshold)
+      : p.value < prevValue * (1 - threshold);
+    if (!isRegression) {
+      prevValue = p.value;
+      return p;
+    }
+    return { ...p, value: null };
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /*  Value formatting                                                   */
 /* ------------------------------------------------------------------ */
 

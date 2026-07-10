@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   filterMeasurements,
   buildMetricTrendData,
+  filterTrendDips,
   formatMetricValue,
   toDisplayUnit,
   fromDisplayUnit,
@@ -193,6 +194,76 @@ describe('buildMetricTrendData', () => {
   it('carries the goal through (already in display units)', () => {
     const data = buildMetricTrendData([makeMeasurement()], 'weight', '2026', 165, TODAY, 'month');
     expect(data.goal).toBe(165);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  filterTrendDips                                                    */
+/* ------------------------------------------------------------------ */
+
+describe('filterTrendDips', () => {
+  const pts = (vals: (number | null)[]) =>
+    vals.map((v, i) => ({ label: String(i), value: v }));
+
+  it('passes through a monotonically improving lower-is-better series unchanged', () => {
+    const result = filterTrendDips(pts([180, 178, 175, 173]), true);
+    expect(result.map((p) => p.value)).toEqual([180, 178, 175, 173]);
+  });
+
+  it('removes upward spikes for lower-is-better metrics', () => {
+    // 190 is ~8.6% above the previous kept value (175)
+    const result = filterTrendDips(pts([175, 190, 174]), true);
+    expect(result.map((p) => p.value)).toEqual([175, null, 174]);
+  });
+
+  it('allows small upward moves within threshold for lower-is-better', () => {
+    // 176 is ~0.6% above 175 — well within 5%
+    const result = filterTrendDips(pts([175, 176, 174]), true);
+    expect(result.map((p) => p.value)).toEqual([175, 176, 174]);
+  });
+
+  it('passes through a monotonically improving higher-is-better series unchanged', () => {
+    const result = filterTrendDips(pts([60, 61, 62, 63]), false);
+    expect(result.map((p) => p.value)).toEqual([60, 61, 62, 63]);
+  });
+
+  it('removes downward dips for higher-is-better metrics', () => {
+    // 55 is ~11.3% below the previous kept value (62)
+    const result = filterTrendDips(pts([62, 55, 63]), false);
+    expect(result.map((p) => p.value)).toEqual([62, null, 63]);
+  });
+
+  it('allows small downward moves within threshold for higher-is-better', () => {
+    // 61 is ~1.6% below 62 — within 5%
+    const result = filterTrendDips(pts([62, 61, 63]), false);
+    expect(result.map((p) => p.value)).toEqual([62, 61, 63]);
+  });
+
+  it('preserves null buckets (chart gaps) in the output', () => {
+    const result = filterTrendDips(pts([175, null, 174, 200, 173]), true);
+    expect(result.map((p) => p.value)).toEqual([175, null, 174, null, 173]);
+  });
+
+  it('uses a null bucket as a gap without advancing the anchor', () => {
+    // After a null gap the next non-null point is compared to the last kept value
+    const result = filterTrendDips(pts([175, null, 190]), true);
+    // 190 is >5% above 175 so it becomes null
+    expect(result.map((p) => p.value)).toEqual([175, null, null]);
+  });
+
+  it('returns an empty array unchanged', () => {
+    expect(filterTrendDips([], true)).toEqual([]);
+  });
+
+  it('returns a single-point array unchanged', () => {
+    const result = filterTrendDips(pts([180]), true);
+    expect(result.map((p) => p.value)).toEqual([180]);
+  });
+
+  it('respects a custom threshold', () => {
+    // 183 is ~1.7% above 180; passes at 5% but filtered at 1%
+    const result = filterTrendDips(pts([180, 183]), true, 0.01);
+    expect(result.map((p) => p.value)).toEqual([180, null]);
   });
 });
 
