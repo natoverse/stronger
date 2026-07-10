@@ -54,6 +54,7 @@ The app uses seven tabs in the user's spreadsheet. Each tab has a header constan
 | `Stronger - Workout Schedule` | `WORKOUT_SCHEDULE_READ_RANGE = A2:D10000`, `WORKOUT_SCHEDULE_FULL_RANGE = A1:D10000` | 4 (`date`, `workoutId`, `calendarEventId`, `strongerId`) | A–D |
 | `Stronger - Cardio`     | `CARDIO_RANGE = A:B`  | 2 (`id`, `name`) | A–B |
 | `Stronger - Strava`     | `STRAVA_SYNC_RANGE = A:J`, `STRAVA_HEADER_RANGE = A1:J1`, `STRAVA_READ_RANGE = A2:J` | 10 (`date` → `maxHR`) | A–J |
+| `Stronger - Garmin`     | Written by `scripts/garmin-sync.py` (`HEADER`, `A:R`); not yet read by the app | 18 (`date` → `vo2Max`) | A–R |
 
 ### Critical rule: keep ranges in sync with the data model
 
@@ -118,7 +119,7 @@ Default data loaded from JSON files in `lib/` and used as seed data when a user 
 
 ### Garmin sync (`scripts/garmin-sync.py`)
 
-A Python script run by the `garmin-sync.yml` GitHub Actions workflow on a daily cron (also runnable on any machine with `python`). It authenticates to Garmin Connect using a saved `garth` token dump (`GARMIN_TOKENS` secret, minted once via browser login), fetches recent activities, then appends new rows to the "Stronger - Strava" sheet tab via a Google service account. The sheet tab keeps its legacy `Stronger - Strava` name and columns for backward compatibility — only the data source changed (Garmin instead of Strava, which dropped its free API). See [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) and `specs/031-garmin-direct-sync.spec.md` for details. Deps in `scripts/requirements.txt`; offline mapping tests in `scripts/test_garmin_sync.py`.
+A Python script run by the `garmin-sync.yml` GitHub Actions workflow on a daily cron (also runnable on any machine with `python`). It authenticates to Garmin Connect using a saved `garth` token dump (`GARMIN_TOKENS` secret, minted once via browser login), fetches recent activities, then appends new rows to a dedicated "Stronger - Garmin" sheet tab via a Google service account. Garmin exposes richer metrics than Strava did (moving duration, elevation loss, speeds, steps, training effect, VO2 max), so the tab uses a Garmin-native schema rather than reusing the Strava columns. The legacy "Stronger - Strava" tab is deprecated gradually as the app's activity view is migrated. See [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) and `specs/031-garmin-direct-sync.spec.md` for details. Deps in `scripts/requirements.txt`; offline mapping tests in `scripts/test_garmin_sync.py`.
 
 ### GitHub Actions (`.github/workflows/`)
 

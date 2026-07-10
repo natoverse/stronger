@@ -26,11 +26,19 @@ def test_maps_full_activity():
         "startTimeLocal": "2026-01-02 06:30:00",
         "activityType": {"typeId": 1, "typeKey": "running"},
         "duration": 1830.4,
+        "movingDuration": 1800.6,
         "distance": 5012.7,
         "elevationGain": 42.6,
+        "elevationLoss": 40.2,
         "calories": 380.2,
         "averageHR": 148.5,
         "maxHR": 172.0,
+        "averageSpeed": 2.734,
+        "maxSpeed": 3.501,
+        "steps": 5123.4,
+        "aerobicTrainingEffect": 3.45,
+        "anaerobicTrainingEffect": 0.5,
+        "vO2MaxValue": 52.0,
     }
     row = garmin_sync.activity_to_row(activity)
     assert row == [
@@ -39,11 +47,19 @@ def test_maps_full_activity():
         "running",
         "Morning Run",
         "1830",
+        "1801",
         "5013",
         "43",
+        "40",
         "380",
         "148",
         "172",
+        "2.73",
+        "3.5",
+        "5123",
+        "3.5",
+        "0.5",
+        "52",
     ], row
 
 
@@ -53,7 +69,7 @@ def test_row_matches_header_length():
         "startTimeLocal": "2026-01-02 06:30:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    assert len(row) == len(garmin_sync.HEADER) == 10, row
+    assert len(row) == len(garmin_sync.HEADER) == 18, row
 
 
 def test_missing_optional_fields_default_to_zero():
@@ -62,8 +78,12 @@ def test_missing_optional_fields_default_to_zero():
         "startTimeLocal": "2026-03-04 12:00:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    # date, id, type, name, then six numeric zeros
-    assert row == ["2026-03-04", "42", "", "", "0", "0", "0", "0", "0", "0"], row
+    # date, id, type, name, then fourteen numeric zeros
+    assert row == [
+        "2026-03-04", "42", "", "",
+        "0", "0", "0", "0", "0", "0", "0", "0",
+        "0", "0", "0", "0", "0", "0",
+    ], row
 
 
 def test_falls_back_to_gmt_start():
@@ -93,12 +113,12 @@ def test_non_numeric_metric_defaults_to_zero():
         "calories": "n/a",
     }
     row = garmin_sync.activity_to_row(activity)
-    assert row[5] == "0" and row[7] == "0", row
+    assert row[6] == "0" and row[9] == "0", row
 
 
 def test_column_letter_matches_span():
-    # 10 columns -> J
-    assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "J"
+    # 18 columns -> R
+    assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "R"
 
 
 def _run():

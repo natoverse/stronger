@@ -1,10 +1,10 @@
 # Garmin Sync Setup
 
-Stronger syncs activity data into Google Sheets directly from **Garmin Connect**. A scheduled GitHub Actions workflow (or any machine with `python`) pulls recent activities into the `Stronger - Strava` tab in your spreadsheet.
+Stronger syncs activity data into Google Sheets directly from **Garmin Connect**. A scheduled GitHub Actions workflow (or any machine with `python`) pulls recent activities into a dedicated `Stronger - Garmin` tab in your spreadsheet.
 
 The workflow runs daily at 06:00 UTC and can also be triggered manually. It's idempotent — re-runs won't create duplicate rows.
 
-> **Migration note:** This replaces the old Strava-based sync. Strava's API is now behind a paid membership, so we go straight to the source (Garmin). The sheet tab keeps its legacy name `Stronger - Strava` and its columns so the app's activity charts keep working with no changes — only the data source changed. The column formerly called `stravaId` now holds the Garmin activity ID (still used for deduplication).
+> **Migration note:** This replaces the old Strava-based sync. Strava's API is now behind a paid membership, so we go straight to the source (Garmin). Garmin exposes richer metrics than Strava did, so the data lands in its own `Stronger - Garmin` tab with a Garmin-native schema. The legacy `Stronger - Strava` tab is left in place and deprecated gradually as the app's activity view is migrated over.
 
 ## How it works
 
@@ -18,20 +18,28 @@ Garmin has no public developer API, and since March 2026 the Garmin **login page
 
 ## Data stored
 
-Each activity row in the `Stronger - Strava` tab contains:
+Each activity row in the `Stronger - Garmin` tab contains:
 
 | Column | Description |
 |--------|-------------|
 | `date` | Activity date (YYYY-MM-DD) |
-| `id` | Garmin activity ID (used for deduplication) |
+| `activityId` | Garmin activity ID (used for deduplication) |
 | `activityType` | Garmin activity type key (e.g. `running`, `cycling`, `strength_training`) |
 | `name` | Activity name from Garmin |
-| `duration` | Duration in seconds |
+| `duration` | Total duration in seconds |
+| `movingDuration` | Moving duration in seconds |
 | `distance` | Distance in meters (0 for stationary activities) |
 | `elevationGain` | Total elevation gain in meters |
+| `elevationLoss` | Total elevation loss in meters |
 | `calories` | Calories burned |
 | `avgHR` | Average heart rate in bpm (0 if not recorded) |
 | `maxHR` | Max heart rate in bpm (0 if not recorded) |
+| `avgSpeed` | Average speed in m/s (0 if not recorded) |
+| `maxSpeed` | Max speed in m/s (0 if not recorded) |
+| `steps` | Step count (0 if not applicable) |
+| `aerobicTE` | Aerobic training effect (0–5, 0 if not recorded) |
+| `anaerobicTE` | Anaerobic training effect (0–5, 0 if not recorded) |
+| `vo2Max` | VO2 max estimate for the activity (0 if not recorded) |
 
 ## Prerequisites
 
@@ -92,7 +100,7 @@ Go to your GitHub repo → **Settings → Secrets and variables → Actions** an
 1. Go to **Actions → Garmin Sync (Garmin Connect → Google Sheets)**.
 2. Click **Run workflow** → **Run workflow** (on the main branch).
 3. Check that the workflow completes successfully.
-4. Open your spreadsheet — you should see the `Stronger - Strava` tab populated with your recent activities.
+4. Open your spreadsheet — you should see a `Stronger - Garmin` tab populated with your recent activities.
 
 After verifying, the daily cron at 06:00 UTC will keep it updated automatically.
 

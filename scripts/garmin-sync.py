@@ -2,13 +2,14 @@
 """Garmin Sync — Garmin Connect -> Google Sheets pipeline.
 
 Fetches recent activities from Garmin Connect and appends new rows to the
-"Stronger - Strava" tab in a Google Sheet. Uses a saved ``garth`` token dump
+"Stronger - Garmin" tab in a Google Sheet. Uses a saved ``garth`` token dump
 for Garmin auth (no interactive login at run time) and a Google service
 account for Sheets access.
 
-The sheet tab keeps its legacy "Stronger - Strava" name and 10-column layout
-so the app's activity charts keep working unchanged — only the *source* of the
-data changed (Garmin instead of Strava). See specs/031-garmin-direct-sync.spec.md.
+The tab uses a Garmin-native schema that is richer than the legacy Strava
+layout (moving duration, elevation loss, speeds, steps, training effect,
+VO2 max). The old "Stronger - Strava" tab is left in place and deprecated
+gradually. See specs/031-garmin-direct-sync.spec.md.
 
 Environment variables (all required):
   GARMIN_TOKENS               – base64 ``garth`` token dump (garth.client.dumps())
@@ -28,22 +29,31 @@ from urllib.parse import quote
 
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 
-TAB_NAME = "Stronger - Strava"
-# Column layout is shared with the app (src/google/config.ts). The `id` column
-# (formerly `stravaId`) now holds the Garmin activity ID used for deduplication.
+TAB_NAME = "Stronger - Garmin"
+# Garmin-native schema. Column B (`activityId`) is the dedup key. This is
+# intentionally richer than the legacy Strava layout; the app view that reads
+# it is migrated separately (the Strava tab is deprecated gradually).
 HEADER = [
     "date",
-    "id",
+    "activityId",
     "activityType",
     "name",
     "duration",
+    "movingDuration",
     "distance",
     "elevationGain",
+    "elevationLoss",
     "calories",
     "avgHR",
     "maxHR",
+    "avgSpeed",
+    "maxSpeed",
+    "steps",
+    "aerobicTE",
+    "anaerobicTE",
+    "vo2Max",
 ]
-COLUMN_COUNT = len(HEADER)  # 10 -> columns A:J
+COLUMN_COUNT = len(HEADER)  # 18 -> columns A:R
 ACTIVITY_LIMIT = 30
 
 
@@ -72,6 +82,17 @@ def _round_int(value):
         return "0"
 
 
+def _round_dec(value, ndigits=2):
+    """Round to ``ndigits`` decimals, trimming trailing zeros. Defaults to "0"."""
+    try:
+        rounded = round(float(value), ndigits)
+    except (TypeError, ValueError):
+        return "0"
+    # Format without a trailing ".0" / trailing zeros (e.g. 3.50 -> "3.5").
+    text = f"{rounded:.{ndigits}f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def activity_to_row(activity):
     """Convert a Garmin activity dict to a spreadsheet row.
 
@@ -98,11 +119,19 @@ def activity_to_row(activity):
         activity_type,
         activity.get("activityName") or "",
         _round_int(activity.get("duration", 0)),
+        _round_int(activity.get("movingDuration", 0)),
         _round_int(activity.get("distance", 0)),
         _round_int(activity.get("elevationGain", 0)),
+        _round_int(activity.get("elevationLoss", 0)),
         _round_int(activity.get("calories", 0)),
         _round_int(activity.get("averageHR", 0)),
         _round_int(activity.get("maxHR", 0)),
+        _round_dec(activity.get("averageSpeed", 0)),
+        _round_dec(activity.get("maxSpeed", 0)),
+        _round_int(activity.get("steps", 0)),
+        _round_dec(activity.get("aerobicTrainingEffect", 0), 1),
+        _round_dec(activity.get("anaerobicTrainingEffect", 0), 1),
+        _round_dec(activity.get("vO2MaxValue", 0), 1),
     ]
 
 
