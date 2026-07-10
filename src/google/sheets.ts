@@ -6,7 +6,7 @@
  */
 
 import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, WithingsMeasurement, AppSettings } from '../model/types.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -2342,13 +2342,13 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 const APP_SETTING_PREFIX = 'app.'
 
 /** Map of app setting keys to their AppSettings field names. */
-const APP_SETTING_BOOL_KEYS: Record<string, keyof Pick<AppSettings, 'showRestTimer' | 'showSetComments' | 'keepScreenOn'>> = {
+const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 	'app.showRestTimer': 'showRestTimer',
 	'app.showSetComments': 'showSetComments',
 	'app.keepScreenOn': 'keepScreenOn',
 }
 
-const APP_SETTING_PERCENT_KEYS: Record<string, keyof Pick<AppSettings, 'withingsDipThresholdPercent' | 'progressDipThresholdPercent'>> = {
+const APP_SETTING_PERCENT_KEYS: Record<string, AppPercentSettingKey> = {
 	'app.withingsDipThresholdPercent': 'withingsDipThresholdPercent',
 	'app.progressDipThresholdPercent': 'progressDipThresholdPercent',
 }

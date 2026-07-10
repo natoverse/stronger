@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings } from './model/index.js';
+import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey } from './model/index.js';
 import { computeProgression } from './model/index.js';
 import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
@@ -30,8 +30,6 @@ import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
 import './App.css';
-
-type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
 
 function App() {
   const { route, navigateTo, replaceTo } = useHashRouter();

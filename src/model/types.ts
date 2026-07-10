@@ -336,6 +336,9 @@ export interface AppSettings {
 	progressDipThresholdPercent: number;
 }
 
+export type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
+export type AppPercentSettingKey = 'withingsDipThresholdPercent' | 'progressDipThresholdPercent';
+
 // ---------------------------------------------------------------------------
 // Layer 7 – Progression (post-workout weight update proposals)
 // ---------------------------------------------------------------------------

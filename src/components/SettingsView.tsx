@@ -3,9 +3,7 @@ import { Upload, FileText, AlertTriangle, Check, Loader, Unlink, Sliders } from 
 import { parseHevyCsv, convertHevyRows, computeImportSummary } from '../model/hevy-import.js';
 import { clearSheetId } from '../google/storage.js';
 import type { ImportSummary } from '../model/hevy-import.js';
-import type { AppSettings } from '../model/index.js';
-
-type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
+import type { AppSettings, AppBooleanSettingKey } from '../model/index.js';
 
 interface Props {
   spreadsheetId: string;
