@@ -234,7 +234,10 @@ function MetricTrendChart({
   let current: string[] = [];
   points.forEach((p, i) => {
     if (p.value === null) {
-      if (current.length > 0) {
+      // Dip-filtered points are excluded from the line but shouldn't break
+      // it — the line continues straight through to the next real point.
+      // Only genuine data gaps (no measurement for the bucket) break it.
+      if (!p.dipFiltered && current.length > 0) {
         segments.push(current.join(' '));
         current = [];
       }
