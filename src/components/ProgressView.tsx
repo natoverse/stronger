@@ -14,6 +14,7 @@ interface Props {
   logRows: ParsedLogRow[];
   liftGoals?: LiftGoal[];
   onLiftGoalChange?: (liftId: string, weight: number | null) => void;
+  dipThresholdPercent?: number;
 }
 
 const METRIC_LABELS: Record<ProgressMetric, string> = {
@@ -65,7 +66,13 @@ const CHART_HEIGHT = 260;
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function ProgressView({ logRows, liftGoals, onLiftGoalChange }: Props) {
+export function ProgressView({
+  logRows,
+  liftGoals,
+  onLiftGoalChange,
+  dipThresholdPercent = 10,
+}: Props) {
+  const dipThreshold = dipThresholdPercent / 100;
   const lifts = useMemo(() => getLiftsWithData(logRows), [logRows]);
 
   // Separate big-4 lifts (that have data) from the rest
@@ -137,6 +144,7 @@ export function ProgressView({ logRows, liftGoals, onLiftGoalChange }: Props) {
                   metric={metric}
                   range={range}
                   skipDips={skipDips}
+                  dipThreshold={dipThreshold}
                   goalWeight={liftGoals?.find((g) => g.liftId === liftId)?.weight}
                   onGoalChange={onLiftGoalChange}
                 />
@@ -167,6 +175,7 @@ export function ProgressView({ logRows, liftGoals, onLiftGoalChange }: Props) {
                 metric={metric}
                 range={range}
                 skipDips={skipDips}
+                dipThreshold={dipThreshold}
               />
             </>
           )}
@@ -187,6 +196,7 @@ function Big4Chart({
   metric,
   range,
   skipDips,
+  dipThreshold,
   goalWeight,
   onGoalChange,
 }: {
@@ -196,6 +206,7 @@ function Big4Chart({
   metric: ProgressMetric;
   range: TimeRange;
   skipDips: boolean;
+  dipThreshold: number;
   goalWeight?: number;
   onGoalChange?: (liftId: string, weight: number | null) => void;
 }) {
@@ -204,8 +215,8 @@ function Big4Chart({
 
   const data = useMemo(() => {
     const raw = buildProgressData(logRows, liftId, metric, range);
-    return skipDips ? filterDips(raw) : raw;
-  }, [logRows, liftId, metric, range, skipDips]);
+    return skipDips ? filterDips(raw, dipThreshold) : raw;
+  }, [logRows, liftId, metric, range, skipDips, dipThreshold]);
 
   const stableYMin = useMemo(
     () => allTimeMinForLift(logRows, liftId, metric),
@@ -272,18 +283,20 @@ function SelectedLiftChart({
   metric,
   range,
   skipDips,
+  dipThreshold,
 }: {
   liftId: string;
   logRows: ParsedLogRow[];
   metric: ProgressMetric;
   range: TimeRange;
   skipDips: boolean;
+  dipThreshold: number;
 }) {
   const data = useMemo(() => {
     if (!liftId) return [];
     const raw = buildProgressData(logRows, liftId, metric, range);
-    return skipDips ? filterDips(raw) : raw;
-  }, [logRows, liftId, metric, range, skipDips]);
+    return skipDips ? filterDips(raw, dipThreshold) : raw;
+  }, [logRows, liftId, metric, range, skipDips, dipThreshold]);
 
   const stableYMin = useMemo(
     () => liftId ? allTimeMinForLift(logRows, liftId, metric) : undefined,

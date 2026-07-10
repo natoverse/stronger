@@ -3,7 +3,7 @@ import { Upload, FileText, AlertTriangle, Check, Loader, Unlink, Sliders } from 
 import { parseHevyCsv, convertHevyRows, computeImportSummary } from '../model/hevy-import.js';
 import { clearSheetId } from '../google/storage.js';
 import type { ImportSummary } from '../model/hevy-import.js';
-import type { AppSettings } from '../model/index.js';
+import type { AppSettings, AppBooleanSettingKey } from '../model/index.js';
 
 interface Props {
   spreadsheetId: string;
@@ -11,7 +11,7 @@ interface Props {
   appendLogRows: (spreadsheetId: string, rows: (string | number | boolean)[][]) => Promise<void>;
   onDisconnectSheet: () => void;
   appSettings: AppSettings;
-  onAppSettingChange: (key: keyof AppSettings, value: boolean) => void;
+  onAppSettingChange: (key: AppBooleanSettingKey, value: boolean) => void;
 }
 
 type ImportPhase = 'idle' | 'preview' | 'importing' | 'done' | 'error';

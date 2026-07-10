@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings } from './model/index.js';
+import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey } from './model/index.js';
 import { computeProgression } from './model/index.js';
 import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
@@ -777,7 +777,7 @@ function App() {
     });
   }, [spreadsheetId]);
 
-  const handleAppSettingChange = useCallback((key: keyof AppSettings, value: boolean) => {
+  const handleAppSettingChange = useCallback((key: AppBooleanSettingKey, value: boolean) => {
     setAppSettings((prev) => {
       const updated = { ...prev, [key]: value };
       if (spreadsheetId) {
@@ -1191,7 +1191,12 @@ function App() {
           onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
-        <ProgressView logRows={logRows} liftGoals={liftGoals} onLiftGoalChange={handleLiftGoalChange} />
+        <ProgressView
+          logRows={logRows}
+          liftGoals={liftGoals}
+          onLiftGoalChange={handleLiftGoalChange}
+          dipThresholdPercent={appSettings.progressDipThresholdPercent}
+        />
       </>
     );
   }
@@ -1236,6 +1241,7 @@ function App() {
         <WithingsView
           measurements={withingsMeasurements}
           goals={withingsGoals}
+          dipThresholdPercent={appSettings.withingsDipThresholdPercent}
           onGoalChange={handleWithingsGoalChange}
         />
       </>

@@ -330,7 +330,14 @@ export interface AppSettings {
 	showSetComments: boolean;
 	/** Whether to acquire a wake lock to prevent the phone from sleeping during workouts. */
 	keepScreenOn: boolean;
+	/** Percent threshold for filtering Withings "dip" points when Skip Dips is enabled. */
+	withingsDipThresholdPercent: number;
+	/** Percent drop threshold for filtering progress-chart dips when Skip Dips is enabled. */
+	progressDipThresholdPercent: number;
 }
+
+export type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
+export type AppPercentSettingKey = 'withingsDipThresholdPercent' | 'progressDipThresholdPercent';
 
 // ---------------------------------------------------------------------------
 // Layer 7 – Progression (post-workout weight update proposals)

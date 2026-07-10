@@ -28,6 +28,7 @@ import { useChartTooltip } from '../hooks/useChartTooltip.js';
 interface Props {
   measurements: WithingsMeasurement[];
   goals: WithingsGoal[];
+  dipThresholdPercent?: number;
   onGoalChange?: (metric: WithingsMetric, value: number | null) => void;
 }
 
@@ -48,10 +49,16 @@ const AGGREGATION_OPTIONS: { value: WithingsAggregation; label: string }[] = [
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function WithingsView({ measurements, goals, onGoalChange }: Props) {
+export function WithingsView({
+  measurements,
+  goals,
+  dipThresholdPercent = 5,
+  onGoalChange,
+}: Props) {
   const [range, setRange] = useState<WithingsTimeRange>(String(new Date().getFullYear()));
   const [aggregation, setAggregation] = useState<WithingsAggregation>('week');
   const [skipDips, setSkipDips] = useState(true);
+  const dipThreshold = dipThresholdPercent / 100;
 
   const today = useMemo(() => new Date(), []);
   const timeRanges = useMemo(() => getTimeRangeOptions(today), [today]);
@@ -143,6 +150,7 @@ export function WithingsView({ measurements, goals, onGoalChange }: Props) {
             data={data}
             goal={goalMap.get(data.metric) ?? null}
             skipDips={skipDips}
+            dipThreshold={dipThreshold}
             onGoalChange={onGoalChange}
           />
         ))
@@ -161,11 +169,13 @@ function MetricTrendChart({
   data,
   goal,
   skipDips,
+  dipThreshold,
   onGoalChange,
 }: {
   data: MetricTrendData;
   goal: number | null;
   skipDips: boolean;
+  dipThreshold: number;
   onGoalChange?: (metric: WithingsMetric, value: number | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -186,8 +196,8 @@ function MetricTrendChart({
   const { points: rawPoints } = data;
   const points = useMemo(
     () =>
-      skipDips ? filterTrendDips(rawPoints, METRIC_LOWER_IS_BETTER[data.metric], 0.05) : rawPoints,
-    [rawPoints, skipDips, data.metric],
+      skipDips ? filterTrendDips(rawPoints, METRIC_LOWER_IS_BETTER[data.metric], dipThreshold) : rawPoints,
+    [rawPoints, skipDips, data.metric, dipThreshold],
   );
   const n = points.length;
 
