@@ -10,6 +10,7 @@ import type {
 import {
   filterMeasurements,
   buildMetricTrendData,
+  filterTrendDips,
   formatMetricValue,
   getTimeRangeOptions,
   WITHINGS_METRICS,
@@ -50,6 +51,7 @@ const AGGREGATION_OPTIONS: { value: WithingsAggregation; label: string }[] = [
 export function WithingsView({ measurements, goals, onGoalChange }: Props) {
   const [range, setRange] = useState<WithingsTimeRange>(String(new Date().getFullYear()));
   const [aggregation, setAggregation] = useState<WithingsAggregation>('week');
+  const [skipDips, setSkipDips] = useState(true);
 
   const today = useMemo(() => new Date(), []);
   const timeRanges = useMemo(() => getTimeRangeOptions(today), [today]);
@@ -115,7 +117,7 @@ export function WithingsView({ measurements, goals, onGoalChange }: Props) {
         ))}
       </div>
 
-      {/* Aggregation selector */}
+      {/* Aggregation selector + skip-dips toggle */}
       <div className="strava-agg-group">
         {AGGREGATION_OPTIONS.map((opt) => (
           <button
@@ -126,6 +128,12 @@ export function WithingsView({ measurements, goals, onGoalChange }: Props) {
             {opt.label}
           </button>
         ))}
+        <button
+          className={`strava-agg-btn${skipDips ? ' active' : ''}`}
+          onClick={() => setSkipDips((v) => !v)}
+        >
+          Skip Dips
+        </button>
       </div>
 
       {anyData ? (
@@ -134,6 +142,7 @@ export function WithingsView({ measurements, goals, onGoalChange }: Props) {
             key={data.metric}
             data={data}
             goal={goalMap.get(data.metric) ?? null}
+            skipDips={skipDips}
             onGoalChange={onGoalChange}
           />
         ))
@@ -151,10 +160,12 @@ export function WithingsView({ measurements, goals, onGoalChange }: Props) {
 function MetricTrendChart({
   data,
   goal,
+  skipDips,
   onGoalChange,
 }: {
   data: MetricTrendData;
   goal: number | null;
+  skipDips: boolean;
   onGoalChange?: (metric: WithingsMetric, value: number | null) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -172,7 +183,12 @@ function MetricTrendChart({
   const plotW = viewBoxWidth - CHART_PADDING.left - CHART_PADDING.right;
   const plotH = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
 
-  const { points } = data;
+  const { points: rawPoints } = data;
+  const points = useMemo(
+    () =>
+      skipDips ? filterTrendDips(rawPoints, METRIC_LOWER_IS_BETTER[data.metric]) : rawPoints,
+    [rawPoints, skipDips, data.metric],
+  );
   const n = points.length;
 
   // Y-axis domain: pad the observed min/max (and goal) by ~5% so the trend
