@@ -9,6 +9,7 @@
  */
 
 import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+import { getGapiErrorStatus } from './auth.ts'
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
@@ -57,13 +58,22 @@ export async function performBackup(
 
 	let backupId = settings.get(BACKUP_SETTING_KEY) ?? undefined
 
-	// Verify existing backup sheet is still accessible
+	// Verify existing backup sheet is still accessible.
+	// Only treat 404 (deleted) or 403 (unshared) as "gone" — for transient
+	// errors (network, rate-limit, etc.) we re-throw so the caller retries
+	// later rather than silently spinning up a duplicate backup sheet.
 	if (backupId) {
 		try {
 			await gapi.client.sheets.spreadsheets.get({ spreadsheetId: backupId })
-		} catch {
-			// Backup sheet inaccessible — will create a new one
-			backupId = undefined
+		} catch (err) {
+			const status = getGapiErrorStatus(err)
+			if (status === 404 || status === 403) {
+				// Backup sheet is truly gone — create a fresh one
+				backupId = undefined
+			} else {
+				// Transient error — propagate so we retry next time
+				throw err
+			}
 		}
 	}
 
