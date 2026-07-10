@@ -186,7 +186,7 @@ function MetricTrendChart({
   const { points: rawPoints } = data;
   const points = useMemo(
     () =>
-      skipDips ? filterTrendDips(rawPoints, METRIC_LOWER_IS_BETTER[data.metric]) : rawPoints,
+      skipDips ? filterTrendDips(rawPoints, METRIC_LOWER_IS_BETTER[data.metric], 0.05) : rawPoints,
     [rawPoints, skipDips, data.metric],
   );
   const n = points.length;

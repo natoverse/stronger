@@ -211,7 +211,7 @@ describe('filterTrendDips', () => {
   });
 
   it('removes upward spikes for lower-is-better metrics', () => {
-    // 190 is >5% above the previous kept value (175)
+    // 190 is ~8.6% above the previous kept value (175)
     const result = filterTrendDips(pts([175, 190, 174]), true);
     expect(result.map((p) => p.value)).toEqual([175, null, 174]);
   });
@@ -228,7 +228,7 @@ describe('filterTrendDips', () => {
   });
 
   it('removes downward dips for higher-is-better metrics', () => {
-    // 55 is >5% below the previous kept value (62)
+    // 55 is ~11.3% below the previous kept value (62)
     const result = filterTrendDips(pts([62, 55, 63]), false);
     expect(result.map((p) => p.value)).toEqual([62, null, 63]);
   });
