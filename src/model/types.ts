@@ -286,6 +286,35 @@ export interface StravaActivity {
 }
 
 // ---------------------------------------------------------------------------
+// Withings body composition (synced externally via GitHub Actions)
+// ---------------------------------------------------------------------------
+
+/**
+ * A single body-composition measurement synced from the Withings API.
+ * Each entry is one weigh-in. Body-composition fields are optional because a
+ * scale without those sensors (or a weigh-in that didn't capture them) reports
+ * only weight.
+ */
+export interface WithingsMeasurement {
+	/** Measurement date in YYYY-MM-DD format. */
+	date: string;
+	/** Withings measurement group ID (used for deduplication). */
+	grpId: string;
+	/** Body weight in kg. */
+	weight: number;
+	/** Fat mass in kg, or null if not measured. */
+	fatMass: number | null;
+	/** Body fat percentage, or null if not measured. */
+	fatRatio: number | null;
+	/** Muscle mass in kg, or null if not measured. */
+	muscleMass: number | null;
+	/** Bone mass in kg, or null if not measured. */
+	boneMass: number | null;
+	/** Body water in kg, or null if not measured. */
+	hydration: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // App settings (persisted in the Settings sheet tab as key-value pairs)
 // ---------------------------------------------------------------------------
 

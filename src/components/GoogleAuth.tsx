@@ -33,7 +33,7 @@ import {
 	GOOGLE_CLIENT_ID,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
-import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Activity } from 'lucide-react'
+import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Activity, Scale } from 'lucide-react'
 
 type Phase =
 	| 'loading' // loading Google scripts
@@ -51,11 +51,12 @@ interface Props {
 	onOpenExercises?: () => void
 	onOpenProgress?: () => void
 	onOpenStrava?: () => void
+	onOpenWithings?: () => void
 	onOpenSettings?: () => void
 	onGoToList?: () => void
 }
 
-export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCalendar, onOpenExercises, onOpenProgress, onOpenStrava, onOpenSettings, onGoToList }: Props) {
+export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCalendar, onOpenExercises, onOpenProgress, onOpenStrava, onOpenWithings, onOpenSettings, onGoToList }: Props) {
 	const [phase, setPhase] = useState<Phase>('loading')
 	const [error, setError] = useState<string | null>(null)
 	const [sheetUrl, setSheetUrl] = useState('')
@@ -445,6 +446,11 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				{onOpenStrava && (
 					<button className="btn-toolbar" onClick={onOpenStrava} title="Activities">
 						<Activity size={20} />
+					</button>
+				)}
+				{onOpenWithings && (
+					<button className="btn-toolbar" onClick={onOpenWithings} title="Body Composition">
+						<Scale size={20} />
 					</button>
 				)}
 				{onOpenSettings && (
