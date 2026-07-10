@@ -31,6 +31,8 @@ import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
 import './App.css';
 
+type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
+
 function App() {
   const { route, navigateTo, replaceTo } = useHashRouter();
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -777,7 +779,7 @@ function App() {
     });
   }, [spreadsheetId]);
 
-  const handleAppSettingChange = useCallback((key: keyof AppSettings, value: boolean) => {
+  const handleAppSettingChange = useCallback((key: AppBooleanSettingKey, value: boolean) => {
     setAppSettings((prev) => {
       const updated = { ...prev, [key]: value };
       if (spreadsheetId) {
@@ -1191,7 +1193,12 @@ function App() {
           onOpenWithings={onOpenWithings}
           onOpenSettings={handleOpenSettings}
         />
-        <ProgressView logRows={logRows} liftGoals={liftGoals} onLiftGoalChange={handleLiftGoalChange} />
+        <ProgressView
+          logRows={logRows}
+          liftGoals={liftGoals}
+          onLiftGoalChange={handleLiftGoalChange}
+          dipThresholdPercent={appSettings.progressDipThresholdPercent}
+        />
       </>
     );
   }
@@ -1236,6 +1243,7 @@ function App() {
         <WithingsView
           measurements={withingsMeasurements}
           goals={withingsGoals}
+          dipThresholdPercent={appSettings.withingsDipThresholdPercent}
           onGoalChange={handleWithingsGoalChange}
         />
       </>

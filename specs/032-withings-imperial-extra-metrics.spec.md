@@ -41,3 +41,11 @@ Three refinements after the initial Withings sync landed (#201):
 - **Column order**: new fields appended (`…hydration, fatFreeMass, heartRate`) rather than inserted, so rows written by the initial release remain valid — the parser reads missing trailing cells as null.
 - **Goal units**: goals are stored in the Settings tab in display units (lb), matching the existing Strava goal convention, so no conversion is needed on read/write — only the sheet measurement data is metric.
 - **Backfill start**: `Date.UTC(2021, 0, 1)`. Extendable later by lowering that constant.
+
+## Iteration notes
+
+- Added two app-level settings in the Settings sheet to make dip filtering configurable instead of hard-coded:
+  - `app.withingsDipThresholdPercent` (default `5`)
+  - `app.progressDipThresholdPercent` (default `10`)
+- Values are interpreted as percentages (not fractions) and validated to be in `(0, 100]`; invalid values fall back to defaults.
+- The thresholds are consumed by the existing "Skip Dips" toggles in Withings and Progress views.

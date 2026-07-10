@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { goalsFromSettings, goalsToSettings } from '../sheets.ts'
+import {
+	goalsFromSettings,
+	goalsToSettings,
+	DEFAULT_APP_SETTINGS,
+	appSettingsFromMap,
+	appSettingsToMap,
+} from '../sheets.ts'
 
 /* ------------------------------------------------------------------ */
 /*  goalsFromSettings                                                   */
@@ -143,5 +149,63 @@ describe('goalsToSettings', () => {
 			settings,
 		)
 		expect(result).toBe(settings)
+	})
+})
+
+/* ------------------------------------------------------------------ */
+/*  appSettingsFromMap / appSettingsToMap                              */
+/* ------------------------------------------------------------------ */
+
+describe('appSettingsFromMap / appSettingsToMap', () => {
+	it('uses defaults when settings are missing', () => {
+		expect(appSettingsFromMap(new Map())).toEqual(DEFAULT_APP_SETTINGS)
+	})
+
+	it('reads booleans and dip thresholds from settings', () => {
+		const settings = new Map<string, string>([
+			['app.showRestTimer', 'false'],
+			['app.showSetComments', 'false'],
+			['app.keepScreenOn', 'true'],
+			['app.withingsDipThresholdPercent', '2.5'],
+			['app.progressDipThresholdPercent', '7.5'],
+		])
+		expect(appSettingsFromMap(settings)).toEqual({
+			showRestTimer: false,
+			showSetComments: false,
+			keepScreenOn: true,
+			withingsDipThresholdPercent: 2.5,
+			progressDipThresholdPercent: 7.5,
+		})
+	})
+
+	it('falls back to defaults for invalid dip-threshold values', () => {
+		const settings = new Map<string, string>([
+			['app.withingsDipThresholdPercent', '-1'],
+			['app.progressDipThresholdPercent', '0'],
+		])
+		expect(appSettingsFromMap(settings)).toEqual(DEFAULT_APP_SETTINGS)
+	})
+
+	it('writes app settings and replaces existing app.* keys', () => {
+		const settings = new Map<string, string>([
+			['theme', 'dark'],
+			['app.showRestTimer', 'true'],
+			['app.withingsDipThresholdPercent', '5'],
+			['app.progressDipThresholdPercent', '10'],
+		])
+		const appSettings = {
+			showRestTimer: false,
+			showSetComments: true,
+			keepScreenOn: false,
+			withingsDipThresholdPercent: 3,
+			progressDipThresholdPercent: 6,
+		}
+		appSettingsToMap(appSettings, settings)
+		expect(settings.get('theme')).toBe('dark')
+		expect(settings.get('app.showRestTimer')).toBe('false')
+		expect(settings.get('app.showSetComments')).toBe('true')
+		expect(settings.get('app.keepScreenOn')).toBe('false')
+		expect(settings.get('app.withingsDipThresholdPercent')).toBe('3')
+		expect(settings.get('app.progressDipThresholdPercent')).toBe('6')
 	})
 })

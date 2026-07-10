@@ -2334,16 +2334,23 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	showRestTimer: true,
 	showSetComments: true,
 	keepScreenOn: true,
+	withingsDipThresholdPercent: 5,
+	progressDipThresholdPercent: 10,
 }
 
 /** Settings key prefix for app-level settings. */
 const APP_SETTING_PREFIX = 'app.'
 
 /** Map of app setting keys to their AppSettings field names. */
-const APP_SETTING_KEYS: Record<string, keyof AppSettings> = {
+const APP_SETTING_BOOL_KEYS: Record<string, keyof Pick<AppSettings, 'showRestTimer' | 'showSetComments' | 'keepScreenOn'>> = {
 	'app.showRestTimer': 'showRestTimer',
 	'app.showSetComments': 'showSetComments',
 	'app.keepScreenOn': 'keepScreenOn',
+}
+
+const APP_SETTING_PERCENT_KEYS: Record<string, keyof Pick<AppSettings, 'withingsDipThresholdPercent' | 'progressDipThresholdPercent'>> = {
+	'app.withingsDipThresholdPercent': 'withingsDipThresholdPercent',
+	'app.progressDipThresholdPercent': 'progressDipThresholdPercent',
 }
 
 /**
@@ -2352,10 +2359,18 @@ const APP_SETTING_KEYS: Record<string, keyof AppSettings> = {
  */
 export function appSettingsFromMap(settings: Map<string, string>): AppSettings {
 	const result = { ...DEFAULT_APP_SETTINGS }
-	for (const [key, field] of Object.entries(APP_SETTING_KEYS)) {
+	for (const [key, field] of Object.entries(APP_SETTING_BOOL_KEYS)) {
 		const raw = settings.get(key)
 		if (raw !== undefined) {
 			result[field] = raw === 'true'
+		}
+	}
+	for (const [key, field] of Object.entries(APP_SETTING_PERCENT_KEYS)) {
+		const raw = settings.get(key)
+		if (raw === undefined) continue
+		const value = Number(raw)
+		if (isFinite(value) && value > 0 && value <= 100) {
+			result[field] = value
 		}
 	}
 	return result
@@ -2377,7 +2392,10 @@ export function appSettingsToMap(
 		}
 	}
 	// Add new app setting keys
-	for (const [key, field] of Object.entries(APP_SETTING_KEYS)) {
+	for (const [key, field] of Object.entries(APP_SETTING_BOOL_KEYS)) {
+		settings.set(key, String(appSettings[field]))
+	}
+	for (const [key, field] of Object.entries(APP_SETTING_PERCENT_KEYS)) {
 		settings.set(key, String(appSettings[field]))
 	}
 	return settings
