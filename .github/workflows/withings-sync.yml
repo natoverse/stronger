@@ -5,6 +5,11 @@ on:
     # Run daily at 06:30 UTC (offset from the Strava sync at 06:00)
     - cron: '30 6 * * *'
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Backfill full history since 2021-01-01 (one-time import) instead of the rolling 60-day window'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -28,4 +33,4 @@ jobs:
           WITHINGS_REFRESH_TOKEN: ${{ secrets.WITHINGS_REFRESH_TOKEN }}
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-        run: node scripts/withings-sync.mjs
+        run: node scripts/withings-sync.mjs ${{ inputs.backfill && '--backfill' || '' }}
