@@ -42,7 +42,9 @@ export interface TrendPoint {
   label: string;
   /**
    * Averaged metric value for the bucket in display units, or null if the
-   * bucket had no measurement for this metric (renders as a gap in the line).
+   * bucket had no measurement for this metric, or if filterTrendDips
+   * excluded it as a dip/spike. Either way the chart connects straight
+   * through to the next real point rather than showing a gap.
    */
   value: number | null;
 }
