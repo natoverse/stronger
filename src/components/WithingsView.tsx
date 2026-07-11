@@ -229,23 +229,14 @@ function MetricTrendChart({
     }
   }
 
-  // Build line segments, breaking the line where a bucket has no data.
-  const segments: string[] = [];
-  let current: string[] = [];
-  points.forEach((p, i) => {
-    if (p.value === null) {
-      // Dip-filtered points are excluded from the line but shouldn't break
-      // it — the line continues straight through to the next real point.
-      // Only genuine data gaps (no measurement for the bucket) break it.
-      if (!p.dipFiltered && current.length > 0) {
-        segments.push(current.join(' '));
-        current = [];
-      }
-    } else {
-      current.push(`${xCenter(i)},${yVal(p.value)}`);
-    }
-  });
-  if (current.length > 0) segments.push(current.join(' '));
+  // Build a single continuous, lightly-smoothed line through every point
+  // that has a value, connecting straight across any missing buckets
+  // (whether they're genuine gaps or dip-filtered) rather than breaking
+  // the line into disconnected segments.
+  const lineCoords = points
+    .map((p, i) => (p.value === null ? null : { x: xCenter(i), y: yVal(p.value) }))
+    .filter((c): c is { x: number; y: number } => c !== null);
+  const linePath = buildSmoothPath(lineCoords);
 
   const xPositions = useMemo(
     () => Array.from({ length: n }, (_, i) => xCenter(i)),
@@ -367,10 +358,8 @@ function MetricTrendChart({
             />
           )}
 
-          {/* Trend line (one polyline per contiguous segment) */}
-          {segments.map((seg, i) => (
-            <polyline key={`seg-${i}`} points={seg} className="strava-cumulative-line" />
-          ))}
+          {/* Trend line — one continuous, lightly-smoothed curve */}
+          {linePath && <path d={linePath} className="strava-cumulative-line" />}
 
           {/* Data dots */}
           {points.map((p, i) =>
@@ -440,4 +429,28 @@ function niceTicksFor(min: number, max: number, count: number): number[] {
     ticks.push(Math.round(v * 1e6) / 1e6);
   }
   return ticks;
+}
+
+/**
+ * Builds a lightly-smoothed SVG path ("d" attribute) through a series of
+ * points using Catmull-Rom-to-Bezier interpolation, so the trend line
+ * curves gently between points instead of having sharp corners.
+ */
+function buildSmoothPath(coords: { x: number; y: number }[]): string {
+  if (coords.length === 0) return '';
+  if (coords.length === 1) return `M ${coords[0].x},${coords[0].y}`;
+
+  let d = `M ${coords[0].x},${coords[0].y}`;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p0 = coords[i - 1] ?? coords[i];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[i + 2] ?? p2;
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  }
+  return d;
 }

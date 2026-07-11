@@ -265,16 +265,6 @@ describe('filterTrendDips', () => {
     const result = filterTrendDips(pts([180, 183]), true, 0.01);
     expect(result.map((p) => p.value)).toEqual([180, null]);
   });
-
-  it('flags dip-filtered points with dipFiltered so the chart can keep the line continuous', () => {
-    const result = filterTrendDips(pts([175, 190, 174]), true);
-    expect(result.map((p) => p.dipFiltered ?? false)).toEqual([false, true, false]);
-  });
-
-  it('does not flag genuine data gaps as dipFiltered', () => {
-    const result = filterTrendDips(pts([175, null, 174]), true);
-    expect(result.map((p) => p.dipFiltered ?? false)).toEqual([false, false, false]);
-  });
 });
 
 /* ------------------------------------------------------------------ */

@@ -42,16 +42,11 @@ export interface TrendPoint {
   label: string;
   /**
    * Averaged metric value for the bucket in display units, or null if the
-   * bucket had no measurement for this metric (renders as a gap in the line).
+   * bucket had no measurement for this metric, or if filterTrendDips
+   * excluded it as a dip/spike. Either way the chart connects straight
+   * through to the next real point rather than showing a gap.
    */
   value: number | null;
-  /**
-   * True when a non-null value was nulled out by filterTrendDips because it
-   * was flagged as a dip/spike. Unlike a genuine data gap, this should NOT
-   * break the rendered line — the line should connect straight through to
-   * the next real point.
-   */
-  dipFiltered?: boolean;
 }
 
 /** A single metric's target (e.g. a goal weight). */
@@ -333,7 +328,7 @@ export function filterTrendDips(
       prevValue = p.value;
       return p;
     }
-    return { ...p, value: null, dipFiltered: true };
+    return { ...p, value: null };
   });
 }
 
