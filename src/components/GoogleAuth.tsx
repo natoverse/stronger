@@ -27,13 +27,17 @@ import {
 	createLogTab,
 	verifyCardioTab,
 	createCardioTab,
+	verifyMealItemsTab,
+	createMealItemsTab,
+	verifyMealLogTab,
+	createMealLogTab,
 	readCardioActivities,
 	writeDefaultCardioActivities,
 	describeSheetError,
 	GOOGLE_CLIENT_ID,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
-import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Activity, Scale } from 'lucide-react'
+import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Activity, Scale, Utensils } from 'lucide-react'
 
 type Phase =
 	| 'loading' // loading Google scripts
@@ -52,11 +56,12 @@ interface Props {
 	onOpenProgress?: () => void
 	onOpenStrava?: () => void
 	onOpenWithings?: () => void
+	onOpenNutrition?: () => void
 	onOpenSettings?: () => void
 	onGoToList?: () => void
 }
 
-export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCalendar, onOpenExercises, onOpenProgress, onOpenStrava, onOpenWithings, onOpenSettings, onGoToList }: Props) {
+export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCalendar, onOpenExercises, onOpenProgress, onOpenStrava, onOpenWithings, onOpenNutrition, onOpenSettings, onGoToList }: Props) {
 	const [phase, setPhase] = useState<Phase>('loading')
 	const [error, setError] = useState<string | null>(null)
 	const [sheetUrl, setSheetUrl] = useState('')
@@ -159,6 +164,8 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				if (!cardioTabExists) {
 					await createCardioTab(spreadsheetId)
 				}
+				if (!await verifyMealItemsTab(spreadsheetId)) await createMealItemsTab(spreadsheetId)
+				if (!await verifyMealLogTab(spreadsheetId)) await createMealLogTab(spreadsheetId)
 
 				setPhase('connected')
 				if (onNeedsSetup) {
@@ -184,6 +191,8 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 			if (!cardioTabExists) {
 				await createCardioTab(spreadsheetId)
 			}
+			if (!await verifyMealItemsTab(spreadsheetId)) await createMealItemsTab(spreadsheetId)
+			if (!await verifyMealLogTab(spreadsheetId)) await createMealLogTab(spreadsheetId)
 
 			// Build a lift-name lookup for exercise display names
 			const liftNames = new Map(configs.map((c) => [c.id, c.name]))
@@ -451,6 +460,11 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				{onOpenWithings && (
 					<button className="btn-toolbar" onClick={onOpenWithings} title="Body Composition">
 						<Scale size={20} />
+					</button>
+				)}
+				{onOpenNutrition && (
+					<button className="btn-toolbar" onClick={onOpenNutrition} title="Nutrition">
+						<Utensils size={20} />
 					</button>
 				)}
 				{onOpenSettings && (

@@ -65,6 +65,18 @@ export {
 	readCardioActivities,
 	writeDefaultCardioActivities,
 	writeCardioActivities,
+	mealItemToRow,
+	parseMealItemRow,
+	mealLogEntryToRow,
+	parseMealLogRow,
+	verifyMealItemsTab,
+	createMealItemsTab,
+	verifyMealLogTab,
+	createMealLogTab,
+	readMealItems,
+	writeMealItems,
+	readMealLog,
+	appendMealLogEntry,
 	stravaActivityToRow,
 	parseStravaRow,
 	verifyStravaTab,
@@ -97,7 +109,7 @@ export type { SheetInfo, LogContext, ParsedLogRow, LiftGoal } from './sheets.ts'
 export { performBackup, BACKUP_SETTING_KEY } from './backup.ts'
 export type { CalendarListEntry } from './types.ts'
 export { GOOGLE_CLIENT_ID } from './config.ts'
-export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
 export {
 	listWritableCalendars,
 	listEventsInRange,

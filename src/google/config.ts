@@ -44,6 +44,12 @@ export const WORKOUT_SCHEDULE_TAB_NAME = 'Stronger - Workout Schedule'
 /** Name of the tab that holds cardio activity definitions (id + name). */
 export const CARDIO_TAB_NAME = 'Stronger - Cardio'
 
+/** Name of the tab that holds saved food and drink items. */
+export const MEAL_ITEMS_TAB_NAME = 'Stronger - Meal Items'
+
+/** Name of the tab that holds daily food and drink entries. */
+export const MEAL_LOG_TAB_NAME = 'Stronger - Meal Log'
+
 /** Name of the tab that holds Strava synced activity data. */
 export const STRAVA_TAB_NAME = 'Stronger - Strava'
 

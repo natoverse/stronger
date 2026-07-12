@@ -258,6 +258,30 @@ export interface CardioActivity {
 }
 
 // ---------------------------------------------------------------------------
+// Meal tracking
+// ---------------------------------------------------------------------------
+
+/** The five meal categories used to organize saved foods and daily entries. */
+export type MealCategory = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Drinks';
+
+/** A reusable food or drink with its nutrition per serving. */
+export interface MealItem {
+	id: string;
+	name: string;
+	category: MealCategory;
+	calories: number;
+	fat: number;
+	carbs: number;
+	fiber: number;
+	protein: number;
+}
+
+/** A food or drink logged for a specific day. */
+export interface MealLogEntry extends MealItem {
+	date: string;
+}
+
+// ---------------------------------------------------------------------------
 // Strava activity (synced externally via GitHub Actions)
 // ---------------------------------------------------------------------------
 
