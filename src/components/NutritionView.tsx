@@ -117,7 +117,7 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
             <h3>{category}</h3>
             {categoryItems.map((item) => (
               <button className="nutrition-item" key={item.id} onClick={() => logItem(item)}>
-                <span>{item.name}<small>{item.calories} cal · Protein {item.protein}g · Carbs {item.carbs}g · Fat {item.fat}g · Fiber {item.fiber}g</small></span>
+                <span>{item.name}<small>{item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g</small></span>
                 <Plus size={18} />
               </button>
             ))}
