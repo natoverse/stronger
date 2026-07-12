@@ -4,8 +4,6 @@ import type { MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
 const EMPTY_MACROS = { calories: '', fat: '', carbs: '', fiber: '', protein: '' };
-let fallbackIdCounter = 0;
-const fallbackIdPrefix = Math.random().toString(36).slice(2);
 
 type MacroInputs = typeof EMPTY_MACROS;
 
@@ -22,7 +20,7 @@ function localDate(): string {
 }
 
 function newId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${fallbackIdPrefix}-${fallbackIdCounter++}`;
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function MacroFields({ values, onChange }: { values: MacroInputs; onChange: (values: MacroInputs) => void }) {
@@ -103,7 +101,7 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
     <main className="nutrition-view">
       <div className="nutrition-heading">
         <h2>Nutrition</h2>
-        <input aria-label="Log date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        <input aria-label="Log date" type="date" max={localDate()} value={date} onChange={(event) => setDate(event.target.value)} />
       </div>
       <section className="nutrition-totals">
         <strong>{totals.calories} cal</strong>
@@ -119,7 +117,7 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
             <h3>{category}</h3>
             {categoryItems.map((item) => (
               <button className="nutrition-item" key={item.id} onClick={() => logItem(item)}>
-                <span>{item.name}<small>{item.calories} cal · P {item.protein}g · C {item.carbs}g · F {item.fat}g · Fi {item.fiber}g</small></span>
+                <span>{item.name}<small>{item.calories} cal · Protein {item.protein}g · Carbs {item.carbs}g · Fat {item.fat}g · Fiber {item.fiber}g</small></span>
                 <Plus size={18} />
               </button>
             ))}
