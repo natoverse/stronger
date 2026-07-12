@@ -4,6 +4,7 @@ import type { MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
 const EMPTY_MACROS = { calories: '', fat: '', carbs: '', fiber: '', protein: '' };
+let fallbackIdCounter = 0;
 
 type MacroInputs = typeof EMPTY_MACROS;
 
@@ -20,7 +21,7 @@ function localDate(): string {
 }
 
 function newId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${fallbackIdCounter++}`;
 }
 
 function MacroFields({ values, onChange }: { values: MacroInputs; onChange: (values: MacroInputs) => void }) {

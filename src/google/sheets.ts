@@ -1758,9 +1758,10 @@ export function mealItemToRow(item: MealItem): (string | number)[] {
 function parseMealValues(row: string[], offset: number): Omit<MealItem, 'id'> | null {
 	const name = (row[offset] ?? '').trim()
 	const category = (row[offset + 1] ?? '').trim() as MealCategory
-	const values = row.slice(offset + 2, offset + 7).map(Number)
-	if (!name || !MEAL_CATEGORIES.includes(category) || values.length !== 5 || values.some((value) => !Number.isFinite(value) || value < 0)) return null
-	const [calories, fat, carbs, fiber, protein] = values
+	const macroValues = row.slice(offset + 2, offset + 7).map(Number)
+	if (!name || !MEAL_CATEGORIES.includes(category) || macroValues.length !== 5) return null
+	if (macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
+	const [calories, fat, carbs, fiber, protein] = macroValues
 	return { name, category, calories, fat, carbs, fiber, protein }
 }
 
