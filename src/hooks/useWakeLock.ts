@@ -16,11 +16,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 export function useWakeLock(enabled = true) {
 	const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+	const acquiringRef = useRef(false);
+	const lastGestureRetryRef = useRef(0);
 	const [active, setActive] = useState(false);
-	const activeRef = useRef(false);
 	const enabledRef = useRef(enabled);
 	enabledRef.current = enabled;
-	activeRef.current = active;
 
 	const acquire = useCallback(async () => {
 		// Only request when enabled AND the page is visible (the API
@@ -31,6 +31,8 @@ export function useWakeLock(enabled = true) {
 			setActive(true);
 			return;
 		}
+		if (acquiringRef.current) return;
+		acquiringRef.current = true;
 
 		try {
 			const sentinel = await navigator.wakeLock.request('screen');
@@ -53,6 +55,8 @@ export function useWakeLock(enabled = true) {
 		} catch {
 			// Request can fail (low battery, hidden tab, etc.) — ignore.
 			setActive(false);
+		} finally {
+			acquiringRef.current = false;
 		}
 	}, []);
 
@@ -85,14 +89,17 @@ export function useWakeLock(enabled = true) {
 	}, [enabled, acquire]);
 
 	useEffect(() => {
-		if (!enabled || activeRef.current) return;
+		if (!enabled || active) return;
 
 		const retryOnUserGesture = () => {
+			const now = Date.now();
+			if (now - lastGestureRetryRef.current < 1500) return;
+			lastGestureRetryRef.current = now;
 			void acquire();
 		};
 
 		window.addEventListener('pointerdown', retryOnUserGesture, { passive: true });
-		window.addEventListener('keydown', retryOnUserGesture);
+		window.addEventListener('keydown', retryOnUserGesture, { passive: true });
 
 		return () => {
 			window.removeEventListener('pointerdown', retryOnUserGesture);
