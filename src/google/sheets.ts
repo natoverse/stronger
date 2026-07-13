@@ -5,8 +5,8 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/types.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -1736,6 +1736,117 @@ export async function writeCardioActivities(
 		range: CARDIO_RANGE,
 		valueInputOption: 'RAW',
 		resource: { values: allRows },
+	})
+}
+
+/* ------------------------------------------------------------------ */
+/*  Meal tabs                                                           */
+/* ------------------------------------------------------------------ */
+
+const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:H`
+const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:I1`
+const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:I2`
+const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:I`
+const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein']
+const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER]
+const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
+
+export function mealItemToRow(item: MealItem): (string | number)[] {
+	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein]
+}
+
+function parseMealValues(row: string[], offset: number): Omit<MealItem, 'id'> | null {
+	const name = (row[offset] ?? '').trim()
+	const category = (row[offset + 1] ?? '').trim() as MealCategory
+	const macroValues = row.slice(offset + 2, offset + 7).map(Number)
+	if (!name || !MEAL_CATEGORIES.includes(category) || macroValues.length !== 5) return null
+	if (macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
+	const [calories, fat, carbs, fiber, protein] = macroValues
+	return { name, category, calories, fat, carbs, fiber, protein }
+}
+
+export function parseMealItemRow(row: string[]): MealItem | null {
+	const id = (row[0] ?? '').trim()
+	const values = parseMealValues(row, 1)
+	return id && values ? { id, ...values } : null
+}
+
+export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {
+	return [entry.date, ...mealItemToRow(entry)]
+}
+
+export function parseMealLogRow(row: string[]): MealLogEntry | null {
+	const date = (row[0] ?? '').trim()
+	const id = (row[1] ?? '').trim()
+	const values = parseMealValues(row, 2)
+	return date && id && values ? { date, id, ...values } : null
+}
+
+async function verifyTab(spreadsheetId: string, tabName: string): Promise<boolean> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	const response = await gapi.client.sheets.spreadsheets.get({ spreadsheetId })
+	return (response.result.sheets ?? []).some((sheet) => sheet.properties.title === tabName)
+}
+
+async function createTab(spreadsheetId: string, tabName: string, header: string[], headerRange: string): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	await gapi.client.sheets.spreadsheets.batchUpdate({
+		spreadsheetId,
+		resource: { requests: [{ addSheet: { properties: { title: tabName } } }] },
+	})
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId, range: headerRange, valueInputOption: 'RAW', resource: { values: [header] },
+	})
+}
+
+export function verifyMealItemsTab(spreadsheetId: string): Promise<boolean> {
+	return verifyTab(spreadsheetId, MEAL_ITEMS_TAB_NAME)
+}
+
+export function createMealItemsTab(spreadsheetId: string): Promise<void> {
+	return createTab(spreadsheetId, MEAL_ITEMS_TAB_NAME, MEAL_ITEMS_HEADER, `'${MEAL_ITEMS_TAB_NAME}'!A1:H1`)
+}
+
+export function verifyMealLogTab(spreadsheetId: string): Promise<boolean> {
+	return verifyTab(spreadsheetId, MEAL_LOG_TAB_NAME)
+}
+
+export function createMealLogTab(spreadsheetId: string): Promise<void> {
+	return createTab(spreadsheetId, MEAL_LOG_TAB_NAME, MEAL_LOG_HEADER, MEAL_LOG_HEADER_RANGE)
+}
+
+export async function readMealItems(spreadsheetId: string): Promise<MealItem[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_ITEMS_RANGE })
+	return (response.result.values ?? []).slice(1).map(parseMealItemRow).filter((item): item is MealItem => item !== null)
+}
+
+export async function writeMealItems(spreadsheetId: string, items: MealItem[]): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId, range: MEAL_ITEMS_RANGE })
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId, range: MEAL_ITEMS_RANGE, valueInputOption: 'RAW',
+		resource: { values: [MEAL_ITEMS_HEADER, ...items.map(mealItemToRow)] },
+	})
+}
+
+export async function readMealLog(spreadsheetId: string): Promise<MealLogEntry[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
+	return (response.result.values ?? []).map(parseMealLogRow).filter((entry): entry is MealLogEntry => entry !== null)
+}
+
+export async function appendMealLogEntry(spreadsheetId: string, entry: MealLogEntry): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	await gapi.client.sheets.spreadsheets.values.append({
+		spreadsheetId, range: MEAL_LOG_APPEND_RANGE, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+		resource: { values: [mealLogEntryToRow(entry)] },
 	})
 }
 

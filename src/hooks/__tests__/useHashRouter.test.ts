@@ -100,6 +100,10 @@ describe('parseHash', () => {
     expect(parseHash('#settings')).toEqual({ view: 'settings' });
   });
 
+  it('parses the nutrition route', () => {
+    expect(parseHash('#/nutrition')).toEqual({ view: 'nutrition' });
+  });
+
   it('parses the exercise editor new route', () => {
     expect(parseHash('#/exercise/new')).toEqual({ view: 'exerciseEditor' });
   });
@@ -176,6 +180,10 @@ describe('routeToHash', () => {
     expect(routeToHash({ view: 'settings' })).toBe('/settings');
   });
 
+  it('returns /nutrition for nutrition route', () => {
+    expect(routeToHash({ view: 'nutrition' })).toBe('/nutrition');
+  });
+
   it('returns /exercise/new for exercise editor route without exerciseId', () => {
     expect(routeToHash({ view: 'exerciseEditor' })).toBe('/exercise/new');
   });
@@ -203,6 +211,7 @@ describe('routeToHash', () => {
       { view: 'exercises' },
       { view: 'progress' },
       { view: 'settings' },
+      { view: 'nutrition' },
       { view: 'exerciseEditor' },
       { view: 'exerciseEditor', exerciseId: 'bench' },
     ];

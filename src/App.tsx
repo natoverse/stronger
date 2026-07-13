@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from './model/index.js';
+import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealItem, MealLogEntry, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from './model/index.js';
 import { computeProgression } from './model/index.js';
-import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealItems, writeMealItems, readMealLog, appendMealLogEntry, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
@@ -29,6 +29,7 @@ import type { StravaActivity, StravaGoal, StravaMetric } from './model/strava.js
 import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
+import { NutritionView } from './components/NutritionView.js';
 import './App.css';
 
 function App() {
@@ -48,6 +49,8 @@ function App() {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
   const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>([]);
+  const [mealItems, setMealItems] = useState<MealItem[]>([]);
+  const [mealLog, setMealLog] = useState<MealLogEntry[]>([]);
   const [stravaActivities, setStravaActivities] = useState<StravaActivity[]>([]);
   const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
@@ -68,6 +71,7 @@ function App() {
   const logLoadedRef = useRef(false);
   const stravaLoadedRef = useRef(false);
   const withingsLoadedRef = useRef(false);
+  const nutritionLoadedRef = useRef(false);
 
   const handleConnected = useCallback(
     (loadedWorkouts: Workout[], loadedConfigs: LiftConfig[], sheetId: string, defs: WorkoutDefinition[], cardio: CardioActivity[]) => {
@@ -84,6 +88,7 @@ function App() {
       logLoadedRef.current = false;
       stravaLoadedRef.current = false;
       withingsLoadedRef.current = false;
+      nutritionLoadedRef.current = false;
     },
     [],
   );
@@ -145,12 +150,15 @@ function App() {
     setStravaActivities([]);
     setWithingsMeasurements([]);
     setWithingsGoals([]);
+    setMealItems([]);
+    setMealLog([]);
     // Reset lazy-loading flags
     flagsLoadedRef.current = false;
     workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
     stravaLoadedRef.current = false;
     withingsLoadedRef.current = false;
+    nutritionLoadedRef.current = false;
     replaceTo({ view: 'list' });
   }, [replaceTo]);
 
@@ -377,6 +385,18 @@ function App() {
       });
     } catch {
       // Silently ignore — Withings data is optional
+    }
+  }, []);
+
+  const loadNutritionData = useCallback(async (sheetId: string) => {
+    try {
+      await withAuthRetry(async () => {
+        const [items, entries] = await Promise.all([readMealItems(sheetId), readMealLog(sheetId)]);
+        setMealItems(items);
+        setMealLog(entries);
+      });
+    } catch {
+      // Nutrition is optional if the sheet cannot be read.
     }
   }, []);
 
@@ -734,6 +754,20 @@ function App() {
     navigateTo({ view: 'withings' });
   }, [navigateTo]);
 
+  const handleOpenNutrition = useCallback(() => {
+    navigateTo({ view: 'nutrition' });
+  }, [navigateTo]);
+
+  const handleSaveMealItems = useCallback((items: MealItem[]) => {
+    setMealItems(items);
+    if (spreadsheetId) void withAuthRetry(() => writeMealItems(spreadsheetId, items));
+  }, [spreadsheetId]);
+
+  const handleLogMealEntry = useCallback((entry: MealLogEntry) => {
+    setMealLog((previous) => [...previous, entry]);
+    if (spreadsheetId) void withAuthRetry(() => appendMealLogEntry(spreadsheetId, entry));
+  }, [spreadsheetId]);
+
   const handleWithingsGoalChange = useCallback((metric: WithingsMetric, value: number | null) => {
     setWithingsGoals((prev) => {
       const updated = prev.filter((g) => g.metric !== metric);
@@ -1022,6 +1056,13 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadWithingsData]);
 
+  useEffect(() => {
+    if (route.view === 'nutrition' && spreadsheetId && !nutritionLoadedRef.current) {
+      nutritionLoadedRef.current = true;
+      void loadNutritionData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadNutritionData]);
+
   // Gate: require auth + sheet connection before showing workouts
   if (!sheetConnected) {
     return (
@@ -1259,6 +1300,31 @@ function App() {
     );
   }
 
+  if (route.view === 'nutrition') {
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onGoToList={handleGoToList}
+          onOpenCalendar={handleOpenCalendar}
+          onOpenExercises={handleOpenExercises}
+          onOpenProgress={handleOpenProgress}
+          onOpenStrava={onOpenStrava}
+          onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
+          onOpenSettings={handleOpenSettings}
+        />
+        <NutritionView
+          items={mealItems}
+          entries={mealLog}
+          onSaveItems={handleSaveMealItems}
+          onLogEntry={handleLogMealEntry}
+        />
+      </>
+    );
+  }
+
   if (route.view === 'settings' && spreadsheetId) {
     return (
       <>
@@ -1271,6 +1337,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <SettingsView
