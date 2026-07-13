@@ -136,10 +136,12 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 
 	const addSet = useCallback(
 		(exerciseIdx: number) => {
-			const exercise = workout.exercises[exerciseIdx];
+			const exercise = allExercises[exerciseIdx];
+			if (!exercise) return;
 			const extraSets = addedSets[exerciseIdx];
 			const allSets = [...exercise.sets, ...extraSets];
 			const lastSet = allSets[allSets.length - 1];
+			if (!lastSet) return;
 
 			const newSet: ComputedSet = { ...lastSet };
 
@@ -164,7 +166,7 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 				),
 			);
 		},
-		[workout, addedSets],
+		[allExercises, addedSets],
 	);
 
 	const addExercise = useCallback(
