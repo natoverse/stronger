@@ -17,14 +17,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export function useWakeLock(enabled = true) {
 	const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 	const [active, setActive] = useState(false);
+	const activeRef = useRef(false);
 	const enabledRef = useRef(enabled);
 	enabledRef.current = enabled;
+	activeRef.current = active;
 
 	const acquire = useCallback(async () => {
 		// Only request when enabled AND the page is visible (the API
 		// throws NotAllowedError for hidden documents).
 		if (!enabledRef.current || !('wakeLock' in navigator)) return;
 		if (document.visibilityState !== 'visible') return;
+		if (wakeLockRef.current && !wakeLockRef.current.released) {
+			setActive(true);
+			return;
+		}
 
 		try {
 			const sentinel = await navigator.wakeLock.request('screen');
@@ -77,6 +83,22 @@ export function useWakeLock(enabled = true) {
 			}
 		};
 	}, [enabled, acquire]);
+
+	useEffect(() => {
+		if (!enabled || activeRef.current) return;
+
+		const retryOnUserGesture = () => {
+			void acquire();
+		};
+
+		window.addEventListener('pointerdown', retryOnUserGesture, { passive: true });
+		window.addEventListener('keydown', retryOnUserGesture);
+
+		return () => {
+			window.removeEventListener('pointerdown', retryOnUserGesture);
+			window.removeEventListener('keydown', retryOnUserGesture);
+		};
+	}, [enabled, active, acquire]);
 
 	return { active, reacquire: acquire };
 }
