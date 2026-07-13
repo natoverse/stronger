@@ -16,6 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  */
 export function useWakeLock(enabled = true) {
 	const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+	const acquiringRef = useRef(false);
+	const lastGestureRetryRef = useRef(0);
 	const [active, setActive] = useState(false);
 	const enabledRef = useRef(enabled);
 	enabledRef.current = enabled;
@@ -25,6 +27,12 @@ export function useWakeLock(enabled = true) {
 		// throws NotAllowedError for hidden documents).
 		if (!enabledRef.current || !('wakeLock' in navigator)) return;
 		if (document.visibilityState !== 'visible') return;
+		if (wakeLockRef.current && !wakeLockRef.current.released) {
+			setActive(true);
+			return;
+		}
+		if (acquiringRef.current) return;
+		acquiringRef.current = true;
 
 		try {
 			const sentinel = await navigator.wakeLock.request('screen');
@@ -47,6 +55,8 @@ export function useWakeLock(enabled = true) {
 		} catch {
 			// Request can fail (low battery, hidden tab, etc.) — ignore.
 			setActive(false);
+		} finally {
+			acquiringRef.current = false;
 		}
 	}, []);
 
@@ -77,6 +87,25 @@ export function useWakeLock(enabled = true) {
 			}
 		};
 	}, [enabled, acquire]);
+
+	useEffect(() => {
+		if (!enabled || active) return;
+
+		const retryOnUserGesture = () => {
+			const now = Date.now();
+			if (now - lastGestureRetryRef.current < 1500) return;
+			lastGestureRetryRef.current = now;
+			void acquire();
+		};
+
+		window.addEventListener('pointerdown', retryOnUserGesture, { passive: true });
+		window.addEventListener('keydown', retryOnUserGesture, { passive: true });
+
+		return () => {
+			window.removeEventListener('pointerdown', retryOnUserGesture);
+			window.removeEventListener('keydown', retryOnUserGesture);
+		};
+	}, [enabled, active, acquire]);
 
 	return { active, reacquire: acquire };
 }
