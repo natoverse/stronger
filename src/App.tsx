@@ -1131,6 +1131,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseEditor
@@ -1155,6 +1156,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseLibrary
@@ -1181,6 +1183,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <WorkoutEditor
@@ -1207,6 +1210,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <CalendarView
@@ -1241,6 +1245,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ProgressView
@@ -1265,6 +1270,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <StravaView
@@ -1288,6 +1294,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <WithingsView
@@ -1374,6 +1381,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
           onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <SessionDetail
@@ -1397,6 +1405,7 @@ function App() {
         onOpenProgress={handleOpenProgress}
         onOpenStrava={onOpenStrava}
         onOpenWithings={onOpenWithings}
+        onOpenNutrition={handleOpenNutrition}
         onOpenSettings={handleOpenSettings}
       />
       <WorkoutSelect
