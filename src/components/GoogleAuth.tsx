@@ -37,7 +37,7 @@ import {
 	GOOGLE_CLIENT_ID,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
-import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Activity, Scale, Utensils } from 'lucide-react'
+import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Activity, HeartPulse, Salad } from 'lucide-react'
 
 type Phase =
 	| 'loading' // loading Google scripts
@@ -459,12 +459,12 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				)}
 				{onOpenWithings && (
 					<button className="btn-toolbar" onClick={onOpenWithings} title="Body Composition">
-						<Scale size={20} />
+						<HeartPulse size={20} />
 					</button>
 				)}
 				{onOpenNutrition && (
 					<button className="btn-toolbar" onClick={onOpenNutrition} title="Nutrition">
-						<Utensils size={20} />
+						<Salad size={20} />
 					</button>
 				)}
 				{onOpenSettings && (
