@@ -63,7 +63,7 @@ A single new sheet tab, **"Stronger - Garmin Wellness"**, holds one row per day 
 | Training Readiness | ≥75 → green, ≥50 → yellow, <50 → pink |
 | Training Status | Full Garmin palette: productive=green, peaking=purple, maintaining=yellow, recovery=blue, unproductive=orange, strained=pink, overreaching=red, detraining=gray |
 | Acute Load | <100 → gray (below optimal), 100–300 → green (optimal), >300 → pink (too high) |
-| Overnight HRV | Color by hrvStatus: BALANCED/OPTIMAL → green, UNBALANCED → orange, LOW → red |
+| Overnight HRV | Color by hrvStatus: BALANCED/OPTIMAL → green, UNBALANCED → yellow, LOW → red |
 
 #### Aggregation
 - Day: one bar per calendar day
