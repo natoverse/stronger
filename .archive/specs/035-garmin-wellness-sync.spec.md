@@ -63,7 +63,7 @@ A single new sheet tab, **"Stronger - Garmin Wellness"**, holds one row per day 
 | Training Readiness | ≥75 → green, ≥50 → yellow, <50 → pink |
 | Training Status | Full Garmin palette: productive=green, peaking=purple, maintaining=yellow, recovery=blue, unproductive=orange, strained=pink, overreaching=red, detraining=gray |
 | Acute Load | <100 → gray (below optimal), 100–300 → green (optimal), >300 → pink (too high) |
-| Overnight HRV | Color by hrvStatus: BALANCED/OPTIMAL → green, UNBALANCED → orange, LOW → red |
+| Overnight HRV | Color by hrvStatus: BALANCED/OPTIMAL → green, UNBALANCED → yellow, LOW → red |
 
 #### Aggregation
 - Day: one bar per calendar day
@@ -105,8 +105,19 @@ Verified all fields against the real Garmin Connect API response structures usin
 
 3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.
 
-## Iteration notes (2026-07-14)
+## Iteration log
 
-- Combined Body Battery High and Body Battery Low into a single **Body Battery Range** chart in `GarminWellnessView`.
-- The range chart now renders floating bars where each bar's top is the aggregated daily max and the bottom is the aggregated daily min, so bar height represents the daily spread.
-- Tooltip and header summary were updated to display min→max ranges instead of separate high/low chart values.
+- **Training load chart simplification (2026-07):** Replaced the separate acute-load and chronic-load charts with a single acute:chronic load ratio chart in the Training section. The ratio uses the aggregated acute and chronic bucket values, and its bars are color-coded yellow below `0.8`, green from `0.8` through `1.5`, and pink above `1.5`.
+- **Body Battery range chart consolidation (2026-07-14):** Combined the separate Body Battery High/Low charts into a single floating-range chart in `GarminWellnessView` where each bar encodes the aggregated low→high spread for a bucket.
+- **Body Battery tooltip + summary update (2026-07-14):** Updated hover and card summary text to show min→max values (`Avg low–high`) instead of separate high/low summaries.
+
+## Follow-up extraction hardening
+
+- Garmin exposes VO2 max in more than one shape depending on the endpoint payload and device profile. The sync now accepts top-level `generic`/`running` containers, direct `vo2Max*` keys, and both `VO2MAX_RUNNING` and `VO2_MAX_RUNNING` metric-map variants.
+- Hill score and endurance score also arrive as direct `overallScore` values in some single-day responses, not only under `allMetrics.metricsMap.*`. The sync now prefers those single-day score fields and keeps the older metric-map fallback paths for compatibility.
+- Added `scripts/test_garmin_wellness_sync.py` as an offline regression harness for these alternative response shapes so future Garmin API drift is easier to catch locally.
+
+## Iteration notes
+- The Recovery HRV chart now plots `hrvWeeklyAvg` instead of `hrvLastNight` so the visual trend reflects Garmin's rolling weekly signal rather than the noisier overnight reading.
+- HRV bar colors continue to come from `hrvStatus` for the same underlying rows, with BALANCED/OPTIMAL = green, UNBALANCED = yellow, and LOW = red.
+- Training status now normalizes Garmin's numeric/status-phrase variants to stable enum text before writing or reading sheet rows. The sync prefers `trainingStatusFeedbackPhrase` / `trainingStatusKey` when available, and falls back to numeric-code mapping so values like `4` render as `MAINTAINING` instead of a raw number.

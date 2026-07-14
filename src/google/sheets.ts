@@ -2723,6 +2723,40 @@ function parseNum(raw: string | undefined): number | null {
 	return isFinite(v) ? v : null
 }
 
+const TRAINING_STATUS_CODE_MAP: Record<string, string> = {
+	'0': 'NO_STATUS',
+	'1': 'DETRAINING',
+	'2': 'UNPRODUCTIVE',
+	'4': 'MAINTAINING',
+	'5': 'RECOVERY',
+	'6': 'PEAKING',
+	'7': 'PRODUCTIVE',
+	'8': 'STRAINED',
+}
+
+function normalizeTrainingStatus(raw: string | undefined): string {
+	const value = raw?.trim()
+	if (!value) return ''
+	if (/^\d+$/.test(value)) return TRAINING_STATUS_CODE_MAP[value] ?? value
+
+	const upper = value.toUpperCase()
+	if (upper.startsWith('NO_STATUS')) return 'NO_STATUS'
+	for (const prefix of [
+		'PRODUCTIVE',
+		'MAINTAINING',
+		'RECOVERY',
+		'RECOVERY_ACTIVE',
+		'UNPRODUCTIVE',
+		'STRAINED',
+		'OVERREACHING',
+		'DETRAINING',
+		'PEAKING',
+	]) {
+		if (upper === prefix || upper.startsWith(`${prefix}_`)) return prefix
+	}
+	return upper
+}
+
 /**
  * Parse a single row from the "Stronger - Garmin Wellness" sheet.
  * Returns null if the row has no valid date.
@@ -2744,7 +2778,7 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 		bodyBatteryHigh:      parseNum(row[WC.bodyBatteryHigh]),
 		bodyBatteryLow:       parseNum(row[WC.bodyBatteryLow]),
 		readinessScore:       parseNum(row[WC.readinessScore]),
-		trainingStatus:       row[WC.trainingStatus]?.trim() ?? '',
+		trainingStatus:       normalizeTrainingStatus(row[WC.trainingStatus]),
 		trainingAcuteLoad:    parseNum(row[WC.trainingAcuteLoad]),
 		trainingChronicLoad:  parseNum(row[WC.trainingChronicLoad]),
 		steps:                parseNum(row[WC.steps]),

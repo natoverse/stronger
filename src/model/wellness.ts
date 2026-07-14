@@ -236,6 +236,43 @@ export function buildWellnessChartData(
   return { metric, buckets, summary };
 }
 
+export function buildTrainingLoadRatioChartData(
+  entries: GarminWellnessEntry[],
+  range: string,
+  aggregation: StravaAggregation,
+  today: Date = new Date(),
+): WellnessChartData {
+  const acute = buildWellnessChartData(entries, 'trainingAcuteLoad', range, aggregation, today);
+  const chronic = buildWellnessChartData(entries, 'trainingChronicLoad', range, aggregation, today);
+
+  let total = 0;
+  let count = 0;
+
+  const buckets = acute.buckets.map((bucket, index) => {
+    const acuteValue = bucket.value;
+    const chronicValue = chronic.buckets[index]?.value ?? null;
+    const ratio = acuteValue !== null && chronicValue !== null && chronicValue > 0
+      ? acuteValue / chronicValue
+      : null;
+
+    if (ratio !== null && Number.isFinite(ratio)) {
+      total += ratio;
+      count++;
+    }
+
+    return {
+      label: bucket.label,
+      value: ratio,
+    };
+  });
+
+  return {
+    metric: 'trainingAcuteLoad',
+    buckets,
+    summary: count > 0 ? total / count : null,
+  };
+}
+
 /**
  * Build status-bar chart data for the training status metric.
  * Each bucket gets the modal training status string for the period.
@@ -288,4 +325,9 @@ export function formatWellnessValue(value: number | null, metric: WellnessNumeri
   }
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(1);
+}
+
+export function formatWellnessRatio(value: number | null): string {
+  if (value === null) return '—';
+  return value.toFixed(2).replace(/\.?0+$/, '');
 }

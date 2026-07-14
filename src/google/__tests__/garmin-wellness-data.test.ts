@@ -72,4 +72,16 @@ describe('parseGarminWellnessRow', () => {
     expect(entry!.date).toBe('2024-06-01');
     expect(entry!.hrvStatus).toBe('UNBALANCED');
   });
+
+  it('normalizes numeric training status codes to enum text', () => {
+    const row = ['2024-07-14', '', '', '', '', '', '', '', '', '', '', '', '', '4'];
+    const entry = parseGarminWellnessRow(row);
+    expect(entry!.trainingStatus).toBe('MAINTAINING');
+  });
+
+  it('normalizes Garmin training status feedback phrases', () => {
+    const row = ['2024-07-14', '', '', '', '', '', '', '', '', '', '', '', '', 'strained_5'];
+    const entry = parseGarminWellnessRow(row);
+    expect(entry!.trainingStatus).toBe('STRAINED');
+  });
 });
