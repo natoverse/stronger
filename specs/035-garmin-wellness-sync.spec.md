@@ -104,3 +104,7 @@ Verified all fields against the real Garmin Connect API response structures usin
 2. **`_fetch_training_status` — completely wrong keys**: The response uses `mostRecentTrainingStatus → latestTrainingStatusData → {sportKey: {trainingStatus, acuteTrainingLoadDTO: {dailyTrainingLoadAcute, dailyTrainingLoadChronic}}}`, not `trainingStatusDTO → latestTrainingStatusWeek → {acuteLoad, chronicLoad}`. Fixed to use the correct path.
 
 3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.
+
+## Iteration log
+
+- **Training load chart simplification (2026-07):** Replaced the separate acute-load and chronic-load charts with a single acute:chronic load ratio chart in the Training section. The ratio uses the aggregated acute and chronic bucket values, and its bars are color-coded yellow below `0.8`, green from `0.8` through `1.5`, and pink above `1.5`.
