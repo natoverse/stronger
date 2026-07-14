@@ -335,6 +335,8 @@ def _fetch_goals(client) -> dict:
 
     These come from the same daily summary endpoint.  The goal values rarely
     change so we only need to read them once (for today).
+    Only writes goals that are > 0 so that absent API fields don't overwrite
+    user-configured values with zero.
     """
     try:
         today = date.today().isoformat()
@@ -343,10 +345,10 @@ def _fetch_goals(client) -> dict:
             return {}
         goals: dict = {}
         step_goal = _num(data.get("dailyStepGoal"), 0)
-        if step_goal is not None:
+        if step_goal is not None and int(step_goal) > 0:
             goals["app.garminDailyStepsGoal"] = str(int(step_goal))
-        floors_goal = _num(data.get("floorsAscendedGoal"), 1)
-        if floors_goal is not None:
+        floors_goal = _num(data.get("floorsAscendedGoal"), 0)
+        if floors_goal is not None and int(floors_goal) > 0:
             goals["app.garminDailyFloorsGoal"] = str(int(floors_goal))
         # Garmin may use different field names across API versions
         intensity_goal_raw = (

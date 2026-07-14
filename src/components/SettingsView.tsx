@@ -278,7 +278,7 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
         </div>
 
         <div className="settings-subsection-title">Garmin Goals</div>
-        <p className="settings-toggle-description" style={{ marginBottom: '0.75rem', fontSize: '0.8rem', opacity: 0.7 }}>Auto-synced from Garmin. Set to 0 to disable goal coloring.</p>
+        <p className="settings-toggle-description">Auto-synced from Garmin. Set to 0 to disable goal coloring.</p>
 
         <div className="settings-percent-row">
           <span className="settings-toggle-label">
