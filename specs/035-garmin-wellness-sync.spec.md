@@ -104,3 +104,9 @@ Verified all fields against the real Garmin Connect API response structures usin
 2. **`_fetch_training_status` — completely wrong keys**: The response uses `mostRecentTrainingStatus → latestTrainingStatusData → {sportKey: {trainingStatus, acuteTrainingLoadDTO: {dailyTrainingLoadAcute, dailyTrainingLoadChronic}}}`, not `trainingStatusDTO → latestTrainingStatusWeek → {acuteLoad, chronicLoad}`. Fixed to use the correct path.
 
 3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.
+
+## Iteration notes (2026-07-14)
+
+- Combined Body Battery High and Body Battery Low into a single **Body Battery Range** chart in `GarminWellnessView`.
+- The range chart now renders floating bars where each bar's top is the aggregated daily max and the bottom is the aggregated daily min, so bar height represents the daily spread.
+- Tooltip and header summary were updated to display min→max ranges instead of separate high/low chart values.
