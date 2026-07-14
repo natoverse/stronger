@@ -73,8 +73,6 @@ PY
 
 Copy the printed JSON — that's your `GARMIN_TOKENS` secret.
 
-> **Migrating from the old garth-based sync?** Tokens minted with the previous `garth` login are **not** compatible with `garminconnect`. Re-run this step to mint a fresh bundle and update the `GARMIN_TOKENS` secret.
-
 ## Step 2: Create a Google service account
 
 The sync script uses a service account (not your personal OAuth) to write to the spreadsheet.
@@ -126,6 +124,19 @@ python scripts/garmin-sync.py
 
 Wire it into `cron` (or a systemd timer) to run on whatever schedule you like.
 
+## Backfilling older history
+
+By default the sync only fetches the most recent activities, which is all the daily cron needs. Garmin Connect keeps your **full** history, so there's no limit on how far back you can pull — you just have to ask for it.
+
+To backfill, set the optional `GARMIN_SYNC_START_DATE` environment variable (a `YYYY-MM-DD` date) and run the script once. Every activity on or after that date is fetched, deduplicated by activity ID, and appended. For example, to pull everything back to 2021 inclusive:
+
+```bash
+export GARMIN_SYNC_START_DATE="2021-01-01"
+python scripts/garmin-sync.py
+```
+
+You can also trigger a backfill from **Actions → Garmin Sync → Run workflow**, which has an optional **start date** input (leave it blank for a normal recent-activity sync). Because the sync dedups by Garmin activity ID, running a backfill won't create duplicate rows, and the daily runs keep fetching just recent activities afterwards.
+
 ## Troubleshooting
 
 | Problem | Fix |
@@ -133,6 +144,6 @@ Wire it into `cron` (or a systemd timer) to run on whatever schedule you like.
 | Workflow fails with "Missing GARMIN_TOKENS" | The token bundle secret is not set. Re-do Step 1 and Step 4. |
 | Workflow fails with "Missing GOOGLE_SERVICE_ACCOUNT_KEY" | The service account key secret is not set or is malformed. Paste the entire JSON content. |
 | Workflow fails with "Missing SPREADSHEET_ID" | The spreadsheet ID secret is not set. |
-| Garmin auth fails (401 / token error) | The saved tokens were revoked or the refresh token expired (or you migrated from the old `garth`-based sync). Re-mint them (Step 1) and update the `GARMIN_TOKENS` secret. |
+| Garmin auth fails (401 / token error) | The saved tokens were revoked or the refresh token expired. Re-mint them (Step 1) and update the `GARMIN_TOKENS` secret. |
 | Sheets API returns 403 | The service account doesn't have editor access to the spreadsheet. Re-do Step 3. |
 | "No new activities to sync" | All recent activities are already in the sheet. This is normal on re-runs. |

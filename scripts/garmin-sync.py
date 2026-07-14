@@ -11,11 +11,16 @@ layout (moving duration, elevation loss, speeds, steps, training effect,
 VO2 max). The old "Stronger - Strava" tab is left in place and deprecated
 gradually. See specs/031-garmin-direct-sync.spec.md.
 
-Environment variables (all required):
+Environment variables:
   GARMIN_TOKENS               – ``garminconnect`` token bundle (contents of the
-                                saved ``garmin_tokens.json``)
-  GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account
-  SPREADSHEET_ID              – Google Sheets spreadsheet ID
+                                saved ``garmin_tokens.json``)                (required)
+  GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account       (required)
+  SPREADSHEET_ID              – Google Sheets spreadsheet ID                  (required)
+  GARMIN_SYNC_START_DATE      – optional ``YYYY-MM-DD`` date. When set, every
+                                activity on/after this date is fetched (a
+                                one-time backfill, e.g. ``2021-01-01`` to pull
+                                history back to 2021 inclusive). When unset,
+                                only the most recent activities are fetched.
 
 Usage:
   python scripts/garmin-sync.py
@@ -27,6 +32,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
@@ -86,6 +92,19 @@ def login_from_tokens(token_bundle):
 def fetch_recent_activities(client, limit=ACTIVITY_LIMIT):
     """Fetch the most recent activities from Garmin Connect."""
     activities = client.get_activities(0, limit)
+    return activities or []
+
+
+def fetch_activities_since(client, start_date):
+    """Fetch every activity on/after ``start_date`` (inclusive).
+
+    ``start_date`` is a ``YYYY-MM-DD`` string. Used for one-time backfills
+    (e.g. pulling history back to 2021). Garmin Connect keeps your full
+    history, so the only limit on how far back this reaches is the date you
+    pass. ``get_activities_by_date`` pages through the range internally.
+    """
+    today = date.today().isoformat()
+    activities = client.get_activities_by_date(start_date, today)
     return activities or []
 
 
@@ -259,6 +278,7 @@ def main():
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
     service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
     spreadsheet_id = os.environ.get("SPREADSHEET_ID")
+    start_date = (os.environ.get("GARMIN_SYNC_START_DATE") or "").strip()
 
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
@@ -271,9 +291,14 @@ def main():
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
 
-    # 2. Fetch recent activities.
-    print("Fetching recent activities from Garmin Connect...")
-    activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
+    # 2. Fetch activities — a dated backfill when GARMIN_SYNC_START_DATE is set,
+    #    otherwise the most recent activities for the daily incremental sync.
+    if start_date:
+        print(f"Backfilling activities since {start_date} from Garmin Connect...")
+        activities = fetch_activities_since(garmin, start_date)
+    else:
+        print("Fetching recent activities from Garmin Connect...")
+        activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
     print(f"Fetched {len(activities)} activities from Garmin.")
 
     # 3. Authenticate with Google Sheets.
