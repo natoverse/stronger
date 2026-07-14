@@ -6,7 +6,7 @@
  * Reuses the same CSS classes as StravaView (strava-chart-card, strava-bar, etc.)
  * and the same aggregation engine from strava.ts via wellness.ts.
  */
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GarminWellnessEntry } from '../model/types.js';
 import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket } from '../model/wellness.js';
 import {
@@ -53,7 +53,7 @@ function trainingLoadRatioColor(v: number): string {
   return ACCENT;
 }
 
-function trainingStatusColor(status: string): string {
+export function trainingStatusColor(status: string): string {
   switch (status.toUpperCase()) {
     case 'PRODUCTIVE':      return GREEN;
     case 'PEAKING':         return PURPLE;
@@ -66,6 +66,31 @@ function trainingStatusColor(status: string): string {
     case 'DETRAINING':      return GRAY;
     default:                return GRAY;
   }
+}
+
+interface ChartLegendItem {
+  status: string;
+  label: string;
+  color: string;
+}
+
+export const TRAINING_STATUS_LEGEND_ITEMS: ChartLegendItem[] = [
+  { status: 'PRODUCTIVE', label: 'Productive', color: GREEN },
+  { status: 'PEAKING', label: 'Peaking', color: PURPLE },
+  { status: 'MAINTAINING', label: 'Maintaining', color: YELLOW },
+  { status: 'RECOVERY', label: 'Recovery', color: BLUE },
+  { status: 'UNPRODUCTIVE', label: 'Unproductive', color: ORANGE },
+  { status: 'STRAINED', label: 'Strained', color: ACCENT },
+  { status: 'OVERREACHING', label: 'Overreaching', color: RED },
+  { status: 'DETRAINING', label: 'Detraining', color: GRAY },
+];
+
+export function formatTrainingStatusLabel(status: string): string {
+  if (!status) return '—';
+  return status
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function hrvStatusColor(status: string): string {
@@ -448,6 +473,39 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
 
   const xPositions = buckets.map((_, i) => xCenter(i));
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [legendIndex, setLegendIndex] = useState(0);
+  const legendRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!legendOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!legendRef.current?.contains(event.target as Node)) {
+        setLegendOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setLegendOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [legendOpen]);
+
+  const activeLegendItem = TRAINING_STATUS_LEGEND_ITEMS[legendIndex] ?? TRAINING_STATUS_LEGEND_ITEMS[0];
+
+  function showLegendItem(index: number) {
+    setLegendIndex(index);
+    setLegendOpen(true);
+  }
 
   const maxLabels = Math.min(n, 8);
   const xLabelIndices: number[] = [];
@@ -463,25 +521,34 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
     <div className="strava-chart-card">
       <div className="strava-chart-header">
         <h3 className="strava-chart-label">Training Status</h3>
-      </div>
-
-      {/* Status color legend */}
-      <div className="wellness-status-legend">
-        {[
-          { label: 'Productive',  color: GREEN  },
-          { label: 'Peaking',     color: PURPLE },
-          { label: 'Maintaining', color: YELLOW },
-          { label: 'Recovery',    color: BLUE   },
-          { label: 'Unproductive',color: ORANGE },
-          { label: 'Strained',    color: ACCENT },
-          { label: 'Overreaching',color: RED    },
-          { label: 'Detraining',  color: GRAY   },
-        ].map(({ label, color }) => (
-          <span key={label} className="wellness-status-legend-item">
-            <span className="wellness-status-legend-dot" style={{ background: color }} />
-            {label}
-          </span>
-        ))}
+        <div className="wellness-status-legend" ref={legendRef}>
+          <div className="wellness-status-legend-swatches" role="group" aria-label="Training status legend">
+            {TRAINING_STATUS_LEGEND_ITEMS.map((item, index) => (
+              <button
+                key={item.status}
+                type="button"
+                className={`wellness-status-legend-swatch${legendOpen && legendIndex === index ? ' active' : ''}`}
+                style={{ background: item.color }}
+                onPointerDown={() => showLegendItem(index)}
+                onMouseEnter={() => legendOpen && setLegendIndex(index)}
+                onClick={() => showLegendItem(index)}
+                onPointerMove={() => legendOpen && setLegendIndex(index)}
+                onFocus={() => showLegendItem(index)}
+                aria-label={item.label}
+                aria-expanded={legendOpen}
+              />
+            ))}
+          </div>
+          {legendOpen && (
+            <div className="wellness-status-legend-popover" role="status" aria-live="polite">
+              <span className="wellness-status-legend-popover-value">
+                <span className="wellness-status-legend-dot" style={{ background: activeLegendItem.color }} />
+                {activeLegendItem.label}
+              </span>
+              <span className="wellness-status-legend-popover-hint">Hover or swipe across the colors.</span>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="strava-chart-container" {...containerHandlers}>
@@ -532,9 +599,7 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
             style={{ left: `${(xCenter(activeIndex) / VIEW_BOX_W) * 100}%` }}
           >
             <span className="chart-tooltip-value">
-              {buckets[activeIndex].status
-                ? buckets[activeIndex].status.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
-                : '—'}
+              {formatTrainingStatusLabel(buckets[activeIndex].status)}
             </span>
             <span className="chart-tooltip-date">{buckets[activeIndex].label}</span>
           </div>
