@@ -105,6 +105,10 @@ Verified all fields against the real Garmin Connect API response structures usin
 
 3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.
 
+## Iteration log
+
+- **Training load chart simplification (2026-07):** Replaced the separate acute-load and chronic-load charts with a single acute:chronic load ratio chart in the Training section. The ratio uses the aggregated acute and chronic bucket values, and its bars are color-coded yellow below `0.8`, green from `0.8` through `1.5`, and pink above `1.5`.
+
 ## Follow-up extraction hardening
 
 - Garmin exposes VO2 max in more than one shape depending on the endpoint payload and device profile. The sync now accepts top-level `generic`/`running` containers, direct `vo2Max*` keys, and both `VO2MAX_RUNNING` and `VO2_MAX_RUNNING` metric-map variants.
@@ -112,7 +116,6 @@ Verified all fields against the real Garmin Connect API response structures usin
 - Added `scripts/test_garmin_wellness_sync.py` as an offline regression harness for these alternative response shapes so future Garmin API drift is easier to catch locally.
 
 ## Iteration notes
-
 - The Recovery HRV chart now plots `hrvWeeklyAvg` instead of `hrvLastNight` so the visual trend reflects Garmin's rolling weekly signal rather than the noisier overnight reading.
 - HRV bar colors continue to come from `hrvStatus` for the same underlying rows, with BALANCED/OPTIMAL = green, UNBALANCED = yellow, and LOW = red.
 - Training status now normalizes Garmin's numeric/status-phrase variants to stable enum text before writing or reading sheet rows. The sync prefers `trainingStatusFeedbackPhrase` / `trainingStatusKey` when available, and falls back to numeric-code mapping so values like `4` render as `MAINTAINING` instead of a raw number.

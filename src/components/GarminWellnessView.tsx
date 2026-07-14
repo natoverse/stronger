@@ -11,7 +11,9 @@ import type { GarminWellnessEntry } from '../model/types.js';
 import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket } from '../model/wellness.js';
 import {
   buildWellnessChartData,
+  buildTrainingLoadRatioChartData,
   buildStatusChartData,
+  formatWellnessRatio,
   getTimeRangeOptions,
   formatWellnessValue,
   WELLNESS_METRIC_LABELS,
@@ -38,9 +40,9 @@ function readinessColor(v: number): string {
   return ACCENT;
 }
 
-function acuteLoadColor(v: number): string {
-  if (v < 100) return GRAY;
-  if (v < 300) return GREEN;
+function trainingLoadRatioColor(v: number): string {
+  if (v < 0.8) return YELLOW;
+  if (v <= 1.5) return GREEN;
   return ACCENT;
 }
 
@@ -372,8 +374,7 @@ export function GarminWellnessView({ entries }: Props) {
   // Build chart data
   const readinessData   = useMemo(() => buildWellnessChartData(entries, 'readinessScore',       range, aggregation, today), [entries, range, aggregation, today]);
   const statusData      = useMemo(() => buildStatusChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
-  const acuteLoadData   = useMemo(() => buildWellnessChartData(entries, 'trainingAcuteLoad',    range, aggregation, today), [entries, range, aggregation, today]);
-  const chronicLoadData = useMemo(() => buildWellnessChartData(entries, 'trainingChronicLoad',  range, aggregation, today), [entries, range, aggregation, today]);
+  const trainingLoadRatioData = useMemo(() => buildTrainingLoadRatioChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
   const vo2Data         = useMemo(() => buildWellnessChartData(entries, 'vo2Max',               range, aggregation, today), [entries, range, aggregation, today]);
   const hillData        = useMemo(() => buildWellnessChartData(entries, 'hillScore',            range, aggregation, today), [entries, range, aggregation, today]);
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
@@ -449,19 +450,12 @@ export function GarminWellnessView({ entries }: Props) {
       />
       <WellnessStatusBarChart buckets={statusData.buckets} />
       <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.trainingAcuteLoad}
-        unit={WELLNESS_METRIC_UNITS.trainingAcuteLoad}
-        buckets={acuteLoadData.buckets}
-        summaryLabel={summaryStr(acuteLoadData.summary, 'trainingAcuteLoad', '')}
-        colorFn={(v) => v !== null ? acuteLoadColor(v) : GRAY}
-        formatValue={numFmt('trainingAcuteLoad')}
-      />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.trainingChronicLoad}
-        unit={WELLNESS_METRIC_UNITS.trainingChronicLoad}
-        buckets={chronicLoadData.buckets}
-        summaryLabel={summaryStr(chronicLoadData.summary, 'trainingChronicLoad', '')}
-        formatValue={numFmt('trainingChronicLoad')}
+        label="Acute:Chronic Load Ratio"
+        unit=""
+        buckets={trainingLoadRatioData.buckets}
+        summaryLabel={formatWellnessRatio(trainingLoadRatioData.summary)}
+        colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
+        formatValue={formatWellnessRatio}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.vo2Max}
