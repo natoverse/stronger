@@ -1,10 +1,48 @@
 import { describe, expect, it } from 'vitest';
-import { hrvStatusColor } from '../GarminWellnessView.js';
+import {
+  enduranceScoreColor,
+  hillScoreColor,
+  hrvStatusColor,
+  vo2MaxColor,
+} from '../GarminWellnessView.js';
 
 describe('hrvStatusColor', () => {
   it('maps balanced, low, and unbalanced HRV statuses to the requested colors', () => {
     expect(hrvStatusColor('BALANCED')).toBe('#00e676');
     expect(hrvStatusColor('LOW')).toBe('#ff1744');
     expect(hrvStatusColor('UNBALANCED')).toBe('#ffea00');
+  });
+});
+
+describe('vo2MaxColor', () => {
+  it('maps VO2 max thresholds to the expected palette', () => {
+    expect(vo2MaxColor(38.4)).toBe('#ff1744');
+    expect(vo2MaxColor(38.5)).toBe('#ffab40');
+    expect(vo2MaxColor(42.4)).toBe('#00e676');
+    expect(vo2MaxColor(46.4)).toBe('#2196f3');
+    expect(vo2MaxColor(52.5)).toBe('#d500f9');
+  });
+});
+
+describe('hillScoreColor', () => {
+  it('maps hill score thresholds to the expected palette', () => {
+    expect(hillScoreColor(24.9)).toBe('#ff1744');
+    expect(hillScoreColor(25)).toBe('#ffab40');
+    expect(hillScoreColor(50)).toBe('#00e676');
+    expect(hillScoreColor(70)).toBe('#2196f3');
+    expect(hillScoreColor(85)).toBe('#d500f9');
+    expect(hillScoreColor(95)).toBe('#ff2d7b');
+  });
+});
+
+describe('enduranceScoreColor', () => {
+  it('maps endurance score thresholds to the expected palette', () => {
+    expect(enduranceScoreColor(4999)).toBe('#ff1744');
+    expect(enduranceScoreColor(5000)).toBe('#ffab40');
+    expect(enduranceScoreColor(5700)).toBe('#ffea00');
+    expect(enduranceScoreColor(6400)).toBe('#00e676');
+    expect(enduranceScoreColor(7000)).toBe('#2196f3');
+    expect(enduranceScoreColor(7700)).toBe('#d500f9');
+    expect(enduranceScoreColor(8400)).toBe('#ff2d7b');
   });
 });
