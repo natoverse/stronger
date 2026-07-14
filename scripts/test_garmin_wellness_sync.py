@@ -107,6 +107,11 @@ def test_fetch_endurance_score_from_nested_object():
     assert row == {"enduranceScore": "7450"}, row
 
 
+def test_header_drives_column_count_and_span():
+    assert garmin_wellness_sync.COLUMN_COUNT == len(garmin_wellness_sync.HEADER)
+    assert garmin_wellness_sync._column_letter(garmin_wellness_sync.COLUMN_COUNT) == "W"
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

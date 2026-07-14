@@ -38,7 +38,9 @@ from urllib.parse import quote
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 TAB_NAME = "Stronger - Garmin Wellness"
 
-# 23 columns — keep in sync with src/google/config.ts GARMIN_WELLNESS_HEADER
+# 23 columns today — keep in sync with src/google/sheets.ts GARMIN_WELLNESS_HEADER.
+# Range math below derives from len(HEADER), so this script keeps working if the
+# schema grows or shrinks later.
 HEADER = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
@@ -51,8 +53,7 @@ HEADER = [
     "intensityMinModerate", "intensityMinVigorous",
     "hillScore", "enduranceScore",
 ]
-COLUMN_COUNT = len(HEADER)   # 24 → A:X
-assert COLUMN_COUNT == 24, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # currently 23 → A:W
 
 ROLLING_DAYS = 14
 BACKFILL_START_DATE = "2021-01-01"
