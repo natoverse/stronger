@@ -67,11 +67,11 @@ const TRAINING_READINESS_BANDS: ThresholdBand[] = [
 ];
 
 export const TRAINING_READINESS_LEGEND_ITEMS: LegendItem[] = [
-  { range: '<25', label: 'Poor', color: ACCENT },
-  { range: '<50', label: 'Low', color: ORANGE },
-  { range: '<75', label: 'Moderate', color: YELLOW },
-  { range: '<95', label: 'High', color: GREEN },
   { range: '95+', label: 'Prime', color: BLUE },
+  { range: '<95', label: 'High', color: GREEN },
+  { range: '<75', label: 'Moderate', color: YELLOW },
+  { range: '<50', label: 'Low', color: ORANGE },
+  { range: '<25', label: 'Poor', color: ACCENT },
 ];
 
 function readinessColor(v: number): string {
@@ -88,9 +88,9 @@ const LOAD_RATIO_BANDS: ThresholdBand[] = [
 ];
 
 export const LOAD_RATIO_LEGEND_ITEMS: LegendItem[] = [
-  { range: '<0.8', label: 'Low', color: YELLOW },
-  { range: '<1.5', label: 'Optimal', color: GREEN },
   { range: '1.5+', label: 'High', color: ACCENT },
+  { range: '<1.5', label: 'Optimal', color: GREEN },
+  { range: '<0.8', label: 'Low', color: YELLOW },
 ];
 
 function trainingLoadRatioColor(v: number): string {
@@ -169,11 +169,11 @@ const VO2_MAX_BANDS: ThresholdBand[] = [
 ];
 
 export const VO2_MAX_LEGEND_ITEMS: LegendItem[] = [
-  { range: '<38.5', label: 'Poor', color: RED },
-  { range: '<42.5', label: 'Fair', color: ORANGE },
-  { range: '<46.4', label: 'Good', color: GREEN },
-  { range: '<52.5', label: 'Excellent', color: BLUE },
   { range: '52.5+', label: 'Superior', color: PURPLE },
+  { range: '<52.5', label: 'Excellent', color: BLUE },
+  { range: '<46.4', label: 'Good', color: GREEN },
+  { range: '<42.5', label: 'Fair', color: ORANGE },
+  { range: '<38.5', label: 'Poor', color: RED },
 ];
 
 export function vo2MaxColor(value: number): string {
@@ -193,12 +193,12 @@ const HILL_SCORE_BANDS: ThresholdBand[] = [
 ];
 
 export const HILL_SCORE_LEGEND_ITEMS: LegendItem[] = [
-  { range: '<25', label: 'Recreational', color: RED },
-  { range: '<50', label: 'Challenger', color: ORANGE },
-  { range: '<69', label: 'Trained', color: GREEN },
-  { range: '<85', label: 'Skilled', color: BLUE },
-  { range: '<95', label: 'Expert', color: PURPLE },
   { range: '95+', label: 'Elite', color: ACCENT },
+  { range: '<95', label: 'Expert', color: PURPLE },
+  { range: '<85', label: 'Skilled', color: BLUE },
+  { range: '<69', label: 'Trained', color: GREEN },
+  { range: '<50', label: 'Challenger', color: ORANGE },
+  { range: '<25', label: 'Recreational', color: RED },
 ];
 
 export function hillScoreColor(value: number): string {
@@ -217,10 +217,10 @@ const SLEEP_SCORE_BANDS: ThresholdBand[] = [
 ];
 
 export const SLEEP_SCORE_LEGEND_ITEMS: LegendItem[] = [
-  { range: '<60', label: 'Poor', color: RED },
-  { range: '<80', label: 'Fair', color: ORANGE },
-  { range: '<90', label: 'Good', color: GREEN },
   { range: '90+', label: 'Excellent', color: BLUE },
+  { range: '<90', label: 'Good', color: GREEN },
+  { range: '<80', label: 'Fair', color: ORANGE },
+  { range: '<60', label: 'Poor', color: RED },
 ];
 
 export function sleepScoreColor(value: number): string {
@@ -241,13 +241,13 @@ const ENDURANCE_SCORE_BANDS: ThresholdBand[] = [
 ];
 
 export const ENDURANCE_SCORE_LEGEND_ITEMS: LegendItem[] = [
-  { range: '<5000', label: 'Recreational', color: RED },
-  { range: '<5700', label: 'Intermediate', color: ORANGE },
-  { range: '<6400', label: 'Trained', color: YELLOW },
-  { range: '<7000', label: 'Well-trained', color: GREEN },
-  { range: '<7700', label: 'Expert', color: BLUE },
-  { range: '<8400', label: 'Superior', color: PURPLE },
   { range: '8400+', label: 'Elite', color: ACCENT },
+  { range: '<8400', label: 'Superior', color: PURPLE },
+  { range: '<7700', label: 'Expert', color: BLUE },
+  { range: '<7000', label: 'Well-trained', color: GREEN },
+  { range: '<6400', label: 'Trained', color: YELLOW },
+  { range: '<5700', label: 'Intermediate', color: ORANGE },
+  { range: '<5000', label: 'Recreational', color: RED },
 ];
 
 export function enduranceScoreColor(value: number): string {
