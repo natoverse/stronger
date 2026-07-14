@@ -57,6 +57,7 @@ function App() {
   const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
   const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>([]);
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
+  const [garminRange, setGarminRange] = useState<StravaTimeRange>('month');
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
   const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
@@ -1327,7 +1328,7 @@ function App() {
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
-        <div className="strava-view">
+        <div className="chart-controls-sticky">
           <div className="strava-range-group">
             {timeRanges.map((r) => (
               <button
@@ -1395,13 +1396,13 @@ function App() {
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
-        <div className="strava-view">
+        <div className="chart-controls-sticky">
           <div className="strava-range-group">
             {timeRanges.map((r) => (
               <button
                 key={r.value}
-                className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
-                onClick={() => setChartRange(r.value)}
+                className={`strava-range-btn${garminRange === r.value ? ' active' : ''}`}
+                onClick={() => setGarminRange(r.value)}
               >
                 {r.label}
               </button>
@@ -1423,7 +1424,7 @@ function App() {
           <ActivitiesView
             activities={garminActivities}
             goals={stravaGoals}
-            range={chartRange}
+            range={garminRange}
             aggregation={chartAggregation}
             onGoalChange={handleStravaGoalChange}
             title={null}
@@ -1432,7 +1433,7 @@ function App() {
           />
           <GarminWellnessView
             entries={wellnessEntries}
-            range={chartRange}
+            range={garminRange}
             aggregation={chartAggregation}
             embedded
           />
