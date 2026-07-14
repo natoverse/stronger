@@ -1436,6 +1436,9 @@ function App() {
             entries={wellnessEntries}
             range={garminRange}
             aggregation={chartAggregation}
+            stepsGoal={appSettings.garminDailyStepsGoal}
+            floorsGoal={appSettings.garminDailyFloorsGoal}
+            weeklyIntensityMinGoal={appSettings.garminWeeklyIntensityMinGoal}
             embedded
           />
         </div>

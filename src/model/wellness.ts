@@ -309,6 +309,163 @@ export function buildStatusChartData(
   return { buckets };
 }
 
+/**
+ * Build combined intensity-minutes chart data (moderate + vigorous summed).
+ *
+ * When `weeklyGoal > 0`:
+ * - In `'day'` aggregation: each bar's colorKey is set by comparing the
+ *   7-day rolling sum ending on that date to the weekly goal.
+ * - In `'week'` aggregation: the bar's colorKey compares the week's total to
+ *   the weekly goal.
+ * - In `'month'` aggregation: compares the month's total to the weekly goal × 4.
+ *
+ * colorKey values: `'below'` | `'met'` | `'exceeded'` | `''`
+ */
+export function buildIntensityMinCombinedChartData(
+  entries: GarminWellnessEntry[],
+  range: string,
+  aggregation: StravaAggregation,
+  weeklyGoal: number,
+  today: Date = new Date(),
+): WellnessChartData {
+  const slots = generateBucketSlots(range, aggregation, today);
+  const start = getRangeStart(range, today);
+  const end = getRangeEnd(range, today);
+
+  // Build a daily totals map: date → (moderate + vigorous) sum
+  // Include all entries (not just those in range) so the rolling window works
+  // for the first days of the range.
+  const dailyTotals = new Map<string, number>();
+  for (const entry of entries) {
+    const mod = entry.intensityMinModerate ?? 0;
+    const vig = entry.intensityMinVigorous ?? 0;
+    if (entry.intensityMinModerate !== null || entry.intensityMinVigorous !== null) {
+      dailyTotals.set(entry.date, mod + vig);
+    }
+  }
+
+  if (aggregation === 'day') {
+    let totalSum = 0;
+    let totalCount = 0;
+
+    const buckets: WellnessBucket[] = slots.map(({ key, label }) => {
+      // key is the ISO date string in day mode
+      const value = dailyTotals.has(key) ? dailyTotals.get(key)! : null;
+
+      if (value !== null) {
+        totalSum += value;
+        totalCount++;
+      }
+
+      let colorKey = '';
+      if (weeklyGoal > 0) {
+        // Rolling 7-day sum ending on this date
+        const endDate = new Date(key + 'T00:00:00');
+        const startRoll = new Date(endDate);
+        startRoll.setDate(startRoll.getDate() - 6);
+        const startRollStr = startRoll.toISOString().slice(0, 10);
+
+        let rollingSum = 0;
+        for (const [d, v] of dailyTotals) {
+          if (d >= startRollStr && d <= key) rollingSum += v;
+        }
+
+        colorKey = rollingSum >= weeklyGoal * 1.25 ? 'exceeded'
+          : rollingSum >= weeklyGoal ? 'met'
+          : 'below';
+      }
+
+      return { label, value, colorKey };
+    });
+
+    const summary = totalCount > 0 ? totalSum / totalCount : null;
+    const latestValue = [...buckets].reverse().find((b) => b.value !== null)?.value ?? null;
+    return { metric: 'intensityMinModerate', buckets, summary, latestValue };
+  }
+
+  // Week / month aggregation: sum moderate + vigorous per bucket
+  const inRange = entries.filter(({ date }) => {
+    const d = new Date(date + 'T00:00:00');
+    return d >= start && d <= end;
+  });
+
+  const valueMap = new Map<string, number[]>();
+  for (const entry of inRange) {
+    if (entry.intensityMinModerate === null && entry.intensityMinVigorous === null) continue;
+    const key = getBucketKey(entry.date, aggregation);
+    const total = (entry.intensityMinModerate ?? 0) + (entry.intensityMinVigorous ?? 0);
+    if (!valueMap.has(key)) valueMap.set(key, []);
+    valueMap.get(key)!.push(total);
+  }
+
+  const scaledGoal = aggregation === 'month' ? weeklyGoal * 4 : weeklyGoal;
+
+  let totalSum = 0;
+  let totalCount = 0;
+
+  const buckets: WellnessBucket[] = slots.map(({ key, label }) => {
+    const vals = valueMap.get(key);
+    let value: number | null = null;
+    if (vals && vals.length > 0) {
+      value = vals.reduce((a, b) => a + b, 0);
+      totalSum += value;
+      totalCount++;
+    }
+
+    let colorKey = '';
+    if (weeklyGoal > 0 && value !== null) {
+      colorKey = value >= scaledGoal * 1.25 ? 'exceeded'
+        : value >= scaledGoal ? 'met'
+        : 'below';
+    }
+
+    return { label, value, colorKey };
+  });
+
+  const summary = totalCount > 0 ? totalSum / totalCount : null;
+  const latestValue = [...buckets].reverse().find((b) => b.value !== null)?.value ?? null;
+  return { metric: 'intensityMinModerate', buckets, summary, latestValue };
+}
+
+// ---------------------------------------------------------------------------
+// Goal coloring helpers
+// ---------------------------------------------------------------------------
+
+/** Color key values produced by goal-aware chart builders. */
+export type GoalColorKey = 'below' | 'met' | 'exceeded' | '';
+
+/**
+ * Return the goal-comparison color for a given value and daily/periodic goal.
+ * Aggregation scale: week = ×7, month = ×30, day = ×1.
+ *
+ * Returns `fallback` when goal is 0 (disabled) or value is null.
+ */
+export function goalColor(
+  value: number | null,
+  goal: number,
+  aggregation: StravaAggregation,
+  fallback: string,
+): string {
+  if (goal === 0 || value === null) return fallback;
+  const scale = aggregation === 'week' ? 7 : aggregation === 'month' ? 30 : 1;
+  const scaled = goal * scale;
+  if (value >= scaled * 1.25) return '#2196f3'; // BLUE
+  if (value >= scaled) return '#00e676';          // GREEN
+  return '#ffea00';                               // YELLOW
+}
+
+/**
+ * Map a `GoalColorKey` (pre-computed in chart data) to a display color.
+ * Used by the intensity-minutes combined chart where rolling-window color
+ * is embedded as a colorKey in each bucket.
+ */
+export function goalColorFromKey(colorKey: string | undefined, fallback: string): string {
+  if (colorKey === 'exceeded') return '#2196f3'; // BLUE
+  if (colorKey === 'met') return '#00e676';       // GREEN
+  if (colorKey === 'below') return '#ffea00';     // YELLOW
+  return fallback;
+}
+
 // ---------------------------------------------------------------------------
 // Display formatting
 // ---------------------------------------------------------------------------

@@ -2616,6 +2616,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	skipBodyCompDips: true,
 	dailyCalorieGoal: 0,
 	dailyProteinGoalGrams: 0,
+	garminDailyStepsGoal: 0,
+	garminDailyFloorsGoal: 0,
+	garminWeeklyIntensityMinGoal: 0,
 }
 
 /** Settings key prefix for app-level settings. */
@@ -2637,6 +2640,9 @@ const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min
 	'app.progressDipThresholdPercent': { field: 'progressDipThresholdPercent', min: 0.1, max: 100 },
 	'app.dailyCalorieGoal': { field: 'dailyCalorieGoal', min: 0, max: 20000 },
 	'app.dailyProteinGoalGrams': { field: 'dailyProteinGoalGrams', min: 0, max: 1000 },
+	'app.garminDailyStepsGoal': { field: 'garminDailyStepsGoal', min: 0, max: 100000 },
+	'app.garminDailyFloorsGoal': { field: 'garminDailyFloorsGoal', min: 0, max: 500 },
+	'app.garminWeeklyIntensityMinGoal': { field: 'garminWeeklyIntensityMinGoal', min: 0, max: 10000 },
 }
 
 /**

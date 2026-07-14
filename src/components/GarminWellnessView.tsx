@@ -13,10 +13,13 @@ import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
   buildStatusChartData,
+  buildIntensityMinCombinedChartData,
   formatWellnessRatio,
   formatWellnessValue,
   WELLNESS_METRIC_LABELS,
   WELLNESS_METRIC_UNITS,
+  goalColor,
+  goalColorFromKey,
 } from '../model/wellness.js';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
 
@@ -257,6 +260,12 @@ export function enduranceScoreColor(value: number): string {
 export function enduranceScoreLegendLabel(value: number): string {
   return thresholdLabel(value, ENDURANCE_SCORE_BANDS, 'Elite');
 }
+
+export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
+  { label: 'Exceeded (>125%)', color: BLUE },
+  { label: 'Goal met', color: GREEN },
+  { label: 'Below goal', color: YELLOW },
+];
 
 /* ------------------------------------------------------------------ */
 /*  Chart constants (same as StravaView)                              */
@@ -758,9 +767,15 @@ interface Props {
   range: WellnessTimeRange;
   aggregation: WellnessAggregation;
   embedded?: boolean;
+  /** Daily step goal (0 = no goal). Auto-synced from Garmin. */
+  stepsGoal?: number;
+  /** Daily floors goal (0 = no goal). Auto-synced from Garmin. */
+  floorsGoal?: number;
+  /** Weekly intensity minutes goal (0 = no goal). Auto-synced from Garmin. */
+  weeklyIntensityMinGoal?: number;
 }
 
-export function GarminWellnessView({ entries, range, aggregation, embedded = false }: Props) {
+export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, weeklyIntensityMinGoal = 0 }: Props) {
   const today = useMemo(() => new Date(), []);
 
   // Build chart data
@@ -793,8 +808,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
 
   const stepsData       = useMemo(() => buildWellnessChartData(entries, 'steps',                range, aggregation, today), [entries, range, aggregation, today]);
   const floorsData      = useMemo(() => buildWellnessChartData(entries, 'floors',               range, aggregation, today), [entries, range, aggregation, today]);
-  const modMinData      = useMemo(() => buildWellnessChartData(entries, 'intensityMinModerate', range, aggregation, today), [entries, range, aggregation, today]);
-  const vigMinData      = useMemo(() => buildWellnessChartData(entries, 'intensityMinVigorous', range, aggregation, today), [entries, range, aggregation, today]);
+  const intensityData   = useMemo(() => buildIntensityMinCombinedChartData(entries, range, aggregation, weeklyIntensityMinGoal, today), [entries, range, aggregation, weeklyIntensityMinGoal, today]);
 
   if (entries.length === 0) {
     return (
@@ -955,6 +969,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={stepsData.buckets}
         summaryLabel={summaryStr(summaryValue(stepsData), 'steps', '')}
         formatValue={numFmt('steps')}
+        legendItems={stepsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
+        colorFn={(v) => v !== null ? goalColor(v, stepsGoal, aggregation, ACCENT) : GRAY}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.floors}
@@ -962,20 +978,17 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={floorsData.buckets}
         summaryLabel={summaryStr(summaryValue(floorsData), 'floors', '')}
         formatValue={numFmt('floors')}
+        legendItems={floorsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
+        colorFn={(v) => v !== null ? goalColor(v, floorsGoal, aggregation, ACCENT) : GRAY}
       />
       <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.intensityMinModerate}
+        label="Intensity Minutes"
         unit={WELLNESS_METRIC_UNITS.intensityMinModerate}
-        buckets={modMinData.buckets}
-        summaryLabel={summaryStr(summaryValue(modMinData), 'intensityMinModerate', WELLNESS_METRIC_UNITS.intensityMinModerate)}
+        buckets={intensityData.buckets}
+        summaryLabel={summaryStr(summaryValue(intensityData), 'intensityMinModerate', WELLNESS_METRIC_UNITS.intensityMinModerate)}
         formatValue={numFmt('intensityMinModerate')}
-      />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.intensityMinVigorous}
-        unit={WELLNESS_METRIC_UNITS.intensityMinVigorous}
-        buckets={vigMinData.buckets}
-        summaryLabel={summaryStr(summaryValue(vigMinData), 'intensityMinVigorous', WELLNESS_METRIC_UNITS.intensityMinVigorous)}
-        formatValue={numFmt('intensityMinVigorous')}
+        legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
+        colorFn={(v, key) => goalColorFromKey(key, v !== null ? ACCENT : GRAY)}
       />
     </div>
   );
