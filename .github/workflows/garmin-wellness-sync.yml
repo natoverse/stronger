@@ -1,0 +1,38 @@
+name: Garmin Wellness Sync
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # 08:00 UTC daily (one hour after garmin-sync)
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Backfill all data since 2021-01-01"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run Garmin wellness sync
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+        run: |
+          if [ "${{ inputs.backfill }}" = "true" ]; then
+            python scripts/garmin-wellness-sync.py --backfill
+          else
+            python scripts/garmin-wellness-sync.py
+          fi
