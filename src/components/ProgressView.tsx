@@ -56,7 +56,7 @@ const BIG_FOUR_LABELS: Record<string, string> = {
 /* ------------------------------------------------------------------ */
 
 const CHART_PADDING = { top: 20, right: 16, bottom: 40, left: 52 };
-const CHART_HEIGHT = 260;
+const CHART_HEIGHT = 220;
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
