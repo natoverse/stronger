@@ -176,7 +176,7 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
         <label className="settings-toggle-row">
           <span className="settings-toggle-label">
             <span className="settings-toggle-name">Skip Body Comp Dips</span>
-            <span className="settings-toggle-description">Filter measurement spikes from body-composition charts</span>
+            <span className="settings-toggle-description">Filter measurement dips from body-composition charts</span>
           </span>
           <input
             type="checkbox"

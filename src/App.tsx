@@ -57,6 +57,7 @@ function App() {
   const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
   const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>([]);
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
+  // 'week' gives a sensible middle-ground granularity for activity and body-comp charts
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('week');
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
   const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
