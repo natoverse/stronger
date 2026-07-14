@@ -149,6 +149,7 @@ export function ProgressView({
 
               <SelectedLiftChart
                 liftId={selectedLift}
+                label={otherLifts.find((l) => l.liftId === selectedLift)?.exerciseName ?? 'Selected Lift'}
                 logRows={logRows}
                 metric={metric}
                 range={range}
@@ -203,11 +204,17 @@ function Big4Chart({
 
   // Only show goal on heaviest and e1rm charts
   const showGoal = goalWeight !== undefined && metric !== 'volume';
+  const headerSummary = data.length > 0
+    ? formatProgressSummary(metric, Math.max(...data.map((d) => d.value)), showGoal ? goalWeight : undefined)
+    : null;
 
   return (
     <div className="strava-chart-card">
       <div className="strava-chart-header">
-        <h3 className="strava-chart-label">{label}</h3>
+        <h3 className="strava-chart-label">
+          {label}
+          {headerSummary && <span className="strava-chart-total">{headerSummary}</span>}
+        </h3>
         {onGoalChange && metric !== 'volume' && (
           <button
             className="strava-goal-btn"
@@ -257,6 +264,7 @@ function Big4Chart({
 
 function SelectedLiftChart({
   liftId,
+  label,
   logRows,
   metric,
   range,
@@ -264,6 +272,7 @@ function SelectedLiftChart({
   dipThreshold,
 }: {
   liftId: string;
+  label: string;
   logRows: ParsedLogRow[];
   metric: ProgressMetric;
   range: StravaTimeRange;
@@ -284,8 +293,15 @@ function SelectedLiftChart({
   if (data.length === 0) {
     return <p className="progress-empty">No data for this selection.</p>;
   }
+  const headerSummary = formatProgressSummary(metric, Math.max(...data.map((d) => d.value)));
   return (
     <div className="strava-chart-card">
+      <div className="strava-chart-header">
+        <h3 className="strava-chart-label">
+          {label}
+          <span className="strava-chart-total">{headerSummary}</span>
+        </h3>
+      </div>
       <ProgressChart data={data} metric={metric} stableYMin={stableYMin} />
     </div>
   );
@@ -344,8 +360,6 @@ function ProgressChart({
       xLabelIndices.push(Math.round((i / (xLabelCount - 1)) * (data.length - 1)));
     }
   }
-
-  const yUnit = metric === 'volume' ? 'vol' : '';
 
   // Tooltip support
   const xPositions = useMemo(
@@ -447,10 +461,6 @@ function ProgressChart({
           />
         )}
       </svg>
-      <div className="progress-unit">
-        {yUnit ? `${yUnit} · ` : ''}{formatValue(maxVal)}{goalWeight !== undefined ? ` / ${formatValue(goalWeight)}` : ''}
-      </div>
-
       {/* Tooltip label */}
       {active != null && activeIndex !== null && (
         <div
@@ -483,6 +493,11 @@ function formatValue(v: number): string {
   if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
   if (Number.isInteger(v)) return String(v);
   return v.toFixed(1);
+}
+
+function formatProgressSummary(metric: ProgressMetric, maxValue: number, goalWeight?: number): string {
+  const prefix = metric === 'volume' ? 'vol · ' : '';
+  return `${prefix}${formatValue(maxValue)}${goalWeight !== undefined ? ` / ${formatValue(goalWeight)}` : ''}`;
 }
 
 /**
