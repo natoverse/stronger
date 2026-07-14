@@ -177,9 +177,16 @@ describe('getCutoffDate', () => {
     expect(getCutoffDate('all')).toBeNull();
   });
 
-  it('returns a date string for month-based ranges', () => {
-    const result = getCutoffDate('1m');
+  it('returns a date string for rolling ranges', () => {
+    const result = getCutoffDate('month');
     expect(result).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    const result2 = getCutoffDate('year');
+    expect(result2).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('returns Jan 1 for a year string', () => {
+    const result = getCutoffDate('2025');
+    expect(result).toBe('2025-01-01');
   });
 });
 
@@ -215,7 +222,7 @@ describe('buildProgressData', () => {
       makeRow({ date: '2020-01-01', liftId: 'squat', actualWeight: 100, actualReps: 5 }),
       makeRow({ date: '2025-12-01', liftId: 'squat', actualWeight: 120, actualReps: 5 }),
     ];
-    const data = buildProgressData(rows, 'squat', 'volume', '1m');
+    const data = buildProgressData(rows, 'squat', 'volume', 'month');
     // Only recent data should appear (the 2020 row is too old)
     expect(data.length).toBeLessThanOrEqual(1);
   });

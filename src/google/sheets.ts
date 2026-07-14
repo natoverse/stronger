@@ -2612,6 +2612,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	showNutritionTab: false,
 	withingsDipThresholdPercent: 2,
 	progressDipThresholdPercent: 10,
+	skipProgressDips: true,
+	skipBodyCompDips: true,
 	dailyCalorieGoal: 0,
 	dailyProteinGoalGrams: 0,
 }
@@ -2626,6 +2628,8 @@ const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 	'app.keepScreenOn': 'keepScreenOn',
 	'app.showGarminTab': 'showGarminTab',
 	'app.showNutritionTab': 'showNutritionTab',
+	'app.skipProgressDips': 'skipProgressDips',
+	'app.skipBodyCompDips': 'skipBodyCompDips',
 }
 
 const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min: number; max: number }> = {

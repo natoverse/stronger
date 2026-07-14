@@ -94,11 +94,12 @@ describe('toDisplayUnit / fromDisplayUnit', () => {
 /* ------------------------------------------------------------------ */
 
 describe('filterMeasurements', () => {
-  it('keeps measurements within the current month', () => {
+  it('keeps measurements within the last 30 days for month range', () => {
+    // TODAY = June 20 2026; last 30 days = May 22 – June 20
     const measurements = [
       makeMeasurement({ date: '2026-06-01', grpId: 'a' }),
       makeMeasurement({ date: '2026-06-19', grpId: 'b' }),
-      makeMeasurement({ date: '2026-05-31', grpId: 'c' }), // previous month
+      makeMeasurement({ date: '2026-04-30', grpId: 'c' }), // well outside 30 days
     ];
     const result = filterMeasurements(measurements, 'month', TODAY);
     expect(result.map((m) => m.grpId)).toEqual(['a', 'b']);

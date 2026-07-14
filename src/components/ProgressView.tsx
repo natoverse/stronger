@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import type { ParsedLogRow } from '../google/sheets.js';
 import type { LiftGoal } from '../google/sheets.js';
-import type { ProgressMetric, TimeRange, ProgressDataPoint } from '../model/progress.js';
+import type { ProgressMetric, ProgressDataPoint } from '../model/progress.js';
 import {
   getLiftsWithData,
   buildProgressData,
   filterDips,
 } from '../model/progress.js';
+import type { StravaTimeRange } from '../model/strava.js';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
 import { Target } from 'lucide-react';
 
@@ -15,19 +16,14 @@ interface Props {
   liftGoals?: LiftGoal[];
   onLiftGoalChange?: (liftId: string, weight: number | null) => void;
   dipThresholdPercent?: number;
+  skipDips?: boolean;
+  range: StravaTimeRange;
 }
 
 const METRIC_LABELS: Record<ProgressMetric, string> = {
   volume: 'Total Volume',
   heaviest: 'Heaviest Weight',
   e1rm: 'Est. 1RM',
-};
-
-const RANGE_LABELS: Record<TimeRange, string> = {
-  '1m': '1M',
-  '3m': '3M',
-  '12m': '1Y',
-  all: 'All',
 };
 
 /** The four main barbell lifts shown prominently at the top. */
@@ -71,6 +67,8 @@ export function ProgressView({
   liftGoals,
   onLiftGoalChange,
   dipThresholdPercent = 10,
+  skipDips = true,
+  range,
 }: Props) {
   const dipThreshold = dipThresholdPercent / 100;
   const lifts = useMemo(() => getLiftsWithData(logRows), [logRows]);
@@ -82,8 +80,6 @@ export function ProgressView({
 
   const [selectedLift, setSelectedLift] = useState<string>(otherLifts[0]?.liftId ?? '');
   const [metric, setMetric] = useState<ProgressMetric>('e1rm');
-  const [range, setRange] = useState<TimeRange>('12m');
-  const [skipDips, setSkipDips] = useState(true);
 
   // Auto-select the first "other" lift if the current selection becomes invalid
   useEffect(() => {
@@ -100,6 +96,9 @@ export function ProgressView({
         <p className="progress-empty">No logged strength data yet. Complete a workout to see progress charts.</p>
       ) : (
         <>
+          {/* Strength section */}
+          <h3 className="strava-section-title">Strength</h3>
+
           {/* Metric toggle */}
           <div className="progress-toggle-group">
             {(Object.keys(METRIC_LABELS) as ProgressMetric[]).map((m) => (
@@ -111,25 +110,6 @@ export function ProgressView({
                 {METRIC_LABELS[m]}
               </button>
             ))}
-          </div>
-
-          {/* Time range + skip-dips toggle */}
-          <div className="progress-toggle-group">
-            {(Object.keys(RANGE_LABELS) as TimeRange[]).map((r) => (
-              <button
-                key={r}
-                className={`progress-toggle${range === r ? ' active' : ''}`}
-                onClick={() => setRange(r)}
-              >
-                {RANGE_LABELS[r]}
-              </button>
-            ))}
-            <button
-              className={`progress-toggle progress-toggle-sm${skipDips ? ' active' : ''}`}
-              onClick={() => setSkipDips((v) => !v)}
-            >
-              Skip Dips
-            </button>
           </div>
 
           {/* Big 4 charts */}
@@ -204,7 +184,7 @@ function Big4Chart({
   label: string;
   logRows: ParsedLogRow[];
   metric: ProgressMetric;
-  range: TimeRange;
+  range: StravaTimeRange;
   skipDips: boolean;
   dipThreshold: number;
   goalWeight?: number;
@@ -288,7 +268,7 @@ function SelectedLiftChart({
   liftId: string;
   logRows: ParsedLogRow[];
   metric: ProgressMetric;
-  range: TimeRange;
+  range: StravaTimeRange;
   skipDips: boolean;
   dipThreshold: number;
 }) {

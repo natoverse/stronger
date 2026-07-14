@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { WithingsMeasurement } from '../model/types.js';
 import type {
   WithingsMetric,
@@ -12,7 +12,6 @@ import {
   buildMetricTrendData,
   filterTrendDips,
   formatMetricValue,
-  getTimeRangeOptions,
   WITHINGS_METRICS,
   METRIC_LABELS,
   METRIC_UNITS,
@@ -29,6 +28,9 @@ interface Props {
   measurements: WithingsMeasurement[];
   goals: WithingsGoal[];
   dipThresholdPercent?: number;
+  skipDips?: boolean;
+  range: WithingsTimeRange;
+  aggregation: WithingsAggregation;
   onGoalChange?: (metric: WithingsMetric, value: number | null) => void;
 }
 
@@ -39,12 +41,6 @@ interface Props {
 const CHART_HEIGHT = 220;
 const CHART_PADDING = { top: 16, right: 20, bottom: 32, left: 52 };
 
-const AGGREGATION_OPTIONS: { value: WithingsAggregation; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-];
-
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -53,15 +49,14 @@ export function WithingsView({
   measurements,
   goals,
   dipThresholdPercent = 5,
+  skipDips = true,
+  range,
+  aggregation,
   onGoalChange,
 }: Props) {
-  const [range, setRange] = useState<WithingsTimeRange>(String(new Date().getFullYear()));
-  const [aggregation, setAggregation] = useState<WithingsAggregation>('week');
-  const [skipDips, setSkipDips] = useState(true);
   const dipThreshold = dipThresholdPercent / 100;
 
   const today = useMemo(() => new Date(), []);
-  const timeRanges = useMemo(() => getTimeRangeOptions(today), [today]);
 
   const filtered = useMemo(
     () => filterMeasurements(measurements, range, today),
@@ -110,38 +105,6 @@ export function WithingsView({
   return (
     <div className="strava-view">
       <h2 className="strava-title">Body Composition</h2>
-
-      {/* Time range selector */}
-      <div className="strava-range-group">
-        {timeRanges.map((r) => (
-          <button
-            key={r.value}
-            className={`strava-range-btn${range === r.value ? ' active' : ''}`}
-            onClick={() => setRange(r.value)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Aggregation selector + skip-dips toggle */}
-      <div className="strava-agg-group">
-        {AGGREGATION_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            className={`strava-agg-btn${aggregation === opt.value ? ' active' : ''}`}
-            onClick={() => setAggregation(opt.value)}
-          >
-            {opt.label}
-          </button>
-        ))}
-        <button
-          className={`strava-agg-btn${skipDips ? ' active' : ''}`}
-          onClick={() => setSkipDips((v) => !v)}
-        >
-          Skip Dips
-        </button>
-      </div>
 
       {anyData ? (
         charts.map((data) => (

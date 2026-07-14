@@ -157,6 +157,36 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
           <span className="settings-toggle-switch" />
         </label>
 
+        <div className="settings-subsection-title">Charts</div>
+
+        <label className="settings-toggle-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Skip Progress Dips</span>
+            <span className="settings-toggle-description">Filter deload sessions from strength-progress charts</span>
+          </span>
+          <input
+            type="checkbox"
+            className="settings-toggle-input"
+            checked={appSettings.skipProgressDips}
+            onChange={(e) => onAppSettingChange('skipProgressDips', e.target.checked)}
+          />
+          <span className="settings-toggle-switch" />
+        </label>
+
+        <label className="settings-toggle-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Skip Body Comp Dips</span>
+            <span className="settings-toggle-description">Filter measurement dips from body-composition charts</span>
+          </span>
+          <input
+            type="checkbox"
+            className="settings-toggle-input"
+            checked={appSettings.skipBodyCompDips}
+            onChange={(e) => onAppSettingChange('skipBodyCompDips', e.target.checked)}
+          />
+          <span className="settings-toggle-switch" />
+        </label>
+
         <div className="settings-percent-row">
           <span className="settings-toggle-label">
             <span className="settings-toggle-name">Body Comp Dip Filter</span>
