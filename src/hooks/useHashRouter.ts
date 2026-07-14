@@ -9,7 +9,6 @@ export type Route =
   | { view: 'exerciseEditor'; exerciseId?: string }
   | { view: 'progress' }
   | { view: 'settings' }
-  | { view: 'strava' }
   | { view: 'garmin' }
   | { view: 'withings' }
   | { view: 'nutrition' };
@@ -35,7 +34,6 @@ export function parseHash(hash: string = window.location.hash): Route {
   if (stripped === 'exercises') return { view: 'exercises' };
   if (stripped === 'progress') return { view: 'progress' };
   if (stripped === 'settings') return { view: 'settings' };
-  if (stripped === 'strava') return { view: 'strava' };
   if (stripped === 'garmin') return { view: 'garmin' };
   if (stripped === 'withings') return { view: 'withings' };
   if (stripped === 'nutrition') return { view: 'nutrition' };
@@ -62,7 +60,6 @@ export function routeToHash(route: Route): string {
   if (route.view === 'exercises') return '/exercises';
   if (route.view === 'progress') return '/progress';
   if (route.view === 'settings') return '/settings';
-  if (route.view === 'strava') return '/strava';
   if (route.view === 'garmin') return '/garmin';
   if (route.view === 'withings') return '/withings';
   if (route.view === 'nutrition') return '/nutrition';
