@@ -34,6 +34,13 @@ const PURPLE = '#d500f9';
 const BLUE   = '#2196f3';
 const GRAY   = 'rgba(255,255,255,0.25)';
 
+function thresholdColor(value: number, thresholds: Array<{ max: number; color: string }>, fallback: string): string {
+  for (const { max, color } of thresholds) {
+    if (value < max) return color;
+  }
+  return fallback;
+}
+
 function readinessColor(v: number): string {
   if (v >= 75) return GREEN;
   if (v >= 50) return YELLOW;
@@ -67,6 +74,39 @@ export function hrvStatusColor(status: string): string {
   if (s.includes('UNBALANCED'))            return YELLOW;
   if (s === 'LOW')                         return RED;
   return ACCENT;
+}
+
+// Garmin fitness bands requested for VO₂ max: poor, fair, good, excellent, superior.
+export function vo2MaxColor(value: number): string {
+  return thresholdColor(value, [
+    { max: 38.5, color: RED },
+    { max: 42.4, color: ORANGE },
+    { max: 46.4, color: GREEN },
+    { max: 52.5, color: BLUE },
+  ], PURPLE);
+}
+
+// Garmin hill score bands requested for climbing fitness from red through pink.
+export function hillScoreColor(value: number): string {
+  return thresholdColor(value, [
+    { max: 25, color: RED },
+    { max: 50, color: ORANGE },
+    { max: 70, color: GREEN },
+    { max: 85, color: BLUE },
+    { max: 95, color: PURPLE },
+  ], ACCENT);
+}
+
+// Garmin endurance score bands requested for lowest through highest endurance fitness.
+export function enduranceScoreColor(value: number): string {
+  return thresholdColor(value, [
+    { max: 5000, color: RED },
+    { max: 5700, color: ORANGE },
+    { max: 6400, color: YELLOW },
+    { max: 7000, color: GREEN },
+    { max: 7700, color: BLUE },
+    { max: 8400, color: PURPLE },
+  ], ACCENT);
 }
 
 /* ------------------------------------------------------------------ */
@@ -462,6 +502,7 @@ export function GarminWellnessView({ entries }: Props) {
         unit={WELLNESS_METRIC_UNITS.vo2Max}
         buckets={vo2Data.buckets}
         summaryLabel={summaryStr(vo2Data.summary, 'vo2Max', WELLNESS_METRIC_UNITS.vo2Max)}
+        colorFn={(v) => v !== null ? vo2MaxColor(v) : GRAY}
         formatValue={numFmt('vo2Max')}
       />
       <WellnessBarChart
@@ -469,6 +510,7 @@ export function GarminWellnessView({ entries }: Props) {
         unit={WELLNESS_METRIC_UNITS.hillScore}
         buckets={hillData.buckets}
         summaryLabel={summaryStr(hillData.summary, 'hillScore', '')}
+        colorFn={(v) => v !== null ? hillScoreColor(v) : GRAY}
         formatValue={numFmt('hillScore')}
       />
       <WellnessBarChart
@@ -476,6 +518,7 @@ export function GarminWellnessView({ entries }: Props) {
         unit={WELLNESS_METRIC_UNITS.enduranceScore}
         buckets={enduranceData.buckets}
         summaryLabel={summaryStr(enduranceData.summary, 'enduranceScore', '')}
+        colorFn={(v) => v !== null ? enduranceScoreColor(v) : GRAY}
         formatValue={numFmt('enduranceScore')}
       />
 
