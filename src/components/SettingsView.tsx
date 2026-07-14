@@ -277,6 +277,75 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
           </div>
         </div>
 
+        <div className="settings-subsection-title">Garmin Goals</div>
+        <p className="settings-toggle-description">Auto-synced from Garmin. Set to 0 to disable goal coloring.</p>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Steps</span>
+            <span className="settings-toggle-description">Colors the steps chart yellow/green/blue</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={100000}
+              step={500}
+              value={appSettings.garminDailyStepsGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 100000) onAppNumericSettingChange('garminDailyStepsGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">steps</span>
+          </div>
+        </div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Floors</span>
+            <span className="settings-toggle-description">Colors the floors chart yellow/green/blue</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={500}
+              step={1}
+              value={appSettings.garminDailyFloorsGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 500) onAppNumericSettingChange('garminDailyFloorsGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">floors</span>
+          </div>
+        </div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Weekly Intensity Min</span>
+            <span className="settings-toggle-description">Colors combined intensity chart based on 7-day rolling sum</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={10000}
+              step={10}
+              value={appSettings.garminWeeklyIntensityMinGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 10000) onAppNumericSettingChange('garminWeeklyIntensityMinGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">min</span>
+          </div>
+        </div>
+
       </div>
 
       <div className="settings-section" style={{ marginTop: '1.5rem' }}>

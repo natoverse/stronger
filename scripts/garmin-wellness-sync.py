@@ -330,6 +330,91 @@ def _fetch_daily_summary(client, cdate: str) -> dict:
         return {}
 
 
+def _fetch_goals(client) -> dict:
+    """Fetch daily/weekly goals (steps, floors, intensity minutes) for today.
+
+    These come from the same daily summary endpoint.  The goal values rarely
+    change so we only need to read them once (for today).
+    Only writes goals that are > 0 so that absent API fields don't overwrite
+    user-configured values with zero.
+    """
+    try:
+        today = date.today().isoformat()
+        data = client.get_user_summary(today)
+        if not data:
+            return {}
+        goals: dict = {}
+        step_goal = _num(data.get("dailyStepGoal"), 0)
+        if step_goal is not None and int(step_goal) > 0:
+            goals["app.garminDailyStepsGoal"] = str(int(step_goal))
+        floors_goal = _num(data.get("floorsAscendedGoal"), 0)
+        if floors_goal is not None and int(floors_goal) > 0:
+            goals["app.garminDailyFloorsGoal"] = str(int(floors_goal))
+        # Garmin may use different field names across API versions
+        intensity_goal_raw = (
+            data.get("weeklyIntensityMinutesGoal")
+            or data.get("minIntensityMinutesGoalWeekly")
+            or data.get("intensityMinutesGoal")
+            or data.get("weeklyIntensityMinGoal")
+        )
+        intensity_goal = _num(intensity_goal_raw, 0)
+        if intensity_goal is not None and int(intensity_goal) > 0:
+            goals["app.garminWeeklyIntensityMinGoal"] = str(int(intensity_goal))
+        return goals
+    except Exception as exc:
+        print(f"  WARNING: goals fetch: {exc}", file=sys.stderr)
+        return {}
+
+
+SETTINGS_TAB_NAME = "Stronger - Settings"
+
+
+def _read_settings(session, spreadsheet_id: str, token: str) -> dict[str, str]:
+    """Read current key-value rows from the Settings tab."""
+    try:
+        settings_range = quote(f"'{SETTINGS_TAB_NAME}'!A:B")
+        data = _sheets_get(
+            session,
+            f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{settings_range}",
+            token,
+        )
+        rows = data.get("values", [])
+        if len(rows) <= 1:
+            return {}
+        return {row[0]: row[1] for row in rows[1:] if len(row) >= 2}
+    except Exception as exc:
+        print(f"  WARNING: settings read: {exc}", file=sys.stderr)
+        return {}
+
+
+def _update_settings_goals(
+    session, spreadsheet_id: str, token: str, goals: dict
+) -> None:
+    """Merge goal key-value pairs into the Settings tab (full overwrite)."""
+    if not goals:
+        return
+    current = _read_settings(session, spreadsheet_id, token)
+    if not current and not goals:
+        return
+    current.update(goals)
+    rows = [["key", "value"]] + [[k, v] for k, v in current.items()]
+    settings_range = quote(f"'{SETTINGS_TAB_NAME}'!A:B")
+    res = session.put(
+        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{settings_range}"
+        "?valueInputOption=RAW",
+        headers={"Authorization": "Bearer " + token},
+        json={"values": rows},
+    )
+    if not res.ok:
+        print(
+            f"  WARNING: settings update failed ({res.status_code}): {res.text}",
+            file=sys.stderr,
+        )
+    else:
+        keys = ", ".join(goals.keys())
+        print(f"Updated {len(goals)} goal setting(s) in Settings tab ({keys}).")
+
+
 def _fetch_vo2max(client, cdate: str) -> dict:
     try:
         data = client.get_max_metrics(cdate)
@@ -548,6 +633,14 @@ def main() -> None:
     print(f"Appending {len(new_rows)} new wellness rows...")
     append_rows(session, spreadsheet_id, google_token, new_rows)
     print(f"Done — synced {len(new_rows)} days of wellness data.")
+
+    # 8. Update goal settings in the Settings tab
+    print("Fetching Garmin goals...")
+    goals = _fetch_goals(garmin)
+    if goals:
+        _update_settings_goals(session, spreadsheet_id, google_token, goals)
+    else:
+        print("No goal data available from Garmin (goals may not be set in the app).")
 
 
 if __name__ == "__main__":

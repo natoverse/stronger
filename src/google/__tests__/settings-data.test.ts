@@ -187,6 +187,9 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			progressDipThresholdPercent: 7.5,
 			dailyCalorieGoal: 2500,
 			dailyProteinGoalGrams: 180,
+			garminDailyStepsGoal: 0,
+			garminDailyFloorsGoal: 0,
+			garminWeeklyIntensityMinGoal: 0,
 		})
 	})
 
@@ -219,6 +222,9 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			progressDipThresholdPercent: 6,
 			dailyCalorieGoal: 2200,
 			dailyProteinGoalGrams: 160,
+			garminDailyStepsGoal: 0,
+			garminDailyFloorsGoal: 0,
+			garminWeeklyIntensityMinGoal: 0,
 		}
 		appSettingsToMap(appSettings, settings)
 		expect(settings.get('theme')).toBe('dark')
@@ -233,5 +239,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		expect(settings.get('app.progressDipThresholdPercent')).toBe('6')
 		expect(settings.get('app.dailyCalorieGoal')).toBe('2200')
 		expect(settings.get('app.dailyProteinGoalGrams')).toBe('160')
+		expect(settings.get('app.garminDailyStepsGoal')).toBe('0')
+		expect(settings.get('app.garminDailyFloorsGoal')).toBe('0')
+		expect(settings.get('app.garminWeeklyIntensityMinGoal')).toBe('0')
 	})
 })

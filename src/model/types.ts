@@ -372,6 +372,12 @@ export interface AppSettings {
 	dailyCalorieGoal: number;
 	/** Daily protein target in grams used in the nutrition summary (0 disables goal coloring). */
 	dailyProteinGoalGrams: number;
+	/** Daily step goal used to color the Garmin steps chart (0 disables goal coloring). Auto-synced from Garmin. */
+	garminDailyStepsGoal: number;
+	/** Daily floors goal used to color the Garmin floors chart (0 disables goal coloring). Auto-synced from Garmin. */
+	garminDailyFloorsGoal: number;
+	/** Weekly intensity minutes goal used to color the Garmin intensity chart (0 disables goal coloring). Auto-synced from Garmin. */
+	garminWeeklyIntensityMinGoal: number;
 }
 
 export type AppBooleanSettingKey =
@@ -386,7 +392,10 @@ export type AppNumericSettingKey =
 	| 'withingsDipThresholdPercent'
 	| 'progressDipThresholdPercent'
 	| 'dailyCalorieGoal'
-	| 'dailyProteinGoalGrams';
+	| 'dailyProteinGoalGrams'
+	| 'garminDailyStepsGoal'
+	| 'garminDailyFloorsGoal'
+	| 'garminWeeklyIntensityMinGoal';
 
 // ---------------------------------------------------------------------------
 // Layer 8 – Garmin Wellness (daily metrics from Garmin Connect)
