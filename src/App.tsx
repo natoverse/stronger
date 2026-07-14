@@ -1084,7 +1084,15 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadStravaData]);
 
-  // Lazy-load Garmin activities when the garmin view is first visited.
+  // Keep legacy wellness links working by redirecting to the combined garmin page.
+  useEffect(() => {
+    if (route.view === 'wellness') {
+      // Preserves existing bookmarks/external links that still use #/wellness.
+      replaceTo({ view: 'garmin' });
+    }
+  }, [route.view, replaceTo]);
+
+  // Lazy-load Garmin activities when the combined activities/wellness view is first visited.
   useEffect(() => {
     if (route.view === 'garmin' && spreadsheetId && !garminLoadedRef.current) {
       garminLoadedRef.current = true;
@@ -1092,9 +1100,9 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadGarminData]);
 
-  // Lazy-load Garmin wellness data when the wellness view is first visited.
+  // Lazy-load Garmin wellness data when the combined activities/wellness view is first visited.
   useEffect(() => {
-    if (route.view === 'wellness' && spreadsheetId && !wellnessLoadedRef.current) {
+    if (route.view === 'garmin' && spreadsheetId && !wellnessLoadedRef.current) {
       wellnessLoadedRef.current = true;
       void loadWellnessData(spreadsheetId);
     }
@@ -1340,6 +1348,7 @@ function App() {
           onGoalChange={handleStravaGoalChange}
           emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
         />
+        <GarminWellnessView entries={wellnessEntries} />
       </>
     );
   }
@@ -1366,27 +1375,6 @@ function App() {
           dipThresholdPercent={appSettings.withingsDipThresholdPercent}
           onGoalChange={handleWithingsGoalChange}
         />
-      </>
-    );
-  }
-
-  if (route.view === 'wellness') {
-    return (
-      <>
-        <GoogleAuth
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
-          onOpenExercises={handleOpenExercises}
-          onOpenProgress={handleOpenProgress}
-          onOpenGarmin={onOpenGarmin}
-          onOpenWellness={onOpenWellness}
-          onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
-          onOpenSettings={handleOpenSettings}
-        />
-        <GarminWellnessView entries={wellnessEntries} />
       </>
     );
   }

@@ -43,7 +43,7 @@ const METRICS: StravaMetric[] = ['distance', 'elevationGain', 'duration'];
 /** Cardio charts show all three metrics; strength only shows duration. */
 const STRENGTH_METRICS: StravaMetric[] = ['duration'];
 
-const CHART_HEIGHT = 220;
+const CHART_HEIGHT = 132;
 const CHART_PADDING = { top: 16, right: 56, bottom: 32, left: 52 };
 
 const AGGREGATION_OPTIONS: { value: StravaAggregation; label: string }[] = [
@@ -58,7 +58,7 @@ const AGGREGATION_OPTIONS: { value: StravaAggregation; label: string }[] = [
 
 export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.' }: Props) {
   const [range, setRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
-  const [aggregation, setAggregation] = useState<StravaAggregation>('week');
+  const [aggregation, setAggregation] = useState<StravaAggregation>('day');
   const [filterOpen, setFilterOpen] = useState(false);
 
   // Split into cardio (everything except strength) and strength training
