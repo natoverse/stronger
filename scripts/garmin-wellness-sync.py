@@ -304,6 +304,7 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
         data = client.get_endurance_score(cdate)
         val = _extract_metric_value(
             data,
+            "enduranceScore",
             "overallScore",
             "score",
             "value",
