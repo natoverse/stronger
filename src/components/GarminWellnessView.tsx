@@ -241,6 +241,147 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, colorFn, formatV
   );
 }
 
+interface WellnessRangeBucket {
+  label: string;
+  min: number | null;
+  max: number | null;
+}
+
+interface RangeBarChartProps {
+  label: string;
+  unit: string;
+  buckets: WellnessRangeBucket[];
+  summaryLabel: string;
+  formatValue: (v: number | null) => string;
+}
+
+function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue }: RangeBarChartProps) {
+  const n = buckets.length;
+  if (n === 0) return null;
+
+  const values = buckets.flatMap((b) => [b.min, b.max]).filter((v): v is number => v !== null);
+  const rawMin = values.length > 0 ? Math.min(...values) : 0;
+  const rawMax = values.length > 0 ? Math.max(...values) : 1;
+  const yMin = rawMin;
+  const yMax = rawMax === rawMin ? rawMin + 1 : rawMax;
+
+  const barWidth = PLOT_W / n;
+  const barGap = Math.max(1, barWidth * 0.15);
+  const barInner = barWidth - barGap * 2;
+
+  const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
+  const yPos = (v: number) => CHART_PADDING.top + PLOT_H - ((v - yMin) / (yMax - yMin)) * PLOT_H;
+
+  const yTicks = niceTicksFor(yMin, yMax, 4);
+
+  const maxLabels = Math.min(n, 8);
+  const xLabelIndices: number[] = [];
+  if (n <= maxLabels) {
+    for (let i = 0; i < n; i++) xLabelIndices.push(i);
+  } else {
+    for (let i = 0; i < maxLabels; i++) {
+      xLabelIndices.push(Math.round((i / (maxLabels - 1)) * (n - 1)));
+    }
+  }
+
+  const xPositions = buckets.map((_, i) => xCenter(i));
+  const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
+
+  return (
+    <div className="strava-chart-card">
+      <div className="strava-chart-header">
+        <h3 className="strava-chart-label">
+          {label}
+          <span className="strava-chart-total">{summaryLabel}</span>
+        </h3>
+      </div>
+
+      <div className="strava-chart-container" {...containerHandlers}>
+        <svg
+          ref={svgRef}
+          className="strava-chart-svg"
+          viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {yTicks.map((tick) => (
+            <line
+              key={`grid-${tick}`}
+              x1={CHART_PADDING.left} y1={yPos(tick)}
+              x2={VIEW_BOX_W - CHART_PADDING.right} y2={yPos(tick)}
+              className="strava-grid-line"
+            />
+          ))}
+
+          {yTicks.map((tick) => (
+            <text
+              key={`lbl-${tick}`}
+              x={CHART_PADDING.left - 4} y={yPos(tick)}
+              className="strava-axis-label"
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {formatValue(tick)}
+            </text>
+          ))}
+
+          {xLabelIndices.map((i) => (
+            <text
+              key={`xlbl-${i}`}
+              x={xCenter(i)} y={CHART_HEIGHT - 4}
+              className="strava-axis-label"
+              textAnchor="middle"
+            >
+              {buckets[i].label}
+            </text>
+          ))}
+
+          {buckets.map((b, i) => {
+            const minVal = b.min ?? b.max;
+            const maxVal = b.max ?? b.min;
+            if (minVal === null || maxVal === null) return null;
+            const low = Math.min(minVal, maxVal);
+            const high = Math.max(minVal, maxVal);
+            const yTop = yPos(high);
+            const yBottom = yPos(low);
+            return (
+              <rect
+                key={`bar-${i}`}
+                x={CHART_PADDING.left + barWidth * i + barGap}
+                y={yTop}
+                width={Math.max(barInner, 1)}
+                height={Math.max(yBottom - yTop, 1)}
+                fill={ACCENT}
+                opacity={i === activeIndex ? 1 : 0.75}
+                rx={2}
+              />
+            );
+          })}
+
+          {activeIndex !== null && (
+            <line
+              x1={xCenter(activeIndex)} y1={CHART_PADDING.top}
+              x2={xCenter(activeIndex)} y2={CHART_PADDING.top + PLOT_H}
+              className="chart-crosshair"
+            />
+          )}
+        </svg>
+
+        {activeIndex !== null && activeIndex < buckets.length && (
+          <div
+            className="chart-tooltip"
+            style={{ left: `${(xCenter(activeIndex) / VIEW_BOX_W) * 100}%` }}
+          >
+            <span className="chart-tooltip-value">
+              {`${formatValue(buckets[activeIndex].min)}–${formatValue(buckets[activeIndex].max)}${unit ? ` ${unit}` : ''}`}
+            </span>
+            <span className="chart-tooltip-date">{buckets[activeIndex].label}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /*  WellnessStatusBarChart — categorical full-height color bars       */
 /* ------------------------------------------------------------------ */
@@ -382,6 +523,18 @@ export function GarminWellnessView({ entries }: Props) {
   const rhrData         = useMemo(() => buildWellnessChartData(entries, 'restingHR',            range, aggregation, today), [entries, range, aggregation, today]);
   const bbHighData      = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryHigh',      range, aggregation, today), [entries, range, aggregation, today]);
   const bbLowData       = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryLow',       range, aggregation, today), [entries, range, aggregation, today]);
+  const bbRangeBuckets  = useMemo(
+    () =>
+      bbHighData.buckets.map((highBucket, index) => {
+        const lowBucket = bbLowData.buckets[index];
+        return {
+          label: highBucket.label,
+          min: lowBucket?.value ?? null,
+          max: highBucket.value,
+        };
+      }),
+    [bbHighData.buckets, bbLowData.buckets],
+  );
 
   const sleepDurData    = useMemo(() => buildWellnessChartData(entries, 'sleepDurationSec',     range, aggregation, today), [entries, range, aggregation, today]);
   const sleepScoreData  = useMemo(() => buildWellnessChartData(entries, 'sleepScore',           range, aggregation, today), [entries, range, aggregation, today]);
@@ -502,19 +655,16 @@ export function GarminWellnessView({ entries }: Props) {
         summaryLabel={summaryStr(rhrData.summary, 'restingHR', WELLNESS_METRIC_UNITS.restingHR)}
         formatValue={numFmt('restingHR')}
       />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.bodyBatteryHigh}
-        unit={WELLNESS_METRIC_UNITS.bodyBatteryHigh}
-        buckets={bbHighData.buckets}
-        summaryLabel={summaryStr(bbHighData.summary, 'bodyBatteryHigh', '')}
+      <WellnessRangeBarChart
+        label="Body Battery Range"
+        unit=""
+        buckets={bbRangeBuckets}
+        summaryLabel={
+          bbLowData.summary !== null && bbHighData.summary !== null
+            ? `Avg ${formatWellnessValue(bbLowData.summary, 'bodyBatteryLow')}–${formatWellnessValue(bbHighData.summary, 'bodyBatteryHigh')}`
+            : ''
+        }
         formatValue={numFmt('bodyBatteryHigh')}
-      />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.bodyBatteryLow}
-        unit={WELLNESS_METRIC_UNITS.bodyBatteryLow}
-        buckets={bbLowData.buckets}
-        summaryLabel={summaryStr(bbLowData.summary, 'bodyBatteryLow', '')}
-        formatValue={numFmt('bodyBatteryLow')}
       />
 
       {/* Section: Sleep */}
