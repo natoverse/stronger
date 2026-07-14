@@ -53,6 +53,9 @@ export const MEAL_LOG_TAB_NAME = 'Stronger - Meal Log'
 /** Name of the tab that holds Strava synced activity data. */
 export const STRAVA_TAB_NAME = 'Stronger - Strava'
 
+/** Name of the tab that holds Garmin synced activity data. */
+export const GARMIN_TAB_NAME = 'Stronger - Garmin'
+
 /** Name of the tab that holds Withings synced body-composition data. */
 export const WITHINGS_TAB_NAME = 'Stronger - Withings'
 
