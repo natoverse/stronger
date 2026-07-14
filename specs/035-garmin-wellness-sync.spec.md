@@ -84,3 +84,23 @@ A single new sheet tab, **"Stronger - Garmin Wellness"**, holds one row per day 
 - `src/App.tsx` — state, lazy loading, route rendering
 - `src/App.css` — wellness status legend styles
 - `src/google/__tests__/garmin-wellness-data.test.ts` — parse tests
+
+## API field audit (post-implementation)
+
+Verified all fields against the real Garmin Connect API response structures using the `python-garminconnect` typed models and recorded test cassettes.
+
+### Confirmed correct
+| Endpoint | Fields used | Notes |
+|----------|------------|-------|
+| `get_hrv_data` | `hrvSummary.lastNight`, `.weeklyAvg`, `.status` | ✅ All exist in real cassette |
+| `get_sleep_data` | `dailySleepDTO.sleepTimeSeconds`, `.deepSleepSeconds`, `.lightSleepSeconds`, `.remSleepSeconds`, `.awakeSleepSeconds`, `.sleepScores.overall.value` | ✅ Confirmed via typed model |
+| `get_training_readiness` | `entry.score`, `inputContext == "AFTER_WAKEUP_RESET"` | ✅ Confirmed via typed model |
+| `get_user_summary` | `totalSteps`, `floorsAscended`, `restingHeartRate`, `bodyBatteryHighestValue`, `bodyBatteryLowestValue`, `moderateIntensityMinutes`, `vigorousIntensityMinutes` | ✅ Confirmed from real API cassette |
+| `get_hill_score` / `get_endurance_score` | `allMetrics.metricsMap.HILL_SCORE[0].value` / `ENDURANCE_SCORE[0].value` | ✅ Correct (also tries `data.get("value")` first) |
+
+### Bugs found and fixed
+1. **`_fetch_hrv` — wrong nesting path**: The real response is `{"hrvSummary": {...}, "hrv": []}` where `hrv` is a raw readings array (often empty, always falsy). The original code `(data.get("hrv") or {}).get("hrvSummary")` returned `{}` for every call. Fixed to `data.get("hrvSummary") or {}`.
+
+2. **`_fetch_training_status` — completely wrong keys**: The response uses `mostRecentTrainingStatus → latestTrainingStatusData → {sportKey: {trainingStatus, acuteTrainingLoadDTO: {dailyTrainingLoadAcute, dailyTrainingLoadChronic}}}`, not `trainingStatusDTO → latestTrainingStatusWeek → {acuteLoad, chronicLoad}`. Fixed to use the correct path.
+
+3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.

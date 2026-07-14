@@ -112,7 +112,9 @@ def _fetch_hrv(client, cdate: str) -> dict:
         data = client.get_hrv_data(cdate)
         if not data:
             return {}
-        summary = (data.get("hrv") or {}).get("hrvSummary") or {}
+        # The response is {"hrvSummary": {...}, "hrv": [<raw readings>]}.
+        # "hrv" is an array of per-minute readings (often empty), NOT the summary.
+        summary = data.get("hrvSummary") or {}
         if not summary:
             return {}
         return {
@@ -179,20 +181,24 @@ def _fetch_readiness(client, cdate: str) -> dict:
 def _fetch_training_status(client, cdate: str) -> dict:
     try:
         data = client.get_training_status(cdate)
-        if not data:
+        if not data or not isinstance(data, dict):
             return {}
+        # Response shape: mostRecentTrainingStatus → latestTrainingStatusData
+        # → {<sport-key>: {trainingStatus, acuteTrainingLoadDTO: {dailyTrainingLoadAcute, …}}}
+        most_recent = data.get("mostRecentTrainingStatus") or {}
+        latest_map = most_recent.get("latestTrainingStatusData") or {}
         entry: dict = {}
-        if isinstance(data, dict):
-            dto = data.get("trainingStatusDTO") or {}
-            entry = dto.get("latestTrainingStatusWeek") or dto
-        elif isinstance(data, list) and data:
-            entry = data[0]
-        if not isinstance(entry, dict):
+        if latest_map:
+            first = next(iter(latest_map.values()), None)
+            if isinstance(first, dict):
+                entry = first
+        if not entry:
             return {}
+        atl = entry.get("acuteTrainingLoadDTO") or {}
         return {
             "trainingStatus":      str(entry.get("trainingStatus") or ""),
-            "trainingAcuteLoad":   _num(entry.get("acuteLoad"), 1),
-            "trainingChronicLoad": _num(entry.get("chronicLoad"), 1),
+            "trainingAcuteLoad":   _num(atl.get("dailyTrainingLoadAcute"), 1),
+            "trainingChronicLoad": _num(atl.get("dailyTrainingLoadChronic"), 1),
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] training_status: {exc}", file=sys.stderr)
@@ -225,15 +231,17 @@ def _fetch_vo2max(client, cdate: str) -> dict:
         data = client.get_max_metrics(cdate)
         if not data:
             return {}
-        metrics_map: dict = {}
-        if isinstance(data, list) and data:
-            metrics_map = data[0].get("metricsMap") or {}
-        elif isinstance(data, dict):
-            metrics_map = data.get("metricsMap") or {}
-        running = metrics_map.get("VO2_MAX_RUNNING") or []
-        if running and isinstance(running, list):
-            val = running[0].get("value") if isinstance(running[0], dict) else running[0]
-            return {"vo2Max": _num(val, 1)}
+        # Response is a list of metric objects; each has an
+        # allMetrics.metricsMap.VO2_MAX_RUNNING list with {value: ...} entries.
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            metrics_map = (item.get("allMetrics") or {}).get("metricsMap") or {}
+            running = metrics_map.get("VO2_MAX_RUNNING") or []
+            if running and isinstance(running, list):
+                val = running[0].get("value") if isinstance(running[0], dict) else running[0]
+                return {"vo2Max": _num(val, 1)}
         return {}
     except Exception as exc:
         print(f"  WARNING [{cdate}] vo2max: {exc}", file=sys.stderr)
