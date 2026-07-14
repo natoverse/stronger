@@ -316,7 +316,7 @@ def _column_letter(n: int) -> str:
 
 
 def _sheets_get(session, url: str, token: str) -> dict:
-    res = session.get(url, headers={"Authorization": f"******"})
+    res = session.get(url, headers={"Authorization": "Bearer " + token})
     if not res.ok:
         raise RuntimeError(f"Sheets GET failed ({res.status_code}): {res.text}")
     return res.json()
@@ -335,7 +335,7 @@ def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
     # Create the tab
     create_res = session.post(
         f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
-        headers={"Authorization": f"******"},
+        headers={"Authorization": "Bearer " + token},
         json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
     )
     if not create_res.ok:
@@ -346,7 +346,7 @@ def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
     header_range = quote(f"'{TAB_NAME}'!A1:{col}1")
     header_res = session.put(
         f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{header_range}?valueInputOption=RAW",
-        headers={"Authorization": f"******"},
+        headers={"Authorization": "Bearer " + token},
         json={"values": [HEADER]},
     )
     if not header_res.ok:
@@ -372,7 +372,7 @@ def append_rows(session, spreadsheet_id: str, token: str, rows: list[list[str]])
     res = session.post(
         f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{append_range}:append"
         "?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
-        headers={"Authorization": f"******"},
+        headers={"Authorization": "Bearer " + token},
         json={"values": rows},
     )
     if not res.ok:

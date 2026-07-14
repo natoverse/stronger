@@ -124,7 +124,7 @@ export interface WellnessStatusChartData {
 }
 
 // ---------------------------------------------------------------------------
-// Local helpers (not exported from strava.ts)
+// Local helpers (duplicated from strava.ts — not exported there)
 // ---------------------------------------------------------------------------
 
 function getISOWeek(d: Date): number {
