@@ -1744,11 +1744,11 @@ export async function writeCardioActivities(
 /* ------------------------------------------------------------------ */
 
 const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:H`
-const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:I1`
-const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:I2`
-const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:I`
+const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:J1`
+const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:J2`
+const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:J`
 const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein']
-const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER]
+const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity']
 const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
 
 export function mealItemToRow(item: MealItem): (string | number)[] {
@@ -1765,6 +1765,12 @@ function parseMealValues(row: string[], offset: number): Omit<MealItem, 'id'> | 
 	return { name, category, calories, fat, carbs, fiber, protein }
 }
 
+/** Parse a serving quantity, defaulting to 1 for missing or invalid values. */
+function parseQuantity(raw: string | undefined): number {
+	const value = Number((raw ?? '').trim())
+	return Number.isFinite(value) && value > 0 ? value : 1
+}
+
 export function parseMealItemRow(row: string[]): MealItem | null {
 	const id = (row[0] ?? '').trim()
 	const values = parseMealValues(row, 1)
@@ -1772,14 +1778,15 @@ export function parseMealItemRow(row: string[]): MealItem | null {
 }
 
 export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {
-	return [entry.date, ...mealItemToRow(entry)]
+	return [entry.date, ...mealItemToRow(entry), entry.quantity]
 }
 
 export function parseMealLogRow(row: string[]): MealLogEntry | null {
 	const date = (row[0] ?? '').trim()
 	const id = (row[1] ?? '').trim()
 	const values = parseMealValues(row, 2)
-	return date && id && values ? { date, id, ...values } : null
+	if (!date || !id || !values) return null
+	return { date, id, ...values, quantity: parseQuantity(row[9]) }
 }
 
 async function verifyTab(spreadsheetId: string, tabName: string): Promise<boolean> {
@@ -1848,6 +1855,35 @@ export async function appendMealLogEntry(spreadsheetId: string, entry: MealLogEn
 		spreadsheetId, range: MEAL_LOG_APPEND_RANGE, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
 		resource: { values: [mealLogEntryToRow(entry)] },
 	})
+}
+
+/**
+ * Delete a single logged meal entry by its id. Finds the meal log tab's
+ * numeric sheetId, reads all raw rows to locate the matching row(s), then
+ * issues a batchUpdate with deleteDimension requests (processed in reverse
+ * order to keep indices stable).
+ */
+export async function deleteMealLogEntry(spreadsheetId: string, id: string): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	const metaResponse = await gapi.client.sheets.spreadsheets.get({ spreadsheetId })
+	const logSheet = (metaResponse.result.sheets ?? []).find((s) => s.properties.title === MEAL_LOG_TAB_NAME)
+	if (!logSheet) return
+	const sheetId = logSheet.properties.sheetId
+	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return
+	const requests = rawRows
+		.map((raw, index) => ({ raw, index }))
+		.filter(({ raw }) => (raw[1] ?? '').trim() === id)
+		.map(({ index }) => index)
+		.sort((a, b) => b - a)
+		.map((rawIdx) => ({
+			// Sheet row = rawIdx + 2 (header is row 1); deleteDimension is 0-indexed.
+			deleteDimension: { range: { sheetId, dimension: 'ROWS' as const, startIndex: rawIdx + 1, endIndex: rawIdx + 2 } },
+		}))
+	if (requests.length === 0) return
+	await gapi.client.sheets.spreadsheets.batchUpdate({ spreadsheetId, resource: { requests } })
 }
 
 /* ------------------------------------------------------------------ */

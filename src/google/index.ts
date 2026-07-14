@@ -77,6 +77,7 @@ export {
 	writeMealItems,
 	readMealLog,
 	appendMealLogEntry,
+	deleteMealLogEntry,
 	stravaActivityToRow,
 	parseStravaRow,
 	verifyStravaTab,

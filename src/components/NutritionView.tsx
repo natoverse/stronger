@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import type { MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
@@ -12,6 +12,7 @@ interface Props {
   entries: MealLogEntry[];
   onSaveItems: (items: MealItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
+  onDeleteEntry: (id: string) => void;
 }
 
 function localDate(): string {
@@ -21,6 +22,11 @@ function localDate(): string {
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/** Round to at most two decimals for tidy macro display. */
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function MacroFields({ values, onChange }: { values: MacroInputs; onChange: (values: MacroInputs) => void }) {
@@ -53,7 +59,7 @@ function macrosFrom(values: MacroInputs) {
   };
 }
 
-export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props) {
+export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
   const [date, setDate] = useState(localDate);
   const [showSavedForm, setShowSavedForm] = useState(false);
   const [savedName, setSavedName] = useState('');
@@ -62,12 +68,16 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
   const [customName, setCustomName] = useState('');
   const [customCategory, setCustomCategory] = useState<MealCategory>('Snacks');
   const [customMacros, setCustomMacros] = useState<MacroInputs>(EMPTY_MACROS);
+  const [customQuantity, setCustomQuantity] = useState('1');
+  const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
   const dayEntries = useMemo(() => entries.filter((entry) => entry.date === date), [entries, date]);
   const totals = useMemo(
     () => dayEntries.reduce((sum, entry) => ({
-      calories: sum.calories + entry.calories, fat: sum.fat + entry.fat, carbs: sum.carbs + entry.carbs,
-      fiber: sum.fiber + entry.fiber, protein: sum.protein + entry.protein,
+      calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
+      carbs: sum.carbs + entry.carbs * entry.quantity, fiber: sum.fiber + entry.fiber * entry.quantity,
+      protein: sum.protein + entry.protein * entry.quantity,
     }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0 }),
     [dayEntries],
   );
@@ -76,7 +86,18 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
     items.filter((item) => item.category === category).sort((a, b) => a.name.localeCompare(b.name)),
   ])), [items]);
 
-  const logItem = (item: MealItem) => onLogEntry({ ...item, id: newId(), date });
+  const quantityFor = (id: string) => {
+    const value = Number(quantities[id] ?? '1');
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  };
+
+  const logItem = (item: MealItem) => {
+    onLogEntry({ ...item, id: newId(), date, quantity: quantityFor(item.id) });
+    setQuantities((previous) => ({ ...previous, [item.id]: '1' }));
+  };
+
+  const toggleCategory = (category: MealCategory) =>
+    setOpenCategories((previous) => ({ ...previous, [category]: !previous[category] }));
 
   const saveItem = (event: React.FormEvent) => {
     event.preventDefault();
@@ -90,11 +111,16 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
 
   const logCustom = (event: React.FormEvent) => {
     event.preventDefault();
-    const entry: MealLogEntry = { id: newId(), date, name: customName.trim(), category: customCategory, ...macrosFrom(customMacros) };
+    const quantity = Number(customQuantity);
+    const entry: MealLogEntry = {
+      id: newId(), date, name: customName.trim(), category: customCategory,
+      ...macrosFrom(customMacros), quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+    };
     if (!entry.name) return;
     onLogEntry(entry);
     setCustomName('');
     setCustomMacros(EMPTY_MACROS);
+    setCustomQuantity('1');
   };
 
   return (
@@ -104,24 +130,43 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
         <input aria-label="Log date" type="date" max={localDate()} value={date} onChange={(event) => setDate(event.target.value)} />
       </div>
       <section className="nutrition-totals">
-        <strong>{totals.calories} cal</strong>
-        <span>Fat {totals.fat}g</span><span>Carbs {totals.carbs}g</span>
-        <span>Fiber {totals.fiber}g</span><span>Protein {totals.protein}g</span>
+        <strong>{round(totals.calories)} cal</strong>
+        <span>Fat {round(totals.fat)}g</span><span>Carbs {round(totals.carbs)}g</span>
+        <span>Fiber {round(totals.fiber)}g</span><span>Protein {round(totals.protein)}g</span>
       </section>
 
       {CATEGORIES.map((category) => {
         const categoryItems = itemsByCategory.get(category) ?? [];
-        const categoryEntries = dayEntries.filter((entry) => entry.category === category);
+        const open = openCategories[category] ?? false;
         return (
           <section className="nutrition-category" key={category}>
-            <h3>{category}</h3>
-            {categoryItems.map((item) => (
-              <button className="nutrition-item" key={item.id} onClick={() => logItem(item)}>
-                <span>{item.name}<small>{item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g</small></span>
-                <Plus size={18} />
-              </button>
-            ))}
-            {categoryEntries.map((entry) => <p className="nutrition-entry" key={entry.id}>{entry.name} <span>{entry.calories} cal</span></p>)}
+            <button className="nutrition-category-toggle" aria-expanded={open} onClick={() => toggleCategory(category)}>
+              {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+              <h3>{category}</h3>
+              <small>{categoryItems.length}</small>
+            </button>
+            {open && (
+              <div className="nutrition-category-body">
+                {categoryItems.length === 0
+                  ? <p className="nutrition-empty">No saved items yet.</p>
+                  : categoryItems.map((item) => (
+                    <div className="nutrition-item" key={item.id}>
+                      <span>{item.name}<small>{item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g</small></span>
+                      <div className="nutrition-item-add">
+                        <input
+                          aria-label={`Servings of ${item.name}`}
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={quantities[item.id] ?? '1'}
+                          onChange={(event) => setQuantities((previous) => ({ ...previous, [item.id]: event.target.value }))}
+                        />
+                        <button aria-label={`Add ${item.name} to day`} onClick={() => logItem(item)}><Plus size={18} /></button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
           </section>
         );
       })}
@@ -146,9 +191,31 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry }: Props
           <select value={customCategory} onChange={(event) => setCustomCategory(event.target.value as MealCategory)}>
             {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
           </select>
+          <label className="nutrition-quantity-field">
+            Servings
+            <input type="number" min="0" step="any" value={customQuantity} onChange={(event) => setCustomQuantity(event.target.value)} />
+          </label>
           <MacroFields values={customMacros} onChange={setCustomMacros} />
           <button className="btn-primary" type="submit">Add to Day</button>
         </form>
+      </section>
+
+      <section className="nutrition-day">
+        <h3>Today's Meals</h3>
+        {dayEntries.length === 0
+          ? <p className="nutrition-empty">Nothing logged for this day yet.</p>
+          : dayEntries.map((entry) => (
+            <div className="nutrition-entry" key={entry.id}>
+              <span>
+                {entry.name}
+                {entry.quantity !== 1 && <em> &times;{round(entry.quantity)}</em>}
+                <small>{entry.category} &middot; {round(entry.calories * entry.quantity)} cal</small>
+              </span>
+              <button aria-label={`Delete ${entry.name}`} className="nutrition-delete" onClick={() => onDeleteEntry(entry.id)}>
+                <Trash2 size={18} />
+              </button>
+            </div>
+          ))}
       </section>
     </main>
   );

@@ -279,6 +279,8 @@ export interface MealItem {
 /** A food or drink logged for a specific day. */
 export interface MealLogEntry extends MealItem {
 	date: string;
+	/** Number of servings logged. Defaults to 1; fractional values (e.g. 0.5) are allowed. Macros are per serving and scaled by this quantity. */
+	quantity: number;
 }
 
 // ---------------------------------------------------------------------------
