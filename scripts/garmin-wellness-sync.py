@@ -97,7 +97,11 @@ def _extract_metric_value(raw, *metric_keys: str):
                     return candidate
             return None
         if isinstance(value, list) and value:
-            return _coerce_metric_value(value[-1])
+            for entry in value:
+                candidate = _coerce_metric_value(entry)
+                if candidate is not None:
+                    return candidate
+            return None
         return value
 
     items = raw if isinstance(raw, list) else [raw]
@@ -310,11 +314,11 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
         val = _extract_metric_value(
             data,
             "enduranceScore",
+            "latestScore",
             "overallScore",
             "score",
             "value",
             "ENDURANCE_SCORE",
-            "latestScore",
         )
         return {"enduranceScore": _num(val, 1)}
     except Exception as exc:
