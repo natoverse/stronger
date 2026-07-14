@@ -286,6 +286,11 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue
 
   const xPositions = buckets.map((_, i) => xCenter(i));
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
+  const activeRangeBucket = activeIndex === null ? null : buckets[activeIndex] ?? null;
+  const activeTooltipX = activeIndex !== null ? xCenter(activeIndex) : 0;
+  const activeTooltipValue = activeRangeBucket === null || activeRangeBucket.min === null || activeRangeBucket.max === null
+    ? '—'
+    : `${formatValue(activeRangeBucket.min)}–${formatValue(activeRangeBucket.max)}${unit ? ` ${unit}` : ''}`;
 
   return (
     <div className="strava-chart-card">
@@ -336,11 +341,11 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue
           ))}
 
           {buckets.map((b, i) => {
-            const minVal = b.min ?? b.max;
-            const maxVal = b.max ?? b.min;
-            if (minVal === null || maxVal === null) return null;
-            const low = Math.min(minVal, maxVal);
-            const high = Math.max(minVal, maxVal);
+            if (b.min === null && b.max === null) return null;
+            const lowValue = (b.min ?? b.max)!;
+            const highValue = (b.max ?? b.min)!;
+            const low = Math.min(lowValue, highValue);
+            const high = Math.max(lowValue, highValue);
             const yTop = yPos(high);
             const yBottom = yPos(low);
             return (
@@ -349,6 +354,7 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue
                 x={CHART_PADDING.left + barWidth * i + barGap}
                 y={yTop}
                 width={Math.max(barInner, 1)}
+                // Keep zero-range days visible as a thin mark.
                 height={Math.max(yBottom - yTop, 1)}
                 fill={ACCENT}
                 opacity={i === activeIndex ? 1 : 0.75}
@@ -366,15 +372,15 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue
           )}
         </svg>
 
-        {activeIndex !== null && activeIndex < buckets.length && (
+        {activeRangeBucket !== null && (
           <div
             className="chart-tooltip"
-            style={{ left: `${(xCenter(activeIndex) / VIEW_BOX_W) * 100}%` }}
+            style={{ left: `${(activeTooltipX / VIEW_BOX_W) * 100}%` }}
           >
             <span className="chart-tooltip-value">
-              {`${formatValue(buckets[activeIndex].min)}–${formatValue(buckets[activeIndex].max)}${unit ? ` ${unit}` : ''}`}
+              {activeTooltipValue}
             </span>
-            <span className="chart-tooltip-date">{buckets[activeIndex].label}</span>
+            <span className="chart-tooltip-date">{activeRangeBucket.label}</span>
           </div>
         )}
       </div>
