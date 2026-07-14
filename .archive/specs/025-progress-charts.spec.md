@@ -50,3 +50,8 @@ Warmup sets are excluded from all calculations. Only completed, non-warmup sets 
 - The app has no charting library today. The implementer will need to add one; the choice is left to implementation.
 - Route should be `#/progress`, added to the hash router's route union type in `src/hooks/useHashRouter.ts`.
 - The Epley formula breaks down for single-rep sets (reps = 1 yields 1RM = weight itself), which is correct and expected.
+
+## Implementation notes (iteration updates)
+
+- Strength chart metric/goal summaries were moved into each chart card header (next to the lift title) to match the Garmin/activities chart pattern.
+- The selected-lift strength card now renders the same shared header structure as big-4 cards so final chart cards keep consistent heights.
