@@ -648,9 +648,10 @@ interface Props {
   entries: GarminWellnessEntry[];
   range: WellnessTimeRange;
   aggregation: WellnessAggregation;
+  embedded?: boolean;
 }
 
-export function GarminWellnessView({ entries, range, aggregation }: Props) {
+export function GarminWellnessView({ entries, range, aggregation, embedded = false }: Props) {
   const today = useMemo(() => new Date(), []);
 
   // Build chart data
@@ -688,7 +689,7 @@ export function GarminWellnessView({ entries, range, aggregation }: Props) {
 
   if (entries.length === 0) {
     return (
-      <div className="strava-view">
+      <div className={embedded ? 'strava-subview' : 'strava-view'}>
         <div className="strava-empty">
           No wellness data yet. Run the Garmin Wellness sync to populate the &apos;Stronger - Garmin Wellness&apos; tab.
         </div>
@@ -708,7 +709,7 @@ export function GarminWellnessView({ entries, range, aggregation }: Props) {
     (v: number | null) => formatWellnessValue(v, metric);
 
   return (
-    <div className="strava-view">
+    <div className={embedded ? 'strava-subview' : 'strava-view'}>
       {/* Section: Training */}
       <h2 className="strava-section-title">Training</h2>
       <WellnessBarChart

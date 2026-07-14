@@ -30,9 +30,11 @@ interface Props {
   aggregation: StravaAggregation;
   onGoalChange?: (metric: StravaMetric, value: number | null) => void;
   /** Heading shown at the top of the view. Defaults to "Activities". */
-  title?: string;
+  title?: string | null;
   /** Message shown when there are no activities. */
   emptyText?: string;
+  /** When true, omit outer page padding so the charts can live inside a shared layout. */
+  embedded?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -51,7 +53,7 @@ const CHART_PADDING = { top: 16, right: 56, bottom: 32, left: 52 };
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function ActivitiesView({ activities, goals, range, aggregation, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.' }: Props) {
+export function ActivitiesView({ activities, goals, range, aggregation, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.', embedded = false }: Props) {
   // Split into cardio (everything except strength) and strength training
   const { cardio: cardioActivities, strength: strengthActivities } = useMemo(
     () => splitActivities(activities),
@@ -104,8 +106,8 @@ export function ActivitiesView({ activities, goals, range, aggregation, onGoalCh
 
   if (activities.length === 0) {
     return (
-      <div className="strava-view">
-        <h2 className="strava-title">{title}</h2>
+      <div className={embedded ? 'strava-subview' : 'strava-view'}>
+        {title ? <h2 className="strava-title">{title}</h2> : null}
         <p className="strava-empty">
           {emptyText}
         </p>
@@ -114,8 +116,8 @@ export function ActivitiesView({ activities, goals, range, aggregation, onGoalCh
   }
 
   return (
-    <div className="strava-view">
-      <h2 className="strava-title">{title}</h2>
+    <div className={embedded ? 'strava-subview' : 'strava-view'}>
+      {title ? <h2 className="strava-title">{title}</h2> : null}
 
       {/* Cardio charts */}
       {cardioCharts.length > 0 && (

@@ -1370,15 +1370,24 @@ function App() {
             ))}
           </div>
         </div>
-        <ActivitiesView
-          activities={garminActivities}
-          goals={stravaGoals}
-          range={garminRange}
-          aggregation={garminAggregation}
-          onGoalChange={handleStravaGoalChange}
-          emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
-        />
-        <GarminWellnessView entries={wellnessEntries} range={garminRange} aggregation={garminAggregation} />
+        <div className="strava-view">
+          <ActivitiesView
+            activities={garminActivities}
+            goals={stravaGoals}
+            range={garminRange}
+            aggregation={garminAggregation}
+            onGoalChange={handleStravaGoalChange}
+            title={null}
+            emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
+            embedded
+          />
+          <GarminWellnessView
+            entries={wellnessEntries}
+            range={garminRange}
+            aggregation={garminAggregation}
+            embedded
+          />
+        </div>
       </>
     );
   }
