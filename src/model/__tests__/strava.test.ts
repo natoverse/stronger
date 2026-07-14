@@ -54,11 +54,21 @@ describe('toDisplayUnit', () => {
 /* ------------------------------------------------------------------ */
 
 describe('getRangeStart', () => {
-  it('returns first of month for month range', () => {
-    const today = new Date(2025, 5, 18);
+  it('returns 30 days ago for month range', () => {
+    const today = new Date(2025, 5, 18); // June 18 2025
     const start = getRangeStart('month', today);
-    expect(start.getDate()).toBe(1);
-    expect(start.getMonth()).toBe(5);
+    // today - 29 days = May 20
+    expect(start.getDate()).toBe(20);
+    expect(start.getMonth()).toBe(4); // May
+  });
+
+  it('returns 365 days ago for rolling year range', () => {
+    const today = new Date(2025, 5, 18); // June 18 2025
+    const start = getRangeStart('year', today);
+    // today - 364 days = June 19 2024
+    expect(start.getFullYear()).toBe(2024);
+    expect(start.getMonth()).toBe(5); // June
+    expect(start.getDate()).toBe(19);
   });
 
   it('returns Jan 1 for a year range', () => {
@@ -79,10 +89,18 @@ describe('getRangeStart', () => {
 });
 
 describe('getRangeEnd', () => {
-  it('returns last day of month for month range', () => {
-    const today = new Date(2025, 5, 18); // June
+  it('returns today for month range', () => {
+    const today = new Date(2025, 5, 18); // June 18
     const end = getRangeEnd('month', today);
-    expect(end.getDate()).toBe(30);
+    expect(end.getDate()).toBe(18);
+    expect(end.getMonth()).toBe(5);
+  });
+
+  it('returns today for rolling year range', () => {
+    const today = new Date(2025, 5, 18);
+    const end = getRangeEnd('year', today);
+    expect(end.getDate()).toBe(18);
+    expect(end.getMonth()).toBe(5);
   });
 
   it('returns Dec 31 for a year range', () => {
@@ -190,12 +208,13 @@ describe('generateBucketSlots', () => {
     expect(slots[11].label).toBe('Dec');
   });
 
-  it('generates daily slots for month range', () => {
-    const today = new Date(2025, 5, 15); // June 2025 (30 days)
+  it('generates daily slots for month range (last 30 days with M/D labels)', () => {
+    // today = June 15; range = May 17 – June 15 (30 days)
+    const today = new Date(2025, 5, 15);
     const slots = generateBucketSlots('month', 'day', today);
     expect(slots).toHaveLength(30);
-    expect(slots[0].label).toBe('1');
-    expect(slots[29].label).toBe('30');
+    expect(slots[0].label).toBe('5/17');  // May 17
+    expect(slots[29].label).toBe('6/15'); // June 15
   });
 
   it('generates daily slots for year range', () => {
@@ -215,11 +234,22 @@ describe('generateBucketSlots', () => {
     expect(slots[0].label).toMatch(/^W\d+$/);
   });
 
-  it('generates single bucket for month range with month aggregation', () => {
-    const today = new Date(2025, 5, 15); // June 2025
+  it('generates 1–2 monthly buckets for month range with month aggregation', () => {
+    // today = June 15; range = May 17 – June 15 → spans May and June
+    const today = new Date(2025, 5, 15);
     const slots = generateBucketSlots('month', 'month', today);
-    expect(slots).toHaveLength(1);
-    expect(slots[0].label).toBe('Jun');
+    expect(slots.length).toBeGreaterThanOrEqual(1);
+    expect(slots.length).toBeLessThanOrEqual(2);
+    expect(slots.some((s) => s.label === 'May')).toBe(true);
+    expect(slots.some((s) => s.label === 'Jun')).toBe(true);
+  });
+
+  it('generates 12 monthly buckets for rolling year range', () => {
+    const today = new Date(2025, 5, 15);
+    const slots = generateBucketSlots('year', 'month', today);
+    expect(slots).toHaveLength(12);
+    expect(slots[0].label).toBe('Jan');
+    expect(slots[11].label).toBe('Dec');
   });
 });
 
@@ -330,17 +360,18 @@ describe('buildMetricChartData', () => {
     expect(data.cumulative).toHaveLength(12);
   });
 
-  it('truncates cumulative for in-progress current month', () => {
+  it('truncates cumulative for in-progress rolling month', () => {
     const today = new Date(2025, 5, 15); // June 15, 2025
     const activities = [
+      // Both within the last 30 days (May 17 – June 15)
       makeActivity({ date: '2025-06-02', distance: 5000 }),
       makeActivity({ date: '2025-06-10', distance: 3000 }),
     ];
     const data = buildMetricChartData(activities, 'distance', 'month', null, today, 'day');
-    // Should have 30 day buckets for June
+    // 30 day slots (May 17 – June 15)
     expect(data.buckets).toHaveLength(30);
-    // Cumulative should only go up to day 15 (index 14)
-    expect(data.cumulative).toHaveLength(15);
+    // today === range end (June 15 = last slot), so all 30 buckets are active
+    expect(data.cumulative).toHaveLength(30);
   });
 
   it('includes prorated goal when provided', () => {
@@ -407,11 +438,12 @@ describe('buildMetricChartData', () => {
       makeActivity({ date: '2025-06-18', distance: 10000 }),
     ];
     const data = buildMetricChartData(activities, 'distance', 'month', null, today, 'day');
-    expect(data.buckets).toHaveLength(30); // June has 30 days
-    // Day 2 (index 1) should have combined distance
-    expect(data.buckets[1].value).toBeCloseTo(toDisplayUnit('distance', 8000), 1);
-    // Day 18 (index 17) should have its distance
-    expect(data.buckets[17].value).toBeCloseTo(toDisplayUnit('distance', 10000), 1);
+    // 30 day slots (May 20 – June 18)
+    expect(data.buckets).toHaveLength(30);
+    // June 2 = May 20 + 13 days → index 13
+    expect(data.buckets[13].value).toBeCloseTo(toDisplayUnit('distance', 8000), 1);
+    // June 18 = last slot → index 29
+    expect(data.buckets[29].value).toBeCloseTo(toDisplayUnit('distance', 10000), 1);
     expect(data.latestValue).toBeCloseTo(toDisplayUnit('distance', 10000), 1);
   });
 
@@ -431,13 +463,14 @@ describe('buildMetricChartData', () => {
 /* ------------------------------------------------------------------ */
 
 describe('getTimeRangeOptions', () => {
-  it('returns This Month plus 6 years going back', () => {
+  it('returns Month, Year, current year and 3 prior years (6 total)', () => {
     const today = new Date(2025, 5, 15);
     const options = getTimeRangeOptions(today);
-    expect(options).toHaveLength(7);
+    expect(options).toHaveLength(6);
     expect(options[0]).toEqual({ value: 'month', label: 'Month' });
-    expect(options[1]).toEqual({ value: '2025', label: '2025' });
-    expect(options[6]).toEqual({ value: '2020', label: '2020' });
+    expect(options[1]).toEqual({ value: 'year', label: 'Year' });
+    expect(options[2]).toEqual({ value: '2025', label: '2025' });
+    expect(options[5]).toEqual({ value: '2022', label: '2022' });
   });
 });
 

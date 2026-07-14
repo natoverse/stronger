@@ -36,8 +36,9 @@ export type StravaMetric = 'distance' | 'elevationGain' | 'duration';
 
 /**
  * Time range selector for activity charts.
- * - 'month': the current calendar month
- * - A 4-digit year string (e.g. '2026'): that full calendar year
+ * - 'month': rolling last 30 days
+ * - 'year': rolling last 365 days
+ * - A 4-digit year string (e.g. '2026'): that full calendar year (Jan 1 – Dec 31)
  */
 export type StravaTimeRange = string;
 
@@ -139,9 +140,9 @@ export function splitActivities(activities: StravaActivity[]): {
 /*  Time range helpers                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Parse a year from a range string, or null if it's 'month'. */
+/** Parse a year from a range string, or null if it's 'month' or 'year'. */
 function parseYearRange(range: StravaTimeRange): number | null {
-  if (range === 'month') return null;
+  if (range === 'month' || range === 'year') return null;
   const year = parseInt(range, 10);
   return year >= 2000 ? year : null;
 }
@@ -156,8 +157,13 @@ export function getRangeStart(range: StravaTimeRange, today: Date = new Date()):
     // Specific year: Jan 1
     return new Date(year, 0, 1);
   }
-  // 'month': first of current month
-  d.setDate(1);
+  if (range === 'year') {
+    // Rolling last 365 days: today − 364 days (inclusive of today = 365 total)
+    d.setDate(d.getDate() - 364);
+    return d;
+  }
+  // 'month': rolling last 30 days
+  d.setDate(d.getDate() - 29);
   return d;
 }
 
@@ -170,11 +176,10 @@ export function getRangeEnd(range: StravaTimeRange, today: Date = new Date()): D
     end.setHours(23, 59, 59, 999);
     return end;
   }
-  // 'month': last day of current month
+  // 'month' and 'year': rolling window ending today
   const d = new Date(today);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-  end.setHours(23, 59, 59, 999);
-  return end;
+  d.setHours(23, 59, 59, 999);
+  return d;
 }
 
 /* ------------------------------------------------------------------ */
@@ -216,14 +221,16 @@ function toISODate(d: Date): string {
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** Build the list of time range options: Month, then the current year and 5 prior years. */
+/** Build the list of time range options: Month (30 days), Year (365 days), current year, and 3 prior years. */
 export function getTimeRangeOptions(today: Date = new Date()): { value: StravaTimeRange; label: string }[] {
   const currentYear = today.getFullYear();
   return [
     { value: 'month', label: 'Month' },
-    ...Array.from({ length: 6 }, (_, i) => ({
-      value: String(currentYear - i),
-      label: String(currentYear - i),
+    { value: 'year', label: 'Year' },
+    { value: String(currentYear), label: String(currentYear) },
+    ...Array.from({ length: 3 }, (_, i) => ({
+      value: String(currentYear - 1 - i),
+      label: String(currentYear - 1 - i),
     })),
   ];
 }
@@ -265,9 +272,7 @@ export function generateBucketSlots(
       const cursor = new Date(start);
       while (cursor <= end) {
         const key = toISODate(cursor);
-        const label = range === 'month'
-          ? String(cursor.getDate())
-          : `${cursor.getMonth() + 1}/${cursor.getDate()}`;
+        const label = `${cursor.getMonth() + 1}/${cursor.getDate()}`;
         slots.push({ key, label });
         cursor.setDate(cursor.getDate() + 1);
       }
@@ -298,11 +303,21 @@ export function generateBucketSlots(
 
     case 'month': {
       if (range === 'month') {
-        // Just one bucket for the single month
-        const monthIdx = start.getMonth();
-        return [{ key: String(monthIdx), label: MONTH_LABELS[monthIdx] }];
+        // 'month' = last 30 days; may span two calendar months — emit one slot per distinct month
+        const slots: { key: string; label: string }[] = [];
+        const seen = new Set<string>();
+        const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+        while (cursor <= end) {
+          const key = String(cursor.getMonth());
+          if (!seen.has(key)) {
+            seen.add(key);
+            slots.push({ key, label: MONTH_LABELS[cursor.getMonth()] });
+          }
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+        return slots;
       }
-      // Year range → 12 monthly buckets
+      // Year-based range ('year' rolling or specific year string) → 12 monthly buckets
       return MONTH_LABELS.map((label, i) => ({ key: String(i), label }));
     }
   }
@@ -314,8 +329,8 @@ export function generateBucketSlots(
 
 /**
  * Prorate an annual goal to the selected time range.
- * Returns the full goal for the current year, prorated for month,
- * or null for past years.
+ * Returns the full goal for the current year and rolling 'year' range,
+ * prorated for 'month', or null for past years.
  */
 export function prorateGoal(
   annualGoal: number,
@@ -328,7 +343,12 @@ export function prorateGoal(
     return year === today.getFullYear() ? annualGoal : null;
   }
 
-  // 'month': prorate by days
+  if (range === 'year') {
+    // Rolling 365 days → full year goal
+    return annualGoal;
+  }
+
+  // 'month': prorate by days (rolling 30-day window)
   const start = getRangeStart(range, today);
   const end = getRangeEnd(range, today);
   const rangeDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24) + 1;

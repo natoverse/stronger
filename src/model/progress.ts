@@ -1,4 +1,6 @@
 import type { ParsedLogRow } from '../google/sheets.js';
+import { getRangeStart, getRangeEnd } from './strava.js';
+import type { StravaTimeRange } from './strava.js';
 
 /** A single data point on the progress chart. */
 export interface ProgressDataPoint {
@@ -10,7 +12,9 @@ export interface ProgressDataPoint {
 
 export type ProgressMetric = 'volume' | 'heaviest' | 'e1rm';
 
-export type TimeRange = '1m' | '3m' | '12m' | 'all';
+/** Time range for strength-progress charts. Shares the same vocabulary as StravaTimeRange,
+ *  plus 'all' for the internal all-time baseline computation. */
+export type TimeRange = StravaTimeRange | 'all';
 
 /** Set types that count toward progress metrics. Warmup sets are excluded. */
 const QUALIFYING_SET_TYPES = new Set(['work', 'backoff', 'joker']);
@@ -122,15 +126,23 @@ export function getLiftsWithData(
 }
 
 /**
- * Compute the cutoff date for a given time range.
- * Returns an ISO date string (YYYY-MM-DD) or null for 'all'.
+ * Get the start cutoff date string for a given time range, or null for 'all'.
  */
 export function getCutoffDate(range: TimeRange): string | null {
   if (range === 'all') return null;
-  const now = new Date();
-  const months = range === '1m' ? 1 : range === '3m' ? 3 : 12;
-  now.setMonth(now.getMonth() - months);
-  return now.toISOString().slice(0, 10);
+  const d = getRangeStart(range);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Get the end cutoff date string for a given time range, or null for 'all'.
+ * Returns null for 'month' and 'year' (rolling windows — no hard end beyond today).
+ */
+export function getCutoffEnd(range: TimeRange): string | null {
+  if (range === 'all' || range === 'month' || range === 'year') return null;
+  // Specific year (e.g. '2025') → Dec 31 of that year
+  const d = getRangeEnd(range);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -146,10 +158,14 @@ export function buildProgressData(
   range: TimeRange,
 ): ProgressDataPoint[] {
   const cutoff = getCutoffDate(range);
+  const cutoffEnd = getCutoffEnd(range);
 
-  // Filter to the selected lift
+  // Filter to the selected lift within the time range
   const liftRows = logRows.filter(
-    (r) => r.liftId === liftId && (cutoff === null || r.date >= cutoff),
+    (r) =>
+      r.liftId === liftId &&
+      (cutoff === null || r.date >= cutoff) &&
+      (cutoffEnd === null || r.date <= cutoffEnd),
   );
 
   // Group by session (date + startTime)

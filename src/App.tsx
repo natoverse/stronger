@@ -56,8 +56,8 @@ function App() {
   const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
   const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
   const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>([]);
-  const [garminRange, setGarminRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
-  const [garminAggregation, setGarminAggregation] = useState<StravaAggregation>('day');
+  const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
+  const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('week');
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
   const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
   const [liftGoals, setLiftGoals] = useState<LiftGoal[]>([]);
@@ -1311,34 +1311,7 @@ function App() {
   }
 
   if (route.view === 'progress') {
-    return (
-      <>
-        <GoogleAuth
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
-          onOpenExercises={handleOpenExercises}
-          onOpenProgress={handleOpenProgress}
-          onOpenGarmin={onOpenGarmin}
-          onOpenWellness={onOpenWellness}
-          onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
-          onOpenSettings={handleOpenSettings}
-        />
-        <ProgressView
-          logRows={logRows}
-          liftGoals={liftGoals}
-          onLiftGoalChange={handleLiftGoalChange}
-          dipThresholdPercent={appSettings.progressDipThresholdPercent}
-        />
-      </>
-    );
-  }
-
-
-  if (route.view === 'garmin') {
-    const garminTimeRanges = getTimeRangeOptions(new Date());
+    const timeRanges = getTimeRangeOptions(new Date());
     return (
       <>
         <GoogleAuth
@@ -1356,51 +1329,32 @@ function App() {
         />
         <div className="strava-view">
           <div className="strava-range-group">
-            {garminTimeRanges.map((r) => (
+            {timeRanges.map((r) => (
               <button
                 key={r.value}
-                className={`strava-range-btn${garminRange === r.value ? ' active' : ''}`}
-                onClick={() => setGarminRange(r.value)}
+                className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
+                onClick={() => setChartRange(r.value)}
               >
                 {r.label}
               </button>
             ))}
           </div>
-          <div className="strava-agg-group">
-            {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
-              <button
-                key={agg}
-                className={`strava-agg-btn${garminAggregation === agg ? ' active' : ''}`}
-                onClick={() => setGarminAggregation(agg)}
-              >
-                {agg.charAt(0).toUpperCase() + agg.slice(1)}
-              </button>
-            ))}
-          </div>
         </div>
-        <div className="strava-view">
-          <ActivitiesView
-            activities={garminActivities}
-            goals={stravaGoals}
-            range={garminRange}
-            aggregation={garminAggregation}
-            onGoalChange={handleStravaGoalChange}
-            title={null}
-            emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
-            embedded
-          />
-          <GarminWellnessView
-            entries={wellnessEntries}
-            range={garminRange}
-            aggregation={garminAggregation}
-            embedded
-          />
-        </div>
+        <ProgressView
+          logRows={logRows}
+          liftGoals={liftGoals}
+          onLiftGoalChange={handleLiftGoalChange}
+          dipThresholdPercent={appSettings.progressDipThresholdPercent}
+          skipDips={appSettings.skipProgressDips}
+          range={chartRange}
+        />
       </>
     );
   }
 
-  if (route.view === 'withings') {
+
+  if (route.view === 'garmin') {
+    const timeRanges = getTimeRangeOptions(new Date());
     return (
       <>
         <GoogleAuth
@@ -1416,10 +1370,100 @@ function App() {
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
+        <div className="strava-view">
+          <div className="strava-range-group">
+            {timeRanges.map((r) => (
+              <button
+                key={r.value}
+                className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
+                onClick={() => setChartRange(r.value)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="strava-agg-group">
+            {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
+              <button
+                key={agg}
+                className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
+                onClick={() => setChartAggregation(agg)}
+              >
+                {agg.charAt(0).toUpperCase() + agg.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="strava-view">
+          <ActivitiesView
+            activities={garminActivities}
+            goals={stravaGoals}
+            range={chartRange}
+            aggregation={chartAggregation}
+            onGoalChange={handleStravaGoalChange}
+            title={null}
+            emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
+            embedded
+          />
+          <GarminWellnessView
+            entries={wellnessEntries}
+            range={chartRange}
+            aggregation={chartAggregation}
+            embedded
+          />
+        </div>
+      </>
+    );
+  }
+
+  if (route.view === 'withings') {
+    const timeRanges = getTimeRangeOptions(new Date());
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onGoToList={handleGoToList}
+          onOpenCalendar={handleOpenCalendar}
+          onOpenExercises={handleOpenExercises}
+          onOpenProgress={handleOpenProgress}
+          onOpenGarmin={onOpenGarmin}
+          onOpenWellness={onOpenWellness}
+          onOpenWithings={onOpenWithings}
+          onOpenNutrition={onOpenNutrition}
+          onOpenSettings={handleOpenSettings}
+        />
+        <div className="strava-view">
+          <div className="strava-range-group">
+            {timeRanges.map((r) => (
+              <button
+                key={r.value}
+                className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
+                onClick={() => setChartRange(r.value)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="strava-agg-group">
+            {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
+              <button
+                key={agg}
+                className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
+                onClick={() => setChartAggregation(agg)}
+              >
+                {agg.charAt(0).toUpperCase() + agg.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
         <WithingsView
           measurements={withingsMeasurements}
           goals={withingsGoals}
           dipThresholdPercent={appSettings.withingsDipThresholdPercent}
+          skipDips={appSettings.skipBodyCompDips}
+          range={chartRange}
+          aggregation={chartAggregation}
           onGoalChange={handleWithingsGoalChange}
         />
       </>

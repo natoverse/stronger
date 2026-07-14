@@ -364,6 +364,10 @@ export interface AppSettings {
 	withingsDipThresholdPercent: number;
 	/** Percent drop threshold for filtering progress-chart dips when Skip Dips is enabled. */
 	progressDipThresholdPercent: number;
+	/** Whether to filter deload dips from strength-progress charts. */
+	skipProgressDips: boolean;
+	/** Whether to filter spikes/dips from body-composition charts. */
+	skipBodyCompDips: boolean;
 	/** Daily calorie target used in the nutrition summary (0 disables goal coloring). */
 	dailyCalorieGoal: number;
 	/** Daily protein target in grams used in the nutrition summary (0 disables goal coloring). */
@@ -375,7 +379,9 @@ export type AppBooleanSettingKey =
 	| 'showSetComments'
 	| 'keepScreenOn'
 	| 'showGarminTab'
-	| 'showNutritionTab';
+	| 'showNutritionTab'
+	| 'skipProgressDips'
+	| 'skipBodyCompDips';
 export type AppNumericSettingKey =
 	| 'withingsDipThresholdPercent'
 	| 'progressDipThresholdPercent'
