@@ -61,3 +61,6 @@ export const WITHINGS_TAB_NAME = 'Stronger - Withings'
 
 /** Name of the tab that holds app settings as key/value pairs. */
 export const SETTINGS_TAB_NAME = 'Stronger - Settings'
+
+/** Name of the tab that holds daily Garmin wellness metrics (HRV, sleep, training, etc.). */
+export const GARMIN_WELLNESS_TAB_NAME = 'Stronger - Garmin Wellness'

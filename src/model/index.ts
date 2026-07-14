@@ -22,6 +22,7 @@ export type {
 	SetType,
 	WeightBasis,
 	WithingsMeasurement,
+	GarminWellnessEntry,
 	Workout,
 	WorkoutScheduleEntry,
 } from './types.js';

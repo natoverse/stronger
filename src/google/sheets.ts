@@ -5,8 +5,8 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/types.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey, GarminWellnessEntry } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -2673,4 +2673,122 @@ export function appSettingsToMap(
 		settings.set(key, String(appSettings[field]))
 	}
 	return settings
+}
+
+/* ------------------------------------------------------------------ */
+/*  Garmin Wellness tab                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Column header row written to the "Stronger - Garmin Wellness" tab.
+ * 24 columns (A–X). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
+ */
+export const GARMIN_WELLNESS_HEADER: string[] = [
+	'date',
+	'hrvLastNight', 'hrvWeeklyAvg', 'hrvStatus',
+	'sleepDurationSec', 'sleepDeepSec', 'sleepLightSec',
+	'sleepRemSec', 'sleepAwakeSec', 'sleepScore',
+	'bodyBatteryHigh', 'bodyBatteryLow',
+	'readinessScore',
+	'trainingStatus', 'trainingAcuteLoad', 'trainingChronicLoad',
+	'steps', 'floors', 'restingHR', 'vo2Max',
+	'intensityMinModerate', 'intensityMinVigorous',
+	'hillScore', 'enduranceScore',
+]
+
+/** A1 range for reading Garmin wellness data (row 2 onward, 24 columns = A:X). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:X`
+
+/** Column index map for the Garmin wellness row (0-based). */
+const WC = {
+	date: 0,
+	hrvLastNight: 1, hrvWeeklyAvg: 2, hrvStatus: 3,
+	sleepDurationSec: 4, sleepDeepSec: 5, sleepLightSec: 6,
+	sleepRemSec: 7, sleepAwakeSec: 8, sleepScore: 9,
+	bodyBatteryHigh: 10, bodyBatteryLow: 11,
+	readinessScore: 12,
+	trainingStatus: 13, trainingAcuteLoad: 14, trainingChronicLoad: 15,
+	steps: 16, floors: 17, restingHR: 18, vo2Max: 19,
+	intensityMinModerate: 20, intensityMinVigorous: 21,
+	hillScore: 22, enduranceScore: 23,
+} as const
+
+function parseNum(raw: string | undefined): number | null {
+	if (!raw || raw.trim() === '') return null
+	const v = Number(raw)
+	return isFinite(v) ? v : null
+}
+
+/**
+ * Parse a single row from the "Stronger - Garmin Wellness" sheet.
+ * Returns null if the row has no valid date.
+ */
+export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | null {
+	const date = row[WC.date]?.trim()
+	if (!date) return null
+	return {
+		date,
+		hrvLastNight:         parseNum(row[WC.hrvLastNight]),
+		hrvWeeklyAvg:         parseNum(row[WC.hrvWeeklyAvg]),
+		hrvStatus:            row[WC.hrvStatus]?.trim() ?? '',
+		sleepDurationSec:     parseNum(row[WC.sleepDurationSec]),
+		sleepDeepSec:         parseNum(row[WC.sleepDeepSec]),
+		sleepLightSec:        parseNum(row[WC.sleepLightSec]),
+		sleepRemSec:          parseNum(row[WC.sleepRemSec]),
+		sleepAwakeSec:        parseNum(row[WC.sleepAwakeSec]),
+		sleepScore:           parseNum(row[WC.sleepScore]),
+		bodyBatteryHigh:      parseNum(row[WC.bodyBatteryHigh]),
+		bodyBatteryLow:       parseNum(row[WC.bodyBatteryLow]),
+		readinessScore:       parseNum(row[WC.readinessScore]),
+		trainingStatus:       row[WC.trainingStatus]?.trim() ?? '',
+		trainingAcuteLoad:    parseNum(row[WC.trainingAcuteLoad]),
+		trainingChronicLoad:  parseNum(row[WC.trainingChronicLoad]),
+		steps:                parseNum(row[WC.steps]),
+		floors:               parseNum(row[WC.floors]),
+		restingHR:            parseNum(row[WC.restingHR]),
+		vo2Max:               parseNum(row[WC.vo2Max]),
+		intensityMinModerate: parseNum(row[WC.intensityMinModerate]),
+		intensityMinVigorous: parseNum(row[WC.intensityMinVigorous]),
+		hillScore:            parseNum(row[WC.hillScore]),
+		enduranceScore:       parseNum(row[WC.enduranceScore]),
+	}
+}
+
+/**
+ * Check whether the "Stronger - Garmin Wellness" tab exists in the spreadsheet.
+ * Returns false if the tab is missing (it's created by the sync script, not the app).
+ */
+export async function verifyGarminWellnessTab(spreadsheetId: string): Promise<boolean> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.get({
+		spreadsheetId,
+	})
+	const sheets: Array<{ properties: { title: string } }> =
+		response.result.sheets ?? []
+	return sheets.some((s) => s.properties.title === GARMIN_WELLNESS_TAB_NAME)
+}
+
+/**
+ * Read all Garmin wellness entries from the spreadsheet.
+ * Returns an empty array if the tab is missing or has no valid rows.
+ */
+export async function readGarminWellnessEntries(
+	spreadsheetId: string,
+): Promise<GarminWellnessEntry[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: GARMIN_WELLNESS_READ_RANGE,
+	})
+
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return []
+
+	return rawRows
+		.map(parseGarminWellnessRow)
+		.filter((r): r is GarminWellnessEntry => r !== null)
 }

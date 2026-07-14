@@ -366,6 +366,82 @@ export type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepSc
 export type AppPercentSettingKey = 'withingsDipThresholdPercent' | 'progressDipThresholdPercent';
 
 // ---------------------------------------------------------------------------
+// Layer 8 – Garmin Wellness (daily metrics from Garmin Connect)
+// ---------------------------------------------------------------------------
+
+/**
+ * One row in the "Stronger - Garmin Wellness" sheet — a single day's worth of
+ * aggregated wellness metrics fetched from Garmin Connect.
+ *
+ * All numeric fields are `null` when the value was not available for that day.
+ * String fields are `''` when unavailable.
+ */
+export interface GarminWellnessEntry {
+	/** ISO date string (YYYY-MM-DD). */
+	date: string;
+
+	// HRV
+	/** Overnight HRV (last night), in ms. */
+	hrvLastNight: number | null;
+	/** Rolling 5-day weekly HRV average, in ms. */
+	hrvWeeklyAvg: number | null;
+	/** Garmin HRV status string (e.g. BALANCED, UNBALANCED, LOW). */
+	hrvStatus: string;
+
+	// Sleep
+	/** Total sleep duration, in seconds. */
+	sleepDurationSec: number | null;
+	/** Deep sleep duration, in seconds. */
+	sleepDeepSec: number | null;
+	/** Light sleep duration, in seconds. */
+	sleepLightSec: number | null;
+	/** REM sleep duration, in seconds. */
+	sleepRemSec: number | null;
+	/** Awake time during sleep window, in seconds. */
+	sleepAwakeSec: number | null;
+	/** Overall sleep score (0–100). */
+	sleepScore: number | null;
+
+	// Body battery
+	/** Highest body battery reading during the day (0–100). */
+	bodyBatteryHigh: number | null;
+	/** Lowest body battery reading during the day (0–100). */
+	bodyBatteryLow: number | null;
+
+	// Training readiness
+	/** Training readiness score (0–100). */
+	readinessScore: number | null;
+
+	// Training status & load
+	/** Garmin training status string (e.g. PRODUCTIVE, MAINTAINING, RECOVERY). */
+	trainingStatus: string;
+	/** Acute (short-term) training load. */
+	trainingAcuteLoad: number | null;
+	/** Chronic (long-term) training load. */
+	trainingChronicLoad: number | null;
+
+	// Activity
+	/** Total step count for the day. */
+	steps: number | null;
+	/** Floors ascended during the day. */
+	floors: number | null;
+	/** Resting heart rate, in bpm. */
+	restingHR: number | null;
+	/** Running VO2 max estimate. */
+	vo2Max: number | null;
+	/** Moderate-intensity minutes for the day. */
+	intensityMinModerate: number | null;
+	/** Vigorous-intensity minutes for the day. */
+	intensityMinVigorous: number | null;
+
+	// Fitness scores
+	/** Hill Score (0–100). */
+	hillScore: number | null;
+	/** Endurance Score (0–100). */
+	enduranceScore: number | null;
+}
+
+// ---------------------------------------------------------------------------
 // Layer 7 – Progression (post-workout weight update proposals)
 // ---------------------------------------------------------------------------
 
