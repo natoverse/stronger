@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  TRAINING_STATUS_LEGEND_ITEMS,
   enduranceScoreColor,
+  formatTrainingStatusLabel,
   hillScoreColor,
   hrvStatusColor,
+  trainingStatusColor,
   vo2MaxColor,
 } from '../GarminWellnessView.js';
 
@@ -44,5 +47,18 @@ describe('enduranceScoreColor', () => {
     expect(enduranceScoreColor(7000)).toBe('#2196f3');
     expect(enduranceScoreColor(7700)).toBe('#d500f9');
     expect(enduranceScoreColor(8400)).toBe('#ff2d7b');
+  });
+});
+
+describe('training status legend', () => {
+  it('keeps legend swatch colors aligned with training status bars', () => {
+    for (const item of TRAINING_STATUS_LEGEND_ITEMS) {
+      expect(item.color).toBe(trainingStatusColor(item.status));
+    }
+  });
+
+  it('formats underscored training statuses for display', () => {
+    expect(formatTrainingStatusLabel('RECOVERY_ACTIVE')).toBe('Recovery active');
+    expect(formatTrainingStatusLabel('')).toBe('—');
   });
 });

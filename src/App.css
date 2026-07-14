@@ -3876,23 +3876,71 @@ body {
 /* ------------------------------------------------------------------ */
 
 .wellness-status-legend {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 12px;
-	margin: 4px 0 8px;
-}
-
-.wellness-status-legend-item {
-	display: flex;
-	align-items: center;
-	gap: 4px;
-	font-size: 0.65rem;
-	color: rgba(255, 255, 255, 0.6);
+	position: relative;
 }
 
 .wellness-status-legend-dot {
 	width: 8px;
 	height: 8px;
-	border-radius: 50%;
+	border-radius: 2px;
 	flex-shrink: 0;
+}
+
+.wellness-status-legend-swatches {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	touch-action: pan-x;
+}
+
+.wellness-status-legend-swatch {
+	appearance: none;
+	width: 12px;
+	height: 12px;
+	padding: 0;
+	background: transparent;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 3px;
+	cursor: pointer;
+	transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.wellness-status-legend-swatch:hover,
+.wellness-status-legend-swatch:focus-visible,
+.wellness-status-legend-swatch.active {
+	transform: translateY(-1px);
+	border-color: rgba(255, 255, 255, 0.55);
+	box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+	outline: none;
+}
+
+.wellness-status-legend-popover {
+	position: absolute;
+	top: calc(100% + 8px);
+	right: 0;
+	min-width: 160px;
+	padding: 10px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	background: rgba(10, 10, 10, 0.96);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 10px;
+	box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+	z-index: 2;
+}
+
+.wellness-status-legend-popover-value {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: #fff;
+	font-size: 0.75rem;
+	font-weight: 600;
+}
+
+.wellness-status-legend-popover-hint {
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 0.65rem;
+	line-height: 1.3;
 }
