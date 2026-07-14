@@ -127,6 +127,36 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
           <span className="settings-toggle-switch" />
         </label>
 
+        <div className="settings-subsection-title">Optional Tabs</div>
+
+        <label className="settings-toggle-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Garmin</span>
+            <span className="settings-toggle-description">Show the Activities & Wellness tab in the toolbar</span>
+          </span>
+          <input
+            type="checkbox"
+            className="settings-toggle-input"
+            checked={appSettings.showGarminTab}
+            onChange={(e) => onAppSettingChange('showGarminTab', e.target.checked)}
+          />
+          <span className="settings-toggle-switch" />
+        </label>
+
+        <label className="settings-toggle-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Nutrition</span>
+            <span className="settings-toggle-description">Show the Nutrition tab in the toolbar</span>
+          </span>
+          <input
+            type="checkbox"
+            className="settings-toggle-input"
+            checked={appSettings.showNutritionTab}
+            onChange={(e) => onAppSettingChange('showNutritionTab', e.target.checked)}
+          />
+          <span className="settings-toggle-switch" />
+        </label>
+
         <div className="settings-percent-row">
           <span className="settings-toggle-label">
             <span className="settings-toggle-name">Body Comp Dip Filter</span>
