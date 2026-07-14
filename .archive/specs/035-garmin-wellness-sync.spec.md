@@ -108,6 +108,8 @@ Verified all fields against the real Garmin Connect API response structures usin
 ## Iteration log
 
 - **Training load chart simplification (2026-07):** Replaced the separate acute-load and chronic-load charts with a single acute:chronic load ratio chart in the Training section. The ratio uses the aggregated acute and chronic bucket values, and its bars are color-coded yellow below `0.8`, green from `0.8` through `1.5`, and pink above `1.5`.
+- **Body Battery range chart consolidation (2026-07-14):** Combined the separate Body Battery High/Low charts into a single floating-range chart in `GarminWellnessView` where each bar encodes the aggregated low→high spread for a bucket.
+- **Body Battery tooltip + summary update (2026-07-14):** Updated hover and card summary text to show min→max values (`Avg low–high`) instead of separate high/low summaries.
 
 ## Follow-up extraction hardening
 
