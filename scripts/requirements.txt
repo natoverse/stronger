@@ -1,10 +1,15 @@
 # Dependencies for scripts/garmin-sync.py
 #
-# garth       – Garmin Connect auth + API client (the engine GarminDB uses).
-#               Deprecated upstream but still works for token refresh + reads
-#               from a saved token dump. See specs/031-garmin-direct-sync.spec.md.
-# google-auth – Google service-account OAuth for Sheets API access.
-# requests    – HTTP client for the Sheets REST calls (also a garth dependency).
-garth>=0.5.0
+# garminconnect – Garmin Connect auth + API client (the engine GarminDB now
+#                 uses). Replaced the deprecated `garth`; its multi-strategy
+#                 login with curl_cffi TLS impersonation restores fully headless
+#                 auth. See specs/031-garmin-direct-sync.spec.md.
+# curl_cffi     – TLS-impersonation HTTP client garminconnect uses to bypass
+#                 Garmin's Cloudflare fingerprinting. Pinned >=0.15.0 for the
+#                 redirect-SSRF fix (GHSA affecting < 0.15.0).
+# google-auth   – Google service-account OAuth for Sheets API access.
+# requests      – HTTP client for the Sheets REST calls.
+garminconnect>=0.3.4
+curl_cffi>=0.15.0
 google-auth>=2.0.0
 requests>=2.32.2

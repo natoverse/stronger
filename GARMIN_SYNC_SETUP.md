@@ -8,13 +8,13 @@ The workflow runs daily at 06:00 UTC and can also be triggered manually. It's id
 
 ## How it works
 
-1. A one-time browser login mints a Garmin OAuth token dump (`garth`). You store it as a repo secret.
+1. A one-time local login mints a Garmin token bundle (`garminconnect`). You store it as a repo secret.
 2. A GitHub Actions workflow runs `scripts/garmin-sync.py` on a daily schedule.
 3. The script loads the saved tokens, refreshes the short-lived access token, fetches the 30 most recent activities, deduplicates by Garmin activity ID, and appends new rows to the sheet via a Google service account.
 
-### Why a one-time browser login?
+### Authentication
 
-Garmin has no public developer API, and since March 2026 the Garmin **login page** is protected by Cloudflare fingerprinting that blocks non-browser HTTP clients ([details](https://github.com/matin/garth/discussions/222)). However, **token refresh still works** from a plain HTTP client — only the initial login is blocked. So you log in once in a browser to mint tokens, then the recurring sync runs fully headless (in Actions or on a server) using those saved tokens. Garmin OAuth1 tokens last about a year before you need to re-mint them.
+Garmin has no public developer API. We use [`python-garminconnect`](https://github.com/cyberjunky/python-garminconnect), the maintained client that [GarminDB](https://github.com/tcgoetz/GarminDB) also uses. It logs in via Garmin's mobile SSO flow with `curl_cffi` TLS impersonation, which restores fully **headless** logins (no browser needed). Once you mint a token bundle, the recurring sync runs headless in Actions or on a server using those saved tokens. The DI refresh token auto-renews the short-lived access token indefinitely; a full re-login is only needed if the refresh token is revoked or expires.
 
 ## Data stored
 
@@ -48,24 +48,32 @@ Each activity row in the `Stronger - Garmin` tab contains:
 - A Google Cloud service account with editor access to your spreadsheet
 - A GitHub repository (this one) with Actions enabled — or any machine that can run the script on a cron
 
-## Step 1: Mint a Garmin token dump
+## Step 1: Mint a Garmin token bundle
 
-Install the sync dependencies and log in **once** to produce a base64 token dump. Do this on your own machine (the login needs a real browser session / your credentials, so never put your Garmin password in CI).
+Install the sync dependencies and log in **once** to produce a saved token bundle. Do this on your own machine (the login needs your credentials, so never put your Garmin password in CI). The login is headless — no browser required.
 
 ```bash
 pip install -r scripts/requirements.txt
 python3 - <<'PY'
-import garth, getpass
-# Interactive login (prompts for email, password, and MFA code if enabled).
-garth.login(input("Garmin email: "), getpass.getpass("Garmin password: "))
+import getpass
+from pathlib import Path
+from garminconnect import Garmin
+
+email = input("Garmin email: ")
+password = getpass.getpass("Garmin password: ")
+
+# Interactive login (prompts for an MFA code if your account has it enabled).
+garmin = Garmin(email=email, password=password, prompt_mfa=lambda: input("MFA code: "))
+garmin.login("~/.garminconnect")  # saves ~/.garminconnect/garmin_tokens.json
+
 print("\nGARMIN_TOKENS secret value:\n")
-print(garth.client.dumps())
+print(Path("~/.garminconnect/garmin_tokens.json").expanduser().read_text())
 PY
 ```
 
-Copy the printed base64 string — that's your `GARMIN_TOKENS` secret.
+Copy the printed JSON — that's your `GARMIN_TOKENS` secret.
 
-> If the interactive login is blocked by Cloudflare, use a browser-login helper such as [`garmin-browser-login`](https://github.com/sidequest-scribe/garmin-browser-login) to obtain `garth`-compatible tokens, then call `garth.client.dumps()` to produce the same base64 string.
+> **Migrating from the old garth-based sync?** Tokens minted with the previous `garth` login are **not** compatible with `garminconnect`. Re-run this step to mint a fresh bundle and update the `GARMIN_TOKENS` secret.
 
 ## Step 2: Create a Google service account
 
@@ -91,7 +99,7 @@ Go to your GitHub repo → **Settings → Secrets and variables → Actions** an
 
 | Secret | Value |
 |--------|-------|
-| `GARMIN_TOKENS` | The base64 token dump from Step 1 |
+| `GARMIN_TOKENS` | The token bundle JSON from Step 1 |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | The full JSON content of the service account key file |
 | `SPREADSHEET_ID` | The ID from your spreadsheet URL (`https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit`) |
 
@@ -110,7 +118,7 @@ If you'd rather not use GitHub Actions (or want more frequent syncs), run the sc
 
 ```bash
 pip install -r scripts/requirements.txt
-export GARMIN_TOKENS="...base64 dump..."
+export GARMIN_TOKENS="$(cat ~/.garminconnect/garmin_tokens.json)"
 export GOOGLE_SERVICE_ACCOUNT_KEY="$(cat service-account.json)"
 export SPREADSHEET_ID="your-spreadsheet-id"
 python scripts/garmin-sync.py
@@ -122,9 +130,9 @@ Wire it into `cron` (or a systemd timer) to run on whatever schedule you like.
 
 | Problem | Fix |
 |---------|-----|
-| Workflow fails with "Missing GARMIN_TOKENS" | The token dump secret is not set. Re-do Step 1 and Step 4. |
+| Workflow fails with "Missing GARMIN_TOKENS" | The token bundle secret is not set. Re-do Step 1 and Step 4. |
 | Workflow fails with "Missing GOOGLE_SERVICE_ACCOUNT_KEY" | The service account key secret is not set or is malformed. Paste the entire JSON content. |
 | Workflow fails with "Missing SPREADSHEET_ID" | The spreadsheet ID secret is not set. |
-| Garmin auth fails (401 / token error) | The saved tokens likely expired (~1 year) or were revoked. Re-mint them (Step 1) and update the `GARMIN_TOKENS` secret. |
+| Garmin auth fails (401 / token error) | The saved tokens were revoked or the refresh token expired (or you migrated from the old `garth`-based sync). Re-mint them (Step 1) and update the `GARMIN_TOKENS` secret. |
 | Sheets API returns 403 | The service account doesn't have editor access to the spreadsheet. Re-do Step 3. |
 | "No new activities to sync" | All recent activities are already in the sheet. This is normal on re-runs. |

@@ -4,7 +4,7 @@
 Run with:  python scripts/test_garmin_sync.py
 
 These tests exercise only the pure ``activity_to_row`` mapping — no network,
-no Garmin/Google auth. They mirror the sheet's 10-column layout expected by
+no Garmin/Google auth. They mirror the sheet's 18-column layout expected by
 the app (src/google/config.ts).
 """
 
