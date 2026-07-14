@@ -3,7 +3,7 @@ import { Upload, FileText, AlertTriangle, Check, Loader, Unlink, Sliders } from 
 import { parseHevyCsv, convertHevyRows, computeImportSummary } from '../model/hevy-import.js';
 import { clearSheetId } from '../google/storage.js';
 import type { ImportSummary } from '../model/hevy-import.js';
-import type { AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/index.js';
+import type { AppSettings, AppBooleanSettingKey, AppNumericSettingKey } from '../model/index.js';
 
 interface Props {
   spreadsheetId: string;
@@ -12,12 +12,12 @@ interface Props {
   onDisconnectSheet: () => void;
   appSettings: AppSettings;
   onAppSettingChange: (key: AppBooleanSettingKey, value: boolean) => void;
-  onAppPercentSettingChange: (key: AppPercentSettingKey, value: number) => void;
+  onAppNumericSettingChange: (key: AppNumericSettingKey, value: number) => void;
 }
 
 type ImportPhase = 'idle' | 'preview' | 'importing' | 'done' | 'error';
 
-export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, onDisconnectSheet, appSettings, onAppSettingChange, onAppPercentSettingChange }: Props) {
+export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, onDisconnectSheet, appSettings, onAppSettingChange, onAppNumericSettingChange }: Props) {
   const [phase, setPhase] = useState<ImportPhase>('idle');
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [convertedRows, setConvertedRows] = useState<(string | number | boolean)[][] | null>(null);
@@ -142,7 +142,7 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
               value={appSettings.withingsDipThresholdPercent}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
-                if (isFinite(v) && v > 0 && v <= 100) onAppPercentSettingChange('withingsDipThresholdPercent', v);
+                if (isFinite(v) && v > 0 && v <= 100) onAppNumericSettingChange('withingsDipThresholdPercent', v);
               }}
             />
             <span className="settings-percent-unit">%</span>
@@ -164,10 +164,56 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
               value={appSettings.progressDipThresholdPercent}
               onChange={(e) => {
                 const v = parseFloat(e.target.value);
-                if (isFinite(v) && v > 0 && v <= 100) onAppPercentSettingChange('progressDipThresholdPercent', v);
+                if (isFinite(v) && v > 0 && v <= 100) onAppNumericSettingChange('progressDipThresholdPercent', v);
               }}
             />
             <span className="settings-percent-unit">%</span>
+          </div>
+        </div>
+
+        <div className="settings-subsection-title">Nutrition Goals</div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Calories</span>
+            <span className="settings-toggle-description">Used to color the nutrition summary</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={20000}
+              step={10}
+              value={appSettings.dailyCalorieGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 20000) onAppNumericSettingChange('dailyCalorieGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">cal</span>
+          </div>
+        </div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Protein</span>
+            <span className="settings-toggle-description">Used to color the nutrition summary</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={1000}
+              step={1}
+              value={appSettings.dailyProteinGoalGrams}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 1000) onAppNumericSettingChange('dailyProteinGoalGrams', v);
+              }}
+            />
+            <span className="settings-percent-unit">g</span>
           </div>
         </div>
 

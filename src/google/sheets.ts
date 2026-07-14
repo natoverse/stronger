@@ -6,7 +6,7 @@
  */
 
 import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey, GarminWellnessEntry } from '../model/types.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -2610,6 +2610,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	keepScreenOn: true,
 	withingsDipThresholdPercent: 2,
 	progressDipThresholdPercent: 10,
+	dailyCalorieGoal: 0,
+	dailyProteinGoalGrams: 0,
 }
 
 /** Settings key prefix for app-level settings. */
@@ -2622,9 +2624,11 @@ const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 	'app.keepScreenOn': 'keepScreenOn',
 }
 
-const APP_SETTING_PERCENT_KEYS: Record<string, AppPercentSettingKey> = {
-	'app.withingsDipThresholdPercent': 'withingsDipThresholdPercent',
-	'app.progressDipThresholdPercent': 'progressDipThresholdPercent',
+const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min: number; max: number }> = {
+	'app.withingsDipThresholdPercent': { field: 'withingsDipThresholdPercent', min: 0.1, max: 100 },
+	'app.progressDipThresholdPercent': { field: 'progressDipThresholdPercent', min: 0.1, max: 100 },
+	'app.dailyCalorieGoal': { field: 'dailyCalorieGoal', min: 0, max: 20000 },
+	'app.dailyProteinGoalGrams': { field: 'dailyProteinGoalGrams', min: 0, max: 1000 },
 }
 
 /**
@@ -2639,11 +2643,11 @@ export function appSettingsFromMap(settings: Map<string, string>): AppSettings {
 			result[field] = raw === 'true'
 		}
 	}
-	for (const [key, field] of Object.entries(APP_SETTING_PERCENT_KEYS)) {
+	for (const [key, { field, min, max }] of Object.entries(APP_SETTING_NUMBER_KEYS)) {
 		const raw = settings.get(key)
 		if (raw === undefined) continue
 		const value = Number(raw)
-		if (isFinite(value) && value > 0 && value <= 100) {
+		if (isFinite(value) && value >= min && value <= max) {
 			result[field] = value
 		}
 	}
@@ -2669,7 +2673,7 @@ export function appSettingsToMap(
 	for (const [key, field] of Object.entries(APP_SETTING_BOOL_KEYS)) {
 		settings.set(key, String(appSettings[field]))
 	}
-	for (const [key, field] of Object.entries(APP_SETTING_PERCENT_KEYS)) {
+	for (const [key, { field }] of Object.entries(APP_SETTING_NUMBER_KEYS)) {
 		settings.set(key, String(appSettings[field]))
 	}
 	return settings

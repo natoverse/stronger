@@ -1,7 +1,7 @@
 export type {
 	AppSettings,
 	AppBooleanSettingKey,
-	AppPercentSettingKey,
+	AppNumericSettingKey,
 	CardioActivity,
 	ComputedExercise,
 	ComputedSet,

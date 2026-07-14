@@ -10,6 +10,8 @@ type MacroInputs = typeof EMPTY_MACROS;
 interface Props {
   items: MealItem[];
   entries: MealLogEntry[];
+  dailyCalorieGoal: number;
+  dailyProteinGoalGrams: number;
   onSaveItems: (items: MealItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
   onDeleteEntry: (id: string) => void;
@@ -62,7 +64,13 @@ function macrosFrom(values: MacroInputs) {
   };
 }
 
-export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
+type GoalStatus = 'good' | 'warn' | 'over' | null;
+
+function statusClass(status: GoalStatus): string {
+  return status ? `nutrition-goal-${status}` : '';
+}
+
+export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGoalGrams, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
   const [date, setDate] = useState(localDate);
   const [showSavedForm, setShowSavedForm] = useState(false);
   const [savedName, setSavedName] = useState('');
@@ -92,6 +100,16 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
     category,
     items.filter((item) => item.category === category).sort((a, b) => a.name.localeCompare(b.name)),
   ])), [items]);
+  const calorieGoalStatus = useMemo<GoalStatus>(() => {
+    if (dailyCalorieGoal <= 0) return null;
+    if (totals.calories > dailyCalorieGoal) return 'over';
+    return totals.calories >= dailyCalorieGoal * 0.9 ? 'good' : 'warn';
+  }, [dailyCalorieGoal, totals.calories]);
+  const proteinGoalStatus = useMemo<GoalStatus>(() => {
+    if (dailyProteinGoalGrams <= 0) return null;
+    const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
+    return diff <= dailyProteinGoalGrams * 0.1 ? 'good' : 'warn';
+  }, [dailyProteinGoalGrams, totals.protein]);
 
   const quantityFor = (id: string) => {
     const value = Number(quantities[id] ?? '1');
@@ -137,9 +155,14 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
         <input aria-label="Log date" type="date" max={localDate()} value={date} onChange={(event) => setDate(event.target.value)} />
       </div>
       <section className="nutrition-totals">
-        <strong>{round(totals.calories)} cal</strong>
+        <strong className={statusClass(calorieGoalStatus)}>
+          {round(totals.calories)} cal{dailyCalorieGoal > 0 ? ` / ${round(dailyCalorieGoal)}` : ''}
+        </strong>
         <span>Fat {round(totals.fat)}g</span><span>Carbs {round(totals.carbs)}g</span>
-        <span>Fiber {round(totals.fiber)}g</span><span>Protein {round(totals.protein)}g</span>
+        <span>Fiber {round(totals.fiber)}g</span>
+        <span className={statusClass(proteinGoalStatus)}>
+          Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
+        </span>
       </section>
 
       {CATEGORIES.map((category) => {

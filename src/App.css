@@ -3435,6 +3435,15 @@ body {
 	align-items: center;
 	justify-content: space-between;
 	gap: 1rem;
+}
+
+.settings-subsection-title {
+	margin-top: 0.5rem;
+	color: var(--color-primary);
+	font-size: 0.85rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
 	padding: 0.75rem 0;
 	border-bottom: 1px solid var(--color-border);
 }
@@ -3505,6 +3514,9 @@ body {
 }
 .nutrition-totals { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 1rem 0; padding: .75rem; background: var(--color-surface); border-radius: var(--radius); }
 .nutrition-totals strong { color: var(--color-accent); }
+.nutrition-goal-good { color: #4ade80 !important; }
+.nutrition-goal-warn { color: #facc15 !important; }
+.nutrition-goal-over { color: var(--color-accent) !important; }
 .nutrition-category { margin: 1rem 0; }
 .nutrition-category h3 { margin-bottom: .35rem; }
 .nutrition-category-toggle { display: flex; align-items: center; gap: .5rem; width: 100%; padding: .55rem .7rem; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); text-align: left; }
