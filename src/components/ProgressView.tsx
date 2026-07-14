@@ -90,8 +90,6 @@ export function ProgressView({
 
   return (
     <div className="progress-view">
-      <h2 className="progress-title">Progress</h2>
-
       {lifts.length === 0 ? (
         <p className="progress-empty">No logged strength data yet. Complete a workout to see progress charts.</p>
       ) : (
