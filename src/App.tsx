@@ -3,7 +3,7 @@ import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, Prog
 import { computeProgression } from './model/index.js';
 import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealItems, writeMealItems, readMealLog, appendMealLogEntry, deleteMealLogEntry, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
-import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, performBackup, BACKUP_SETTING_KEY, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
+import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -253,8 +253,6 @@ function App() {
           endTime,
         ).then(() => {
           void loadLogData(sid);
-          // Fire-and-forget backup after successful save
-          void runBackup(sid, settingsRef.current);
         });
       }
 
@@ -1479,27 +1477,4 @@ async function logWorkoutResults(
   }
 
   await withAuthRetry(() => appendLogRows(sheetId, rows));
-}
-
-/**
- * Run a full backup of all tabs to the backup spreadsheet.
- * If a new backup sheet is created, the backup ID is persisted in app settings.
- * Errors are silently caught — backup should never block the user.
- */
-async function runBackup(
-  sheetId: string,
-  settings: Map<string, string>,
-): Promise<void> {
-  try {
-    const backupId = await withAuthRetry(() => performBackup(sheetId, settings));
-
-    // Persist the backup spreadsheet ID in settings if it's new or changed
-    if (backupId && settings.get(BACKUP_SETTING_KEY) !== backupId) {
-      settings.set(BACKUP_SETTING_KEY, backupId);
-      await withAuthRetry(() => writeSettings(sheetId, settings));
-    }
-  } catch {
-    // Backup is best-effort — don't disrupt the user's workflow
-    console.warn('Backup failed — will retry on next workout save');
-  }
 }
