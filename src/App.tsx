@@ -71,7 +71,7 @@ function App() {
   const flagsLoadedRef = useRef(false);
   const workoutScheduleLoadedRef = useRef(false);
   const logLoadedRef = useRef(false);
-  const stravaLoadedRef = useRef(false);
+  const settingsLoadedRef = useRef(false);
   const garminLoadedRef = useRef(false);
   const wellnessLoadedRef = useRef(false);
   const withingsLoadedRef = useRef(false);
@@ -90,7 +90,7 @@ function App() {
       flagsLoadedRef.current = false;
       workoutScheduleLoadedRef.current = false;
       logLoadedRef.current = false;
-      stravaLoadedRef.current = false;
+      settingsLoadedRef.current = false;
       garminLoadedRef.current = false;
       wellnessLoadedRef.current = false;
       withingsLoadedRef.current = false;
@@ -163,7 +163,7 @@ function App() {
     flagsLoadedRef.current = false;
     workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
-    stravaLoadedRef.current = false;
+    settingsLoadedRef.current = false;
     garminLoadedRef.current = false;
     wellnessLoadedRef.current = false;
     withingsLoadedRef.current = false;
@@ -349,7 +349,7 @@ function App() {
     }
   }, []);
 
-  const loadStravaData = useCallback(async (sheetId: string) => {
+  const loadSettingsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
         const settingsTabExists = await verifySettingsTab(sheetId);
@@ -1078,30 +1078,26 @@ function App() {
 
   // Load settings once after connecting (used across multiple views, including toolbar tab visibility).
   useEffect(() => {
-    if (spreadsheetId && !stravaLoadedRef.current) {
-      stravaLoadedRef.current = true;
-      void loadStravaData(spreadsheetId);
+    if (spreadsheetId && !settingsLoadedRef.current) {
+      settingsLoadedRef.current = true;
+      void loadSettingsData(spreadsheetId);
     }
-  }, [spreadsheetId, loadStravaData]);
+  }, [spreadsheetId, loadSettingsData]);
 
-  // Keep legacy wellness links working by redirecting to the combined garmin page.
   useEffect(() => {
     if (route.view === 'wellness') {
       replaceTo(appSettings.showGarminTab ? { view: 'garmin' } : { view: 'list' });
+      return;
     }
-  }, [route.view, appSettings.showGarminTab, replaceTo]);
-
-  useEffect(() => {
     if (route.view === 'garmin' && !appSettings.showGarminTab) {
       replaceTo({ view: 'list' });
+      return;
     }
-  }, [route.view, appSettings.showGarminTab, replaceTo]);
-
-  useEffect(() => {
     if (route.view === 'nutrition' && !appSettings.showNutritionTab) {
       replaceTo({ view: 'list' });
+      return;
     }
-  }, [route.view, appSettings.showNutritionTab, replaceTo]);
+  }, [route.view, appSettings.showGarminTab, appSettings.showNutritionTab, replaceTo]);
 
   // Lazy-load Garmin activities when the combined activities/wellness view is first visited.
   useEffect(() => {
@@ -1120,7 +1116,7 @@ function App() {
   }, [route.view, spreadsheetId, loadWellnessData]);
 
   // Lazy-load Withings measurements when the withings view is first visited.
-  // (Body-composition goals arrive via the settings read in loadStravaData.)
+  // (Body-composition goals arrive via the settings read in loadSettingsData.)
   useEffect(() => {
     if (route.view === 'withings' && spreadsheetId && !withingsLoadedRef.current) {
       withingsLoadedRef.current = true;
