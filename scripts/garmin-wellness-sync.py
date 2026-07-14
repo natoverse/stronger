@@ -120,7 +120,8 @@ def _fetch_hrv(client, cdate: str) -> dict:
             "hrvWeeklyAvg":  _num(summary.get("weeklyAvg"), 0),
             "hrvStatus":     str(summary.get("status") or ""),
         }
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] hrv: {exc}", file=sys.stderr)
         return {}
 
 
@@ -149,7 +150,8 @@ def _fetch_sleep(client, cdate: str) -> dict:
             "sleepAwakeSec":    _num(dto.get("awakeSleepSeconds"), 0),
             "sleepScore":       _num(score, 0),
         }
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] sleep: {exc}", file=sys.stderr)
         return {}
 
 
@@ -169,7 +171,8 @@ def _fetch_readiness(client, cdate: str) -> dict:
         elif isinstance(data, dict):
             entry = data
         return {"readinessScore": _num(entry.get("score"), 0)}
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] readiness: {exc}", file=sys.stderr)
         return {}
 
 
@@ -191,7 +194,8 @@ def _fetch_training_status(client, cdate: str) -> dict:
             "trainingAcuteLoad":   _num(entry.get("acuteLoad"), 1),
             "trainingChronicLoad": _num(entry.get("chronicLoad"), 1),
         }
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] training_status: {exc}", file=sys.stderr)
         return {}
 
 
@@ -211,7 +215,8 @@ def _fetch_daily_summary(client, cdate: str) -> dict:
             "intensityMinModerate": _num(data.get("moderateIntensityMinutes"), 0),
             "intensityMinVigorous": _num(data.get("vigorousIntensityMinutes"), 0),
         }
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] daily_summary: {exc}", file=sys.stderr)
         return {}
 
 
@@ -230,7 +235,8 @@ def _fetch_vo2max(client, cdate: str) -> dict:
             val = running[0].get("value") if isinstance(running[0], dict) else running[0]
             return {"vo2Max": _num(val, 1)}
         return {}
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] vo2max: {exc}", file=sys.stderr)
         return {}
 
 
@@ -249,7 +255,8 @@ def _fetch_hill_score(client, cdate: str) -> dict:
                 if items:
                     val = items[0].get("value") if isinstance(items[0], dict) else items[0]
         return {"hillScore": _num(val, 1)}
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] hill_score: {exc}", file=sys.stderr)
         return {}
 
 
@@ -270,7 +277,8 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
                 if items:
                     val = items[0].get("value") if isinstance(items[0], dict) else items[0]
         return {"enduranceScore": _num(val, 1)}
-    except Exception:
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] endurance_score: {exc}", file=sys.stderr)
         return {}
 
 
