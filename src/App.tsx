@@ -1084,9 +1084,17 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadStravaData]);
 
+  // Keep legacy wellness links working by redirecting to the combined garmin page.
+  useEffect(() => {
+    if (route.view === 'wellness') {
+      // Preserves existing bookmarks/external links that still use #/wellness.
+      replaceTo({ view: 'garmin' });
+    }
+  }, [route.view, replaceTo]);
+
   // Lazy-load Garmin activities when the combined activities/wellness view is first visited.
   useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'wellness') && spreadsheetId && !garminLoadedRef.current) {
+    if (route.view === 'garmin' && spreadsheetId && !garminLoadedRef.current) {
       garminLoadedRef.current = true;
       void loadGarminData(spreadsheetId);
     }
@@ -1094,7 +1102,7 @@ function App() {
 
   // Lazy-load Garmin wellness data when the combined activities/wellness view is first visited.
   useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'wellness') && spreadsheetId && !wellnessLoadedRef.current) {
+    if (route.view === 'garmin' && spreadsheetId && !wellnessLoadedRef.current) {
       wellnessLoadedRef.current = true;
       void loadWellnessData(spreadsheetId);
     }
@@ -1318,7 +1326,7 @@ function App() {
   }
 
 
-  if (route.view === 'garmin' || route.view === 'wellness') {
+  if (route.view === 'garmin') {
     return (
       <>
         <GoogleAuth

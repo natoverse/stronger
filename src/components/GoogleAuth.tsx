@@ -430,7 +430,7 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 	}
 
 	// phase === 'connected'
-	const onOpenActivityWellness = onOpenGarmin ?? onOpenWellness
+	const onOpenGarminWellness = onOpenGarmin || onOpenWellness
 
 	return (
 		<div className="auth-connected">
@@ -455,8 +455,8 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 						<TrendingUp size={20} />
 					</button>
 				)}
-				{onOpenActivityWellness && (
-					<button className="btn-toolbar" onClick={onOpenActivityWellness} title="Activities & Wellness">
+				{onOpenGarminWellness && (
+					<button className="btn-toolbar" onClick={onOpenGarminWellness} title="Activities & Wellness">
 						<Watch size={20} />
 					</button>
 				)}
