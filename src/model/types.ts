@@ -360,10 +360,18 @@ export interface AppSettings {
 	withingsDipThresholdPercent: number;
 	/** Percent drop threshold for filtering progress-chart dips when Skip Dips is enabled. */
 	progressDipThresholdPercent: number;
+	/** Daily calorie target used in the nutrition summary (0 disables goal coloring). */
+	dailyCalorieGoal: number;
+	/** Daily protein target in grams used in the nutrition summary (0 disables goal coloring). */
+	dailyProteinGoalGrams: number;
 }
 
 export type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
-export type AppPercentSettingKey = 'withingsDipThresholdPercent' | 'progressDipThresholdPercent';
+export type AppPercentSettingKey =
+	| 'withingsDipThresholdPercent'
+	| 'progressDipThresholdPercent'
+	| 'dailyCalorieGoal'
+	| 'dailyProteinGoalGrams';
 
 // ---------------------------------------------------------------------------
 // Layer 8 – Garmin Wellness (daily metrics from Garmin Connect)

@@ -171,6 +171,52 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
           </div>
         </div>
 
+        <div className="settings-subsection-title">Nutrition Goals</div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Calories</span>
+            <span className="settings-toggle-description">Used to color the nutrition summary</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={20000}
+              step={10}
+              value={appSettings.dailyCalorieGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 20000) onAppPercentSettingChange('dailyCalorieGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">cal</span>
+          </div>
+        </div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Protein</span>
+            <span className="settings-toggle-description">Used to color the nutrition summary</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={1000}
+              step={1}
+              value={appSettings.dailyProteinGoalGrams}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 1000) onAppPercentSettingChange('dailyProteinGoalGrams', v);
+              }}
+            />
+            <span className="settings-percent-unit">g</span>
+          </div>
+        </div>
+
       </div>
 
       <div className="settings-section" style={{ marginTop: '1.5rem' }}>

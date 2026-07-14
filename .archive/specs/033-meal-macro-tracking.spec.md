@@ -28,3 +28,9 @@ Add lightweight food and drink tracking for calories, fat, carbs, fiber, and pro
 ## Iteration log
 
 - Feature shipped in `Add meal and macro tracking`, then refined by polish commits: hardened meal entry validation (reject blank/unknown/negative rows), avoided fallback meal ID collisions, polished the Quick Add form, and aligned the macro field labels. Serving quantity, per-entry deletion, collapsible category panels, and the standalone "Today's Meals" section followed (see the iteration section above).
+
+## Iteration: daily calorie/protein goals in settings (2026-07)
+
+- Added two app-level nutrition settings persisted in the Settings tab (`app.dailyCalorieGoal`, `app.dailyProteinGoalGrams`) with defaults of `0` (disabled).
+- The Nutrition summary now colors calorie/protein progress against goals: green when within 10% of the target, yellow when outside that band, and pink for calories when intake exceeds the calorie goal.
+- Goals are configured in Settings under a new Nutrition Goals section, and the daily totals now show current value alongside goal when configured.

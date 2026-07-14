@@ -168,6 +168,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			['app.keepScreenOn', 'true'],
 			['app.withingsDipThresholdPercent', '2.5'],
 			['app.progressDipThresholdPercent', '7.5'],
+			['app.dailyCalorieGoal', '2500'],
+			['app.dailyProteinGoalGrams', '180'],
 		])
 		expect(appSettingsFromMap(settings)).toEqual({
 			showRestTimer: false,
@@ -175,6 +177,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			keepScreenOn: true,
 			withingsDipThresholdPercent: 2.5,
 			progressDipThresholdPercent: 7.5,
+			dailyCalorieGoal: 2500,
+			dailyProteinGoalGrams: 180,
 		})
 	})
 
@@ -182,6 +186,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		const settings = new Map<string, string>([
 			['app.withingsDipThresholdPercent', '-1'],
 			['app.progressDipThresholdPercent', '0'],
+			['app.dailyCalorieGoal', '-100'],
+			['app.dailyProteinGoalGrams', '2000'],
 		])
 		expect(appSettingsFromMap(settings)).toEqual(DEFAULT_APP_SETTINGS)
 	})
@@ -199,6 +205,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			keepScreenOn: false,
 			withingsDipThresholdPercent: 3,
 			progressDipThresholdPercent: 6,
+			dailyCalorieGoal: 2200,
+			dailyProteinGoalGrams: 160,
 		}
 		appSettingsToMap(appSettings, settings)
 		expect(settings.get('theme')).toBe('dark')
@@ -207,5 +215,7 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		expect(settings.get('app.keepScreenOn')).toBe('false')
 		expect(settings.get('app.withingsDipThresholdPercent')).toBe('3')
 		expect(settings.get('app.progressDipThresholdPercent')).toBe('6')
+		expect(settings.get('app.dailyCalorieGoal')).toBe('2200')
+		expect(settings.get('app.dailyProteinGoalGrams')).toBe('160')
 	})
 })

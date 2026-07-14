@@ -1410,6 +1410,8 @@ function App() {
         <NutritionView
           items={mealItems}
           entries={mealLog}
+          dailyCalorieGoal={appSettings.dailyCalorieGoal}
+          dailyProteinGoalGrams={appSettings.dailyProteinGoalGrams}
           onSaveItems={handleSaveMealItems}
           onLogEntry={handleLogMealEntry}
           onDeleteEntry={handleDeleteMealEntry}
