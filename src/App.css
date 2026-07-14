@@ -3858,3 +3858,29 @@ body {
 	fill: #fff;
 	filter: drop-shadow(0 0 4px var(--color-primary));
 }
+
+/* ------------------------------------------------------------------ */
+/*  Garmin Wellness View                                               */
+/* ------------------------------------------------------------------ */
+
+.wellness-status-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 12px;
+	margin: 4px 0 8px;
+}
+
+.wellness-status-legend-item {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 0.65rem;
+	color: rgba(255, 255, 255, 0.6);
+}
+
+.wellness-status-legend-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
