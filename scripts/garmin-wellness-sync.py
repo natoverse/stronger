@@ -51,8 +51,8 @@ HEADER = [
     "intensityMinModerate", "intensityMinVigorous",
     "hillScore", "enduranceScore",
 ]
-COLUMN_COUNT = len(HEADER)   # 24 → A:X
-assert COLUMN_COUNT == 24, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # 23 → A:W
+assert COLUMN_COUNT == 23, "Header count mismatch"
 
 ROLLING_DAYS = 14
 BACKFILL_START_DATE = "2021-01-01"
