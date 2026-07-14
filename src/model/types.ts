@@ -367,7 +367,7 @@ export interface AppSettings {
 }
 
 export type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
-export type AppPercentSettingKey =
+export type AppNumericSettingKey =
 	| 'withingsDipThresholdPercent'
 	| 'progressDipThresholdPercent'
 	| 'dailyCalorieGoal'

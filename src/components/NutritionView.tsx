@@ -161,7 +161,7 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
         <span>Fat {round(totals.fat)}g</span><span>Carbs {round(totals.carbs)}g</span>
         <span>Fiber {round(totals.fiber)}g</span>
         <span className={statusClass(proteinGoalStatus)}>
-          Protein {round(totals.protein)}g{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}g` : ''}
+          Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
         </span>
       </section>
 
