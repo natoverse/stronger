@@ -79,6 +79,50 @@ def _num(v, decimals: int = 1) -> str:
         return ""
 
 
+def _extract_metric_value(raw, *metric_keys: str):
+    """Best-effort extract of the first metric value from Garmin metric payloads."""
+    if not raw:
+        return None
+
+    def _coerce_metric_value(value):
+        if isinstance(value, dict):
+            for key in ("value", "overallScore", "latestScore"):
+                candidate = value.get(key)
+                if candidate is not None:
+                    return candidate
+            return None
+        if isinstance(value, list) and value:
+            return _coerce_metric_value(value[-1])
+        return value
+
+    items = raw if isinstance(raw, list) else [raw]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+
+        for key in metric_keys:
+            direct = _coerce_metric_value(item.get(key))
+            if direct is not None:
+                return direct
+
+        for container_key in ("generic", "running", "cycling"):
+            container = item.get(container_key)
+            if not isinstance(container, dict):
+                continue
+            for key in metric_keys:
+                direct = _coerce_metric_value(container.get(key))
+                if direct is not None:
+                    return direct
+
+        metrics_map = (item.get("allMetrics") or {}).get("metricsMap") or {}
+        for metric_key in metric_keys:
+            entries = _coerce_metric_value(metrics_map.get(metric_key))
+            if entries is not None:
+                return entries
+
+    return None
+
+
 def _date_range(start: str, end: str) -> list[str]:
     """Inclusive list of YYYY-MM-DD strings from start to end."""
     cur = date.fromisoformat(start)
@@ -229,20 +273,17 @@ def _fetch_daily_summary(client, cdate: str) -> dict:
 def _fetch_vo2max(client, cdate: str) -> dict:
     try:
         data = client.get_max_metrics(cdate)
-        if not data:
-            return {}
-        # Response is a list of metric objects; each has an
-        # allMetrics.metricsMap.VO2_MAX_RUNNING list with {value: ...} entries.
-        items = data if isinstance(data, list) else [data]
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            metrics_map = (item.get("allMetrics") or {}).get("metricsMap") or {}
-            running = metrics_map.get("VO2_MAX_RUNNING") or []
-            if running and isinstance(running, list):
-                val = running[0].get("value") if isinstance(running[0], dict) else running[0]
-                return {"vo2Max": _num(val, 1)}
-        return {}
+        val = _extract_metric_value(
+            data,
+            "vo2MaxRunning",
+            "vo2MaxPreciseValue",
+            "vo2MaxValue",
+            "genericVO2MaxValue",
+            "VO2MAX_RUNNING",
+            "VO2_MAX_RUNNING",
+            "GENERIC_VO2_MAX",
+        )
+        return {"vo2Max": _num(val, 1)} if val is not None else {}
     except Exception as exc:
         print(f"  WARNING [{cdate}] vo2max: {exc}", file=sys.stderr)
         return {}
@@ -251,17 +292,7 @@ def _fetch_vo2max(client, cdate: str) -> dict:
 def _fetch_hill_score(client, cdate: str) -> dict:
     try:
         data = client.get_hill_score(cdate)
-        if not data:
-            return {}
-        val = None
-        if isinstance(data, dict):
-            val = data.get("value")
-            if val is None:
-                # Nested metricsMap response
-                mm = (data.get("allMetrics") or {}).get("metricsMap") or {}
-                items = mm.get("HILL_SCORE") or []
-                if items:
-                    val = items[0].get("value") if isinstance(items[0], dict) else items[0]
+        val = _extract_metric_value(data, "overallScore", "hillScore", "score", "value", "HILL_SCORE")
         return {"hillScore": _num(val, 1)}
     except Exception as exc:
         print(f"  WARNING [{cdate}] hill_score: {exc}", file=sys.stderr)
@@ -271,19 +302,14 @@ def _fetch_hill_score(client, cdate: str) -> dict:
 def _fetch_endurance_score(client, cdate: str) -> dict:
     try:
         data = client.get_endurance_score(cdate)
-        if not data:
-            return {}
-        val = None
-        if isinstance(data, dict):
-            val = (
-                data.get("value")
-                or (data.get("enduranceScore") or {}).get("latestScore")
-            )
-            if val is None:
-                mm = (data.get("allMetrics") or {}).get("metricsMap") or {}
-                items = mm.get("ENDURANCE_SCORE") or []
-                if items:
-                    val = items[0].get("value") if isinstance(items[0], dict) else items[0]
+        val = _extract_metric_value(
+            data,
+            "overallScore",
+            "score",
+            "value",
+            "ENDURANCE_SCORE",
+            "latestScore",
+        )
         return {"enduranceScore": _num(val, 1)}
     except Exception as exc:
         print(f"  WARNING [{cdate}] endurance_score: {exc}", file=sys.stderr)

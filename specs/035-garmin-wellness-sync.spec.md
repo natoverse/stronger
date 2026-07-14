@@ -104,3 +104,9 @@ Verified all fields against the real Garmin Connect API response structures usin
 2. **`_fetch_training_status` — completely wrong keys**: The response uses `mostRecentTrainingStatus → latestTrainingStatusData → {sportKey: {trainingStatus, acuteTrainingLoadDTO: {dailyTrainingLoadAcute, dailyTrainingLoadChronic}}}`, not `trainingStatusDTO → latestTrainingStatusWeek → {acuteLoad, chronicLoad}`. Fixed to use the correct path.
 
 3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.
+
+## Follow-up extraction hardening
+
+- Garmin exposes VO2 max in more than one shape depending on the endpoint payload and device profile. The sync now accepts top-level `generic`/`running` containers, direct `vo2Max*` keys, and both `VO2MAX_RUNNING` and `VO2_MAX_RUNNING` metric-map variants.
+- Hill score and endurance score also arrive as direct `overallScore` values in some single-day responses, not only under `allMetrics.metricsMap.*`. The sync now prefers those single-day score fields and keeps the older metric-map fallback paths for compatibility.
+- Added `scripts/test_garmin_wellness_sync.py` as an offline regression harness for these alternative response shapes so future Garmin API drift is easier to catch locally.
