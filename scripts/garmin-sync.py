@@ -17,8 +17,13 @@ Environment variables (all required):
   GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account
   SPREADSHEET_ID              – Google Sheets spreadsheet ID
 
+Flags:
+  --backfill  One-time import of full history since ``BACKFILL_START_DATE``
+              (2021-01-01) instead of the rolling recent-activity fetch. Dedup
+              by activity ID keeps it idempotent.
+
 Usage:
-  python scripts/garmin-sync.py
+  python scripts/garmin-sync.py [--backfill]
 """
 
 from __future__ import annotations
@@ -27,6 +32,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 from urllib.parse import quote
 
@@ -59,6 +65,11 @@ HEADER = [
 COLUMN_COUNT = len(HEADER)  # 18 -> columns A:R
 ACTIVITY_LIMIT = 30
 
+# One-time backfill window (used only with the --backfill flag): 2021-01-01.
+# Matches the earliest year selectable in the in-app year picker (and the
+# Withings sync's backfill start).
+BACKFILL_START_DATE = "2021-01-01"
+
 
 # ---------------------------------------------------------------------------
 # Garmin Connect (via garminconnect)
@@ -86,6 +97,19 @@ def login_from_tokens(token_bundle):
 def fetch_recent_activities(client, limit=ACTIVITY_LIMIT):
     """Fetch the most recent activities from Garmin Connect."""
     activities = client.get_activities(0, limit)
+    return activities or []
+
+
+def fetch_activities_since(client, start_date):
+    """Fetch every activity on/after ``start_date`` (inclusive).
+
+    ``start_date`` is a ``YYYY-MM-DD`` string. Used for one-time backfills
+    (e.g. pulling history back to 2021). Garmin Connect keeps your full
+    history, so the only limit on how far back this reaches is the date you
+    pass. ``get_activities_by_date`` pages through the range internally.
+    """
+    today = date.today().isoformat()
+    activities = client.get_activities_by_date(start_date, today)
     return activities or []
 
 
@@ -259,6 +283,7 @@ def main():
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
     service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
     spreadsheet_id = os.environ.get("SPREADSHEET_ID")
+    backfill = "--backfill" in sys.argv
 
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
@@ -271,9 +296,16 @@ def main():
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
 
-    # 2. Fetch recent activities.
-    print("Fetching recent activities from Garmin Connect...")
-    activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
+    # 2. Fetch activities. Normally the most recent activities for the daily
+    #    incremental sync; with --backfill, everything since BACKFILL_START_DATE
+    #    for a one-time import of full history. Dedup by activity ID keeps both
+    #    safe to re-run.
+    if backfill:
+        print(f"Backfilling all activities since {BACKFILL_START_DATE}...")
+        activities = fetch_activities_since(garmin, BACKFILL_START_DATE)
+    else:
+        print("Fetching recent activities from Garmin Connect...")
+        activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
     print(f"Fetched {len(activities)} activities from Garmin.")
 
     # 3. Authenticate with Google Sheets.

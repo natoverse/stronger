@@ -28,6 +28,10 @@ interface Props {
   activities: StravaActivity[];
   goals: StravaGoal[];
   onGoalChange?: (metric: StravaMetric, value: number | null) => void;
+  /** Heading shown at the top of the view. Defaults to "Activities". */
+  title?: string;
+  /** Message shown when there are no activities. */
+  emptyText?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -52,7 +56,7 @@ const AGGREGATION_OPTIONS: { value: StravaAggregation; label: string }[] = [
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function StravaView({ activities, goals, onGoalChange }: Props) {
+export function StravaView({ activities, goals, onGoalChange, title = 'Activities', emptyText = 'No Strava data yet. Set up sync to see activity charts.' }: Props) {
   const [range, setRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [aggregation, setAggregation] = useState<StravaAggregation>('week');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -147,9 +151,9 @@ export function StravaView({ activities, goals, onGoalChange }: Props) {
   if (activities.length === 0) {
     return (
       <div className="strava-view">
-        <h2 className="strava-title">Activities</h2>
+        <h2 className="strava-title">{title}</h2>
         <p className="strava-empty">
-          No Strava data yet. Set up sync to see activity charts.
+          {emptyText}
         </p>
       </div>
     );
@@ -157,7 +161,7 @@ export function StravaView({ activities, goals, onGoalChange }: Props) {
 
   return (
     <div className="strava-view">
-      <h2 className="strava-title">Activities</h2>
+      <h2 className="strava-title">{title}</h2>
 
       {/* Time range selector */}
       <div className="strava-range-group">

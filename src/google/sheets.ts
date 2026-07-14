@@ -5,7 +5,7 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME } from './config.ts'
 import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
@@ -2038,6 +2038,133 @@ export async function readStravaActivities(
 
 	return rawRows
 		.map(parseStravaRow)
+		.filter((r): r is StravaActivity => r !== null)
+}
+
+/* ------------------------------------------------------------------ */
+/*  Garmin tab – constants                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * A1 range for reading Garmin data (row 2 onward, open-ended, 18 columns).
+ * The tab is written by `scripts/garmin-sync.py`; the app only reads it.
+ */
+const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:R`
+
+/**
+ * Column order of the "Stronger - Garmin" tab (see scripts/garmin-sync.py).
+ * Only a subset is consumed by the activity charts.
+ */
+const GARMIN_COL = {
+	date: 0,
+	activityId: 1,
+	activityType: 2,
+	name: 3,
+	duration: 4,
+	distance: 6,
+	elevationGain: 7,
+	calories: 9,
+	avgHR: 10,
+	maxHR: 11,
+} as const
+
+/* ------------------------------------------------------------------ */
+/*  Garmin tab – serialization                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Normalize a Garmin `activityType` key into a human-readable label that
+ * matches Strava's vocabulary where possible, so the two activity views are
+ * directly comparable. Garmin uses snake_case keys (e.g. `strength_training`,
+ * `lap_swimming`); we title-case them and map strength workouts onto the
+ * label Strava uses (`Weight Training`) so they're classified consistently.
+ */
+export function normalizeGarminActivityType(typeKey: string): string {
+	const key = typeKey.trim().toLowerCase()
+	if (!key) return ''
+	if (key === 'strength_training') return 'Weight Training'
+	return key
+		.split('_')
+		.filter(Boolean)
+		.map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+		.join(' ')
+}
+
+/**
+ * Parse a single raw Garmin row into a {@link StravaActivity}. The Garmin tab
+ * carries a richer schema, but we map the shared subset so the activity charts
+ * (built for Strava) can render Garmin data unchanged.
+ * Returns `null` for incomplete or invalid rows.
+ */
+export function parseGarminRow(row: string[]): StravaActivity | null {
+	// Need at least through the maxHR column (index 11).
+	if (!row || row.length < GARMIN_COL.maxHR + 1) return null
+
+	const date = (row[GARMIN_COL.date] ?? '').trim()
+	const activityId = (row[GARMIN_COL.activityId] ?? '').trim()
+	const activityType = normalizeGarminActivityType(row[GARMIN_COL.activityType] ?? '')
+	const name = (row[GARMIN_COL.name] ?? '').trim()
+
+	if (!date || !activityId || !activityType) return null
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+
+	const duration = Number((row[GARMIN_COL.duration] ?? '').trim())
+	const distance = Number((row[GARMIN_COL.distance] ?? '').trim())
+	const elevationGain = Number((row[GARMIN_COL.elevationGain] ?? '').trim())
+	const calories = Number((row[GARMIN_COL.calories] ?? '').trim())
+	const avgHR = Number((row[GARMIN_COL.avgHR] ?? '').trim())
+	const maxHR = Number((row[GARMIN_COL.maxHR] ?? '').trim())
+
+	if (!Number.isFinite(duration) || duration < 0) return null
+	if (!Number.isFinite(distance) || distance < 0) return null
+	if (!Number.isFinite(elevationGain) || elevationGain < 0) return null
+	if (!Number.isFinite(calories) || calories < 0) return null
+	if (!Number.isFinite(avgHR) || avgHR < 0) return null
+	if (!Number.isFinite(maxHR) || maxHR < 0) return null
+
+	return { date, stravaId: activityId, activityType, name, duration, distance, elevationGain, calories, avgHR, maxHR }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Garmin tab – read                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Check if the Garmin tab exists in the spreadsheet.
+ */
+export async function verifyGarminTab(
+	spreadsheetId: string,
+): Promise<boolean> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.get({
+		spreadsheetId,
+	})
+	const sheets = response.result.sheets ?? []
+	return sheets.some((s) => s.properties.title === GARMIN_TAB_NAME)
+}
+
+/**
+ * Read the Garmin tab and return parsed activities.
+ * Returns an empty array if the tab is missing or has no valid rows.
+ */
+export async function readGarminActivities(
+	spreadsheetId: string,
+): Promise<StravaActivity[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+
+	const response = await gapi.client.sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: GARMIN_READ_RANGE,
+	})
+
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return []
+
+	return rawRows
+		.map(parseGarminRow)
 		.filter((r): r is StravaActivity => r !== null)
 }
 

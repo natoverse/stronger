@@ -5,6 +5,11 @@ on:
     # Run daily at 06:00 UTC
     - cron: '0 6 * * *'
   workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Backfill full history since 2021-01-01 (one-time import) instead of the rolling recent-activity fetch'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,4 +34,4 @@ jobs:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-        run: python scripts/garmin-sync.py
+        run: python scripts/garmin-sync.py ${{ inputs.backfill && '--backfill' || '' }}

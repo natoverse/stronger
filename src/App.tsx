@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealItem, MealLogEntry, AppSettings, AppBooleanSettingKey, AppPercentSettingKey } from './model/index.js';
 import { computeProgression } from './model/index.js';
-import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealItems, writeMealItems, readMealLog, appendMealLogEntry, deleteMealLogEntry, readStravaActivities, verifyStravaTab, createStravaTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealItems, writeMealItems, readMealLog, appendMealLogEntry, deleteMealLogEntry, readStravaActivities, verifyStravaTab, createStravaTab, readGarminActivities, verifyGarminTab, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
@@ -53,6 +53,7 @@ function App() {
   const [mealLog, setMealLog] = useState<MealLogEntry[]>([]);
   const [stravaActivities, setStravaActivities] = useState<StravaActivity[]>([]);
   const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
+  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
   const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
   const [liftGoals, setLiftGoals] = useState<LiftGoal[]>([]);
@@ -70,6 +71,7 @@ function App() {
   const workoutScheduleLoadedRef = useRef(false);
   const logLoadedRef = useRef(false);
   const stravaLoadedRef = useRef(false);
+  const garminLoadedRef = useRef(false);
   const withingsLoadedRef = useRef(false);
   const nutritionLoadedRef = useRef(false);
 
@@ -87,6 +89,7 @@ function App() {
       workoutScheduleLoadedRef.current = false;
       logLoadedRef.current = false;
       stravaLoadedRef.current = false;
+      garminLoadedRef.current = false;
       withingsLoadedRef.current = false;
       nutritionLoadedRef.current = false;
     },
@@ -148,6 +151,7 @@ function App() {
     setNeedsSetup(false);
     setCardioActivities([]);
     setStravaActivities([]);
+    setGarminActivities([]);
     setWithingsMeasurements([]);
     setWithingsGoals([]);
     setMealItems([]);
@@ -157,6 +161,7 @@ function App() {
     workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
     stravaLoadedRef.current = false;
+    garminLoadedRef.current = false;
     withingsLoadedRef.current = false;
     nutritionLoadedRef.current = false;
     replaceTo({ view: 'list' });
@@ -368,6 +373,23 @@ function App() {
       });
     } catch {
       // Silently ignore — settings data is optional
+    }
+  }, []);
+
+  const loadGarminData = useCallback(async (sheetId: string) => {
+    try {
+      await withAuthRetry(async () => {
+        const tabExists = await verifyGarminTab(sheetId);
+        if (!tabExists) {
+          // The Garmin tab is created by the sync script, not the app.
+          setGarminActivities([]);
+          return;
+        }
+        const activities = await readGarminActivities(sheetId);
+        setGarminActivities(activities);
+      });
+    } catch {
+      // Silently ignore — Garmin data is optional
     }
   }, []);
 
@@ -748,6 +770,10 @@ function App() {
     navigateTo({ view: 'strava' });
   }, [navigateTo]);
 
+  const handleOpenGarmin = useCallback(() => {
+    navigateTo({ view: 'garmin' });
+  }, [navigateTo]);
+
   const handleOpenWithings = useCallback(() => {
     navigateTo({ view: 'withings' });
   }, [navigateTo]);
@@ -1050,6 +1076,14 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadStravaData]);
 
+  // Lazy-load Garmin activities when the garmin view is first visited.
+  useEffect(() => {
+    if (route.view === 'garmin' && spreadsheetId && !garminLoadedRef.current) {
+      garminLoadedRef.current = true;
+      void loadGarminData(spreadsheetId);
+    }
+  }, [route.view, spreadsheetId, loadGarminData]);
+
   // Lazy-load Withings measurements when the withings view is first visited.
   // (Body-composition goals arrive via the settings read in loadStravaData.)
   useEffect(() => {
@@ -1087,6 +1121,7 @@ function App() {
   }
 
   const onOpenStrava = handleOpenStrava;
+  const onOpenGarmin = handleOpenGarmin;
   const onOpenWithings = handleOpenWithings;
 
   // Show progression review / confirm page after clicking Finish
@@ -1133,6 +1168,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1158,6 +1194,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1185,6 +1222,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1212,6 +1250,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1247,6 +1286,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1272,6 +1312,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1280,6 +1321,32 @@ function App() {
           activities={stravaActivities}
           goals={stravaGoals}
           onGoalChange={handleStravaGoalChange}
+        />
+      </>
+    );
+  }
+
+  if (route.view === 'garmin') {
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onGoToList={handleGoToList}
+          onOpenCalendar={handleOpenCalendar}
+          onOpenExercises={handleOpenExercises}
+          onOpenProgress={handleOpenProgress}
+          onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
+          onOpenWithings={onOpenWithings}
+          onOpenNutrition={handleOpenNutrition}
+          onOpenSettings={handleOpenSettings}
+        />
+        <StravaView
+          activities={garminActivities}
+          goals={[]}
+          title="Garmin"
+          emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
         />
       </>
     );
@@ -1296,6 +1363,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1321,6 +1389,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1347,6 +1416,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1384,6 +1454,7 @@ function App() {
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenStrava={onOpenStrava}
+          onOpenGarmin={onOpenGarmin}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1408,6 +1479,7 @@ function App() {
         onOpenExercises={handleOpenExercises}
         onOpenProgress={handleOpenProgress}
         onOpenStrava={onOpenStrava}
+        onOpenGarmin={onOpenGarmin}
         onOpenWithings={onOpenWithings}
         onOpenNutrition={handleOpenNutrition}
         onOpenSettings={handleOpenSettings}

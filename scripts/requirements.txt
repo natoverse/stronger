@@ -1,9 +1,9 @@
 # Dependencies for scripts/garmin-sync.py
 #
 # garminconnect – Garmin Connect auth + API client (the engine GarminDB now
-#                 uses). Replaced the deprecated `garth`; its multi-strategy
-#                 login with curl_cffi TLS impersonation restores fully headless
-#                 auth. See specs/031-garmin-direct-sync.spec.md.
+#                 uses). Its multi-strategy login with curl_cffi TLS
+#                 impersonation provides fully headless auth.
+#                 See specs/031-garmin-direct-sync.spec.md.
 # curl_cffi     – TLS-impersonation HTTP client garminconnect uses to bypass
 #                 Garmin's Cloudflare fingerprinting. Pinned >=0.15.0 for the
 #                 redirect-SSRF fix (GHSA affecting < 0.15.0).
