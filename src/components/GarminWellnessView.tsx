@@ -14,7 +14,6 @@ import {
   buildTrainingLoadRatioChartData,
   buildStatusChartData,
   formatWellnessRatio,
-  getTimeRangeOptions,
   formatWellnessValue,
   WELLNESS_METRIC_LABELS,
   WELLNESS_METRIC_UNITS,
@@ -647,13 +646,12 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
 
 interface Props {
   entries: GarminWellnessEntry[];
+  range: WellnessTimeRange;
+  aggregation: WellnessAggregation;
 }
 
-export function GarminWellnessView({ entries }: Props) {
+export function GarminWellnessView({ entries, range, aggregation }: Props) {
   const today = useMemo(() => new Date(), []);
-  const rangeOptions = useMemo(() => getTimeRangeOptions(today), [today]);
-  const [range, setRange] = useState<WellnessTimeRange>(() => String(today.getFullYear()));
-  const [aggregation, setAggregation] = useState<WellnessAggregation>('day');
 
   // Build chart data
   const readinessData   = useMemo(() => buildWellnessChartData(entries, 'readinessScore',       range, aggregation, today), [entries, range, aggregation, today]);
@@ -711,32 +709,6 @@ export function GarminWellnessView({ entries }: Props) {
 
   return (
     <div className="strava-view">
-      {/* Controls */}
-      <div className="strava-controls">
-        <div className="strava-range-group">
-          {rangeOptions.map((opt) => (
-            <button
-              key={opt.value}
-              className={`strava-range-btn${range === opt.value ? ' active' : ''}`}
-              onClick={() => setRange(opt.value)}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <div className="strava-agg-group">
-          {(['day', 'week', 'month'] as WellnessAggregation[]).map((agg) => (
-            <button
-              key={agg}
-              className={`strava-agg-btn${aggregation === agg ? ' active' : ''}`}
-              onClick={() => setAggregation(agg)}
-            >
-              {agg.charAt(0).toUpperCase() + agg.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Section: Training */}
       <h2 className="strava-section-title">Training</h2>
       <WellnessBarChart

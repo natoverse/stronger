@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import type {
   StravaActivity,
   StravaGoal,
@@ -12,12 +12,11 @@ import {
   filterActivities,
   buildMetricChartData,
   formatMetricValue,
-  getTimeRangeOptions,
   METRIC_LABELS,
   METRIC_UNITS,
   splitActivities,
 } from '../model/strava.js';
-import { Target, ChevronDown, ChevronUp } from 'lucide-react';
+import { Target } from 'lucide-react';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
 
 /* ------------------------------------------------------------------ */
@@ -27,6 +26,8 @@ import { useChartTooltip } from '../hooks/useChartTooltip.js';
 interface Props {
   activities: StravaActivity[];
   goals: StravaGoal[];
+  range: StravaTimeRange;
+  aggregation: StravaAggregation;
   onGoalChange?: (metric: StravaMetric, value: number | null) => void;
   /** Heading shown at the top of the view. Defaults to "Activities". */
   title?: string;
@@ -46,56 +47,28 @@ const STRENGTH_METRICS: StravaMetric[] = ['duration'];
 const CHART_HEIGHT = 132;
 const CHART_PADDING = { top: 16, right: 56, bottom: 32, left: 52 };
 
-const AGGREGATION_OPTIONS: { value: StravaAggregation; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-];
-
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.' }: Props) {
-  const [range, setRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
-  const [aggregation, setAggregation] = useState<StravaAggregation>('day');
-  const [filterOpen, setFilterOpen] = useState(false);
-
+export function ActivitiesView({ activities, goals, range, aggregation, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.' }: Props) {
   // Split into cardio (everything except strength) and strength training
   const { cardio: cardioActivities, strength: strengthActivities } = useMemo(
     () => splitActivities(activities),
     [activities],
   );
 
-  // Activity type filter applies to cardio only (strength is shown separately)
   const allTypes = useMemo(
     () => getActivityTypes(cardioActivities),
     [cardioActivities],
   );
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(() => new Set(allTypes));
-
-  // Keep filter in sync when new types appear
-  useMemo(() => {
-    setSelectedTypes((prev) => {
-      const next = new Set(prev);
-      let changed = false;
-      for (const t of allTypes) {
-        if (!next.has(t)) {
-          next.add(t);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  }, [allTypes]);
 
   const today = useMemo(() => new Date(), []);
-  const timeRanges = useMemo(() => getTimeRangeOptions(today), [today]);
 
-  // Cardio: filtered by type + range
+  // Cardio: filtered by range (all types included)
   const filteredCardio = useMemo(
-    () => filterActivities(cardioActivities, range, selectedTypes, today),
-    [cardioActivities, range, selectedTypes, today],
+    () => filterActivities(cardioActivities, range, new Set(allTypes), today),
+    [cardioActivities, range, allTypes, today],
   );
 
   // Strength: filtered by range only (all strength activities included)
@@ -129,25 +102,6 @@ export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activ
     [filteredStrength, range, today, aggregation],
   );
 
-  const toggleType = useCallback((type: string) => {
-    setSelectedTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) {
-        next.delete(type);
-      } else {
-        next.add(type);
-      }
-      return next;
-    });
-  }, []);
-
-  const toggleAll = useCallback(() => {
-    setSelectedTypes((prev) => {
-      if (prev.size === allTypes.length) return new Set();
-      return new Set(allTypes);
-    });
-  }, [allTypes]);
-
   if (activities.length === 0) {
     return (
       <div className="strava-view">
@@ -162,64 +116,6 @@ export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activ
   return (
     <div className="strava-view">
       <h2 className="strava-title">{title}</h2>
-
-      {/* Time range selector */}
-      <div className="strava-range-group">
-        {timeRanges.map((r) => (
-          <button
-            key={r.value}
-            className={`strava-range-btn${range === r.value ? ' active' : ''}`}
-            onClick={() => setRange(r.value)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Aggregation selector */}
-      <div className="strava-agg-group">
-        {AGGREGATION_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            className={`strava-agg-btn${aggregation === opt.value ? ' active' : ''}`}
-            onClick={() => setAggregation(opt.value)}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Activity type filter (cardio only) */}
-      {allTypes.length > 1 && (
-        <div className="strava-filter">
-          <button
-            className="strava-filter-toggle"
-            onClick={() => setFilterOpen(!filterOpen)}
-          >
-            Filter: {selectedTypes.size === allTypes.length ? 'All' : `${selectedTypes.size}/${allTypes.length}`}
-            {filterOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </button>
-          {filterOpen && (
-            <div className="strava-filter-options">
-              <button
-                className={`strava-filter-chip${selectedTypes.size === allTypes.length ? ' active' : ''}`}
-                onClick={toggleAll}
-              >
-                All
-              </button>
-              {allTypes.map((type) => (
-                <button
-                  key={type}
-                  className={`strava-filter-chip${selectedTypes.has(type) ? ' active' : ''}`}
-                  onClick={() => toggleType(type)}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Cardio charts */}
       {cardioCharts.length > 0 && (
