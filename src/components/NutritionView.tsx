@@ -187,10 +187,10 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
         )}
         <form className="nutrition-form" onSubmit={logCustom}>
           <h3>Quick Add</h3>
-          <input placeholder="Meal or item name" value={customName} onChange={(event) => setCustomName(event.target.value)} required />
           <select value={customCategory} onChange={(event) => setCustomCategory(event.target.value as MealCategory)}>
             {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
           </select>
+          <input placeholder="Meal or item name" value={customName} onChange={(event) => setCustomName(event.target.value)} required />
           <label className="nutrition-quantity-field">
             Servings
             <input type="number" min="0" step="any" value={customQuantity} onChange={(event) => setCustomQuantity(event.target.value)} />
