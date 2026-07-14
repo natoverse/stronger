@@ -107,6 +107,55 @@ def test_fetch_endurance_score_from_nested_object():
     assert row == {"enduranceScore": "7450"}, row
 
 
+def test_parse_goals_standard_fields():
+    goals = garmin_wellness_sync.parse_goals(
+        {
+            "dailyStepGoal": 10000,
+            "userFloorsAscendedGoal": 10,
+            "intensityMinutesGoal": 150,
+        }
+    )
+    assert goals == {
+        "app.garminDailyStepsGoal": "10000",
+        "app.garminDailyFloorsGoal": "10",
+        "app.garminWeeklyIntensityMinGoal": "150",
+    }, goals
+
+
+def test_parse_goals_missing_floors_still_harvests_others():
+    # Regression: a missing/renamed field must not abort the whole harvest.
+    goals = garmin_wellness_sync.parse_goals(
+        {"dailyStepGoal": 8000, "intensityMinutesGoal": 300}
+    )
+    assert goals == {
+        "app.garminDailyStepsGoal": "8000",
+        "app.garminWeeklyIntensityMinGoal": "300",
+    }, goals
+
+
+def test_parse_goals_ignores_zero_and_missing():
+    goals = garmin_wellness_sync.parse_goals(
+        {"dailyStepGoal": 0, "userFloorsAscendedGoal": None}
+    )
+    assert goals == {}, goals
+
+
+def test_parse_goals_float_and_alias_fields():
+    goals = garmin_wellness_sync.parse_goals(
+        {"stepGoal": 7500.0, "floorsAscendedGoal": 12.0, "userIntensityMinutesGoal": 200}
+    )
+    assert goals == {
+        "app.garminDailyStepsGoal": "7500",
+        "app.garminDailyFloorsGoal": "12",
+        "app.garminWeeklyIntensityMinGoal": "200",
+    }, goals
+
+
+def test_parse_goals_empty_payload():
+    assert garmin_wellness_sync.parse_goals({}) == {}
+    assert garmin_wellness_sync.parse_goals(None) == {}
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

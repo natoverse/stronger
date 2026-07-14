@@ -330,37 +330,76 @@ def _fetch_daily_summary(client, cdate: str) -> dict:
         return {}
 
 
+def _first_present(data: dict, *keys):
+    """Return the first non-null value among ``keys`` in ``data``."""
+    for key in keys:
+        val = data.get(key)
+        if val is not None:
+            return val
+    return None
+
+
+def _positive_int(v):
+    """Coerce ``v`` to a positive int, or None if absent/zero/invalid.
+
+    The daily-summary payload may omit goal fields entirely, so this must
+    tolerate None and non-numeric strings without raising — a single missing
+    field should never abort harvesting of the other goals.
+    """
+    if v is None:
+        return None
+    try:
+        n = int(round(float(v)))
+    except (ValueError, TypeError):
+        return None
+    return n if n > 0 else None
+
+
+def parse_goals(data: dict) -> dict:
+    """Extract step/floor/intensity goals from a Garmin daily-summary payload.
+
+    Garmin uses ``dailyStepGoal``, ``userFloorsAscendedGoal`` and
+    ``intensityMinutesGoal`` (the intensity goal is weekly). Field names have
+    varied across API versions, so several aliases are accepted. Only goals
+    that resolve to a positive integer are returned, so absent fields don't
+    overwrite user-configured values with zero.
+    """
+    if not data:
+        return {}
+    goals: dict = {}
+    step_goal = _positive_int(_first_present(data, "dailyStepGoal", "stepGoal"))
+    if step_goal is not None:
+        goals["app.garminDailyStepsGoal"] = str(step_goal)
+    floors_goal = _positive_int(
+        _first_present(data, "userFloorsAscendedGoal", "floorsAscendedGoal")
+    )
+    if floors_goal is not None:
+        goals["app.garminDailyFloorsGoal"] = str(floors_goal)
+    intensity_goal = _positive_int(
+        _first_present(
+            data,
+            "intensityMinutesGoal",
+            "userIntensityMinutesGoal",
+            "weeklyIntensityMinutesGoal",
+            "minIntensityMinutesGoalWeekly",
+            "weeklyIntensityMinGoal",
+        )
+    )
+    if intensity_goal is not None:
+        goals["app.garminWeeklyIntensityMinGoal"] = str(intensity_goal)
+    return goals
+
+
 def _fetch_goals(client) -> dict:
     """Fetch daily/weekly goals (steps, floors, intensity minutes) for today.
 
     These come from the same daily summary endpoint.  The goal values rarely
     change so we only need to read them once (for today).
-    Only writes goals that are > 0 so that absent API fields don't overwrite
-    user-configured values with zero.
     """
     try:
         today = date.today().isoformat()
         data = client.get_user_summary(today)
-        if not data:
-            return {}
-        goals: dict = {}
-        step_goal = _num(data.get("dailyStepGoal"), 0)
-        if step_goal is not None and int(step_goal) > 0:
-            goals["app.garminDailyStepsGoal"] = str(int(step_goal))
-        floors_goal = _num(data.get("floorsAscendedGoal"), 0)
-        if floors_goal is not None and int(floors_goal) > 0:
-            goals["app.garminDailyFloorsGoal"] = str(int(floors_goal))
-        # Garmin may use different field names across API versions
-        intensity_goal_raw = (
-            data.get("weeklyIntensityMinutesGoal")
-            or data.get("minIntensityMinutesGoalWeekly")
-            or data.get("intensityMinutesGoal")
-            or data.get("weeklyIntensityMinGoal")
-        )
-        intensity_goal = _num(intensity_goal_raw, 0)
-        if intensity_goal is not None and int(intensity_goal) > 0:
-            goals["app.garminWeeklyIntensityMinGoal"] = str(int(intensity_goal))
-        return goals
+        return parse_goals(data)
     except Exception as exc:
         print(f"  WARNING: goals fetch: {exc}", file=sys.stderr)
         return {}
