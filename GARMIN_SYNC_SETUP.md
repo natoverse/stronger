@@ -128,14 +128,13 @@ Wire it into `cron` (or a systemd timer) to run on whatever schedule you like.
 
 By default the sync only fetches the most recent activities, which is all the daily cron needs. Garmin Connect keeps your **full** history, so there's no limit on how far back you can pull — you just have to ask for it.
 
-To backfill, set the optional `GARMIN_SYNC_START_DATE` environment variable (a `YYYY-MM-DD` date) and run the script once. Every activity on or after that date is fetched, deduplicated by activity ID, and appended. For example, to pull everything back to 2021 inclusive:
+To backfill, run the script with the `--backfill` flag. It fetches every activity since **2021-01-01** (matching the earliest year in the in-app year picker), deduplicates by activity ID, and appends only new rows:
 
 ```bash
-export GARMIN_SYNC_START_DATE="2021-01-01"
-python scripts/garmin-sync.py
+python scripts/garmin-sync.py --backfill
 ```
 
-You can also trigger a backfill from **Actions → Garmin Sync → Run workflow**, which has an optional **start date** input (leave it blank for a normal recent-activity sync). Because the sync dedups by Garmin activity ID, running a backfill won't create duplicate rows, and the daily runs keep fetching just recent activities afterwards.
+From GitHub Actions, trigger a backfill via **Actions → Garmin Sync → Run workflow**, which has a **backfill** checkbox (leave it unchecked for a normal recent-activity sync). Because the sync dedups by Garmin activity ID, running a backfill won't create duplicate rows, and the daily runs keep fetching just recent activities afterwards.
 
 ## Troubleshooting
 

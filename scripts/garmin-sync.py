@@ -11,19 +11,19 @@ layout (moving duration, elevation loss, speeds, steps, training effect,
 VO2 max). The old "Stronger - Strava" tab is left in place and deprecated
 gradually. See specs/031-garmin-direct-sync.spec.md.
 
-Environment variables:
+Environment variables (all required):
   GARMIN_TOKENS               – ``garminconnect`` token bundle (contents of the
-                                saved ``garmin_tokens.json``)                (required)
-  GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account       (required)
-  SPREADSHEET_ID              – Google Sheets spreadsheet ID                  (required)
-  GARMIN_SYNC_START_DATE      – optional ``YYYY-MM-DD`` date. When set, every
-                                activity on/after this date is fetched (a
-                                one-time backfill, e.g. ``2021-01-01`` to pull
-                                history back to 2021 inclusive). When unset,
-                                only the most recent activities are fetched.
+                                saved ``garmin_tokens.json``)
+  GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account
+  SPREADSHEET_ID              – Google Sheets spreadsheet ID
+
+Flags:
+  --backfill  One-time import of full history since ``BACKFILL_START_DATE``
+              (2021-01-01) instead of the rolling recent-activity fetch. Dedup
+              by activity ID keeps it idempotent.
 
 Usage:
-  python scripts/garmin-sync.py
+  python scripts/garmin-sync.py [--backfill]
 """
 
 from __future__ import annotations
@@ -64,6 +64,11 @@ HEADER = [
 ]
 COLUMN_COUNT = len(HEADER)  # 18 -> columns A:R
 ACTIVITY_LIMIT = 30
+
+# One-time backfill window (used only with the --backfill flag): 2021-01-01.
+# Matches the earliest year selectable in the in-app year picker (and the
+# Withings sync's backfill start).
+BACKFILL_START_DATE = "2021-01-01"
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +283,7 @@ def main():
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
     service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
     spreadsheet_id = os.environ.get("SPREADSHEET_ID")
-    start_date = (os.environ.get("GARMIN_SYNC_START_DATE") or "").strip()
+    backfill = "--backfill" in sys.argv
 
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
@@ -291,11 +296,13 @@ def main():
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
 
-    # 2. Fetch activities — a dated backfill when GARMIN_SYNC_START_DATE is set,
-    #    otherwise the most recent activities for the daily incremental sync.
-    if start_date:
-        print(f"Backfilling activities since {start_date} from Garmin Connect...")
-        activities = fetch_activities_since(garmin, start_date)
+    # 2. Fetch activities. Normally the most recent activities for the daily
+    #    incremental sync; with --backfill, everything since BACKFILL_START_DATE
+    #    for a one-time import of full history. Dedup by activity ID keeps both
+    #    safe to re-run.
+    if backfill:
+        print(f"Backfilling all activities since {BACKFILL_START_DATE}...")
+        activities = fetch_activities_since(garmin, BACKFILL_START_DATE)
     else:
         print("Fetching recent activities from Garmin Connect...")
         activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
