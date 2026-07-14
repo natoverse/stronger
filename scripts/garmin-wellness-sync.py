@@ -80,6 +80,9 @@ def _num(v, decimals: int = 1) -> str:
 
 
 TRAINING_STATUS_CODE_MAP = {
+    # Garmin uses codes 0,1,2,4,5,6,7,8; code 3 is not emitted by the API payloads we ingest.
+    # Keys are integers here because script responses are numeric before CSV/string serialization.
+    # Keep values in sync with src/google/sheets.ts TRAINING_STATUS_CODE_MAP.
     0: "NO_STATUS",
     1: "DETRAINING",
     2: "UNPRODUCTIVE",
