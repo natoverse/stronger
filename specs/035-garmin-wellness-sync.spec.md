@@ -104,3 +104,7 @@ Verified all fields against the real Garmin Connect API response structures usin
 2. **`_fetch_training_status` — completely wrong keys**: The response uses `mostRecentTrainingStatus → latestTrainingStatusData → {sportKey: {trainingStatus, acuteTrainingLoadDTO: {dailyTrainingLoadAcute, dailyTrainingLoadChronic}}}`, not `trainingStatusDTO → latestTrainingStatusWeek → {acuteLoad, chronicLoad}`. Fixed to use the correct path.
 
 3. **`_fetch_vo2max` — missing `allMetrics` wrapper**: The response has `item.allMetrics.metricsMap.VO2_MAX_RUNNING[].value`, not `item.metricsMap.VO2_MAX_RUNNING`. Fixed to navigate through `allMetrics`.
+
+## Iteration notes
+
+- Training status now normalizes Garmin's numeric/status-phrase variants to stable enum text before writing or reading sheet rows. The sync prefers `trainingStatusFeedbackPhrase` / `trainingStatusKey` when available, and falls back to numeric-code mapping so values like `4` render as `MAINTAINING` instead of a raw number.
