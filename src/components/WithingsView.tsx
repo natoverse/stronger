@@ -32,6 +32,7 @@ interface Props {
   range: WithingsTimeRange;
   aggregation: WithingsAggregation;
   onGoalChange?: (metric: WithingsMetric, value: number | null) => void;
+  embedded?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -53,6 +54,7 @@ export function WithingsView({
   range,
   aggregation,
   onGoalChange,
+  embedded = false,
 }: Props) {
   const dipThreshold = dipThresholdPercent / 100;
 
@@ -91,7 +93,7 @@ export function WithingsView({
 
   if (measurements.length === 0) {
     return (
-      <div className="strava-view">
+      <div className={embedded ? 'strava-subview' : 'strava-view'}>
         <p className="strava-empty">
           No Withings data yet. Set up sync to see body-composition trends.
         </p>
@@ -102,7 +104,7 @@ export function WithingsView({
   const anyData = charts.some((c) => c.points.some((p) => p.value !== null));
 
   return (
-    <div className="strava-view">
+    <div className={embedded ? 'strava-subview' : 'strava-view'}>
 
       {anyData ? (
         charts.map((data) => (

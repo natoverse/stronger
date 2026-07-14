@@ -205,12 +205,12 @@ function Big4Chart({
   const showGoal = goalWeight !== undefined && metric !== 'volume';
 
   return (
-    <div className="progress-big4-item">
-      <div className="progress-big4-header">
-        <h3 className="progress-big4-label">{label}</h3>
+    <div className="strava-chart-card">
+      <div className="strava-chart-header">
+        <h3 className="strava-chart-label">{label}</h3>
         {onGoalChange && metric !== 'volume' && (
           <button
-            className="progress-goal-btn"
+            className="strava-goal-btn"
             onClick={() => {
               setGoalInput(goalWeight !== undefined ? String(goalWeight) : '');
               setEditing(!editing);
@@ -222,16 +222,16 @@ function Big4Chart({
         )}
       </div>
       {editing && onGoalChange && (
-        <div className="progress-goal-input-row">
+        <div className="strava-goal-input-row">
           <input
-            className="progress-goal-input"
+            className="strava-goal-input"
             type="number"
             placeholder="Goal weight"
             value={goalInput}
             onChange={(e) => setGoalInput(e.target.value)}
           />
           <button
-            className="progress-goal-save"
+            className="strava-goal-save"
             onClick={() => {
               const v = Number(goalInput);
               onGoalChange(liftId, isFinite(v) && v > 0 ? v : null);
@@ -284,7 +284,11 @@ function SelectedLiftChart({
   if (data.length === 0) {
     return <p className="progress-empty">No data for this selection.</p>;
   }
-  return <ProgressChart data={data} metric={metric} stableYMin={stableYMin} />;
+  return (
+    <div className="strava-chart-card">
+      <ProgressChart data={data} metric={metric} stableYMin={stableYMin} />
+    </div>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -355,10 +359,10 @@ function ProgressChart({
   const active = activeIndex !== null ? data[activeIndex] : null;
 
   return (
-    <div className="progress-chart-container" {...containerHandlers}>
+    <div className="strava-chart-container" {...containerHandlers}>
       <svg
         ref={svgRef}
-        className="progress-chart"
+        className="strava-chart-svg"
         viewBox={`0 0 ${viewBoxWidth} ${CHART_HEIGHT}`}
         preserveAspectRatio="xMidYMid meet"
       >
@@ -370,7 +374,7 @@ function ProgressChart({
             y1={yScale(tick)}
             x2={viewBoxWidth - CHART_PADDING.right}
             y2={yScale(tick)}
-            className="progress-grid-line"
+            className="strava-grid-line"
           />
         ))}
 
@@ -380,7 +384,7 @@ function ProgressChart({
             key={tick}
             x={CHART_PADDING.left - 6}
             y={yScale(tick)}
-            className="progress-axis-label"
+            className="strava-axis-label"
             textAnchor="end"
             dominantBaseline="middle"
           >
@@ -394,7 +398,7 @@ function ProgressChart({
             key={i}
             x={xScale(i)}
             y={CHART_HEIGHT - 6}
-            className="progress-axis-label"
+            className="strava-axis-label"
             textAnchor="middle"
           >
             {formatDate(data[i].date)}
@@ -428,7 +432,7 @@ function ProgressChart({
             y1={yScale(goalWeight)}
             x2={viewBoxWidth - CHART_PADDING.right}
             y2={yScale(goalWeight)}
-            className="progress-goal-line"
+            className="strava-goal-line"
           />
         )}
 

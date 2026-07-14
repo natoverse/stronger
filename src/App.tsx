@@ -1371,6 +1371,7 @@ function App() {
               range={chartRange}
               aggregation={chartAggregation}
               onGoalChange={handleWithingsGoalChange}
+              embedded
             />
           </div>
         )}
