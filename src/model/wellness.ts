@@ -23,7 +23,6 @@ export { generateBucketSlots, getRangeStart, getRangeEnd, getTimeRangeOptions };
 // ---------------------------------------------------------------------------
 
 export type WellnessNumericMetric =
-  | 'hrvLastNight'
   | 'hrvWeeklyAvg'
   | 'sleepDurationSec'
   | 'sleepScore'
@@ -50,7 +49,6 @@ const SUM_METRICS = new Set<WellnessNumericMetric>([
 ]);
 
 export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
-  hrvLastNight: 'Overnight HRV',
   hrvWeeklyAvg: 'HRV Weekly Avg',
   sleepDurationSec: 'Sleep Duration',
   sleepScore: 'Sleep Score',
@@ -70,7 +68,6 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
 };
 
 export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
-  hrvLastNight: 'ms',
   hrvWeeklyAvg: 'ms',
   sleepDurationSec: 'h',
   sleepScore: '',

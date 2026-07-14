@@ -38,10 +38,10 @@ from urllib.parse import quote
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 TAB_NAME = "Stronger - Garmin Wellness"
 
-# 24 columns — keep in sync with src/google/config.ts GARMIN_WELLNESS_HEADER
+# 23 columns — keep in sync with src/google/config.ts GARMIN_WELLNESS_HEADER
 HEADER = [
     "date",
-    "hrvLastNight", "hrvWeeklyAvg", "hrvStatus",
+    "hrvWeeklyAvg", "hrvStatus",
     "sleepDurationSec", "sleepDeepSec", "sleepLightSec",
     "sleepRemSec", "sleepAwakeSec", "sleepScore",
     "bodyBatteryHigh", "bodyBatteryLow",
@@ -215,7 +215,6 @@ def _fetch_hrv(client, cdate: str) -> dict:
         if not summary:
             return {}
         return {
-            "hrvLastNight": _num(summary.get("lastNight"), 0),
             "hrvWeeklyAvg":  _num(summary.get("weeklyAvg"), 0),
             "hrvStatus":     str(summary.get("status") or ""),
         }

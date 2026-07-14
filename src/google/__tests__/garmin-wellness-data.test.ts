@@ -5,7 +5,7 @@ describe('parseGarminWellnessRow', () => {
   it('parses a full row correctly', () => {
     const row = [
       '2024-03-15',       // date
-      '42', '48', 'BALANCED', // hrv
+      '48', 'BALANCED', // hrv
       '25200', '7200', '10800', '5400', '1800', '78', // sleep
       '85', '22',         // body battery
       '72',               // readiness
@@ -17,7 +17,6 @@ describe('parseGarminWellnessRow', () => {
     const entry = parseGarminWellnessRow(row);
     expect(entry).not.toBeNull();
     expect(entry!.date).toBe('2024-03-15');
-    expect(entry!.hrvLastNight).toBe(42);
     expect(entry!.hrvWeeklyAvg).toBe(48);
     expect(entry!.hrvStatus).toBe('BALANCED');
     expect(entry!.sleepDurationSec).toBe(25200);
@@ -47,17 +46,17 @@ describe('parseGarminWellnessRow', () => {
     const row = ['2024-03-15'];
     const entry = parseGarminWellnessRow(row);
     expect(entry).not.toBeNull();
-    expect(entry!.hrvLastNight).toBeNull();
+    expect(entry!.hrvWeeklyAvg).toBeNull();
     expect(entry!.sleepDurationSec).toBeNull();
     expect(entry!.trainingStatus).toBe('');
     expect(entry!.steps).toBeNull();
   });
 
   it('parses empty string numeric fields as null', () => {
-    const row = ['2024-01-01', '', '', 'LOW', '', '', '', '', '', ''];
+    const row = ['2024-01-01', '', 'LOW', '', '', '', '', '', '', ''];
     const entry = parseGarminWellnessRow(row);
     expect(entry).not.toBeNull();
-    expect(entry!.hrvLastNight).toBeNull();
+    expect(entry!.hrvWeeklyAvg).toBeNull();
     expect(entry!.hrvStatus).toBe('LOW');
     expect(entry!.sleepDurationSec).toBeNull();
   });
@@ -65,7 +64,7 @@ describe('parseGarminWellnessRow', () => {
   it('trims whitespace from date and string fields', () => {
     const row = [
       '  2024-06-01  ',
-      '50', '55', '  UNBALANCED  ',
+      '55', '  UNBALANCED  ',
       '28800', '', '', '', '', '70',
     ];
     const entry = parseGarminWellnessRow(row);
@@ -74,13 +73,13 @@ describe('parseGarminWellnessRow', () => {
   });
 
   it('normalizes numeric training status codes to enum text', () => {
-    const row = ['2024-07-14', '', '', '', '', '', '', '', '', '', '', '', '', '4'];
+    const row = ['2024-07-14', '', '', '', '', '', '', '', '', '', '', '', '4'];
     const entry = parseGarminWellnessRow(row);
     expect(entry!.trainingStatus).toBe('MAINTAINING');
   });
 
   it('normalizes Garmin training status feedback phrases', () => {
-    const row = ['2024-07-14', '', '', '', '', '', '', '', '', '', '', '', '', 'strained_5'];
+    const row = ['2024-07-14', '', '', '', '', '', '', '', '', '', '', '', 'strained_5'];
     const entry = parseGarminWellnessRow(row);
     expect(entry!.trainingStatus).toBe('STRAINED');
   });

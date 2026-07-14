@@ -9,7 +9,6 @@ import {
 function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellnessEntry {
   return {
     date: '2025-06-15',
-    hrvLastNight: 45,
     hrvWeeklyAvg: 52,
     hrvStatus: 'BALANCED',
     sleepDurationSec: null,
@@ -40,9 +39,9 @@ describe('buildWellnessChartData', () => {
   it('uses weekly HRV values and same-row HRV status for day buckets', () => {
     const data = buildWellnessChartData(
       [
-        makeEntry({ date: '2025-06-15', hrvLastNight: 44, hrvWeeklyAvg: 51, hrvStatus: 'BALANCED' }),
-        makeEntry({ date: '2025-06-16', hrvLastNight: 41, hrvWeeklyAvg: 47, hrvStatus: 'LOW' }),
-        makeEntry({ date: '2025-06-17', hrvLastNight: 48, hrvWeeklyAvg: 49, hrvStatus: 'UNBALANCED' }),
+        makeEntry({ date: '2025-06-15', hrvWeeklyAvg: 51, hrvStatus: 'BALANCED' }),
+        makeEntry({ date: '2025-06-16', hrvWeeklyAvg: 47, hrvStatus: 'LOW' }),
+        makeEntry({ date: '2025-06-17', hrvWeeklyAvg: 49, hrvStatus: 'UNBALANCED' }),
       ],
       'hrvWeeklyAvg',
       'month',
