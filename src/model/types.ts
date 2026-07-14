@@ -389,8 +389,6 @@ export interface GarminWellnessEntry {
 	date: string;
 
 	// HRV
-	/** Overnight HRV (last night), in ms. */
-	hrvLastNight: number | null;
 	/** Rolling 5-day weekly HRV average, in ms. */
 	hrvWeeklyAvg: number | null;
 	/** Garmin HRV status string (e.g. BALANCED, UNBALANCED, LOW). */

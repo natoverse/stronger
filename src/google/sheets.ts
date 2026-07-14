@@ -2685,11 +2685,11 @@ export function appSettingsToMap(
 
 /**
  * Column header row written to the "Stronger - Garmin Wellness" tab.
- * 24 columns (A–X). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
+ * 23 columns (A–W). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
  */
 export const GARMIN_WELLNESS_HEADER: string[] = [
 	'date',
-	'hrvLastNight', 'hrvWeeklyAvg', 'hrvStatus',
+	'hrvWeeklyAvg', 'hrvStatus',
 	'sleepDurationSec', 'sleepDeepSec', 'sleepLightSec',
 	'sleepRemSec', 'sleepAwakeSec', 'sleepScore',
 	'bodyBatteryHigh', 'bodyBatteryLow',
@@ -2700,21 +2700,21 @@ export const GARMIN_WELLNESS_HEADER: string[] = [
 	'hillScore', 'enduranceScore',
 ]
 
-/** A1 range for reading Garmin wellness data (row 2 onward, 24 columns = A:X). */
-const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:X`
+/** A1 range for reading Garmin wellness data (row 2 onward, 23 columns = A:W). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:W`
 
 /** Column index map for the Garmin wellness row (0-based). */
 const WC = {
 	date: 0,
-	hrvLastNight: 1, hrvWeeklyAvg: 2, hrvStatus: 3,
-	sleepDurationSec: 4, sleepDeepSec: 5, sleepLightSec: 6,
-	sleepRemSec: 7, sleepAwakeSec: 8, sleepScore: 9,
-	bodyBatteryHigh: 10, bodyBatteryLow: 11,
-	readinessScore: 12,
-	trainingStatus: 13, trainingAcuteLoad: 14, trainingChronicLoad: 15,
-	steps: 16, floors: 17, restingHR: 18, vo2Max: 19,
-	intensityMinModerate: 20, intensityMinVigorous: 21,
-	hillScore: 22, enduranceScore: 23,
+	hrvWeeklyAvg: 1, hrvStatus: 2,
+	sleepDurationSec: 3, sleepDeepSec: 4, sleepLightSec: 5,
+	sleepRemSec: 6, sleepAwakeSec: 7, sleepScore: 8,
+	bodyBatteryHigh: 9, bodyBatteryLow: 10,
+	readinessScore: 11,
+	trainingStatus: 12, trainingAcuteLoad: 13, trainingChronicLoad: 14,
+	steps: 15, floors: 16, restingHR: 17, vo2Max: 18,
+	intensityMinModerate: 19, intensityMinVigorous: 20,
+	hillScore: 21, enduranceScore: 22,
 } as const
 
 function parseNum(raw: string | undefined): number | null {
@@ -2766,7 +2766,6 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 	if (!date) return null
 	return {
 		date,
-		hrvLastNight:         parseNum(row[WC.hrvLastNight]),
 		hrvWeeklyAvg:         parseNum(row[WC.hrvWeeklyAvg]),
 		hrvStatus:            row[WC.hrvStatus]?.trim() ?? '',
 		sleepDurationSec:     parseNum(row[WC.sleepDurationSec]),
