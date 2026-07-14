@@ -2,8 +2,8 @@
 """Garmin Sync — Garmin Connect -> Google Sheets pipeline.
 
 Fetches recent activities from Garmin Connect and appends new rows to the
-"Stronger - Garmin" tab in a Google Sheet. Uses a saved ``garth`` token dump
-for Garmin auth (no interactive login at run time) and a Google service
+"Stronger - Garmin" tab in a Google Sheet. Uses a saved ``garminconnect`` token
+bundle for Garmin auth (no interactive login at run time) and a Google service
 account for Sheets access.
 
 The tab uses a Garmin-native schema that is richer than the legacy Strava
@@ -12,7 +12,8 @@ VO2 max). The old "Stronger - Strava" tab is left in place and deprecated
 gradually. See specs/031-garmin-direct-sync.spec.md.
 
 Environment variables (all required):
-  GARMIN_TOKENS               – base64 ``garth`` token dump (garth.client.dumps())
+  GARMIN_TOKENS               – ``garminconnect`` token bundle (contents of the
+                                saved ``garmin_tokens.json``)
   GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account
   SPREADSHEET_ID              – Google Sheets spreadsheet ID
 
@@ -25,6 +26,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tempfile
+from pathlib import Path
 from urllib.parse import quote
 
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
@@ -58,20 +61,31 @@ ACTIVITY_LIMIT = 30
 
 
 # ---------------------------------------------------------------------------
-# Garmin Connect (via garth)
+# Garmin Connect (via garminconnect)
 # ---------------------------------------------------------------------------
 
-def fetch_recent_activities(limit=ACTIVITY_LIMIT):
-    """Fetch the most recent activities from Garmin Connect.
+def login_from_tokens(token_bundle):
+    """Return an authenticated ``garminconnect.Garmin`` client from saved tokens.
 
-    Assumes ``garth`` has already been authenticated (tokens loaded).
+    ``token_bundle`` is the contents of a ``garmin_tokens.json`` file (as minted
+    once via a local login — see GARMIN_SYNC_SETUP.md). We write it into a
+    temporary token directory and resume from it so there is no interactive
+    login at run time. garminconnect refreshes the short-lived DI access token
+    automatically when it is about to expire.
     """
-    import garth
+    from garminconnect import Garmin
 
-    activities = garth.connectapi(
-        "/activitylist-service/activities/search/activities",
-        params={"start": 0, "limit": limit},
-    )
+    token_dir = tempfile.mkdtemp(prefix="garmin-tokens-")
+    (Path(token_dir) / "garmin_tokens.json").write_text(token_bundle)
+
+    garmin = Garmin()
+    garmin.login(token_dir)
+    return garmin
+
+
+def fetch_recent_activities(client, limit=ACTIVITY_LIMIT):
+    """Fetch the most recent activities from Garmin Connect."""
+    activities = client.get_activities(0, limit)
     return activities or []
 
 
@@ -240,7 +254,6 @@ def append_rows(session, spreadsheet_id, token, rows):
 # ---------------------------------------------------------------------------
 
 def main():
-    import garth
     import requests
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
@@ -254,13 +267,13 @@ def main():
     if not spreadsheet_id:
         raise SystemExit("Missing SPREADSHEET_ID environment variable")
 
-    # 1. Authenticate with Garmin using the saved token dump.
+    # 1. Authenticate with Garmin using the saved token bundle.
     print("Loading Garmin tokens...")
-    garth.client.loads(garmin_tokens)
+    garmin = login_from_tokens(garmin_tokens)
 
     # 2. Fetch recent activities.
     print("Fetching recent activities from Garmin Connect...")
-    activities = fetch_recent_activities(ACTIVITY_LIMIT)
+    activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
     print(f"Fetched {len(activities)} activities from Garmin.")
 
     # 3. Authenticate with Google Sheets.
