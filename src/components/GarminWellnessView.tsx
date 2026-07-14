@@ -97,6 +97,15 @@ export function hillScoreColor(value: number): string {
   ], ACCENT);
 }
 
+// Sleep score bands: <60 red, <80 orange, <90 green, 90+ blue.
+export function sleepScoreColor(value: number): string {
+  return thresholdColor(value, [
+    { max: 60, color: RED },
+    { max: 80, color: ORANGE },
+    { max: 90, color: GREEN },
+  ], BLUE);
+}
+
 // Garmin endurance score bands requested for lowest through highest endurance fitness.
 export function enduranceScoreColor(value: number): string {
   return thresholdColor(value, [
@@ -725,6 +734,7 @@ export function GarminWellnessView({ entries }: Props) {
         buckets={sleepScoreData.buckets}
         summaryLabel={summaryStr(sleepScoreData.summary, 'sleepScore', '')}
         formatValue={numFmt('sleepScore')}
+        colorFn={(v) => v !== null ? sleepScoreColor(v) : GRAY}
       />
 
       {/* Section: Activity */}
