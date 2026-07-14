@@ -115,3 +115,4 @@ Verified all fields against the real Garmin Connect API response structures usin
 
 - The Recovery HRV chart now plots `hrvWeeklyAvg` instead of `hrvLastNight` so the visual trend reflects Garmin's rolling weekly signal rather than the noisier overnight reading.
 - HRV bar colors continue to come from `hrvStatus` for the same underlying rows, with BALANCED/OPTIMAL = green, UNBALANCED = yellow, and LOW = red.
+- Training status now normalizes Garmin's numeric/status-phrase variants to stable enum text before writing or reading sheet rows. The sync prefers `trainingStatusFeedbackPhrase` / `trainingStatusKey` when available, and falls back to numeric-code mapping so values like `4` render as `MAINTAINING` instead of a raw number.

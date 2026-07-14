@@ -79,6 +79,50 @@ def _num(v, decimals: int = 1) -> str:
         return ""
 
 
+TRAINING_STATUS_CODE_MAP = {
+    0: "NO_STATUS",
+    1: "DETRAINING",
+    2: "UNPRODUCTIVE",
+    4: "MAINTAINING",
+    5: "RECOVERY",
+    6: "PEAKING",
+    7: "PRODUCTIVE",
+    8: "STRAINED",
+}
+
+
+def normalize_training_status(value) -> str:
+    """Normalize Garmin training status values to stable enum text."""
+    if value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return TRAINING_STATUS_CODE_MAP.get(int(value), str(int(value)))
+
+    raw = str(value).strip()
+    if not raw:
+        return ""
+    if raw.isdigit():
+        return TRAINING_STATUS_CODE_MAP.get(int(raw), raw)
+
+    upper = raw.upper()
+    if upper.startswith("NO_STATUS"):
+        return "NO_STATUS"
+    for prefix in (
+        "PRODUCTIVE",
+        "MAINTAINING",
+        "RECOVERY",
+        "RECOVERY_ACTIVE",
+        "UNPRODUCTIVE",
+        "STRAINED",
+        "OVERREACHING",
+        "DETRAINING",
+        "PEAKING",
+    ):
+        if upper == prefix or upper.startswith(prefix + "_"):
+            return prefix
+    return upper
+
+
 def _extract_metric_value(raw, *metric_keys: str):
     """Best-effort extract of the first metric value from Garmin metric payloads.
 
@@ -248,8 +292,13 @@ def _fetch_training_status(client, cdate: str) -> dict:
         if not entry:
             return {}
         atl = entry.get("acuteTrainingLoadDTO") or {}
+        status = normalize_training_status(
+            entry.get("trainingStatusFeedbackPhrase")
+            or entry.get("trainingStatusKey")
+            or entry.get("trainingStatus")
+        )
         return {
-            "trainingStatus":      str(entry.get("trainingStatus") or ""),
+            "trainingStatus":      status,
             "trainingAcuteLoad":   _num(atl.get("dailyTrainingLoadAcute"), 1),
             "trainingChronicLoad": _num(atl.get("dailyTrainingLoadChronic"), 1),
         }
