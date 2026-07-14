@@ -147,7 +147,7 @@ export function enduranceScoreColor(value: number): string {
 /*  Chart constants (same as StravaView)                              */
 /* ------------------------------------------------------------------ */
 
-const CHART_HEIGHT = 220;
+const CHART_HEIGHT = 132;
 const CHART_PADDING = { top: 16, right: 16, bottom: 32, left: 52 };
 const VIEW_BOX_W = 400;
 const PLOT_W = VIEW_BOX_W - CHART_PADDING.left - CHART_PADDING.right;
@@ -652,8 +652,8 @@ interface Props {
 export function GarminWellnessView({ entries }: Props) {
   const today = useMemo(() => new Date(), []);
   const rangeOptions = useMemo(() => getTimeRangeOptions(today), [today]);
-  const [range, setRange] = useState<WellnessTimeRange>(() => rangeOptions[1]?.value ?? 'month');
-  const [aggregation, setAggregation] = useState<WellnessAggregation>('week');
+  const [range, setRange] = useState<WellnessTimeRange>(() => String(today.getFullYear()));
+  const [aggregation, setAggregation] = useState<WellnessAggregation>('day');
 
   // Build chart data
   const readinessData   = useMemo(() => buildWellnessChartData(entries, 'readinessScore',       range, aggregation, today), [entries, range, aggregation, today]);
