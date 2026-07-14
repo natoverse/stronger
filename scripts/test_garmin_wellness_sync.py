@@ -15,7 +15,7 @@ garmin_wellness_sync = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(garmin_wellness_sync)
 
 
-class _Client:
+class _MockGarminClient:
     def __init__(self, *, max_metrics=None, hill_score=None, endurance_score=None):
         self._max_metrics = max_metrics
         self._hill_score = hill_score
@@ -32,13 +32,13 @@ class _Client:
 
 
 def test_fetch_vo2max_from_generic_container():
-    client = _Client(max_metrics=[{"generic": {"vo2MaxPreciseValue": 52.5}}])
+    client = _MockGarminClient(max_metrics=[{"generic": {"vo2MaxPreciseValue": 52.5}}])
     row = garmin_wellness_sync._fetch_vo2max(client, "2026-07-14")
     assert row == {"vo2Max": "52.5"}, row
 
 
 def test_fetch_vo2max_from_metrics_map_variants():
-    client = _Client(
+    client = _MockGarminClient(
         max_metrics={
             "allMetrics": {
                 "metricsMap": {
@@ -52,19 +52,19 @@ def test_fetch_vo2max_from_metrics_map_variants():
 
 
 def test_fetch_hill_score_from_overall_score():
-    client = _Client(hill_score={"overallScore": 98})
+    client = _MockGarminClient(hill_score={"overallScore": 98})
     row = garmin_wellness_sync._fetch_hill_score(client, "2026-07-14")
     assert row == {"hillScore": "98"}, row
 
 
 def test_fetch_endurance_score_from_overall_score():
-    client = _Client(endurance_score={"overallScore": 7301})
+    client = _MockGarminClient(endurance_score={"overallScore": 7301})
     row = garmin_wellness_sync._fetch_endurance_score(client, "2026-07-14")
     assert row == {"enduranceScore": "7301"}, row
 
 
 def test_fetch_endurance_score_from_nested_object():
-    client = _Client(endurance_score={"enduranceScore": {"latestScore": 7450}})
+    client = _MockGarminClient(endurance_score={"enduranceScore": {"latestScore": 7450}})
     row = garmin_wellness_sync._fetch_endurance_score(client, "2026-07-14")
     assert row == {"enduranceScore": "7450"}, row
 

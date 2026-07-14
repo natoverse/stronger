@@ -80,11 +80,16 @@ def _num(v, decimals: int = 1) -> str:
 
 
 def _extract_metric_value(raw, *metric_keys: str):
-    """Best-effort extract of the first metric value from Garmin metric payloads."""
+    """Best-effort extract of the first metric value from Garmin metric payloads.
+
+    ``metric_keys`` are tried in order. The first non-null value found across the
+    supported response shapes is returned.
+    """
     if not raw:
         return None
 
     def _coerce_metric_value(value):
+        """Normalize Garmin metric payload leaves into a scalar value."""
         if isinstance(value, dict):
             for key in ("value", "overallScore", "latestScore"):
                 candidate = value.get(key)
