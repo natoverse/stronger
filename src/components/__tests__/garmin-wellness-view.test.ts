@@ -58,7 +58,7 @@ describe('training status legend', () => {
   });
 
   it('formats underscored training statuses for display', () => {
-    expect(formatTrainingStatusLabel('RECOVERY_ACTIVE')).toBe('Recovery Active');
+    expect(formatTrainingStatusLabel('RECOVERY_ACTIVE')).toBe('Recovery active');
     expect(formatTrainingStatusLabel('')).toBe('—');
   });
 });

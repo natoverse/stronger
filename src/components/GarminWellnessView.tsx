@@ -90,7 +90,7 @@ export function formatTrainingStatusLabel(status: string): string {
   return status
     .replace(/_/g, ' ')
     .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    .replace(/^\w/, (char) => char.toUpperCase());
 }
 
 export function hrvStatusColor(status: string): string {
@@ -476,19 +476,28 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
   const [legendOpen, setLegendOpen] = useState(false);
   const [legendIndex, setLegendIndex] = useState(0);
   const legendRef = useRef<HTMLDivElement | null>(null);
+  const legendButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const legendTriggerIndexRef = useRef(0);
+
+  function closeLegend({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
+    setLegendOpen(false);
+    if (restoreFocus) {
+      legendButtonRefs.current[legendTriggerIndexRef.current]?.focus();
+    }
+  }
 
   useEffect(() => {
     if (!legendOpen) return;
 
     function handlePointerDown(event: PointerEvent) {
       if (!legendRef.current?.contains(event.target as Node)) {
-        setLegendOpen(false);
+        closeLegend();
       }
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setLegendOpen(false);
+        closeLegend({ restoreFocus: true });
       }
     }
 
@@ -503,6 +512,7 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
   const activeLegendItem = TRAINING_STATUS_LEGEND_ITEMS[legendIndex] ?? TRAINING_STATUS_LEGEND_ITEMS[0];
 
   function showLegendItem(index: number) {
+    legendTriggerIndexRef.current = index;
     setLegendIndex(index);
     setLegendOpen(true);
   }
@@ -527,21 +537,34 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
               <button
                 key={item.status}
                 type="button"
-                className={`wellness-status-legend-swatch${legendOpen && legendIndex === index ? ' active' : ''}`}
+                ref={(node) => {
+                  legendButtonRefs.current[index] = node;
+                }}
+                className={`wellness-status-legend-swatch ${legendOpen && legendIndex === index ? 'active' : ''}`.trim()}
                 style={{ background: item.color }}
                 onPointerDown={() => showLegendItem(index)}
                 onMouseEnter={() => legendOpen && setLegendIndex(index)}
-                onClick={() => showLegendItem(index)}
                 onPointerMove={() => legendOpen && setLegendIndex(index)}
-                onFocus={() => showLegendItem(index)}
+                onFocus={() => legendOpen && setLegendIndex(index)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    showLegendItem(index);
+                  }
+                }}
                 aria-label={item.label}
-                aria-expanded={legendOpen}
+                aria-controls={legendOpen && legendIndex === index ? 'training-status-legend-popover' : undefined}
+                aria-expanded={legendOpen && legendIndex === index}
               />
             ))}
           </div>
           {legendOpen && (
-            <div className="wellness-status-legend-popover" role="status" aria-live="polite">
-              <span className="wellness-status-legend-popover-value">
+            <div
+              id="training-status-legend-popover"
+              className="wellness-status-legend-popover"
+              role="tooltip"
+            >
+              <span className="wellness-status-legend-popover-value" aria-live="polite">
                 <span className="wellness-status-legend-dot" style={{ background: activeLegendItem.color }} />
                 {activeLegendItem.label}
               </span>
