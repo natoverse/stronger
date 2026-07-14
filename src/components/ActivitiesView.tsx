@@ -56,7 +56,7 @@ const AGGREGATION_OPTIONS: { value: StravaAggregation; label: string }[] = [
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function StravaView({ activities, goals, onGoalChange, title = 'Activities', emptyText = 'No Strava data yet. Set up sync to see activity charts.' }: Props) {
+export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.' }: Props) {
   const [range, setRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [aggregation, setAggregation] = useState<StravaAggregation>('week');
   const [filterOpen, setFilterOpen] = useState(false);

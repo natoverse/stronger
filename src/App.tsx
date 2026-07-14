@@ -18,7 +18,7 @@ import { CalendarView, SessionDetail } from './components/CalendarView.js';
 import type { LogSession } from './components/CalendarView.js';
 import type { ClearOptions, ClearResult } from './components/CalendarClear.js';
 import { ProgressView } from './components/ProgressView.js';
-import { StravaView } from './components/StravaView.js';
+import { ActivitiesView } from './components/ActivitiesView.js';
 import { SettingsView } from './components/SettingsView.js';
 import { SetupPage } from './components/SetupPage.js';
 import { GoogleAuth } from './components/GoogleAuth.js';
@@ -1292,7 +1292,7 @@ function App() {
           onOpenNutrition={handleOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
-        <StravaView
+        <ActivitiesView
           activities={garminActivities}
           goals={stravaGoals}
           onGoalChange={handleStravaGoalChange}
