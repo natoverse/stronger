@@ -111,6 +111,7 @@ Verified all fields against the real Garmin Connect API response structures usin
 - **Body Battery range chart consolidation (2026-07-14):** Combined the separate Body Battery High/Low charts into a single floating-range chart in `GarminWellnessView` where each bar encodes the aggregated low→high spread for a bucket.
 - **Body Battery tooltip + summary update (2026-07-14):** Updated hover and card summary text to show min→max values (`Avg low–high`) instead of separate high/low summaries.
 - **Combined Activities + Wellness page (2026-07-14):** Merged the old separate activities (`#/garmin`) and wellness (`#/wellness`) views into one combined page with activities charts first, default range set to the current year, default aggregation set to day, and a single watch-icon toolbar entry point.
+- **Combined Garmin page spacing cleanup (2026-07-14):** Removed the redundant Activities page heading on the merged Garmin page and rendered the activities + wellness sections inside one shared padded layout so the transition between them stays visually continuous.
 
 ## Follow-up extraction hardening
 

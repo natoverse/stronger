@@ -3502,6 +3502,14 @@ body {
 	padding: 16px;
 }
 
+.strava-subview {
+	padding: 0;
+}
+
+.strava-subview > .strava-section-title:first-child {
+	margin-top: 0;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Nutrition                                                           */
 /* ------------------------------------------------------------------ */
