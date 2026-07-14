@@ -61,10 +61,10 @@ function trainingStatusColor(status: string): string {
   }
 }
 
-function hrvStatusColor(status: string): string {
+export function hrvStatusColor(status: string): string {
   const s = status.toUpperCase();
   if (s === 'BALANCED' || s === 'OPTIMAL') return GREEN;
-  if (s.includes('UNBALANCED'))            return ORANGE;
+  if (s.includes('UNBALANCED'))            return YELLOW;
   if (s === 'LOW')                         return RED;
   return ACCENT;
 }
@@ -379,7 +379,7 @@ export function GarminWellnessView({ entries }: Props) {
   const hillData        = useMemo(() => buildWellnessChartData(entries, 'hillScore',            range, aggregation, today), [entries, range, aggregation, today]);
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
 
-  const hrvData         = useMemo(() => buildWellnessChartData(entries, 'hrvLastNight',         range, aggregation, today, 'hrvStatus'), [entries, range, aggregation, today]);
+  const hrvData         = useMemo(() => buildWellnessChartData(entries, 'hrvWeeklyAvg',         range, aggregation, today, 'hrvStatus'), [entries, range, aggregation, today]);
   const rhrData         = useMemo(() => buildWellnessChartData(entries, 'restingHR',            range, aggregation, today), [entries, range, aggregation, today]);
   const bbHighData      = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryHigh',      range, aggregation, today), [entries, range, aggregation, today]);
   const bbLowData       = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryLow',       range, aggregation, today), [entries, range, aggregation, today]);
@@ -482,12 +482,12 @@ export function GarminWellnessView({ entries }: Props) {
       {/* Section: Recovery */}
       <h2 className="strava-section-title">Recovery</h2>
       <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.hrvLastNight}
-        unit={WELLNESS_METRIC_UNITS.hrvLastNight}
+        label={WELLNESS_METRIC_LABELS.hrvWeeklyAvg}
+        unit={WELLNESS_METRIC_UNITS.hrvWeeklyAvg}
         buckets={hrvData.buckets}
-        summaryLabel={summaryStr(hrvData.summary, 'hrvLastNight', WELLNESS_METRIC_UNITS.hrvLastNight)}
+        summaryLabel={summaryStr(hrvData.summary, 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg)}
         colorFn={(_, key) => key ? hrvStatusColor(key) : ACCENT}
-        formatValue={numFmt('hrvLastNight')}
+        formatValue={numFmt('hrvWeeklyAvg')}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.restingHR}
