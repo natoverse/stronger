@@ -184,10 +184,10 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
         </button>
         {showSavedForm && (
           <form className="nutrition-form" onSubmit={saveItem}>
-            <input placeholder="Food or drink name" value={savedName} onChange={(event) => setSavedName(event.target.value)} required />
             <select value={savedCategory} onChange={(event) => setSavedCategory(event.target.value as MealCategory)}>
               {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
             </select>
+            <input placeholder="Food or drink name" value={savedName} onChange={(event) => setSavedName(event.target.value)} required />
             <MacroFields values={savedMacros} onChange={setSavedMacros} />
             <button className="btn-primary" type="submit">Save Item</button>
           </form>
