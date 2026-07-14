@@ -3924,6 +3924,19 @@ body {
 	gap: 12px;
 }
 
+.wellness-legend-label-group {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.wellness-legend-swatch {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
 .wellness-legend-range {
 	color: rgba(255, 255, 255, 0.55);
 	font-size: 0.7rem;
