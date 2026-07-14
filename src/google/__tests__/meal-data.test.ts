@@ -24,7 +24,17 @@ describe('meal item data', () => {
   });
 
   it('round-trips a daily log entry', () => {
-    const entry = { ...item, id: 'log-1', date: '2026-07-12' };
+    const entry = { ...item, id: 'log-1', date: '2026-07-12', quantity: 1 };
     expect(parseMealLogRow(mealLogEntryToRow(entry).map(String))).toEqual(entry);
+  });
+
+  it('round-trips a fractional serving quantity', () => {
+    const entry = { ...item, id: 'log-2', date: '2026-07-12', quantity: 0.5 };
+    expect(parseMealLogRow(mealLogEntryToRow(entry).map(String))).toEqual(entry);
+  });
+
+  it('defaults legacy log rows without a quantity column to 1 serving', () => {
+    const legacyRow = ['2026-07-12', 'log-3', 'Oats', 'Breakfast', '150', '3', '27', '4', '5'];
+    expect(parseMealLogRow(legacyRow)?.quantity).toBe(1);
   });
 });
