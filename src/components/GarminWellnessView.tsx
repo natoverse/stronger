@@ -6,7 +6,7 @@
  * Reuses the same CSS classes as StravaView (strava-chart-card, strava-bar, etc.)
  * and the same aggregation engine from strava.ts via wellness.ts.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { GarminWellnessEntry } from '../model/types.js';
 import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData } from '../model/wellness.js';
 import {
@@ -33,23 +33,71 @@ const PURPLE = '#d500f9';
 const BLUE   = '#2196f3';
 const GRAY   = 'rgba(255,255,255,0.25)';
 
-function thresholdColor(value: number, thresholds: Array<{ max: number; color: string }>, fallback: string): string {
+interface ThresholdBand {
+  max: number;
+  color: string;
+  label: string;
+}
+
+interface LegendItem {
+  range?: string;
+  label: string;
+}
+
+function thresholdColor(value: number, thresholds: ThresholdBand[], fallback: string): string {
   for (const { max, color } of thresholds) {
     if (value < max) return color;
   }
   return fallback;
 }
 
-function readinessColor(v: number): string {
-  if (v >= 75) return GREEN;
-  if (v >= 50) return YELLOW;
-  return ACCENT;
+function thresholdLabel(value: number, thresholds: ThresholdBand[], fallback: string): string {
+  for (const { max, label } of thresholds) {
+    if (value < max) return label;
+  }
+  return fallback;
 }
 
+const TRAINING_READINESS_BANDS: ThresholdBand[] = [
+  { max: 25, color: ACCENT, label: 'Poor' },
+  { max: 50, color: ORANGE, label: 'Low' },
+  { max: 75, color: YELLOW, label: 'Moderate' },
+  { max: 95, color: GREEN, label: 'High' },
+];
+
+export const TRAINING_READINESS_LEGEND_ITEMS: LegendItem[] = [
+  { range: '<25', label: 'Poor' },
+  { range: '<50', label: 'Low' },
+  { range: '<75', label: 'Moderate' },
+  { range: '<95', label: 'High' },
+  { range: '95+', label: 'Prime' },
+];
+
+function readinessColor(v: number): string {
+  return thresholdColor(v, TRAINING_READINESS_BANDS, BLUE);
+}
+
+export function readinessLegendLabel(v: number): string {
+  return thresholdLabel(v, TRAINING_READINESS_BANDS, 'Prime');
+}
+
+const LOAD_RATIO_BANDS: ThresholdBand[] = [
+  { max: 0.8, color: YELLOW, label: 'Low' },
+  { max: 1.5, color: GREEN, label: 'Optimal' },
+];
+
+export const LOAD_RATIO_LEGEND_ITEMS: LegendItem[] = [
+  { range: '<0.8', label: 'Low' },
+  { range: '<1.5', label: 'Optimal' },
+  { range: '1.5+', label: 'High' },
+];
+
 function trainingLoadRatioColor(v: number): string {
-  if (v < 0.8) return YELLOW;
-  if (v <= 1.5) return GREEN;
-  return ACCENT;
+  return thresholdColor(v, LOAD_RATIO_BANDS, ACCENT);
+}
+
+export function trainingLoadRatioLegendLabel(v: number): string {
+  return thresholdLabel(v, LOAD_RATIO_BANDS, 'High');
 }
 
 export function trainingStatusColor(status: string): string {
@@ -67,13 +115,13 @@ export function trainingStatusColor(status: string): string {
   }
 }
 
-interface ChartLegendItem {
+interface TrainingStatusLegendItem {
   status: string;
   label: string;
   color: string;
 }
 
-export const TRAINING_STATUS_LEGEND_ITEMS: ChartLegendItem[] = [
+export const TRAINING_STATUS_LEGEND_ITEMS: TrainingStatusLegendItem[] = [
   { status: 'PRODUCTIVE', label: 'Productive', color: GREEN },
   { status: 'PEAKING', label: 'Peaking', color: PURPLE },
   { status: 'MAINTAINING', label: 'Maintaining', color: YELLOW },
@@ -100,46 +148,100 @@ export function hrvStatusColor(status: string): string {
   return ACCENT;
 }
 
-// Garmin fitness bands requested for VO₂ max: poor, fair, good, excellent, superior.
-export function vo2MaxColor(value: number): string {
-  return thresholdColor(value, [
-    { max: 38.5, color: RED },
-    { max: 42.4, color: ORANGE },
-    { max: 46.4, color: GREEN },
-    { max: 52.5, color: BLUE },
-  ], PURPLE);
+export function hrvStatusLegendLabel(status: string): string {
+  if (!status) return 'Unknown';
+  return formatTrainingStatusLabel(status);
 }
 
-// Garmin hill score bands requested for climbing fitness from red through pink.
+export const HRV_STATUS_LEGEND_ITEMS: LegendItem[] = [
+  { label: 'Balanced' },
+  { label: 'Unbalanced' },
+  { label: 'Low' },
+  { label: 'Optimal' },
+];
+
+const VO2_MAX_BANDS: ThresholdBand[] = [
+  { max: 38.5, color: RED, label: 'Poor' },
+  { max: 42.5, color: ORANGE, label: 'Fair' },
+  { max: 46.4, color: GREEN, label: 'Good' },
+  { max: 52.5, color: BLUE, label: 'Excellent' },
+];
+
+export const VO2_MAX_LEGEND_ITEMS: LegendItem[] = [
+  { range: '<38.5', label: 'Poor' },
+  { range: '<42.5', label: 'Fair' },
+  { range: '<46.4', label: 'Good' },
+  { range: '<52.5', label: 'Excellent' },
+  { range: '52.5+', label: 'Superior' },
+];
+
+export function vo2MaxColor(value: number): string {
+  return thresholdColor(value, VO2_MAX_BANDS, PURPLE);
+}
+
+export function vo2MaxLegendLabel(value: number): string {
+  return thresholdLabel(value, VO2_MAX_BANDS, 'Superior');
+}
+
+const HILL_SCORE_BANDS: ThresholdBand[] = [
+  { max: 25, color: RED, label: 'Recreational' },
+  { max: 50, color: ORANGE, label: 'Challenger' },
+  { max: 69, color: GREEN, label: 'Trained' },
+  { max: 85, color: BLUE, label: 'Skilled' },
+  { max: 95, color: PURPLE, label: 'Expert' },
+];
+
+export const HILL_SCORE_LEGEND_ITEMS: LegendItem[] = [
+  { range: '<25', label: 'Recreational' },
+  { range: '<50', label: 'Challenger' },
+  { range: '<69', label: 'Trained' },
+  { range: '<85', label: 'Skilled' },
+  { range: '<95', label: 'Expert' },
+  { range: '95+', label: 'Elite' },
+];
+
 export function hillScoreColor(value: number): string {
-  return thresholdColor(value, [
-    { max: 25, color: RED },
-    { max: 50, color: ORANGE },
-    { max: 70, color: GREEN },
-    { max: 85, color: BLUE },
-    { max: 95, color: PURPLE },
-  ], ACCENT);
+  return thresholdColor(value, HILL_SCORE_BANDS, ACCENT);
+}
+
+export function hillScoreLegendLabel(value: number): string {
+  return thresholdLabel(value, HILL_SCORE_BANDS, 'Elite');
 }
 
 // Sleep score bands: <60 red, <80 orange, <90 green, 90+ blue.
 export function sleepScoreColor(value: number): string {
   return thresholdColor(value, [
-    { max: 60, color: RED },
-    { max: 80, color: ORANGE },
-    { max: 90, color: GREEN },
+    { max: 60, color: RED, label: '' },
+    { max: 80, color: ORANGE, label: '' },
+    { max: 90, color: GREEN, label: '' },
   ], BLUE);
 }
 
-// Garmin endurance score bands requested for lowest through highest endurance fitness.
+const ENDURANCE_SCORE_BANDS: ThresholdBand[] = [
+  { max: 5000, color: RED, label: 'Recreational' },
+  { max: 5700, color: ORANGE, label: 'Intermediate' },
+  { max: 6400, color: YELLOW, label: 'Trained' },
+  { max: 7000, color: GREEN, label: 'Well-trained' },
+  { max: 7700, color: BLUE, label: 'Expert' },
+  { max: 8400, color: PURPLE, label: 'Superior' },
+];
+
+export const ENDURANCE_SCORE_LEGEND_ITEMS: LegendItem[] = [
+  { range: '<5000', label: 'Recreational' },
+  { range: '<5700', label: 'Intermediate' },
+  { range: '<6400', label: 'Trained' },
+  { range: '<7000', label: 'Well-trained' },
+  { range: '<7700', label: 'Expert' },
+  { range: '<8400', label: 'Superior' },
+  { range: '8400+', label: 'Elite' },
+];
+
 export function enduranceScoreColor(value: number): string {
-  return thresholdColor(value, [
-    { max: 5000, color: RED },
-    { max: 5700, color: ORANGE },
-    { max: 6400, color: YELLOW },
-    { max: 7000, color: GREEN },
-    { max: 7700, color: BLUE },
-    { max: 8400, color: PURPLE },
-  ], ACCENT);
+  return thresholdColor(value, ENDURANCE_SCORE_BANDS, ACCENT);
+}
+
+export function enduranceScoreLegendLabel(value: number): string {
+  return thresholdLabel(value, ENDURANCE_SCORE_BANDS, 'Elite');
 }
 
 /* ------------------------------------------------------------------ */
@@ -151,6 +253,80 @@ const CHART_PADDING = { top: 16, right: 16, bottom: 32, left: 52 };
 const VIEW_BOX_W = 400;
 const PLOT_W = VIEW_BOX_W - CHART_PADDING.left - CHART_PADDING.right;
 const PLOT_H = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+
+interface WellnessChartHeaderProps {
+  label: string;
+  summaryLabel?: string;
+  legendItems?: LegendItem[];
+}
+
+function WellnessChartHeader({ label, summaryLabel, legendItems }: WellnessChartHeaderProps) {
+  const [legendOpen, setLegendOpen] = useState(false);
+  const legendRef = useRef<HTMLDivElement | null>(null);
+  const legendId = useId();
+
+  useEffect(() => {
+    if (!legendOpen) return;
+
+    function handlePointerDown(event: PointerEvent) {
+      if (!legendRef.current?.contains(event.target as Node)) {
+        setLegendOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setLegendOpen(false);
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [legendOpen]);
+
+  return (
+    <div className="strava-chart-header">
+      <h3 className="strava-chart-label">
+        {legendItems ? (
+          <button
+            type="button"
+            className="wellness-legend-trigger"
+            onPointerDown={(event) => {
+              event.preventDefault();
+              setLegendOpen((open) => !open);
+            }}
+            aria-expanded={legendOpen}
+            aria-controls={legendId}
+          >
+            {label}
+          </button>
+        ) : (
+          label
+        )}
+        {summaryLabel ? <span className="strava-chart-total">{summaryLabel}</span> : null}
+      </h3>
+      {legendItems && legendOpen ? (
+        <div
+          id={legendId}
+          className="wellness-legend-popover"
+          role="tooltip"
+          ref={legendRef}
+        >
+          {legendItems.map((item) => (
+            <div key={`${item.range ?? 'label'}-${item.label}`} className="wellness-legend-item">
+              {item.range ? <span className="wellness-legend-range">{item.range}</span> : null}
+              <span className="wellness-legend-value">{item.label}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
 /*  Y-axis tick helper (same as StravaView)                           */
@@ -185,12 +361,13 @@ interface BarChartProps {
   unit: string;
   buckets: WellnessBucket[];
   summaryLabel: string;
+  legendItems?: LegendItem[];
   /** Per-bar color function. Falls back to ACCENT. */
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
 }
 
-function WellnessBarChart({ label, unit, buckets, summaryLabel, colorFn, formatValue }: BarChartProps) {
+function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue }: BarChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -221,12 +398,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, colorFn, formatV
 
   return (
     <div className="strava-chart-card">
-      <div className="strava-chart-header">
-        <h3 className="strava-chart-label">
-          {label}
-          <span className="strava-chart-total">{summaryLabel}</span>
-        </h3>
-      </div>
+      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems} />
 
       <div className="strava-chart-container" {...containerHandlers}>
         <svg
@@ -327,10 +499,11 @@ interface RangeBarChartProps {
   unit: string;
   buckets: WellnessRangeBucket[];
   summaryLabel: string;
+  legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
 }
 
-function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue }: RangeBarChartProps) {
+function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems, formatValue }: RangeBarChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -369,12 +542,7 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, formatValue
 
   return (
     <div className="strava-chart-card">
-      <div className="strava-chart-header">
-        <h3 className="strava-chart-label">
-          {label}
-          <span className="strava-chart-total">{summaryLabel}</span>
-        </h3>
-      </div>
+      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems} />
 
       <div className="strava-chart-container" {...containerHandlers}>
         <svg
@@ -481,49 +649,6 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
 
   const xPositions = buckets.map((_, i) => xCenter(i));
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
-  const [legendOpen, setLegendOpen] = useState(false);
-  const [legendIndex, setLegendIndex] = useState(0);
-  const legendRef = useRef<HTMLDivElement | null>(null);
-  const legendButtonRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const legendTriggerIndexRef = useRef(0);
-
-  function closeLegend({ restoreFocus = false }: { restoreFocus?: boolean } = {}) {
-    setLegendOpen(false);
-    if (restoreFocus) {
-      legendButtonRefs.current[legendTriggerIndexRef.current]?.focus();
-    }
-  }
-
-  useEffect(() => {
-    if (!legendOpen) return;
-
-    function handlePointerDown(event: PointerEvent) {
-      if (!legendRef.current?.contains(event.target as Node)) {
-        closeLegend();
-      }
-    }
-
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        closeLegend({ restoreFocus: true });
-      }
-    }
-
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [legendOpen]);
-
-  const activeLegendItem = TRAINING_STATUS_LEGEND_ITEMS[legendIndex] ?? TRAINING_STATUS_LEGEND_ITEMS[0];
-
-  function showLegendItem(index: number) {
-    legendTriggerIndexRef.current = index;
-    setLegendIndex(index);
-    setLegendOpen(true);
-  }
 
   const maxLabels = Math.min(n, 8);
   const xLabelIndices: number[] = [];
@@ -537,50 +662,10 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
 
   return (
     <div className="strava-chart-card">
-      <div className="strava-chart-header">
-        <h3 className="strava-chart-label">Training Status</h3>
-        <div className="wellness-status-legend" ref={legendRef}>
-          <div className="wellness-status-legend-swatches" role="group" aria-label="Training status legend">
-            {TRAINING_STATUS_LEGEND_ITEMS.map((item, index) => (
-              <button
-                key={item.status}
-                type="button"
-                ref={(node) => {
-                  legendButtonRefs.current[index] = node;
-                }}
-                className={`wellness-status-legend-swatch ${legendOpen && legendIndex === index ? 'active' : ''}`.trim()}
-                style={{ background: item.color }}
-                onPointerDown={() => showLegendItem(index)}
-                onMouseEnter={() => legendOpen && setLegendIndex(index)}
-                onPointerMove={() => legendOpen && setLegendIndex(index)}
-                onFocus={() => legendOpen && setLegendIndex(index)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    showLegendItem(index);
-                  }
-                }}
-                aria-label={item.label}
-                aria-controls={legendOpen && legendIndex === index ? 'training-status-legend-popover' : undefined}
-                aria-expanded={legendOpen && legendIndex === index}
-              />
-            ))}
-          </div>
-          {legendOpen && (
-            <div
-              id="training-status-legend-popover"
-              className="wellness-status-legend-popover"
-              role="tooltip"
-            >
-              <span className="wellness-status-legend-popover-value" aria-live="polite">
-                <span className="wellness-status-legend-dot" style={{ background: activeLegendItem.color }} />
-                {activeLegendItem.label}
-              </span>
-              <span className="wellness-status-legend-popover-hint">Hover or swipe across the colors.</span>
-            </div>
-          )}
-        </div>
-      </div>
+      <WellnessChartHeader
+        label="Training Status"
+        legendItems={TRAINING_STATUS_LEGEND_ITEMS.map((item) => ({ label: item.label }))}
+      />
 
       <div className="strava-chart-container" {...containerHandlers}>
         <svg
@@ -704,6 +789,9 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const summaryValue = (data: WellnessChartData): number | null =>
     aggregation === 'day' ? data.latestValue : data.summary;
   const latestBodyBatteryRange = [...bbRangeBuckets].reverse().find((bucket) => bucket.min !== null || bucket.max !== null);
+  const latestHrvStatus = [...hrvData.buckets].reverse().find((bucket) => bucket.value !== null && bucket.colorKey)?.colorKey ?? '';
+  const withLegendLabel = (summary: string, legend: string | null): string =>
+    summary && legend ? `${summary} · ${legend}` : summary;
 
   const numFmt = (metric: Parameters<typeof formatWellnessValue>[1]) =>
     (v: number | null) => formatWellnessValue(v, metric);
@@ -716,16 +804,26 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.readinessScore}
         unit={WELLNESS_METRIC_UNITS.readinessScore}
         buckets={readinessData.buckets}
-        summaryLabel={summaryStr(summaryValue(readinessData), 'readinessScore', '')}
+        summaryLabel={withLegendLabel(
+          summaryStr(summaryValue(readinessData), 'readinessScore', ''),
+          aggregation === 'day' && summaryValue(readinessData) !== null ? readinessLegendLabel(summaryValue(readinessData)!) : null,
+        )}
+        legendItems={TRAINING_READINESS_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? readinessColor(v) : GRAY}
         formatValue={numFmt('readinessScore')}
       />
       <WellnessStatusBarChart buckets={statusData.buckets} />
       <WellnessBarChart
-        label="Acute:Chronic Load Ratio"
+        label="Load Ratio"
         unit=""
         buckets={trainingLoadRatioData.buckets}
-        summaryLabel={formatWellnessRatio(summaryValue(trainingLoadRatioData))}
+        summaryLabel={withLegendLabel(
+          formatWellnessRatio(summaryValue(trainingLoadRatioData)),
+          aggregation === 'day' && summaryValue(trainingLoadRatioData) !== null
+            ? trainingLoadRatioLegendLabel(summaryValue(trainingLoadRatioData)!)
+            : null,
+        )}
+        legendItems={LOAD_RATIO_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
         formatValue={formatWellnessRatio}
       />
@@ -733,7 +831,11 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.vo2Max}
         unit={WELLNESS_METRIC_UNITS.vo2Max}
         buckets={vo2Data.buckets}
-        summaryLabel={summaryStr(summaryValue(vo2Data), 'vo2Max', WELLNESS_METRIC_UNITS.vo2Max)}
+        summaryLabel={withLegendLabel(
+          summaryStr(summaryValue(vo2Data), 'vo2Max', WELLNESS_METRIC_UNITS.vo2Max),
+          aggregation === 'day' && summaryValue(vo2Data) !== null ? vo2MaxLegendLabel(summaryValue(vo2Data)!) : null,
+        )}
+        legendItems={VO2_MAX_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? vo2MaxColor(v) : GRAY}
         formatValue={numFmt('vo2Max')}
       />
@@ -741,7 +843,11 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.hillScore}
         unit={WELLNESS_METRIC_UNITS.hillScore}
         buckets={hillData.buckets}
-        summaryLabel={summaryStr(summaryValue(hillData), 'hillScore', '')}
+        summaryLabel={withLegendLabel(
+          summaryStr(summaryValue(hillData), 'hillScore', ''),
+          aggregation === 'day' && summaryValue(hillData) !== null ? hillScoreLegendLabel(summaryValue(hillData)!) : null,
+        )}
+        legendItems={HILL_SCORE_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? hillScoreColor(v) : GRAY}
         formatValue={numFmt('hillScore')}
       />
@@ -749,7 +855,11 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.enduranceScore}
         unit={WELLNESS_METRIC_UNITS.enduranceScore}
         buckets={enduranceData.buckets}
-        summaryLabel={summaryStr(summaryValue(enduranceData), 'enduranceScore', '')}
+        summaryLabel={withLegendLabel(
+          summaryStr(summaryValue(enduranceData), 'enduranceScore', ''),
+          aggregation === 'day' && summaryValue(enduranceData) !== null ? enduranceScoreLegendLabel(summaryValue(enduranceData)!) : null,
+        )}
+        legendItems={ENDURANCE_SCORE_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? enduranceScoreColor(v) : GRAY}
         formatValue={numFmt('enduranceScore')}
       />
@@ -757,10 +867,14 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
       {/* Section: Recovery */}
       <h2 className="strava-section-title">Recovery</h2>
       <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.hrvWeeklyAvg}
+        label="HRV Status"
         unit={WELLNESS_METRIC_UNITS.hrvWeeklyAvg}
         buckets={hrvData.buckets}
-        summaryLabel={summaryStr(summaryValue(hrvData), 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg)}
+        summaryLabel={withLegendLabel(
+          summaryStr(summaryValue(hrvData), 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg),
+          aggregation === 'day' ? hrvStatusLegendLabel(latestHrvStatus) : null,
+        )}
+        legendItems={HRV_STATUS_LEGEND_ITEMS}
         colorFn={(_, key) => key ? hrvStatusColor(key) : ACCENT}
         formatValue={numFmt('hrvWeeklyAvg')}
       />
