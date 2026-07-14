@@ -208,7 +208,7 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
             <div className="nutrition-entry" key={entry.id}>
               <span>
                 {entry.name}
-                {entry.quantity !== 1 && <em> &times;{round(entry.quantity)}</em>}
+                {entry.quantity !== 1 && <em aria-label={`${round(entry.quantity)} servings`}> &times;{round(entry.quantity)}</em>}
                 <small>{entry.category} &middot; {round(entry.calories * entry.quantity)} cal</small>
               </span>
               <button aria-label={`Delete ${entry.name}`} className="nutrition-delete" onClick={() => onDeleteEntry(entry.id)}>
