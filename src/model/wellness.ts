@@ -107,6 +107,8 @@ export interface WellnessChartData {
   buckets: WellnessBucket[];
   /** Sum or average of all non-null values — shown in the chart header. */
   summary: number | null;
+  /** Most recent non-null bucket value in the selected range. */
+  latestValue: number | null;
 }
 
 /** Bucket for the training-status status chart (categorical, no numeric value). */
@@ -229,8 +231,9 @@ export function buildWellnessChartData(
   const summary = totalCount > 0
     ? (isSum ? totalSum : totalSum / totalCount)
     : null;
+  const latestValue = [...buckets].reverse().find((bucket) => bucket.value !== null)?.value ?? null;
 
-  return { metric, buckets, summary };
+  return { metric, buckets, summary, latestValue };
 }
 
 export function buildTrainingLoadRatioChartData(
@@ -267,6 +270,7 @@ export function buildTrainingLoadRatioChartData(
     metric: 'trainingAcuteLoad',
     buckets,
     summary: count > 0 ? total / count : null,
+    latestValue: [...buckets].reverse().find((bucket) => bucket.value !== null)?.value ?? null,
   };
 }
 

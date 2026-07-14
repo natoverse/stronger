@@ -70,6 +70,8 @@ export interface MetricChartData {
   unit: string;
   /** Total across all buckets */
   total: number;
+  /** Most recent non-empty bucket value within the active range. */
+  latestValue: number | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -375,6 +377,7 @@ export function buildMetricChartData(
       goalTrajectory: [],
       unit: METRIC_UNITS[metric],
       total: 0,
+      latestValue: null,
     };
   }
 
@@ -419,6 +422,9 @@ export function buildMetricChartData(
     }
   }
   const cumulative = fullCumulative.slice(0, activeBucketCount);
+  const latestValue = [...buckets.slice(0, activeBucketCount)]
+    .reverse()
+    .find((bucket) => bucket.value > 0)?.value ?? null;
 
   const proratedGoal = goal !== null ? prorateGoal(goal, range, today) : null;
 
@@ -436,6 +442,7 @@ export function buildMetricChartData(
     goalTrajectory,
     unit: METRIC_UNITS[metric],
     total: running,
+    latestValue,
   };
 }
 

@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { GarminWellnessEntry } from '../model/types.js';
-import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket } from '../model/wellness.js';
+import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData } from '../model/wellness.js';
 import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
@@ -702,6 +702,9 @@ export function GarminWellnessView({ entries }: Props) {
     if (value === null) return '';
     return `${formatWellnessValue(value, metric)}${unit ? ` ${unit}` : ''}`;
   }
+  const summaryValue = (data: WellnessChartData): number | null =>
+    aggregation === 'day' ? data.latestValue : data.summary;
+  const latestBodyBatteryRange = [...bbRangeBuckets].reverse().find((bucket) => bucket.min !== null || bucket.max !== null);
 
   const numFmt = (metric: Parameters<typeof formatWellnessValue>[1]) =>
     (v: number | null) => formatWellnessValue(v, metric);
@@ -740,7 +743,7 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.readinessScore}
         unit={WELLNESS_METRIC_UNITS.readinessScore}
         buckets={readinessData.buckets}
-        summaryLabel={summaryStr(readinessData.summary, 'readinessScore', '')}
+        summaryLabel={summaryStr(summaryValue(readinessData), 'readinessScore', '')}
         colorFn={(v) => v !== null ? readinessColor(v) : GRAY}
         formatValue={numFmt('readinessScore')}
       />
@@ -749,7 +752,7 @@ export function GarminWellnessView({ entries }: Props) {
         label="Acute:Chronic Load Ratio"
         unit=""
         buckets={trainingLoadRatioData.buckets}
-        summaryLabel={formatWellnessRatio(trainingLoadRatioData.summary)}
+        summaryLabel={formatWellnessRatio(summaryValue(trainingLoadRatioData))}
         colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
         formatValue={formatWellnessRatio}
       />
@@ -757,7 +760,7 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.vo2Max}
         unit={WELLNESS_METRIC_UNITS.vo2Max}
         buckets={vo2Data.buckets}
-        summaryLabel={summaryStr(vo2Data.summary, 'vo2Max', WELLNESS_METRIC_UNITS.vo2Max)}
+        summaryLabel={summaryStr(summaryValue(vo2Data), 'vo2Max', WELLNESS_METRIC_UNITS.vo2Max)}
         colorFn={(v) => v !== null ? vo2MaxColor(v) : GRAY}
         formatValue={numFmt('vo2Max')}
       />
@@ -765,7 +768,7 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.hillScore}
         unit={WELLNESS_METRIC_UNITS.hillScore}
         buckets={hillData.buckets}
-        summaryLabel={summaryStr(hillData.summary, 'hillScore', '')}
+        summaryLabel={summaryStr(summaryValue(hillData), 'hillScore', '')}
         colorFn={(v) => v !== null ? hillScoreColor(v) : GRAY}
         formatValue={numFmt('hillScore')}
       />
@@ -773,7 +776,7 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.enduranceScore}
         unit={WELLNESS_METRIC_UNITS.enduranceScore}
         buckets={enduranceData.buckets}
-        summaryLabel={summaryStr(enduranceData.summary, 'enduranceScore', '')}
+        summaryLabel={summaryStr(summaryValue(enduranceData), 'enduranceScore', '')}
         colorFn={(v) => v !== null ? enduranceScoreColor(v) : GRAY}
         formatValue={numFmt('enduranceScore')}
       />
@@ -784,7 +787,7 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.hrvWeeklyAvg}
         unit={WELLNESS_METRIC_UNITS.hrvWeeklyAvg}
         buckets={hrvData.buckets}
-        summaryLabel={summaryStr(hrvData.summary, 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg)}
+        summaryLabel={summaryStr(summaryValue(hrvData), 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg)}
         colorFn={(_, key) => key ? hrvStatusColor(key) : ACCENT}
         formatValue={numFmt('hrvWeeklyAvg')}
       />
@@ -792,7 +795,7 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.restingHR}
         unit={WELLNESS_METRIC_UNITS.restingHR}
         buckets={rhrData.buckets}
-        summaryLabel={summaryStr(rhrData.summary, 'restingHR', WELLNESS_METRIC_UNITS.restingHR)}
+        summaryLabel={summaryStr(summaryValue(rhrData), 'restingHR', WELLNESS_METRIC_UNITS.restingHR)}
         formatValue={numFmt('restingHR')}
       />
       <WellnessRangeBarChart
@@ -800,9 +803,13 @@ export function GarminWellnessView({ entries }: Props) {
         unit=""
         buckets={bbRangeBuckets}
         summaryLabel={
-          bbLowData.summary !== null && bbHighData.summary !== null
-            ? `Avg ${formatWellnessValue(bbLowData.summary, 'bodyBatteryLow')}–${formatWellnessValue(bbHighData.summary, 'bodyBatteryHigh')}`
-            : ''
+          aggregation === 'day'
+            ? (latestBodyBatteryRange && (latestBodyBatteryRange.min !== null || latestBodyBatteryRange.max !== null)
+                ? `${formatWellnessValue(latestBodyBatteryRange.min, 'bodyBatteryLow')}–${formatWellnessValue(latestBodyBatteryRange.max, 'bodyBatteryHigh')}`
+                : '')
+            : (bbLowData.summary !== null && bbHighData.summary !== null
+                ? `Avg ${formatWellnessValue(bbLowData.summary, 'bodyBatteryLow')}–${formatWellnessValue(bbHighData.summary, 'bodyBatteryHigh')}`
+                : '')
         }
         formatValue={numFmt('bodyBatteryHigh')}
       />
@@ -813,14 +820,14 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.sleepDurationSec}
         unit={WELLNESS_METRIC_UNITS.sleepDurationSec}
         buckets={sleepDurData.buckets}
-        summaryLabel={summaryStr(sleepDurData.summary, 'sleepDurationSec', WELLNESS_METRIC_UNITS.sleepDurationSec)}
+        summaryLabel={summaryStr(summaryValue(sleepDurData), 'sleepDurationSec', WELLNESS_METRIC_UNITS.sleepDurationSec)}
         formatValue={numFmt('sleepDurationSec')}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.sleepScore}
         unit={WELLNESS_METRIC_UNITS.sleepScore}
         buckets={sleepScoreData.buckets}
-        summaryLabel={summaryStr(sleepScoreData.summary, 'sleepScore', '')}
+        summaryLabel={summaryStr(summaryValue(sleepScoreData), 'sleepScore', '')}
         formatValue={numFmt('sleepScore')}
         colorFn={(v) => v !== null ? sleepScoreColor(v) : GRAY}
       />
@@ -831,28 +838,28 @@ export function GarminWellnessView({ entries }: Props) {
         label={WELLNESS_METRIC_LABELS.steps}
         unit={WELLNESS_METRIC_UNITS.steps}
         buckets={stepsData.buckets}
-        summaryLabel={summaryStr(stepsData.summary, 'steps', '')}
+        summaryLabel={summaryStr(summaryValue(stepsData), 'steps', '')}
         formatValue={numFmt('steps')}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.floors}
         unit={WELLNESS_METRIC_UNITS.floors}
         buckets={floorsData.buckets}
-        summaryLabel={summaryStr(floorsData.summary, 'floors', '')}
+        summaryLabel={summaryStr(summaryValue(floorsData), 'floors', '')}
         formatValue={numFmt('floors')}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.intensityMinModerate}
         unit={WELLNESS_METRIC_UNITS.intensityMinModerate}
         buckets={modMinData.buckets}
-        summaryLabel={summaryStr(modMinData.summary, 'intensityMinModerate', WELLNESS_METRIC_UNITS.intensityMinModerate)}
+        summaryLabel={summaryStr(summaryValue(modMinData), 'intensityMinModerate', WELLNESS_METRIC_UNITS.intensityMinModerate)}
         formatValue={numFmt('intensityMinModerate')}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.intensityMinVigorous}
         unit={WELLNESS_METRIC_UNITS.intensityMinVigorous}
         buckets={vigMinData.buckets}
-        summaryLabel={summaryStr(vigMinData.summary, 'intensityMinVigorous', WELLNESS_METRIC_UNITS.intensityMinVigorous)}
+        summaryLabel={summaryStr(summaryValue(vigMinData), 'intensityMinVigorous', WELLNESS_METRIC_UNITS.intensityMinVigorous)}
         formatValue={numFmt('intensityMinVigorous')}
       />
     </div>

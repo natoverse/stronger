@@ -58,6 +58,7 @@ describe('buildWellnessChartData', () => {
     expect(june16).toMatchObject({ value: 47, colorKey: 'LOW' });
     expect(june17).toMatchObject({ value: 49, colorKey: 'UNBALANCED' });
     expect(data.summary).toBe(49);
+    expect(data.latestValue).toBe(49);
   });
 });
 
@@ -79,6 +80,7 @@ describe('buildTrainingLoadRatioChartData', () => {
     expect(chart.buckets[2].value).toBeCloseTo(2);
     expect(chart.buckets[3].value).toBeNull();
     expect(chart.summary).toBeCloseTo((0.7 + 0.8 + 2) / 3);
+    expect(chart.latestValue).toBeCloseTo(2);
   });
 
   it('uses aggregated acute and chronic values before taking the ratio', () => {
@@ -93,6 +95,7 @@ describe('buildTrainingLoadRatioChartData', () => {
 
     expect(populatedBucket?.value).toBeCloseTo(1);
     expect(chart.summary).toBeCloseTo(1);
+    expect(chart.latestValue).toBeCloseTo(1);
   });
 });
 
