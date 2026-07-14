@@ -74,6 +74,7 @@ export function hrvStatusColor(status: string): string {
   return ACCENT;
 }
 
+// Garmin fitness bands requested for VO₂ max: poor, fair, good, excellent, superior.
 export function vo2MaxColor(value: number): string {
   return thresholdColor(value, [
     { max: 38.5, color: RED },
@@ -83,6 +84,7 @@ export function vo2MaxColor(value: number): string {
   ], PURPLE);
 }
 
+// Garmin hill score bands requested for climbing fitness from red through pink.
 export function hillScoreColor(value: number): string {
   return thresholdColor(value, [
     { max: 25, color: RED },
@@ -93,6 +95,7 @@ export function hillScoreColor(value: number): string {
   ], ACCENT);
 }
 
+// Garmin endurance score bands requested for lowest through highest endurance fitness.
 export function enduranceScoreColor(value: number): string {
   return thresholdColor(value, [
     { max: 5000, color: RED },
