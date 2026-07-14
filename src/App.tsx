@@ -74,7 +74,7 @@ function App() {
   const flagsLoadedRef = useRef(false);
   const workoutScheduleLoadedRef = useRef(false);
   const logLoadedRef = useRef(false);
-  const stravaLoadedRef = useRef(false);
+  const settingsLoadedRef = useRef(false);
   const garminLoadedRef = useRef(false);
   const wellnessLoadedRef = useRef(false);
   const withingsLoadedRef = useRef(false);
@@ -93,7 +93,7 @@ function App() {
       flagsLoadedRef.current = false;
       workoutScheduleLoadedRef.current = false;
       logLoadedRef.current = false;
-      stravaLoadedRef.current = false;
+      settingsLoadedRef.current = false;
       garminLoadedRef.current = false;
       wellnessLoadedRef.current = false;
       withingsLoadedRef.current = false;
@@ -166,7 +166,7 @@ function App() {
     flagsLoadedRef.current = false;
     workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
-    stravaLoadedRef.current = false;
+    settingsLoadedRef.current = false;
     garminLoadedRef.current = false;
     wellnessLoadedRef.current = false;
     withingsLoadedRef.current = false;
@@ -352,7 +352,7 @@ function App() {
     }
   }, []);
 
-  const loadStravaData = useCallback(async (sheetId: string) => {
+  const loadSettingsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
         const settingsTabExists = await verifySettingsTab(sheetId);
@@ -1079,21 +1079,28 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadLogData]);
 
-  // Lazy-load settings when garmin, progress, or settings view is first visited
+  // Load settings once after connecting (used across multiple views, including toolbar tab visibility).
   useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'progress' || route.view === 'settings') && spreadsheetId && !stravaLoadedRef.current) {
-      stravaLoadedRef.current = true;
-      void loadStravaData(spreadsheetId);
+    if (spreadsheetId && !settingsLoadedRef.current) {
+      settingsLoadedRef.current = true;
+      void loadSettingsData(spreadsheetId);
     }
-  }, [route.view, spreadsheetId, loadStravaData]);
+  }, [spreadsheetId, loadSettingsData]);
 
-  // Keep legacy wellness links working by redirecting to the combined garmin page.
   useEffect(() => {
     if (route.view === 'wellness') {
-      // Preserves existing bookmarks/external links that still use #/wellness.
-      replaceTo({ view: 'garmin' });
+      replaceTo(appSettings.showGarminTab ? { view: 'garmin' } : { view: 'list' });
+      return;
     }
-  }, [route.view, replaceTo]);
+    if (route.view === 'garmin' && !appSettings.showGarminTab) {
+      replaceTo({ view: 'list' });
+      return;
+    }
+    if (route.view === 'nutrition' && !appSettings.showNutritionTab) {
+      replaceTo({ view: 'list' });
+      return;
+    }
+  }, [route.view, appSettings.showGarminTab, appSettings.showNutritionTab, replaceTo]);
 
   // Lazy-load Garmin activities when the combined activities/wellness view is first visited.
   useEffect(() => {
@@ -1112,7 +1119,7 @@ function App() {
   }, [route.view, spreadsheetId, loadWellnessData]);
 
   // Lazy-load Withings measurements when the withings view is first visited.
-  // (Body-composition goals arrive via the settings read in loadStravaData.)
+  // (Body-composition goals arrive via the settings read in loadSettingsData.)
   useEffect(() => {
     if (route.view === 'withings' && spreadsheetId && !withingsLoadedRef.current) {
       withingsLoadedRef.current = true;
@@ -1147,9 +1154,10 @@ function App() {
     );
   }
 
-  const onOpenGarmin = handleOpenGarmin;
-  const onOpenWellness = handleOpenWellness;
+  const onOpenGarmin = appSettings.showGarminTab ? handleOpenGarmin : undefined;
+  const onOpenWellness = appSettings.showGarminTab ? handleOpenWellness : undefined;
   const onOpenWithings = handleOpenWithings;
+  const onOpenNutrition = appSettings.showNutritionTab ? handleOpenNutrition : undefined;
 
   // Show progression review / confirm page after clicking Finish
   if (progressionProposals && pendingFinish) {
@@ -1197,7 +1205,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseEditor
@@ -1223,7 +1231,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseLibrary
@@ -1251,7 +1259,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <WorkoutEditor
@@ -1279,7 +1287,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <CalendarView
@@ -1315,7 +1323,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ProgressView
@@ -1343,7 +1351,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <div className="strava-view">
@@ -1405,7 +1413,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <WithingsView
@@ -1431,7 +1439,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <NutritionView
@@ -1460,7 +1468,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <SettingsView
@@ -1498,7 +1506,7 @@ function App() {
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={handleOpenNutrition}
+          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <SessionDetail
@@ -1523,7 +1531,7 @@ function App() {
         onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
         onOpenWithings={onOpenWithings}
-        onOpenNutrition={handleOpenNutrition}
+        onOpenNutrition={onOpenNutrition}
         onOpenSettings={handleOpenSettings}
       />
       <WorkoutSelect

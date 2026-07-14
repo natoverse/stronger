@@ -2603,11 +2603,13 @@ export function liftGoalsToSettings(
 /*  Settings tab – app settings helpers                                */
 /* ------------------------------------------------------------------ */
 
-/** Default app settings (all features enabled). */
+/** Default app settings. */
 export const DEFAULT_APP_SETTINGS: AppSettings = {
 	showRestTimer: true,
 	showSetComments: true,
 	keepScreenOn: true,
+	showGarminTab: false,
+	showNutritionTab: false,
 	withingsDipThresholdPercent: 2,
 	progressDipThresholdPercent: 10,
 	dailyCalorieGoal: 0,
@@ -2622,6 +2624,8 @@ const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 	'app.showRestTimer': 'showRestTimer',
 	'app.showSetComments': 'showSetComments',
 	'app.keepScreenOn': 'keepScreenOn',
+	'app.showGarminTab': 'showGarminTab',
+	'app.showNutritionTab': 'showNutritionTab',
 }
 
 const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min: number; max: number }> = {

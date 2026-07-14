@@ -356,6 +356,10 @@ export interface AppSettings {
 	showSetComments: boolean;
 	/** Whether to acquire a wake lock to prevent the phone from sleeping during workouts. */
 	keepScreenOn: boolean;
+	/** Whether to show the Garmin activities/wellness tab in the toolbar. */
+	showGarminTab: boolean;
+	/** Whether to show the nutrition tab in the toolbar. */
+	showNutritionTab: boolean;
 	/** Percent threshold for filtering Withings "dip" points when Skip Dips is enabled. */
 	withingsDipThresholdPercent: number;
 	/** Percent drop threshold for filtering progress-chart dips when Skip Dips is enabled. */
@@ -366,7 +370,12 @@ export interface AppSettings {
 	dailyProteinGoalGrams: number;
 }
 
-export type AppBooleanSettingKey = 'showRestTimer' | 'showSetComments' | 'keepScreenOn';
+export type AppBooleanSettingKey =
+	| 'showRestTimer'
+	| 'showSetComments'
+	| 'keepScreenOn'
+	| 'showGarminTab'
+	| 'showNutritionTab';
 export type AppNumericSettingKey =
 	| 'withingsDipThresholdPercent'
 	| 'progressDipThresholdPercent'

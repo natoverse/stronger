@@ -34,3 +34,8 @@ Add lightweight food and drink tracking for calories, fat, carbs, fiber, and pro
 - Added two app-level nutrition settings persisted in the Settings tab (`app.dailyCalorieGoal`, `app.dailyProteinGoalGrams`) with defaults of `0` (disabled).
 - The Nutrition summary now colors calorie/protein progress against goals: green when within 10% of the target, yellow when outside that band, and pink for calories when intake exceeds the calorie goal.
 - Goals are configured in Settings under a new Nutrition Goals section, and the daily totals now show current value alongside goal when configured.
+
+## Iteration: optional nutrition tab visibility (2026-07)
+
+- Added a toolbar visibility toggle for Nutrition in Settings, persisted as `app.showNutritionTab`.
+- The Nutrition tab is now off by default for new/existing sheets unless explicitly enabled.

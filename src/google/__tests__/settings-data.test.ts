@@ -166,6 +166,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			['app.showRestTimer', 'false'],
 			['app.showSetComments', 'false'],
 			['app.keepScreenOn', 'true'],
+			['app.showGarminTab', 'true'],
+			['app.showNutritionTab', 'true'],
 			['app.withingsDipThresholdPercent', '2.5'],
 			['app.progressDipThresholdPercent', '7.5'],
 			['app.dailyCalorieGoal', '2500'],
@@ -175,6 +177,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			showRestTimer: false,
 			showSetComments: false,
 			keepScreenOn: true,
+			showGarminTab: true,
+			showNutritionTab: true,
 			withingsDipThresholdPercent: 2.5,
 			progressDipThresholdPercent: 7.5,
 			dailyCalorieGoal: 2500,
@@ -203,6 +207,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			showRestTimer: false,
 			showSetComments: true,
 			keepScreenOn: false,
+			showGarminTab: true,
+			showNutritionTab: true,
 			withingsDipThresholdPercent: 3,
 			progressDipThresholdPercent: 6,
 			dailyCalorieGoal: 2200,
@@ -213,6 +219,8 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		expect(settings.get('app.showRestTimer')).toBe('false')
 		expect(settings.get('app.showSetComments')).toBe('true')
 		expect(settings.get('app.keepScreenOn')).toBe('false')
+		expect(settings.get('app.showGarminTab')).toBe('true')
+		expect(settings.get('app.showNutritionTab')).toBe('true')
 		expect(settings.get('app.withingsDipThresholdPercent')).toBe('3')
 		expect(settings.get('app.progressDipThresholdPercent')).toBe('6')
 		expect(settings.get('app.dailyCalorieGoal')).toBe('2200')
