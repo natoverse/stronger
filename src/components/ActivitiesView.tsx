@@ -229,6 +229,7 @@ export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activ
             <MetricChart
               key={data.metric}
               data={data}
+              aggregation={aggregation}
               goal={goalMap.get(data.metric) ?? null}
               onGoalChange={onGoalChange}
             />
@@ -244,6 +245,7 @@ export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activ
             <MetricChart
               key={`strength-${data.metric}`}
               data={data}
+              aggregation={aggregation}
               goal={null}
               onGoalChange={undefined}
             />
@@ -264,10 +266,12 @@ export function ActivitiesView({ activities, goals, onGoalChange, title = 'Activ
 
 function MetricChart({
   data,
+  aggregation,
   goal,
   onGoalChange,
 }: {
   data: MetricChartData;
+  aggregation: StravaAggregation;
   goal: number | null;
   onGoalChange?: (metric: StravaMetric, value: number | null) => void;
 }) {
@@ -287,6 +291,9 @@ function MetricChart({
   const plotH = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
 
   const { buckets, cumulative, proratedGoal, goalTrajectory } = data;
+  const topValue = aggregation === 'day' && data.latestValue !== null
+    ? data.latestValue
+    : data.total;
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -353,7 +360,7 @@ function MetricChart({
         <h3 className="strava-chart-label">
           {METRIC_LABELS[data.metric]}
           <span className="strava-chart-total">
-            {formatMetricValue(data.total, data.metric)} {METRIC_UNITS[data.metric]}
+            {formatMetricValue(topValue, data.metric)} {METRIC_UNITS[data.metric]}
           </span>
         </h3>
         {onGoalChange && (
