@@ -39,7 +39,6 @@ function MacroFields({ values, onChange }: { values: MacroInputs; onChange: (val
             type="number"
             min="0"
             step="any"
-            required
             value={values[field]}
             onChange={(event) => onChange({ ...values, [field]: event.target.value })}
           />
@@ -50,12 +49,16 @@ function MacroFields({ values, onChange }: { values: MacroInputs; onChange: (val
 }
 
 function macrosFrom(values: MacroInputs) {
+  const num = (value: string) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
   return {
-    calories: Number(values.calories),
-    fat: Number(values.fat),
-    carbs: Number(values.carbs),
-    fiber: Number(values.fiber),
-    protein: Number(values.protein),
+    calories: num(values.calories),
+    fat: num(values.fat),
+    carbs: num(values.carbs),
+    fiber: num(values.fiber),
+    protein: num(values.protein),
   };
 }
 
@@ -73,6 +76,10 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
 
   const dayEntries = useMemo(() => entries.filter((entry) => entry.date === date), [entries, date]);
+  const dayEntriesByCategory = useMemo(() => CATEGORIES.map((category) => ({
+    category,
+    entries: dayEntries.filter((entry) => entry.category === category),
+  })).filter((group) => group.entries.length > 0), [dayEntries]);
   const totals = useMemo(
     () => dayEntries.reduce((sum, entry) => ({
       calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
@@ -204,16 +211,21 @@ export function NutritionView({ items, entries, onSaveItems, onLogEntry, onDelet
         <h3>Today's Meals</h3>
         {dayEntries.length === 0
           ? <p className="nutrition-empty">Nothing logged for this day yet.</p>
-          : dayEntries.map((entry) => (
-            <div className="nutrition-entry" key={entry.id}>
-              <span>
-                {entry.name}
-                {entry.quantity !== 1 && <em aria-label={`${round(entry.quantity)} servings`}> &times;{round(entry.quantity)}</em>}
-                <small>{entry.category} &middot; {round(entry.calories * entry.quantity)} cal</small>
-              </span>
-              <button aria-label={`Delete ${entry.name}`} className="nutrition-delete" onClick={() => onDeleteEntry(entry.id)}>
-                <Trash2 size={18} />
-              </button>
+          : dayEntriesByCategory.map((group) => (
+            <div className="nutrition-day-category" key={group.category}>
+              <h4 className="nutrition-day-category-label">{group.category}</h4>
+              {group.entries.map((entry) => (
+                <div className="nutrition-entry" key={entry.id}>
+                  <span>
+                    {entry.name}
+                    {entry.quantity !== 1 && <em aria-label={`${round(entry.quantity)} servings`}> &times;{round(entry.quantity)}</em>}
+                    <small>{round(entry.calories * entry.quantity)} cal</small>
+                  </span>
+                  <button aria-label={`Delete ${entry.name}`} className="nutrition-delete" onClick={() => onDeleteEntry(entry.id)}>
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              ))}
             </div>
           ))}
       </section>
