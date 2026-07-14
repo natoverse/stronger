@@ -110,3 +110,8 @@ Verified all fields against the real Garmin Connect API response structures usin
 - Garmin exposes VO2 max in more than one shape depending on the endpoint payload and device profile. The sync now accepts top-level `generic`/`running` containers, direct `vo2Max*` keys, and both `VO2MAX_RUNNING` and `VO2_MAX_RUNNING` metric-map variants.
 - Hill score and endurance score also arrive as direct `overallScore` values in some single-day responses, not only under `allMetrics.metricsMap.*`. The sync now prefers those single-day score fields and keeps the older metric-map fallback paths for compatibility.
 - Added `scripts/test_garmin_wellness_sync.py` as an offline regression harness for these alternative response shapes so future Garmin API drift is easier to catch locally.
+
+## Iteration notes
+
+- The Recovery HRV chart now plots `hrvWeeklyAvg` instead of `hrvLastNight` so the visual trend reflects Garmin's rolling weekly signal rather than the noisier overnight reading.
+- HRV bar colors continue to come from `hrvStatus` for the same underlying rows, with BALANCED/OPTIMAL = green, UNBALANCED = yellow, and LOW = red.
