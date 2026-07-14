@@ -92,7 +92,6 @@ export function WithingsView({
   if (measurements.length === 0) {
     return (
       <div className="strava-view">
-        <h2 className="strava-title">Body Composition</h2>
         <p className="strava-empty">
           No Withings data yet. Set up sync to see body-composition trends.
         </p>
@@ -104,7 +103,6 @@ export function WithingsView({
 
   return (
     <div className="strava-view">
-      <h2 className="strava-title">Body Composition</h2>
 
       {anyData ? (
         charts.map((data) => (

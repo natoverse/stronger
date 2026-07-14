@@ -1118,10 +1118,10 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadWellnessData]);
 
-  // Lazy-load Withings measurements when the withings view is first visited.
+  // Lazy-load Withings measurements when the progress or withings view is first visited.
   // (Body-composition goals arrive via the settings read in loadSettingsData.)
   useEffect(() => {
-    if (route.view === 'withings' && spreadsheetId && !withingsLoadedRef.current) {
+    if ((route.view === 'progress' || route.view === 'withings') && spreadsheetId && !withingsLoadedRef.current) {
       withingsLoadedRef.current = true;
       void loadWithingsData(spreadsheetId);
     }
@@ -1156,7 +1156,7 @@ function App() {
 
   const onOpenGarmin = appSettings.showGarminTab ? handleOpenGarmin : undefined;
   const onOpenWellness = appSettings.showGarminTab ? handleOpenWellness : undefined;
-  const onOpenWithings = handleOpenWithings;
+  const onOpenWithings = undefined;
   const onOpenNutrition = appSettings.showNutritionTab ? handleOpenNutrition : undefined;
 
   // Show progression review / confirm page after clicking Finish
@@ -1339,6 +1339,17 @@ function App() {
               </button>
             ))}
           </div>
+          <div className="strava-agg-group">
+            {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
+              <button
+                key={agg}
+                className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
+                onClick={() => setChartAggregation(agg)}
+              >
+                {agg.charAt(0).toUpperCase() + agg.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
         <ProgressView
           logRows={logRows}
@@ -1348,6 +1359,20 @@ function App() {
           skipDips={appSettings.skipProgressDips}
           range={chartRange}
         />
+        {withingsMeasurements.length > 0 && (
+          <div className="strava-view">
+            <h3 className="strava-section-title">Body Composition</h3>
+            <WithingsView
+              measurements={withingsMeasurements}
+              goals={withingsGoals}
+              dipThresholdPercent={appSettings.withingsDipThresholdPercent}
+              skipDips={appSettings.skipBodyCompDips}
+              range={chartRange}
+              aggregation={chartAggregation}
+              onGoalChange={handleWithingsGoalChange}
+            />
+          </div>
+        )}
       </>
     );
   }
@@ -1417,57 +1442,8 @@ function App() {
   }
 
   if (route.view === 'withings') {
-    const timeRanges = getTimeRangeOptions(new Date());
-    return (
-      <>
-        <GoogleAuth
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
-          onOpenExercises={handleOpenExercises}
-          onOpenProgress={handleOpenProgress}
-          onOpenGarmin={onOpenGarmin}
-          onOpenWellness={onOpenWellness}
-          onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
-          onOpenSettings={handleOpenSettings}
-        />
-        <div className="strava-view">
-          <div className="strava-range-group">
-            {timeRanges.map((r) => (
-              <button
-                key={r.value}
-                className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
-                onClick={() => setChartRange(r.value)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
-          <div className="strava-agg-group">
-            {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
-              <button
-                key={agg}
-                className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
-                onClick={() => setChartAggregation(agg)}
-              >
-                {agg.charAt(0).toUpperCase() + agg.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <WithingsView
-          measurements={withingsMeasurements}
-          goals={withingsGoals}
-          dipThresholdPercent={appSettings.withingsDipThresholdPercent}
-          skipDips={appSettings.skipBodyCompDips}
-          range={chartRange}
-          aggregation={chartAggregation}
-          onGoalChange={handleWithingsGoalChange}
-        />
-      </>
-    );
+    navigateTo({ view: 'progress' });
+    return null;
   }
 
   if (route.view === 'nutrition') {
