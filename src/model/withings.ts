@@ -232,7 +232,7 @@ function getBucketKey(dateStr: string, aggregation: WithingsAggregation): string
     const { year, week } = getISOWeekInfo(d);
     return `${year}-W${String(week).padStart(2, '0')}`;
   }
-  return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /**
@@ -287,7 +287,7 @@ function buildBucketSlots(
   // month
   const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
   while (cursor <= end) {
-    const key = `${cursor.getFullYear()}-${String(cursor.getMonth()).padStart(2, '0')}`;
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
     push(key, MONTH_LABELS[cursor.getMonth()]);
     cursor.setMonth(cursor.getMonth() + 1);
   }
