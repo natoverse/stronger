@@ -12,7 +12,6 @@ import type { WithingsMeasurement } from './types.js';
 import {
   getRangeStart,
   getRangeEnd,
-  generateBucketSlots,
   getTimeRangeOptions,
 } from './strava.js';
 import type { StravaTimeRange, StravaAggregation } from './strava.js';
@@ -192,19 +191,107 @@ function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | n
 /*  Bucketing                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Get ISO week number for a date (mirrors strava.ts). */
-function getISOWeek(d: Date): number {
+const MONTH_LABELS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * ISO week info for a date: the ISO week number and its week-numbering year.
+ *
+ * The week-numbering year is derived from the Thursday of the week, so weeks
+ * that straddle a calendar boundary (e.g. late December belonging to week 1 of
+ * the next year) are attributed correctly. Returning the year alongside the
+ * week is what lets bucket keys stay unique across a rolling window that spans
+ * two calendar years — otherwise "W1" in two different years would collide.
+ */
+function getISOWeekInfo(d: Date): { year: number; week: number } {
   const tmp = new Date(d.getTime());
   tmp.setHours(0, 0, 0, 0);
+  // Shift to the Thursday of this ISO week.
   tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
-  const jan4 = new Date(tmp.getFullYear(), 0, 4);
-  return 1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  const year = tmp.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const week =
+    1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  return { year, week };
 }
 
+/**
+ * Assign a bucket key to a measurement based on the aggregation level.
+ * Keys are year-qualified for week and month so buckets never collide across
+ * calendar years within a rolling window:
+ * - day:   ISO date "YYYY-MM-DD"
+ * - week:  ISO week "YYYY-Www"
+ * - month: "YYYY-MM"
+ */
 function getBucketKey(dateStr: string, aggregation: WithingsAggregation): string {
   if (aggregation === 'day') return dateStr;
   const d = new Date(dateStr + 'T00:00:00');
-  return aggregation === 'week' ? `W${getISOWeek(d)}` : String(d.getMonth());
+  if (aggregation === 'week') {
+    const { year, week } = getISOWeekInfo(d);
+    return `${year}-W${String(week).padStart(2, '0')}`;
+  }
+  return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
+}
+
+/**
+ * Generate all expected bucket slots (key + label) for a range/aggregation,
+ * in strict chronological order.
+ *
+ * This is a Withings-local replacement for the shared Strava bucketer. Unlike
+ * that one, month/week slots are walked forward from the range start so a
+ * rolling "year" window that begins mid-year is ordered chronologically
+ * (e.g. Aug → … → Jul) rather than snapped to a fixed Jan→Dec layout, and
+ * keys are year-qualified to avoid cross-year collisions.
+ */
+function buildBucketSlots(
+  range: WithingsTimeRange,
+  aggregation: WithingsAggregation,
+  today: Date,
+): { key: string; label: string }[] {
+  const start = getRangeStart(range, today);
+  const end = getRangeEnd(range, today);
+  const slots: { key: string; label: string }[] = [];
+  const seen = new Set<string>();
+
+  const push = (key: string, label: string) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    slots.push({ key, label });
+  };
+
+  if (aggregation === 'day') {
+    const cursor = new Date(start);
+    cursor.setHours(0, 0, 0, 0);
+    while (cursor <= end) {
+      push(toISODate(cursor), `${cursor.getMonth() + 1}/${cursor.getDate()}`);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return slots;
+  }
+
+  if (aggregation === 'week') {
+    // Step a day at a time so every ISO week in the window is captured exactly
+    // once, in order, regardless of where the window boundaries fall.
+    const cursor = new Date(start);
+    cursor.setHours(0, 0, 0, 0);
+    while (cursor <= end) {
+      const { year, week } = getISOWeekInfo(cursor);
+      push(`${year}-W${String(week).padStart(2, '0')}`, `W${week}`);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return slots;
+  }
+
+  // month
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  while (cursor <= end) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth()).padStart(2, '0')}`;
+    push(key, MONTH_LABELS[cursor.getMonth()]);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return slots;
 }
 
 /* ------------------------------------------------------------------ */
@@ -229,7 +316,15 @@ export function buildMetricTrendData(
   today: Date = new Date(),
   aggregation: WithingsAggregation = 'week',
 ): MetricTrendData {
-  const slots = generateBucketSlots(range, aggregation, today);
+  const slots = buildBucketSlots(range, aggregation, today);
+
+  // Sort a copy of the measurements chronologically so aggregation, latest /
+  // earliest tracking, and any downstream rendering are deterministic
+  // regardless of the order rows arrive from the sheet. Ties on date are
+  // broken by grpId to keep the ordering stable.
+  const ordered = [...measurements].sort((a, b) =>
+    a.date === b.date ? a.grpId.localeCompare(b.grpId) : a.date < b.date ? -1 : 1,
+  );
 
   // Accumulate sum + count per bucket so we can average.
   const sums = new Map<string, number>();
@@ -247,7 +342,7 @@ export function buildMetricTrendData(
   let min: number | null = null;
   let max: number | null = null;
 
-  for (const m of measurements) {
+  for (const m of ordered) {
     const raw = metricValue(m, metric);
     if (raw === null) continue;
     const v = toDisplayUnit(metric, raw);

@@ -196,6 +196,53 @@ describe('buildMetricTrendData', () => {
     const data = buildMetricTrendData([makeMeasurement()], 'weight', '2026', 165, TODAY, 'month');
     expect(data.goal).toBe(165);
   });
+
+  it('orders rolling-year month buckets chronologically across the year boundary', () => {
+    // TODAY = June 20 2026; rolling 'year' spans ~June 2025 → June 2026.
+    // Buckets must run in chronological order (…2025 months then 2026 months),
+    // not snap to a fixed Jan→Dec layout.
+    const data = buildMetricTrendData([], 'weight', 'year', null, TODAY, 'month');
+    const labels = data.points.map((p) => p.label);
+    expect(labels[0]).toBe('Jun'); // June 2025
+    expect(labels[labels.length - 1]).toBe('Jun'); // June 2026
+    // The first and last buckets share a label but are distinct chronological slots.
+    expect(labels.length).toBeGreaterThan(12);
+  });
+
+  it('does not merge same-month measurements from different years (rolling year)', () => {
+    // Two June measurements a year apart must land in separate buckets rather
+    // than averaging together into one.
+    const measurements = [
+      makeMeasurement({ date: '2025-06-25', grpId: 'a', fatRatio: 30 }),
+      makeMeasurement({ date: '2026-06-01', grpId: 'b', fatRatio: 20 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'fatRatio', 'year', null, TODAY, 'month');
+    const nonNull = data.points.filter((p) => p.value !== null).map((p) => p.value);
+    expect(nonNull).toEqual([30, 20]); // two separate buckets, not one 25 average
+  });
+
+  it('does not merge same week-number measurements from different years (rolling year)', () => {
+    const measurements = [
+      makeMeasurement({ date: '2025-06-21', grpId: 'a', fatRatio: 30 }),
+      makeMeasurement({ date: '2026-06-19', grpId: 'b', fatRatio: 20 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'fatRatio', 'year', null, TODAY, 'week');
+    const nonNull = data.points.filter((p) => p.value !== null).map((p) => p.value);
+    expect(nonNull).toEqual([30, 20]);
+  });
+
+  it('aggregates independent of measurement input order', () => {
+    const inOrder = [
+      makeMeasurement({ date: '2026-02-01', grpId: 'a', fatRatio: 18 }),
+      makeMeasurement({ date: '2026-05-01', grpId: 'b', fatRatio: 24 }),
+    ];
+    const shuffled = [inOrder[1], inOrder[0]];
+    const a = buildMetricTrendData(inOrder, 'fatRatio', '2026', null, TODAY, 'month');
+    const b = buildMetricTrendData(shuffled, 'fatRatio', '2026', null, TODAY, 'month');
+    expect(b.points.map((p) => p.value)).toEqual(a.points.map((p) => p.value));
+    expect(b.latest).toBe(a.latest);
+    expect(b.delta).toBe(a.delta);
+  });
 });
 
 /* ------------------------------------------------------------------ */
