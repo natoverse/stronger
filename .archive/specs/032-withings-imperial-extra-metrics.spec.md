@@ -49,3 +49,8 @@ Three refinements after the initial Withings sync landed (#201):
   - `app.progressDipThresholdPercent` (default `10`)
 - Values are interpreted as percentages (not fractions) and validated to be in `(0, 100]`; invalid values fall back to defaults.
 - The thresholds are consumed by the existing "Skip Dips" toggles in Withings and Progress views.
+
+- Hardened body-composition chart rendering for predictable output across time-range / aggregation selections:
+  - **Chronological, year-qualified buckets.** The Withings view now builds its own bucket slots (`buildBucketSlots` in `src/model/withings.ts`) instead of reusing the Strava bucketer. Week and month keys are year-qualified (`YYYY-Www`, `YYYY-MM`) and walked forward from the range start, so a rolling "Year" window that begins mid-year is ordered chronologically (e.g. Jun→…→Jun) rather than snapping to a fixed Jan→Dec layout, and measurements from the same week/month number in different years no longer collide into one averaged bucket.
+  - **Deterministic aggregation.** Measurements are sorted by date (ties broken by `grpId`) before bucketing so results are independent of sheet row order.
+  - **Bezier overshoot clamping.** `buildSmoothPath` clamps each Catmull-Rom control point's vertical position to the band spanned by its two anchor points, preventing the trend line from bulging above/below every real data point when consecutive values change sharply.

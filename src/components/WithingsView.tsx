@@ -398,10 +398,19 @@ function niceTicksFor(min: number, max: number, count: number): number[] {
  * Builds a lightly-smoothed SVG path ("d" attribute) through a series of
  * points using Catmull-Rom-to-Bezier interpolation, so the trend line
  * curves gently between points instead of having sharp corners.
+ *
+ * Each control point's vertical position is clamped to the range spanned by
+ * its two anchor points. A plain Catmull-Rom spline can overshoot well beyond
+ * the data when consecutive values change sharply (common with sparse or
+ * spiky body-composition samples), producing bulges or loops that dip below /
+ * rise above every real measurement. Clamping keeps the curve within the band
+ * defined by the surrounding points while preserving the horizontal easing.
  */
 function buildSmoothPath(coords: { x: number; y: number }[]): string {
   if (coords.length === 0) return '';
   if (coords.length === 1) return `M ${coords[0].x},${coords[0].y}`;
+
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
   let d = `M ${coords[0].x},${coords[0].y}`;
   for (let i = 0; i < coords.length - 1; i++) {
@@ -410,9 +419,9 @@ function buildSmoothPath(coords: { x: number; y: number }[]): string {
     const p2 = coords[i + 1];
     const p3 = coords[i + 2] ?? p2;
     const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp1y = clamp(p1.y + (p2.y - p0.y) / 6, Math.min(p1.y, p2.y), Math.max(p1.y, p2.y));
     const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    const cp2y = clamp(p2.y - (p3.y - p1.y) / 6, Math.min(p1.y, p2.y), Math.max(p1.y, p2.y));
     d += ` C ${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
   }
   return d;
