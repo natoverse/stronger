@@ -1,6 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
 import type { FoodItem, MealCategory, MealLogEntry } from '../model/index.js';
+import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
+import { getTimeRangeOptions } from '../model/strava.js';
+import { NutritionCharts } from './NutritionCharts.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
 
@@ -18,6 +21,7 @@ interface Props {
   entries: MealLogEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
+  drinksPerDayGoal: number;
   onFavoritesChange: (favorites: FoodItem[]) => void;
   onRecentsChange: (recents: FoodItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
@@ -165,13 +169,15 @@ interface FoodRowProps {
   isFavorite: boolean;
   category: MealCategory;
   quantity: string;
+  drinks: string;
   onCategoryChange: (category: MealCategory) => void;
   onQuantityChange: (quantity: string) => void;
+  onDrinksChange: (drinks: string) => void;
   onToggleFavorite: () => void;
   onAdd: () => void;
 }
 
-function FoodRow({ food, isFavorite, category, quantity, onCategoryChange, onQuantityChange, onToggleFavorite, onAdd }: FoodRowProps) {
+function FoodRow({ food, isFavorite, category, quantity, drinks, onCategoryChange, onQuantityChange, onDrinksChange, onToggleFavorite, onAdd }: FoodRowProps) {
   return (
     <li className="nutrition-food-row">
       <button
@@ -222,6 +228,18 @@ function FoodRow({ food, isFavorite, category, quantity, onCategoryChange, onQua
             <Plus size={14} />
           </button>
         </div>
+        {category === 'Drinks' && (
+          <input
+            className="nutrition-drinks-input"
+            aria-label={`Alcoholic drinks per serving of ${food.name}`}
+            type="number"
+            min={0}
+            step="any"
+            placeholder="drinks"
+            value={drinks}
+            onChange={(event) => onDrinksChange(event.target.value)}
+          />
+        )}
         <button className="nutrition-food-add-btn" aria-label={`Add ${food.name} to day`} onClick={onAdd}>
           <Plus size={18} />
         </button>
@@ -236,6 +254,7 @@ export function NutritionView({
   entries,
   dailyCalorieGoal,
   dailyProteinGoalGrams,
+  drinksPerDayGoal,
   onFavoritesChange,
   onRecentsChange,
   onLogEntry,
@@ -246,6 +265,10 @@ export function NutritionView({
   const [view, setView] = useState<FinderView>('favorites');
   const [categories, setCategories] = useState<Record<string, MealCategory>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [drinks, setDrinks] = useState<Record<string, string>>({});
+  const [chartRange, setChartRange] = useState<StravaTimeRange>('month');
+  const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
+  const timeRanges = useMemo(() => getTimeRangeOptions(new Date()), []);
 
   // Search state
   const [query, setQuery] = useState('');
@@ -294,8 +317,8 @@ export function NutritionView({
     () => dayEntries.reduce((sum, entry) => ({
       calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
       carbs: sum.carbs + entry.carbs * entry.quantity, fiber: sum.fiber + entry.fiber * entry.quantity,
-      protein: sum.protein + entry.protein * entry.quantity,
-    }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0 }),
+      protein: sum.protein + entry.protein * entry.quantity, drinks: sum.drinks + entry.standardDrinks * entry.quantity,
+    }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0, drinks: 0 }),
     [dayEntries],
   );
   const calorieGoalStatus = useMemo<GoalStatus>(() => {
@@ -308,12 +331,23 @@ export function NutritionView({
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
     return diff <= dailyProteinGoalGrams * 0.1 ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
+  const drinksGoalStatus = useMemo<GoalStatus>(() => {
+    if (drinksPerDayGoal <= 0) return null;
+    const ratio = totals.drinks / drinksPerDayGoal;
+    if (ratio < 0.9) return 'warn';
+    return ratio <= 1.1 ? 'good' : 'over';
+  }, [drinksPerDayGoal, totals.drinks]);
 
   const categoryFor = (code: string): MealCategory => categories[code] ?? 'Snacks';
   const quantityValue = (code: string): string => quantities[code] ?? '1';
   const quantityFor = (code: string): number => {
     const value = Number(quantityValue(code));
     return Number.isFinite(value) && value > 0 ? value : 1;
+  };
+  const drinksValue = (code: string): string => drinks[code] ?? '';
+  const drinksFor = (code: string): number => {
+    const value = Number(drinksValue(code));
+    return Number.isFinite(value) && value > 0 ? value : 0;
   };
 
   const toggleFavorite = (food: FoodItem) => {
@@ -325,21 +359,24 @@ export function NutritionView({
   };
 
   const addToDay = (food: FoodItem) => {
+    const category = categoryFor(food.code);
     const entry: MealLogEntry = {
       id: newId(),
       date,
       name: food.name,
-      category: categoryFor(food.code),
+      category,
       calories: food.calories,
       fat: food.fat,
       carbs: food.carbs,
       fiber: food.fiber,
       protein: food.protein,
       quantity: quantityFor(food.code),
+      standardDrinks: category === 'Drinks' ? drinksFor(food.code) : 0,
     };
     onLogEntry(entry);
     onRecentsChange(withRecent(recents, food));
     setQuantities((previous) => ({ ...previous, [food.code]: '1' }));
+    setDrinks((previous) => ({ ...previous, [food.code]: '' }));
   };
 
   const adjustGroup = (group: DayGroup, delta: number) => {
@@ -358,8 +395,10 @@ export function NutritionView({
       isFavorite={favoriteCodes.has(food.code)}
       category={categoryFor(food.code)}
       quantity={quantityValue(food.code)}
+      drinks={drinksValue(food.code)}
       onCategoryChange={(category) => setCategories((previous) => ({ ...previous, [food.code]: category }))}
       onQuantityChange={(quantity) => setQuantities((previous) => ({ ...previous, [food.code]: quantity }))}
+      onDrinksChange={(value) => setDrinks((previous) => ({ ...previous, [food.code]: value }))}
       onToggleFavorite={() => toggleFavorite(food)}
       onAdd={() => addToDay(food)}
     />
@@ -402,6 +441,11 @@ export function NutritionView({
         <span className={statusClass(proteinGoalStatus)}>
           Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
         </span>
+        {(drinksPerDayGoal > 0 || totals.drinks > 0) && (
+          <span className={statusClass(drinksGoalStatus)}>
+            Drinks {round(totals.drinks)}{drinksPerDayGoal > 0 ? ` / ${round(drinksPerDayGoal)}` : ''}
+          </span>
+        )}
       </section>
 
       <div className="nutrition-finder-toggle" role="tablist" aria-label="Find food">
@@ -489,6 +533,44 @@ export function NutritionView({
               ))}
             </div>
           ))}
+      </section>
+
+      <section className="nutrition-charts-section">
+        <div className="nutrition-charts-header">
+          <h3>Trends</h3>
+          <div className="chart-controls-sticky nutrition-chart-controls">
+            <div className="strava-range-group">
+              {timeRanges.map((r) => (
+                <button
+                  key={r.value}
+                  className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
+                  onClick={() => setChartRange(r.value)}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <div className="strava-agg-group">
+              {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
+                <button
+                  key={agg}
+                  className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
+                  onClick={() => setChartAggregation(agg)}
+                >
+                  {agg.charAt(0).toUpperCase() + agg.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <NutritionCharts
+          entries={entries}
+          range={chartRange}
+          aggregation={chartAggregation}
+          calorieGoal={dailyCalorieGoal}
+          proteinGoal={dailyProteinGoalGrams}
+          drinksGoal={drinksPerDayGoal}
+        />
       </section>
     </main>
   );
