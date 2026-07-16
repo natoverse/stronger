@@ -132,9 +132,9 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
   };
 }
 
-async function searchOpenFoodFacts(query: string): Promise<OFFSearchResult[]> {
+async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<OFFSearchResult[]> {
   const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&json=1&page_size=20&fields=product_name,brands,serving_size,serving_quantity,nutriments`;
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`Search failed (${response.status})`);
   const data = (await response.json()) as { products?: OFFProduct[] };
   return (data.products ?? []).flatMap((product) => {
@@ -171,7 +171,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
     setResultCategories({});
     setResultQuantities({});
     try {
-      const found = await searchOpenFoodFacts(trimmed);
+      const found = await searchOpenFoodFacts(trimmed, abortRef.current.signal);
       setResults(found);
       setSearched(true);
     } catch (err: unknown) {
@@ -226,7 +226,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
       {results.length > 0 && (
         <ul className="nutrition-search-results">
           {results.map((result, index) => (
-            <li className="nutrition-search-result" key={index}>
+            <li className="nutrition-search-result" key={`${result.product_name}-${result.brand}-${index}`}>
               <div className="nutrition-search-result-info">
                 <span className="nutrition-search-result-name">{result.product_name}</span>
                 {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
@@ -245,7 +245,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
                 <input
                   aria-label="Servings"
                   type="number"
-                  min="0"
+                  min="0.01"
                   step="any"
                   value={resultQuantities[index] ?? '1'}
                   onChange={(event) => setResultQuantities((previous) => ({ ...previous, [index]: event.target.value }))}
