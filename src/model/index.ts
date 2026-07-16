@@ -14,6 +14,7 @@ export type {
 	MealCategory,
 	MealItem,
 	MealLogEntry,
+	FoodItem,
 	PreviousSetData,
 	ProgressionProposal,
 	ScheduleEntry,

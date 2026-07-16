@@ -285,6 +285,25 @@ export interface MealLogEntry extends MealItem {
 	quantity: number;
 }
 
+/**
+ * A food sourced from the Open Food Facts database, identified by its OFF
+ * `code` (barcode). Used for the favorites and recents lists. Macros are
+ * per serving; the meal category is chosen at log time, not stored here.
+ */
+export interface FoodItem {
+	/** Open Food Facts barcode — the stable identity for the food. */
+	code: string;
+	name: string;
+	brand: string;
+	/** Human-readable serving description (e.g. "30 g"). */
+	servingLabel: string;
+	calories: number;
+	fat: number;
+	carbs: number;
+	fiber: number;
+	protein: number;
+}
+
 // ---------------------------------------------------------------------------
 // Strava activity (synced externally via GitHub Actions)
 // ---------------------------------------------------------------------------

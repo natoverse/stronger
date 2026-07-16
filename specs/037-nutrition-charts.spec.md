@@ -46,3 +46,22 @@ Each chart draws a goal line and color-codes its bars against the (aggregated) g
   formatting, serving-scaled bucket sums, weekly goal aggregation to 7, and exclusion
   of future days. `src/google/__tests__/meal-data.test.ts` covers the new column with
   backward-compatible legacy-row parsing.
+
+## Merge update (nutrition food-finder revamp, spec 036)
+
+This charts feature was merged on top of the OFF food-finder revamp
+(`specs/036-nutrition-food-finder.spec.md`), which replaced the saved Meal
+Items library and Quick-Add forms with a favorites/recents/search finder.
+Decisions adapted during the merge:
+
+- The `Stronger - Meal Items` tab (and its `verify`/`create` helpers) was removed
+  by the food-finder revamp. `standardDrinks` therefore lives only on the meal
+  **log** (`Stronger - Meal Log`, still `A:K`, `standardDrinks` at column K after
+  `quantity`) plus the shared `MealItem` type used for log serialization.
+- Alcoholic drinks are now entered in the food finder: when a food's meal is set
+  to **Drinks**, a compact "Alcoholic drinks" input appears in the food row and is
+  scaled by the logged serving quantity. The old Save-Item/Quick-Add drink inputs
+  no longer exist.
+- The Trends charts and their day/week/month controls render at the bottom of the
+  finder page, below "Today's Meals"; the goal-banded totals chips (including the
+  drinks chip) remain at the top.

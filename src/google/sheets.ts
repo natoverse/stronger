@@ -5,8 +5,8 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_LOG_TAB_NAME, MEAL_FAVORITES_TAB_NAME, MEAL_RECENTS_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, FoodItem, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -1743,14 +1743,19 @@ export async function writeCardioActivities(
 /*  Meal tabs                                                           */
 /* ------------------------------------------------------------------ */
 
-const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:I`
 const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:K1`
 const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K2`
 const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K`
-const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks']
 // Log columns keep `quantity` at index 9 for backward compatibility; `standardDrinks` is appended after it.
 const MEAL_LOG_HEADER = ['date', 'id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'quantity', 'standardDrinks']
 const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
+
+/* Open Food Facts foods (favorites + recents) share one 9-column schema. */
+const FOOD_ITEM_HEADER = ['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein']
+const MEAL_FAVORITES_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A:I`
+const MEAL_FAVORITES_HEADER_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A1:I1`
+const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:I`
+const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:I1`
 
 export function mealItemToRow(item: MealItem): (string | number)[] {
 	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein, item.standardDrinks]
@@ -1796,6 +1801,28 @@ export function parseMealLogRow(row: string[]): MealLogEntry | null {
 	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: parseDrinks(row[10]) }
 }
 
+export function foodItemToRow(food: FoodItem): (string | number)[] {
+	return [food.code, food.name, food.brand, food.servingLabel, food.calories, food.fat, food.carbs, food.fiber, food.protein]
+}
+
+export function parseFoodItemRow(row: string[]): FoodItem | null {
+	const code = (row[0] ?? '').trim()
+	const name = (row[1] ?? '').trim()
+	if (!code || !name) return null
+	// Macros occupy columns E–I (indices 4–8); a short row yields fewer than 5
+	// values and is rejected below so the destructuring never sees undefined.
+	const macroValues = row.slice(4, 9).map(Number)
+	if (macroValues.length !== 5 || macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
+	const [calories, fat, carbs, fiber, protein] = macroValues
+	return {
+		code,
+		name,
+		brand: (row[2] ?? '').trim(),
+		servingLabel: (row[3] ?? '').trim(),
+		calories, fat, carbs, fiber, protein,
+	}
+}
+
 async function verifyTab(spreadsheetId: string, tabName: string): Promise<boolean> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
@@ -1815,14 +1842,6 @@ async function createTab(spreadsheetId: string, tabName: string, header: string[
 	})
 }
 
-export function verifyMealItemsTab(spreadsheetId: string): Promise<boolean> {
-	return verifyTab(spreadsheetId, MEAL_ITEMS_TAB_NAME)
-}
-
-export function createMealItemsTab(spreadsheetId: string): Promise<void> {
-	return createTab(spreadsheetId, MEAL_ITEMS_TAB_NAME, MEAL_ITEMS_HEADER, `'${MEAL_ITEMS_TAB_NAME}'!A1:I1`)
-}
-
 export function verifyMealLogTab(spreadsheetId: string): Promise<boolean> {
 	return verifyTab(spreadsheetId, MEAL_LOG_TAB_NAME)
 }
@@ -1831,21 +1850,53 @@ export function createMealLogTab(spreadsheetId: string): Promise<void> {
 	return createTab(spreadsheetId, MEAL_LOG_TAB_NAME, MEAL_LOG_HEADER, MEAL_LOG_HEADER_RANGE)
 }
 
-export async function readMealItems(spreadsheetId: string): Promise<MealItem[]> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_ITEMS_RANGE })
-	return (response.result.values ?? []).slice(1).map(parseMealItemRow).filter((item): item is MealItem => item !== null)
+export function verifyMealFavoritesTab(spreadsheetId: string): Promise<boolean> {
+	return verifyTab(spreadsheetId, MEAL_FAVORITES_TAB_NAME)
 }
 
-export async function writeMealItems(spreadsheetId: string, items: MealItem[]): Promise<void> {
+export function createMealFavoritesTab(spreadsheetId: string): Promise<void> {
+	return createTab(spreadsheetId, MEAL_FAVORITES_TAB_NAME, FOOD_ITEM_HEADER, MEAL_FAVORITES_HEADER_RANGE)
+}
+
+export function verifyMealRecentsTab(spreadsheetId: string): Promise<boolean> {
+	return verifyTab(spreadsheetId, MEAL_RECENTS_TAB_NAME)
+}
+
+export function createMealRecentsTab(spreadsheetId: string): Promise<void> {
+	return createTab(spreadsheetId, MEAL_RECENTS_TAB_NAME, FOOD_ITEM_HEADER, MEAL_RECENTS_HEADER_RANGE)
+}
+
+async function readFoodItems(spreadsheetId: string, range: string): Promise<FoodItem[]> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
-	await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId, range: MEAL_ITEMS_RANGE })
+	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range })
+	return (response.result.values ?? []).slice(1).map(parseFoodItemRow).filter((food): food is FoodItem => food !== null)
+}
+
+async function writeFoodItems(spreadsheetId: string, range: string, foods: FoodItem[]): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId, range })
 	await gapi.client.sheets.spreadsheets.values.update({
-		spreadsheetId, range: MEAL_ITEMS_RANGE, valueInputOption: 'RAW',
-		resource: { values: [MEAL_ITEMS_HEADER, ...items.map(mealItemToRow)] },
+		spreadsheetId, range, valueInputOption: 'RAW',
+		resource: { values: [FOOD_ITEM_HEADER, ...foods.map(foodItemToRow)] },
 	})
+}
+
+export function readMealFavorites(spreadsheetId: string): Promise<FoodItem[]> {
+	return readFoodItems(spreadsheetId, MEAL_FAVORITES_RANGE)
+}
+
+export function writeMealFavorites(spreadsheetId: string, foods: FoodItem[]): Promise<void> {
+	return writeFoodItems(spreadsheetId, MEAL_FAVORITES_RANGE, foods)
+}
+
+export function readMealRecents(spreadsheetId: string): Promise<FoodItem[]> {
+	return readFoodItems(spreadsheetId, MEAL_RECENTS_RANGE)
+}
+
+export function writeMealRecents(spreadsheetId: string, foods: FoodItem[]): Promise<void> {
+	return writeFoodItems(spreadsheetId, MEAL_RECENTS_RANGE, foods)
 }
 
 export async function readMealLog(spreadsheetId: string): Promise<MealLogEntry[]> {
@@ -1891,6 +1942,26 @@ export async function deleteMealLogEntry(spreadsheetId: string, id: string): Pro
 		}))
 	if (requests.length === 0) return
 	await gapi.client.sheets.spreadsheets.batchUpdate({ spreadsheetId, resource: { requests } })
+}
+
+/**
+ * Update the servings quantity of a single logged meal entry by its id.
+ * Reads all rows to locate the matching row, then writes the new quantity to
+ * that row's quantity cell (column J). No-op when the id is not found.
+ */
+export async function updateMealLogEntry(spreadsheetId: string, id: string, quantity: number): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
+	const rawRows = response.result.values
+	if (!rawRows || rawRows.length === 0) return
+	const rawIdx = rawRows.findIndex((raw) => (raw[1] ?? '').trim() === id)
+	if (rawIdx === -1) return
+	// Sheet row = rawIdx + 2 (header is row 1); quantity lives in column J.
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId, range: `'${MEAL_LOG_TAB_NAME}'!J${rawIdx + 2}`, valueInputOption: 'RAW',
+		resource: { values: [[quantity]] },
+	})
 }
 
 /* ------------------------------------------------------------------ */

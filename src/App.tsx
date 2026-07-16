@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealItem, MealLogEntry, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
+import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealLogEntry, FoodItem, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression } from './model/index.js';
-import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealItems, writeMealItems, readMealLog, appendMealLogEntry, deleteMealLogEntry, readGarminActivities, verifyGarminTab, verifyGarminWellnessTab, readGarminWellnessEntries, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, verifyMealFavoritesTab, createMealFavoritesTab, verifyMealRecentsTab, createMealRecentsTab, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readGarminActivities, verifyGarminTab, verifyGarminWellnessTab, readGarminWellnessEntries, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
@@ -51,7 +51,8 @@ function App() {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
   const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>([]);
-  const [mealItems, setMealItems] = useState<MealItem[]>([]);
+  const [mealFavorites, setMealFavorites] = useState<FoodItem[]>([]);
+  const [mealRecents, setMealRecents] = useState<FoodItem[]>([]);
   const [mealLog, setMealLog] = useState<MealLogEntry[]>([]);
   const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
   const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
@@ -161,7 +162,8 @@ function App() {
     setWellnessEntries([]);
     setWithingsMeasurements([]);
     setWithingsGoals([]);
-    setMealItems([]);
+    setMealFavorites([]);
+    setMealRecents([]);
     setMealLog([]);
     // Reset lazy-loading flags
     flagsLoadedRef.current = false;
@@ -423,8 +425,15 @@ function App() {
   const loadNutritionData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const [items, entries] = await Promise.all([readMealItems(sheetId), readMealLog(sheetId)]);
-        setMealItems(items);
+        if (!await verifyMealFavoritesTab(sheetId)) await createMealFavoritesTab(sheetId);
+        if (!await verifyMealRecentsTab(sheetId)) await createMealRecentsTab(sheetId);
+        const [favorites, recents, entries] = await Promise.all([
+          readMealFavorites(sheetId),
+          readMealRecents(sheetId),
+          readMealLog(sheetId),
+        ]);
+        setMealFavorites(favorites);
+        setMealRecents(recents);
         setMealLog(entries);
       });
     } catch {
@@ -794,14 +803,36 @@ function App() {
     navigateTo({ view: 'nutrition' });
   }, [navigateTo]);
 
-  const handleSaveMealItems = useCallback((items: MealItem[]) => {
-    setMealItems(items);
-    if (spreadsheetId) void withAuthRetry(() => writeMealItems(spreadsheetId, items));
+  const handleSaveMealFavorites = useCallback((favorites: FoodItem[]) => {
+    setMealFavorites(favorites);
+    if (spreadsheetId) void withAuthRetry(() => writeMealFavorites(spreadsheetId, favorites));
+  }, [spreadsheetId]);
+
+  const handleSaveMealRecents = useCallback((recents: FoodItem[]) => {
+    setMealRecents(recents);
+    if (spreadsheetId) void withAuthRetry(() => writeMealRecents(spreadsheetId, recents));
   }, [spreadsheetId]);
 
   const handleLogMealEntry = useCallback((entry: MealLogEntry) => {
+    // Merge into an existing identical food (same day, meal, name, and macros)
+    // by summing servings, so duplicates collapse into a single log row.
+    const match = mealLog.find((e) =>
+      e.date === entry.date && e.category === entry.category && e.name === entry.name &&
+      e.calories === entry.calories && e.fat === entry.fat && e.carbs === entry.carbs &&
+      e.fiber === entry.fiber && e.protein === entry.protein);
+    if (match) {
+      const quantity = Math.round((match.quantity + entry.quantity) * 100) / 100;
+      setMealLog((previous) => previous.map((e) => (e.id === match.id ? { ...e, quantity } : e)));
+      if (spreadsheetId) void withAuthRetry(() => updateMealLogEntry(spreadsheetId, match.id, quantity));
+      return;
+    }
     setMealLog((previous) => [...previous, entry]);
     if (spreadsheetId) void withAuthRetry(() => appendMealLogEntry(spreadsheetId, entry));
+  }, [spreadsheetId, mealLog]);
+
+  const handleAdjustMealEntry = useCallback((id: string, quantity: number) => {
+    setMealLog((previous) => previous.map((entry) => (entry.id === id ? { ...entry, quantity } : entry)));
+    if (spreadsheetId) void withAuthRetry(() => updateMealLogEntry(spreadsheetId, id, quantity));
   }, [spreadsheetId]);
 
   const handleDeleteMealEntry = useCallback((id: string) => {
@@ -1468,13 +1499,16 @@ function App() {
           onOpenSettings={handleOpenSettings}
         />
         <NutritionView
-          items={mealItems}
+          favorites={mealFavorites}
+          recents={mealRecents}
           entries={mealLog}
           dailyCalorieGoal={appSettings.dailyCalorieGoal}
           dailyProteinGoalGrams={appSettings.dailyProteinGoalGrams}
           drinksPerDayGoal={appSettings.drinksPerDayGoal}
-          onSaveItems={handleSaveMealItems}
+          onFavoritesChange={handleSaveMealFavorites}
+          onRecentsChange={handleSaveMealRecents}
           onLogEntry={handleLogMealEntry}
+          onAdjustEntry={handleAdjustMealEntry}
           onDeleteEntry={handleDeleteMealEntry}
         />
       </>

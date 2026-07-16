@@ -1,23 +1,31 @@
 import { useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Search, Trash2 } from 'lucide-react';
-import type { MealCategory, MealItem, MealLogEntry } from '../model/index.js';
+import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
+import type { FoodItem, MealCategory, MealLogEntry } from '../model/index.js';
 import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
 import { getTimeRangeOptions } from '../model/strava.js';
 import { NutritionCharts } from './NutritionCharts.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
-const EMPTY_MACROS = { calories: '', fat: '', carbs: '', fiber: '', protein: '' };
 
-type MacroInputs = typeof EMPTY_MACROS;
+/** Maximum number of recently-used foods to retain. */
+const RECENTS_CAP = 50;
+
+/** Servings step for the quantity +/- controls. */
+const QTY_STEP = 0.25;
+
+type FinderView = 'favorites' | 'recent' | 'search';
 
 interface Props {
-  items: MealItem[];
+  favorites: FoodItem[];
+  recents: FoodItem[];
   entries: MealLogEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
   drinksPerDayGoal: number;
-  onSaveItems: (items: MealItem[]) => void;
+  onFavoritesChange: (favorites: FoodItem[]) => void;
+  onRecentsChange: (recents: FoodItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
+  onAdjustEntry: (id: string, quantity: number) => void;
   onDeleteEntry: (id: string) => void;
 }
 
@@ -35,49 +43,42 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-function MacroFields({ values, onChange }: { values: MacroInputs; onChange: (values: MacroInputs) => void }) {
-  return (
-    <div className="nutrition-macro-fields">
-      {(['calories', 'fat', 'carbs', 'fiber', 'protein'] as const).map((field) => (
-        <label key={field}>
-          {field === 'calories' ? 'Calories' : `${field[0].toUpperCase()}${field.slice(1)} (g)`}
-          <input
-            type="number"
-            min="0"
-            step="any"
-            value={values[field]}
-            onChange={(event) => onChange({ ...values, [field]: event.target.value })}
-          />
-        </label>
-      ))}
-    </div>
-  );
+/** Snap a servings value to the nearest step, clamped to a single step minimum. */
+function snapQuantity(value: number): number {
+  const snapped = Math.round(value / QTY_STEP) * QTY_STEP;
+  return round(Math.max(QTY_STEP, snapped));
 }
 
-function macrosFrom(values: MacroInputs) {
-  const num = (value: string) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  return {
-    calories: num(values.calories),
-    fat: num(values.fat),
-    carbs: num(values.carbs),
-    fiber: num(values.fiber),
-    protein: num(values.protein),
-  };
-}
-
-/** Parse the standard-drinks form input into a non-negative number. */
-function drinksFrom(value: string): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+/** Step a servings string by delta, clamped to a positive multiple of QTY_STEP. */
+function stepQuantity(current: string, delta: number): string {
+  const value = Number(current);
+  const base = Number.isFinite(value) && value > 0 ? value : 1;
+  return String(snapQuantity(base + delta));
 }
 
 type GoalStatus = 'good' | 'warn' | 'over' | null;
 
 function statusClass(status: GoalStatus): string {
   return status ? `nutrition-goal-${status}` : '';
+}
+
+/** Prepend a food to the recents list, de-duplicating by code and capping the length. */
+function withRecent(recents: FoodItem[], food: FoodItem): FoodItem[] {
+  return [food, ...recents.filter((item) => item.code !== food.code)].slice(0, RECENTS_CAP);
+}
+
+/** A single combined line in "Today's Meals": one food, summed across duplicate log rows. */
+interface DayGroup {
+  key: string;
+  category: MealCategory;
+  name: string;
+  caloriesPerServing: number;
+  quantity: number;
+  /** The log-entry ids that make up this group (usually one after log-time merge). */
+  ids: string[];
+  /** The id whose quantity the +/- controls adjust. */
+  primaryId: string;
+  primaryQuantity: number;
 }
 
 /* ── Open Food Facts search ─────────────────────────────────────────────── */
@@ -104,22 +105,10 @@ interface OFFProduct {
   nutriments?: OFFNutriments;
 }
 
-interface OFFSearchResult {
-  code: string;
-  product_name: string;
-  brand: string;
-  servingLabel: string;
-  calories: number;
-  fat: number;
-  carbs: number;
-  fiber: number;
-  protein: number;
-}
-
 const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/cgi/search.pl';
 const OPEN_FOOD_FACTS_STAGING_AUTH = 'Basic b2ZmOm9mZg==';
 
-function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
+function parseOFFProduct(product: OFFProduct): FoodItem | null {
   const name = (product.product_name ?? '').trim();
   if (!name) return null;
   const code = (product.code ?? '').trim();
@@ -139,7 +128,7 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
 
   return {
     code,
-    product_name: name,
+    name,
     brand: (product.brands ?? '').split(',')[0].trim(),
     servingLabel: product.serving_size ?? `${servingQty}g`,
     calories: Math.round(cal * 10) / 10,
@@ -150,7 +139,7 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
   };
 }
 
-async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<OFFSearchResult[]> {
+async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<FoodItem[]> {
   const params = new URLSearchParams({
     search_terms: query,
     search_simple: '1',
@@ -173,149 +162,157 @@ async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<
   });
 }
 
-interface FoodSearchProps {
-  date: string;
-  onLogEntry: (entry: MealLogEntry) => void;
+/* ── Food finder row ────────────────────────────────────────────────────── */
+
+interface FoodRowProps {
+  food: FoodItem;
+  isFavorite: boolean;
+  category: MealCategory;
+  quantity: string;
+  drinks: string;
+  onCategoryChange: (category: MealCategory) => void;
+  onQuantityChange: (quantity: string) => void;
+  onDrinksChange: (drinks: string) => void;
+  onToggleFavorite: () => void;
+  onAdd: () => void;
 }
 
-function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
-  const [query, setQuery] = useState('');
-  const [results, setResults] = useState<OFFSearchResult[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searched, setSearched] = useState(false);
-  const [resultCategories, setResultCategories] = useState<Record<number, MealCategory>>({});
-  const [resultQuantities, setResultQuantities] = useState<Record<number, string>>({});
-  const abortRef = useRef<AbortController | null>(null);
-
-  const handleSearch = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    abortRef.current?.abort();
-    abortRef.current = new AbortController();
-    setLoading(true);
-    setError(null);
-    setSearched(false);
-    setResults([]);
-    setResultCategories({});
-    setResultQuantities({});
-    try {
-      const found = await searchOpenFoodFacts(trimmed, abortRef.current.signal);
-      setResults(found);
-      setSearched(true);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      setError('Search failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const categoryFor = (index: number): MealCategory => resultCategories[index] ?? 'Snacks';
-  const quantityFor = (index: number): number => {
-    const value = Number(resultQuantities[index] ?? '1');
-    return Number.isFinite(value) && value > 0 ? value : 1;
-  };
-
-  const addToDay = (result: OFFSearchResult, index: number) => {
-    const entry: MealLogEntry = {
-      id: newId(),
-      date,
-      name: result.product_name,
-      category: categoryFor(index),
-      calories: result.calories,
-      fat: result.fat,
-      carbs: result.carbs,
-      fiber: result.fiber,
-      protein: result.protein,
-      standardDrinks: 0,
-      quantity: quantityFor(index),
-    };
-    onLogEntry(entry);
-    setResultQuantities((previous) => ({ ...previous, [index]: '1' }));
-  };
-
+function FoodRow({ food, isFavorite, category, quantity, drinks, onCategoryChange, onQuantityChange, onDrinksChange, onToggleFavorite, onAdd }: FoodRowProps) {
   return (
-    <section className="nutrition-search">
-      <form className="nutrition-search-form" onSubmit={handleSearch}>
-        <input
-          placeholder="Search food database…"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          aria-label="Food search query"
-        />
-        <button className="btn-primary nutrition-search-btn" type="submit" disabled={loading} aria-label="Search">
-          <Search size={18} />
+    <li className="nutrition-food-row">
+      <button
+        className={`nutrition-star${isFavorite ? ' is-active' : ''}`}
+        aria-label={isFavorite ? `Remove ${food.name} from favorites` : `Add ${food.name} to favorites`}
+        aria-pressed={isFavorite}
+        onClick={onToggleFavorite}
+      >
+        <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+      </button>
+      <div className="nutrition-food-info">
+        <span className="nutrition-food-name">{food.name}</span>
+        {food.brand && <span className="nutrition-food-brand">{food.brand}</span>}
+        <small className="nutrition-food-serving">Serving: {food.servingLabel}</small>
+        <small>
+          {food.calories} cal · Fat {food.fat}g · Carbs {food.carbs}g · Fiber {food.fiber}g · Protein {food.protein}g
+        </small>
+      </div>
+      <div className="nutrition-food-add">
+        <select
+          aria-label={`Meal for ${food.name}`}
+          value={category}
+          onChange={(event) => onCategoryChange(event.target.value as MealCategory)}
+        >
+          {CATEGORIES.map((option) => <option key={option}>{option}</option>)}
+        </select>
+        <div className="nutrition-qty-stepper">
+          <button
+            type="button"
+            aria-label={`Decrease servings of ${food.name}`}
+            onClick={() => onQuantityChange(stepQuantity(quantity, -QTY_STEP))}
+          >
+            <Minus size={14} />
+          </button>
+          <input
+            aria-label={`Servings of ${food.name}`}
+            type="number"
+            min={QTY_STEP}
+            step={QTY_STEP}
+            value={quantity}
+            onChange={(event) => onQuantityChange(event.target.value)}
+          />
+          <button
+            type="button"
+            aria-label={`Increase servings of ${food.name}`}
+            onClick={() => onQuantityChange(stepQuantity(quantity, QTY_STEP))}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        {category === 'Drinks' && (
+          <input
+            className="nutrition-drinks-input"
+            aria-label={`Alcoholic drinks per serving of ${food.name}`}
+            type="number"
+            min={0}
+            step="any"
+            placeholder="drinks"
+            value={drinks}
+            onChange={(event) => onDrinksChange(event.target.value)}
+          />
+        )}
+        <button className="nutrition-food-add-btn" aria-label={`Add ${food.name} to day`} onClick={onAdd}>
+          <Plus size={18} />
         </button>
-      </form>
-      {loading && <p className="nutrition-search-status">Searching…</p>}
-      {error && <p className="nutrition-search-status nutrition-search-error">{error}</p>}
-      {searched && !loading && results.length === 0 && (
-        <p className="nutrition-search-status">No results found.</p>
-      )}
-      {results.length > 0 && (
-        <ul className="nutrition-search-results">
-          {results.map((result, index) => (
-            <li className="nutrition-search-result" key={`${result.code}-${index}`}>
-              <div className="nutrition-search-result-info">
-                <span className="nutrition-search-result-name">{result.product_name}</span>
-                {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
-                <small>
-                  {result.servingLabel} · {result.calories} cal · Fat {result.fat}g · Carbs {result.carbs}g · Fiber {result.fiber}g · Protein {result.protein}g
-                </small>
-              </div>
-              <div className="nutrition-search-result-add">
-                <select
-                  aria-label="Category"
-                  value={categoryFor(index)}
-                  onChange={(event) => setResultCategories((previous) => ({ ...previous, [index]: event.target.value as MealCategory }))}
-                >
-                  {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
-                </select>
-                <input
-                  aria-label="Servings"
-                  type="number"
-                  min="0.1"
-                  step="any"
-                  value={resultQuantities[index] ?? '1'}
-                  onChange={(event) => setResultQuantities((previous) => ({ ...previous, [index]: event.target.value }))}
-                />
-                <button aria-label={`Add ${result.product_name} to day`} onClick={() => addToDay(result, index)}>
-                  <Plus size={18} />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+      </div>
+    </li>
   );
 }
 
-export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGoalGrams, drinksPerDayGoal, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
+export function NutritionView({
+  favorites,
+  recents,
+  entries,
+  dailyCalorieGoal,
+  dailyProteinGoalGrams,
+  drinksPerDayGoal,
+  onFavoritesChange,
+  onRecentsChange,
+  onLogEntry,
+  onAdjustEntry,
+  onDeleteEntry,
+}: Props) {
   const [date, setDate] = useState(localDate);
-  const [showSavedForm, setShowSavedForm] = useState(false);
-  const [savedName, setSavedName] = useState('');
-  const [savedCategory, setSavedCategory] = useState<MealCategory>('Breakfast');
-  const [savedMacros, setSavedMacros] = useState<MacroInputs>(EMPTY_MACROS);
-  const [savedDrinks, setSavedDrinks] = useState('');
-  const [customName, setCustomName] = useState('');
-  const [customCategory, setCustomCategory] = useState<MealCategory>('Snacks');
-  const [customMacros, setCustomMacros] = useState<MacroInputs>(EMPTY_MACROS);
-  const [customDrinks, setCustomDrinks] = useState('');
-  const [customQuantity, setCustomQuantity] = useState('1');
+  const [view, setView] = useState<FinderView>('favorites');
+  const [categories, setCategories] = useState<Record<string, MealCategory>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+  const [drinks, setDrinks] = useState<Record<string, string>>({});
   const [chartRange, setChartRange] = useState<StravaTimeRange>('month');
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
   const timeRanges = useMemo(() => getTimeRangeOptions(new Date()), []);
 
+  // Search state
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<FoodItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const favoriteCodes = useMemo(() => new Set(favorites.map((food) => food.code)), [favorites]);
+
   const dayEntries = useMemo(() => entries.filter((entry) => entry.date === date), [entries, date]);
-  const dayEntriesByCategory = useMemo(() => CATEGORIES.map((category) => ({
-    category,
-    entries: dayEntries.filter((entry) => entry.category === category),
-  })).filter((group) => group.entries.length > 0), [dayEntries]);
+
+  // Combine duplicate foods (same meal, name, and per-serving calories) into a
+  // single summed line so logging the same food twice shows one entry.
+  const dayGroups = useMemo(() => {
+    const byCategory = new Map<MealCategory, DayGroup[]>();
+    for (const category of CATEGORIES) byCategory.set(category, []);
+    for (const entry of dayEntries) {
+      const groups = byCategory.get(entry.category);
+      if (!groups) continue;
+      const key = `${entry.name}\u0000${entry.calories}`;
+      const existing = groups.find((group) => group.key === key);
+      if (existing) {
+        existing.quantity = round(existing.quantity + entry.quantity);
+        existing.ids.push(entry.id);
+      } else {
+        groups.push({
+          key,
+          category: entry.category,
+          name: entry.name,
+          caloriesPerServing: entry.calories,
+          quantity: entry.quantity,
+          ids: [entry.id],
+          primaryId: entry.id,
+          primaryQuantity: entry.quantity,
+        });
+      }
+    }
+    return CATEGORIES
+      .map((category) => ({ category, groups: byCategory.get(category) ?? [] }))
+      .filter((section) => section.groups.length > 0);
+  }, [dayEntries]);
+
   const totals = useMemo(
     () => dayEntries.reduce((sum, entry) => ({
       calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
@@ -324,10 +321,6 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
     }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0, drinks: 0 }),
     [dayEntries],
   );
-  const itemsByCategory = useMemo(() => new Map(CATEGORIES.map((category) => [
-    category,
-    items.filter((item) => item.category === category).sort((a, b) => a.name.localeCompare(b.name)),
-  ])), [items]);
   const calorieGoalStatus = useMemo<GoalStatus>(() => {
     if (dailyCalorieGoal <= 0) return null;
     if (totals.calories > dailyCalorieGoal) return 'over';
@@ -345,44 +338,92 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
     return ratio <= 1.1 ? 'good' : 'over';
   }, [drinksPerDayGoal, totals.drinks]);
 
-  const quantityFor = (id: string) => {
-    const value = Number(quantities[id] ?? '1');
+  const categoryFor = (code: string): MealCategory => categories[code] ?? 'Snacks';
+  const quantityValue = (code: string): string => quantities[code] ?? '1';
+  const quantityFor = (code: string): number => {
+    const value = Number(quantityValue(code));
     return Number.isFinite(value) && value > 0 ? value : 1;
   };
-
-  const logItem = (item: MealItem) => {
-    onLogEntry({ ...item, id: newId(), date, quantity: quantityFor(item.id) });
-    setQuantities((previous) => ({ ...previous, [item.id]: '1' }));
+  const drinksValue = (code: string): string => drinks[code] ?? '';
+  const drinksFor = (code: string): number => {
+    const value = Number(drinksValue(code));
+    return Number.isFinite(value) && value > 0 ? value : 0;
   };
 
-  const toggleCategory = (category: MealCategory) =>
-    setOpenCategories((previous) => ({ ...previous, [category]: !previous[category] }));
-
-  const saveItem = (event: React.FormEvent) => {
-    event.preventDefault();
-    const item: MealItem = { id: newId(), name: savedName.trim(), category: savedCategory, ...macrosFrom(savedMacros), standardDrinks: drinksFrom(savedDrinks) };
-    if (!item.name) return;
-    onSaveItems([...items, item]);
-    setSavedName('');
-    setSavedMacros(EMPTY_MACROS);
-    setSavedDrinks('');
-    setShowSavedForm(false);
+  const toggleFavorite = (food: FoodItem) => {
+    onFavoritesChange(
+      favoriteCodes.has(food.code)
+        ? favorites.filter((item) => item.code !== food.code)
+        : [...favorites, food],
+    );
   };
 
-  const logCustom = (event: React.FormEvent) => {
-    event.preventDefault();
-    const quantity = Number(customQuantity);
+  const addToDay = (food: FoodItem) => {
+    const category = categoryFor(food.code);
     const entry: MealLogEntry = {
-      id: newId(), date, name: customName.trim(), category: customCategory,
-      ...macrosFrom(customMacros), standardDrinks: drinksFrom(customDrinks),
-      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      id: newId(),
+      date,
+      name: food.name,
+      category,
+      calories: food.calories,
+      fat: food.fat,
+      carbs: food.carbs,
+      fiber: food.fiber,
+      protein: food.protein,
+      quantity: quantityFor(food.code),
+      standardDrinks: category === 'Drinks' ? drinksFor(food.code) : 0,
     };
-    if (!entry.name) return;
     onLogEntry(entry);
-    setCustomName('');
-    setCustomMacros(EMPTY_MACROS);
-    setCustomDrinks('');
-    setCustomQuantity('1');
+    onRecentsChange(withRecent(recents, food));
+    setQuantities((previous) => ({ ...previous, [food.code]: '1' }));
+    setDrinks((previous) => ({ ...previous, [food.code]: '' }));
+  };
+
+  const adjustGroup = (group: DayGroup, delta: number) => {
+    const next = snapQuantity(group.primaryQuantity + delta);
+    if (next !== group.primaryQuantity) onAdjustEntry(group.primaryId, next);
+  };
+
+  const deleteGroup = (group: DayGroup) => {
+    for (const id of group.ids) onDeleteEntry(id);
+  };
+
+  const renderFoodRow = (food: FoodItem) => (
+    <FoodRow
+      key={food.code}
+      food={food}
+      isFavorite={favoriteCodes.has(food.code)}
+      category={categoryFor(food.code)}
+      quantity={quantityValue(food.code)}
+      drinks={drinksValue(food.code)}
+      onCategoryChange={(category) => setCategories((previous) => ({ ...previous, [food.code]: category }))}
+      onQuantityChange={(quantity) => setQuantities((previous) => ({ ...previous, [food.code]: quantity }))}
+      onDrinksChange={(value) => setDrinks((previous) => ({ ...previous, [food.code]: value }))}
+      onToggleFavorite={() => toggleFavorite(food)}
+      onAdd={() => addToDay(food)}
+    />
+  );
+
+  const handleSearch = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    setLoading(true);
+    setError(null);
+    setSearched(false);
+    setResults([]);
+    try {
+      const found = await searchOpenFoodFacts(trimmed, abortRef.current.signal);
+      setResults(found);
+      setSearched(true);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setError('Search failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -407,98 +448,87 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
         )}
       </section>
 
-      {CATEGORIES.map((category) => {
-        const categoryItems = itemsByCategory.get(category) ?? [];
-        const open = openCategories[category] ?? false;
-        return (
-          <section className="nutrition-category" key={category}>
-            <button className="nutrition-category-toggle" aria-expanded={open} onClick={() => toggleCategory(category)}>
-              {open ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-              <h3>{category}</h3>
-              <small>{categoryItems.length}</small>
+      <div className="nutrition-finder-toggle" role="tablist" aria-label="Find food">
+        {(['favorites', 'recent', 'search'] as const).map((option) => (
+          <button
+            key={option}
+            role="tab"
+            aria-selected={view === option}
+            className={`nutrition-finder-tab${view === option ? ' is-active' : ''}`}
+            onClick={() => setView(option)}
+          >
+            {option === 'favorites' ? 'Favorites' : option === 'recent' ? 'Recent' : 'Search'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'search' && (
+        <section className="nutrition-search">
+          <form className="nutrition-search-form" onSubmit={handleSearch}>
+            <input
+              placeholder="Search food database…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="Food search query"
+            />
+            <button className="btn-primary nutrition-search-btn" type="submit" disabled={loading} aria-label="Search">
+              <Search size={18} />
             </button>
-            {open && (
-              <div className="nutrition-category-body">
-                {categoryItems.length === 0
-                  ? <p className="nutrition-empty">No saved items yet.</p>
-                  : categoryItems.map((item) => (
-                    <div className="nutrition-item" key={item.id}>
-                      <span>{item.name}<small>{item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g{item.standardDrinks > 0 ? ` · ${item.standardDrinks} drink${item.standardDrinks === 1 ? '' : 's'}` : ''}</small></span>
-                      <div className="nutrition-item-add">
-                        <input
-                          aria-label={`Servings of ${item.name}`}
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={quantities[item.id] ?? '1'}
-                          onChange={(event) => setQuantities((previous) => ({ ...previous, [item.id]: event.target.value }))}
-                        />
-                        <button aria-label={`Add ${item.name} to day`} onClick={() => logItem(item)}><Plus size={18} /></button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </section>
-        );
-      })}
-
-      <FoodSearch date={date} onLogEntry={onLogEntry} />
-
-      <section className="nutrition-actions">
-        <button className="btn-new-workout" onClick={() => setShowSavedForm((show) => !show)}>
-          <Plus size={20} /> New Saved Item
-        </button>
-        {showSavedForm && (
-          <form className="nutrition-form" onSubmit={saveItem}>
-            <select value={savedCategory} onChange={(event) => setSavedCategory(event.target.value as MealCategory)}>
-              {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
-            </select>
-            <input placeholder="Food or drink name" value={savedName} onChange={(event) => setSavedName(event.target.value)} required />
-            <MacroFields values={savedMacros} onChange={setSavedMacros} />
-            <label className="nutrition-quantity-field">
-              Alcoholic drinks
-              <input type="number" min="0" step="any" value={savedDrinks} onChange={(event) => setSavedDrinks(event.target.value)} />
-            </label>
-            <button className="btn-primary" type="submit">Save Item</button>
           </form>
-        )}
-        <form className="nutrition-form" onSubmit={logCustom}>
-          <h3>Quick Add</h3>
-          <select value={customCategory} onChange={(event) => setCustomCategory(event.target.value as MealCategory)}>
-            {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
-          </select>
-          <input placeholder="Meal or item name" value={customName} onChange={(event) => setCustomName(event.target.value)} required />
-          <label className="nutrition-quantity-field">
-            Servings
-            <input type="number" min="0" step="any" value={customQuantity} onChange={(event) => setCustomQuantity(event.target.value)} />
-          </label>
-          <MacroFields values={customMacros} onChange={setCustomMacros} />
-          <label className="nutrition-quantity-field">
-            Alcoholic drinks
-            <input type="number" min="0" step="any" value={customDrinks} onChange={(event) => setCustomDrinks(event.target.value)} />
-          </label>
-          <button className="btn-primary" type="submit">Add to Day</button>
-        </form>
-      </section>
+          {loading && <p className="nutrition-search-status">Searching…</p>}
+          {error && <p className="nutrition-search-status nutrition-search-error">{error}</p>}
+          {searched && !loading && results.length === 0 && (
+            <p className="nutrition-search-status">No results found.</p>
+          )}
+          {results.length > 0 && (
+            <ul className="nutrition-food-list">{results.map(renderFoodRow)}</ul>
+          )}
+        </section>
+      )}
+
+      {view === 'favorites' && (
+        <section className="nutrition-finder">
+          {favorites.length === 0
+            ? <p className="nutrition-empty">No favorites yet. Star a food to keep it here.</p>
+            : <ul className="nutrition-food-list">{favorites.map(renderFoodRow)}</ul>}
+        </section>
+      )}
+
+      {view === 'recent' && (
+        <section className="nutrition-finder">
+          {recents.length === 0
+            ? <p className="nutrition-empty">No recent foods yet. Foods you log will appear here.</p>
+            : <ul className="nutrition-food-list">{recents.map(renderFoodRow)}</ul>}
+        </section>
+      )}
 
       <section className="nutrition-day">
         <h3>Today's Meals</h3>
-        {dayEntries.length === 0
+        {dayGroups.length === 0
           ? <p className="nutrition-empty">Nothing logged for this day yet.</p>
-          : dayEntriesByCategory.map((group) => (
-            <div className="nutrition-day-category" key={group.category}>
-              <h4 className="nutrition-day-category-label">{group.category}</h4>
-              {group.entries.map((entry) => (
-                <div className="nutrition-entry" key={entry.id}>
-                  <span>
-                    {entry.name}
-                    {entry.quantity !== 1 && <em aria-label={`${round(entry.quantity)} servings`}> &times;{round(entry.quantity)}</em>}
-                    <small>{round(entry.calories * entry.quantity)} cal</small>
+          : dayGroups.map((section) => (
+            <div className="nutrition-day-category" key={section.category}>
+              <h4 className="nutrition-day-category-label">{section.category}</h4>
+              {section.groups.map((group) => (
+                <div className="nutrition-entry" key={group.key}>
+                  <span className="nutrition-entry-info">
+                    {group.name}
+                    <small>{round(group.caloriesPerServing * group.quantity)} cal</small>
                   </span>
-                  <button aria-label={`Delete ${entry.name}`} className="nutrition-delete" onClick={() => onDeleteEntry(entry.id)}>
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="nutrition-entry-controls">
+                    <div className="nutrition-qty-stepper">
+                      <button type="button" aria-label={`Decrease servings of ${group.name}`} onClick={() => adjustGroup(group, -QTY_STEP)}>
+                        <Minus size={14} />
+                      </button>
+                      <span className="nutrition-entry-qty" aria-label={`${round(group.quantity)} servings`}>&times;{round(group.quantity)}</span>
+                      <button type="button" aria-label={`Increase servings of ${group.name}`} onClick={() => adjustGroup(group, QTY_STEP)}>
+                        <Plus size={14} />
+                      </button>
+                    </div>
+                    <button aria-label={`Delete ${group.name}`} className="nutrition-delete" onClick={() => deleteGroup(group)}>
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
