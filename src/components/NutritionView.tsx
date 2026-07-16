@@ -147,6 +147,14 @@ async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<
     json: '1',
     page_size: '20',
     fields: 'code,product_name,brands,serving_size,serving_quantity,nutriments',
+    // Restrict to products that have an English entry
+    tagtype_0: 'languages',
+    tag_contains_0: 'contains',
+    tag_0: 'en',
+    // Exclude meat products (seafood is a separate branch and is not affected)
+    tagtype_1: 'categories',
+    tag_contains_1: 'does_not_contain',
+    tag_1: 'en:meats-and-their-products',
   });
   const response = await fetch(`${OPEN_FOOD_FACTS_STAGING_SEARCH_URL}?${params.toString()}`, {
     signal,
