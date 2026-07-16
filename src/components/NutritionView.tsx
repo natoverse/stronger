@@ -152,7 +152,7 @@ async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<
       Authorization: OPEN_FOOD_FACTS_STAGING_AUTH,
     },
   });
-  if (!response.ok) throw new Error(`Search failed (${response.status})`);
+  if (!response.ok) throw new Error(`Search failed: ${response.statusText || 'request error'} (${response.status})`);
   const data = (await response.json()) as { products?: OFFProduct[] };
   return (data.products ?? []).flatMap((product) => {
     const parsed = parseOFFProduct(product);
@@ -243,7 +243,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
       {results.length > 0 && (
         <ul className="nutrition-search-results">
           {results.map((result, index) => (
-            <li className="nutrition-search-result" key={result.code}>
+            <li className="nutrition-search-result" key={`${result.code}-${index}`}>
               <div className="nutrition-search-result-info">
                 <span className="nutrition-search-result-name">{result.product_name}</span>
                 {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
