@@ -1,6 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Plus, Search, Trash2 } from 'lucide-react';
 import type { MealCategory, MealItem, MealLogEntry } from '../model/index.js';
+import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
+import { getTimeRangeOptions } from '../model/strava.js';
+import { NutritionCharts } from './NutritionCharts.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
 const EMPTY_MACROS = { calories: '', fat: '', carbs: '', fiber: '', protein: '' };
@@ -12,6 +15,7 @@ interface Props {
   entries: MealLogEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
+  drinksPerDayGoal: number;
   onSaveItems: (items: MealItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
   onDeleteEntry: (id: string) => void;
@@ -62,6 +66,12 @@ function macrosFrom(values: MacroInputs) {
     fiber: num(values.fiber),
     protein: num(values.protein),
   };
+}
+
+/** Parse the standard-drinks form input into a non-negative number. */
+function drinksFrom(value: string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
 type GoalStatus = 'good' | 'warn' | 'over' | null;
@@ -219,6 +229,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
       carbs: result.carbs,
       fiber: result.fiber,
       protein: result.protein,
+      standardDrinks: 0,
       quantity: quantityFor(index),
     };
     onLogEntry(entry);
@@ -282,18 +293,23 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
   );
 }
 
-export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGoalGrams, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
+export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGoalGrams, drinksPerDayGoal, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
   const [date, setDate] = useState(localDate);
   const [showSavedForm, setShowSavedForm] = useState(false);
   const [savedName, setSavedName] = useState('');
   const [savedCategory, setSavedCategory] = useState<MealCategory>('Breakfast');
   const [savedMacros, setSavedMacros] = useState<MacroInputs>(EMPTY_MACROS);
+  const [savedDrinks, setSavedDrinks] = useState('');
   const [customName, setCustomName] = useState('');
   const [customCategory, setCustomCategory] = useState<MealCategory>('Snacks');
   const [customMacros, setCustomMacros] = useState<MacroInputs>(EMPTY_MACROS);
+  const [customDrinks, setCustomDrinks] = useState('');
   const [customQuantity, setCustomQuantity] = useState('1');
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+  const [chartRange, setChartRange] = useState<StravaTimeRange>('month');
+  const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
+  const timeRanges = useMemo(() => getTimeRangeOptions(new Date()), []);
 
   const dayEntries = useMemo(() => entries.filter((entry) => entry.date === date), [entries, date]);
   const dayEntriesByCategory = useMemo(() => CATEGORIES.map((category) => ({
@@ -304,8 +320,8 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
     () => dayEntries.reduce((sum, entry) => ({
       calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
       carbs: sum.carbs + entry.carbs * entry.quantity, fiber: sum.fiber + entry.fiber * entry.quantity,
-      protein: sum.protein + entry.protein * entry.quantity,
-    }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0 }),
+      protein: sum.protein + entry.protein * entry.quantity, drinks: sum.drinks + entry.standardDrinks * entry.quantity,
+    }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0, drinks: 0 }),
     [dayEntries],
   );
   const itemsByCategory = useMemo(() => new Map(CATEGORIES.map((category) => [
@@ -322,6 +338,12 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
     return diff <= dailyProteinGoalGrams * 0.1 ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
+  const drinksGoalStatus = useMemo<GoalStatus>(() => {
+    if (drinksPerDayGoal <= 0) return null;
+    const ratio = totals.drinks / drinksPerDayGoal;
+    if (ratio < 0.9) return 'warn';
+    return ratio <= 1.1 ? 'good' : 'over';
+  }, [drinksPerDayGoal, totals.drinks]);
 
   const quantityFor = (id: string) => {
     const value = Number(quantities[id] ?? '1');
@@ -338,11 +360,12 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
 
   const saveItem = (event: React.FormEvent) => {
     event.preventDefault();
-    const item: MealItem = { id: newId(), name: savedName.trim(), category: savedCategory, ...macrosFrom(savedMacros) };
+    const item: MealItem = { id: newId(), name: savedName.trim(), category: savedCategory, ...macrosFrom(savedMacros), standardDrinks: drinksFrom(savedDrinks) };
     if (!item.name) return;
     onSaveItems([...items, item]);
     setSavedName('');
     setSavedMacros(EMPTY_MACROS);
+    setSavedDrinks('');
     setShowSavedForm(false);
   };
 
@@ -351,12 +374,14 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
     const quantity = Number(customQuantity);
     const entry: MealLogEntry = {
       id: newId(), date, name: customName.trim(), category: customCategory,
-      ...macrosFrom(customMacros), quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
+      ...macrosFrom(customMacros), standardDrinks: drinksFrom(customDrinks),
+      quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : 1,
     };
     if (!entry.name) return;
     onLogEntry(entry);
     setCustomName('');
     setCustomMacros(EMPTY_MACROS);
+    setCustomDrinks('');
     setCustomQuantity('1');
   };
 
@@ -375,6 +400,11 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
         <span className={statusClass(proteinGoalStatus)}>
           Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
         </span>
+        {(drinksPerDayGoal > 0 || totals.drinks > 0) && (
+          <span className={statusClass(drinksGoalStatus)}>
+            Drinks {round(totals.drinks)}{drinksPerDayGoal > 0 ? ` / ${round(drinksPerDayGoal)}` : ''}
+          </span>
+        )}
       </section>
 
       {CATEGORIES.map((category) => {
@@ -393,7 +423,7 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
                   ? <p className="nutrition-empty">No saved items yet.</p>
                   : categoryItems.map((item) => (
                     <div className="nutrition-item" key={item.id}>
-                      <span>{item.name}<small>{item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g</small></span>
+                      <span>{item.name}<small>{item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g{item.standardDrinks > 0 ? ` · ${item.standardDrinks} drink${item.standardDrinks === 1 ? '' : 's'}` : ''}</small></span>
                       <div className="nutrition-item-add">
                         <input
                           aria-label={`Servings of ${item.name}`}
@@ -426,6 +456,10 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
             </select>
             <input placeholder="Food or drink name" value={savedName} onChange={(event) => setSavedName(event.target.value)} required />
             <MacroFields values={savedMacros} onChange={setSavedMacros} />
+            <label className="nutrition-quantity-field">
+              Alcoholic drinks
+              <input type="number" min="0" step="any" value={savedDrinks} onChange={(event) => setSavedDrinks(event.target.value)} />
+            </label>
             <button className="btn-primary" type="submit">Save Item</button>
           </form>
         )}
@@ -440,6 +474,10 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
             <input type="number" min="0" step="any" value={customQuantity} onChange={(event) => setCustomQuantity(event.target.value)} />
           </label>
           <MacroFields values={customMacros} onChange={setCustomMacros} />
+          <label className="nutrition-quantity-field">
+            Alcoholic drinks
+            <input type="number" min="0" step="any" value={customDrinks} onChange={(event) => setCustomDrinks(event.target.value)} />
+          </label>
           <button className="btn-primary" type="submit">Add to Day</button>
         </form>
       </section>
@@ -465,6 +503,44 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
               ))}
             </div>
           ))}
+      </section>
+
+      <section className="nutrition-charts-section">
+        <div className="nutrition-charts-header">
+          <h3>Trends</h3>
+          <div className="chart-controls-sticky nutrition-chart-controls">
+            <div className="strava-range-group">
+              {timeRanges.map((r) => (
+                <button
+                  key={r.value}
+                  className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
+                  onClick={() => setChartRange(r.value)}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+            <div className="strava-agg-group">
+              {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
+                <button
+                  key={agg}
+                  className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
+                  onClick={() => setChartAggregation(agg)}
+                >
+                  {agg.charAt(0).toUpperCase() + agg.slice(1)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <NutritionCharts
+          entries={entries}
+          range={chartRange}
+          aggregation={chartAggregation}
+          calorieGoal={dailyCalorieGoal}
+          proteinGoal={dailyProteinGoalGrams}
+          drinksGoal={drinksPerDayGoal}
+        />
       </section>
     </main>
   );

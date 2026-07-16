@@ -251,7 +251,7 @@ function getISOWeek(d: Date): number {
  * - week: ISO week number "W{n}"
  * - month: month index "0"-"11"
  */
-function getBucketKey(dateStr: string, aggregation: StravaAggregation): string {
+export function getBucketKey(dateStr: string, aggregation: StravaAggregation): string {
   if (aggregation === 'day') return dateStr;
   const d = new Date(dateStr + 'T00:00:00');
   return aggregation === 'week' ? `W${getISOWeek(d)}` : String(d.getMonth());

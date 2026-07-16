@@ -277,6 +277,28 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
           </div>
         </div>
 
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Drinks Per Day</span>
+            <span className="settings-toggle-description">Alcoholic drinks target for the nutrition chart</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={100}
+              step={1}
+              value={appSettings.drinksPerDayGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 100) onAppNumericSettingChange('drinksPerDayGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">drinks</span>
+          </div>
+        </div>
+
         <div className="settings-subsection-title">Garmin Goals</div>
         <p className="settings-toggle-description">Auto-synced from Garmin. Set to 0 to disable goal coloring.</p>
 
