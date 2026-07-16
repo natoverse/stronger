@@ -1777,6 +1777,12 @@ function parseQuantity(raw: string | undefined): number {
 	return Number.isFinite(value) && value > 0 ? value : 1
 }
 
+/** Parse a non-negative number, returning 0 for missing, invalid, or negative values. */
+function parseNonNegativeNumber(raw: string | undefined): number {
+	const value = Number((raw ?? '').trim())
+	return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
 export function parseMealItemRow(row: string[]): MealItem | null {
 	const id = (row[0] ?? '').trim()
 	const values = parseMealValues(row, 1)
@@ -1792,8 +1798,7 @@ export function parseMealLogRow(row: string[]): MealLogEntry | null {
 	const id = (row[1] ?? '').trim()
 	const values = parseMealValues(row, 2)
 	if (!date || !id || !values) return null
-	const standardDrinks = Number((row[10] ?? '').trim())
-	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: Number.isFinite(standardDrinks) && standardDrinks >= 0 ? standardDrinks : 0 }
+	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: parseNonNegativeNumber(row[10]) }
 }
 
 export function foodItemToRow(food: FoodItem): (string | number)[] {
@@ -1809,14 +1814,13 @@ export function parseFoodItemRow(row: string[]): FoodItem | null {
 	const macroValues = row.slice(4, 9).map(Number)
 	if (macroValues.length !== 5 || macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
 	const [calories, fat, carbs, fiber, protein] = macroValues
-	const rawStdDrinks = Number((row[9] ?? '').trim())
 	return {
 		code,
 		name,
 		brand: (row[2] ?? '').trim(),
 		servingLabel: (row[3] ?? '').trim(),
 		calories, fat, carbs, fiber, protein,
-		standardDrinks: Number.isFinite(rawStdDrinks) && rawStdDrinks >= 0 ? rawStdDrinks : 0,
+		standardDrinks: parseNonNegativeNumber(row[9]),
 	}
 }
 

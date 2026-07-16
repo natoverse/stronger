@@ -53,10 +53,26 @@ function stepQuantity(current: string, delta: number): string {
   return String(snapQuantity(base + delta));
 }
 
+/** Fraction of a goal that counts as "close enough" (within 10%). */
+const GOAL_PROXIMITY_THRESHOLD = 0.1;
+
 type GoalStatus = 'good' | 'warn' | 'over' | null;
 
 function statusClass(status: GoalStatus): string {
   return status ? `nutrition-goal-${status}` : '';
+}
+
+/** Return the ISO dates for the Monday and Sunday of the week containing the given YYYY-MM-DD date. */
+function getWeekBounds(date: string): { start: string; end: string } {
+  const d = new Date(`${date}T00:00:00`);
+  const dayOfWeek = d.getDay(); // 0=Sun
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  return { start: fmt(monday), end: fmt(sunday) };
 }
 
 /** Prepend a food to the recents list, de-duplicating by code and capping the length. */
@@ -310,16 +326,7 @@ export function NutritionView({
 
   // Weekly standard drinks: sum for the 7-day window containing the selected date (Mon–Sun)
   const weeklyDrinks = useMemo(() => {
-    const d = new Date(`${date}T00:00:00`);
-    const dayOfWeek = d.getDay(); // 0=Sun
-    const monday = new Date(d);
-    monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const fmt = (dt: Date) =>
-      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
-    const start = fmt(monday);
-    const end = fmt(sunday);
+    const { start, end } = getWeekBounds(date);
     return entries
       .filter((e) => e.date >= start && e.date <= end)
       .reduce((sum, e) => sum + (e.standardDrinks ?? 0) * e.quantity, 0);
@@ -328,17 +335,17 @@ export function NutritionView({
   const calorieGoalStatus = useMemo<GoalStatus>(() => {
     if (dailyCalorieGoal <= 0) return null;
     if (totals.calories > dailyCalorieGoal) return 'over';
-    return totals.calories >= dailyCalorieGoal * 0.9 ? 'good' : 'warn';
+    return totals.calories >= dailyCalorieGoal * (1 - GOAL_PROXIMITY_THRESHOLD) ? 'good' : 'warn';
   }, [dailyCalorieGoal, totals.calories]);
   const proteinGoalStatus = useMemo<GoalStatus>(() => {
     if (dailyProteinGoalGrams <= 0) return null;
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
-    return diff <= dailyProteinGoalGrams * 0.1 ? 'good' : 'warn';
+    return diff <= dailyProteinGoalGrams * GOAL_PROXIMITY_THRESHOLD ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
   const weeklyAlcoholStatus = useMemo<GoalStatus>(() => {
     if (weeklyAlcoholGoal <= 0) return null;
     if (weeklyDrinks > weeklyAlcoholGoal) return 'over';
-    return weeklyDrinks >= weeklyAlcoholGoal * 0.9 ? 'good' : 'warn';
+    return weeklyDrinks >= weeklyAlcoholGoal * (1 - GOAL_PROXIMITY_THRESHOLD) ? 'good' : 'warn';
   }, [weeklyAlcoholGoal, weeklyDrinks]);
 
   const categoryFor = (code: string): MealCategory => categories[code] ?? 'Snacks';
