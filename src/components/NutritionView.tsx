@@ -86,6 +86,7 @@ interface OFFNutriments {
 }
 
 interface OFFProduct {
+  code?: string;
   product_name?: string;
   brands?: string;
   serving_size?: string;
@@ -94,6 +95,7 @@ interface OFFProduct {
 }
 
 interface OFFSearchResult {
+  code: string;
   product_name: string;
   brand: string;
   servingLabel: string;
@@ -110,6 +112,7 @@ const OPEN_FOOD_FACTS_STAGING_AUTH = 'Basic b2ZmOm9mZg==';
 function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
   const name = (product.product_name ?? '').trim();
   if (!name) return null;
+  const code = (product.code ?? '').trim();
   const n = product.nutriments ?? {};
   const servingQty = product.serving_quantity ?? 100;
 
@@ -124,6 +127,7 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
   if (cal === 0 && fat === 0 && carbs === 0 && protein === 0) return null;
 
   return {
+    code,
     product_name: name,
     brand: (product.brands ?? '').split(',')[0].trim(),
     servingLabel: product.serving_size ?? `${servingQty}g`,
@@ -139,7 +143,7 @@ async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<
   const params = new URLSearchParams({
     q: query,
     page_size: '20',
-    fields: 'product_name,brands,serving_size,serving_quantity,nutriments',
+    fields: 'code,product_name,brands,serving_size,serving_quantity,nutriments',
   });
   const response = await fetch(`${OPEN_FOOD_FACTS_STAGING_SEARCH_URL}?${params.toString()}`, {
     signal,
@@ -238,7 +242,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
       {results.length > 0 && (
         <ul className="nutrition-search-results">
           {results.map((result, index) => (
-            <li className="nutrition-search-result" key={`${result.product_name}-${result.brand}-${index}`}>
+            <li className="nutrition-search-result" key={result.code || `${result.product_name}-${result.brand}`}>
               <div className="nutrition-search-result-info">
                 <span className="nutrition-search-result-name">{result.product_name}</span>
                 {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
@@ -257,7 +261,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
                 <input
                   aria-label="Servings"
                   type="number"
-                  min="0.01"
+                  min="0.1"
                   step="any"
                   value={resultQuantities[index] ?? '1'}
                   onChange={(event) => setResultQuantities((previous) => ({ ...previous, [index]: event.target.value }))}
