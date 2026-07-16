@@ -3453,6 +3453,22 @@ body {
 .nutrition-form h3 { margin: 0; }
 .nutrition-macro-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
 .nutrition-macro-fields label { display: grid; gap: .2rem; color: var(--color-text-muted); font-size: .8rem; }
+.nutrition-search { margin-top: 1.25rem; }
+.nutrition-search-form { display: flex; gap: .5rem; }
+.nutrition-search-form input { flex: 1; padding: .55rem .75rem; color: var(--color-text); background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); font-size: 1rem; }
+.nutrition-search-btn { display: flex; align-items: center; justify-content: center; padding: .55rem .85rem; border-radius: var(--radius); }
+.nutrition-search-status { margin-top: .5rem; padding: .35rem .7rem; color: var(--color-text-muted); font-size: .9rem; }
+.nutrition-search-error { color: var(--color-accent); }
+.nutrition-search-results { list-style: none; margin-top: .5rem; display: grid; gap: .35rem; }
+.nutrition-search-result { display: flex; align-items: flex-start; justify-content: space-between; gap: .5rem; padding: .6rem .7rem; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius); }
+.nutrition-search-result-info { flex: 1; min-width: 0; }
+.nutrition-search-result-name { display: block; font-weight: 500; }
+.nutrition-search-result-brand { display: block; color: var(--color-text-muted); font-size: .8rem; margin-top: .1rem; }
+.nutrition-search-result-info small { display: block; color: var(--color-text-muted); font-size: .75rem; margin-top: .2rem; }
+.nutrition-search-result-add { display: flex; align-items: center; gap: .3rem; flex-shrink: 0; margin-top: .1rem; }
+.nutrition-search-result-add select { padding: .3rem .4rem; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius); font-size: .8rem; }
+.nutrition-search-result-add input { width: 3.5rem; padding: .3rem .4rem; background: var(--color-bg); color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius); font-size: .85rem; }
+.nutrition-search-result-add button { display: flex; align-items: center; padding: 0; background: none; border: none; cursor: pointer; color: var(--color-primary); }
 
 .strava-title {
 	color: var(--color-primary);
