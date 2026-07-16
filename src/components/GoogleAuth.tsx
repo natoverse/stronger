@@ -27,10 +27,12 @@ import {
 	createLogTab,
 	verifyCardioTab,
 	createCardioTab,
-	verifyMealItemsTab,
-	createMealItemsTab,
 	verifyMealLogTab,
 	createMealLogTab,
+	verifyMealFavoritesTab,
+	createMealFavoritesTab,
+	verifyMealRecentsTab,
+	createMealRecentsTab,
 	readCardioActivities,
 	writeDefaultCardioActivities,
 	describeSheetError,
@@ -165,8 +167,9 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				if (!cardioTabExists) {
 					await createCardioTab(spreadsheetId)
 				}
-				if (!await verifyMealItemsTab(spreadsheetId)) await createMealItemsTab(spreadsheetId)
 				if (!await verifyMealLogTab(spreadsheetId)) await createMealLogTab(spreadsheetId)
+				if (!await verifyMealFavoritesTab(spreadsheetId)) await createMealFavoritesTab(spreadsheetId)
+				if (!await verifyMealRecentsTab(spreadsheetId)) await createMealRecentsTab(spreadsheetId)
 
 				setPhase('connected')
 				if (onNeedsSetup) {
@@ -192,8 +195,9 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 			if (!cardioTabExists) {
 				await createCardioTab(spreadsheetId)
 			}
-			if (!await verifyMealItemsTab(spreadsheetId)) await createMealItemsTab(spreadsheetId)
 			if (!await verifyMealLogTab(spreadsheetId)) await createMealLogTab(spreadsheetId)
+			if (!await verifyMealFavoritesTab(spreadsheetId)) await createMealFavoritesTab(spreadsheetId)
+			if (!await verifyMealRecentsTab(spreadsheetId)) await createMealRecentsTab(spreadsheetId)
 
 			// Build a lift-name lookup for exercise display names
 			const liftNames = new Map(configs.map((c) => [c.id, c.name]))
