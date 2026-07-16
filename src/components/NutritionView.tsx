@@ -113,6 +113,7 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
   const name = (product.product_name ?? '').trim();
   if (!name) return null;
   const code = (product.code ?? '').trim();
+  if (!code) return null;
   const n = product.nutriments ?? {};
   const servingQty = product.serving_quantity ?? 100;
 
@@ -242,7 +243,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
       {results.length > 0 && (
         <ul className="nutrition-search-results">
           {results.map((result, index) => (
-            <li className="nutrition-search-result" key={result.code || String(index)}>
+            <li className="nutrition-search-result" key={result.code}>
               <div className="nutrition-search-result-info">
                 <span className="nutrition-search-result-name">{result.product_name}</span>
                 {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
