@@ -50,3 +50,9 @@ Add lightweight food and drink tracking for calories, fat, carbs, fiber, and pro
 - The `/api/v3/search` endpoint returned HTTP 400 with `invalid_api_action` (`search` is not a valid v3 API action — OFF v3 has no free-text search endpoint).
 - Reverted keyword search back to the staging `https://world.openfoodfacts.net/cgi/search.pl` route, which supports free-text search and returns the same `{ products: [...] }` shape the parser already expects.
 - Query params are now `search_terms`, `search_simple=1`, `action=process`, `json=1`, plus the existing `page_size` and `fields`. The `off:off` basic-auth header is retained for the staging host.
+
+## Superseded: food finder revamp (2026-07)
+
+- The saved-item library (`Stronger - Meal Items` tab, per-category expand/collapse panels), the "New Saved Item" form, and the "Quick Add" form were removed in favor of an OFF-database food finder (favorites / recent / search). See `specs/036-nutrition-food-finder.spec.md`.
+- The daily log (`Stronger - Meal Log`), serving quantities, per-entry deletion, and the calorie/protein goal coloring described above all carry over unchanged.
+

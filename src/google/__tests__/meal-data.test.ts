@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mealItemToRow, mealLogEntryToRow, parseMealItemRow, parseMealLogRow } from '../sheets.ts';
+import { mealItemToRow, mealLogEntryToRow, parseMealItemRow, parseMealLogRow, foodItemToRow, parseFoodItemRow } from '../sheets.ts';
 
 const item = {
   id: 'oats',
@@ -36,5 +36,34 @@ describe('meal item data', () => {
   it('defaults legacy log rows without a quantity column to 1 serving', () => {
     const legacyRow = ['2026-07-12', 'log-3', 'Oats', 'Breakfast', '150', '3', '27', '4', '5'];
     expect(parseMealLogRow(legacyRow)?.quantity).toBe(1);
+  });
+});
+
+describe('food item data (favorites / recents)', () => {
+  const food = {
+    code: '737628064502',
+    name: 'IPA',
+    brand: 'Brewery',
+    servingLabel: '355 ml',
+    calories: 200,
+    fat: 0,
+    carbs: 18,
+    fiber: 0,
+    protein: 2,
+  };
+
+  it('round-trips a food item with brand, serving, and macros', () => {
+    expect(parseFoodItemRow(foodItemToRow(food).map(String))).toEqual(food);
+  });
+
+  it('allows blank brand and serving label', () => {
+    const bare = { ...food, brand: '', servingLabel: '' };
+    expect(parseFoodItemRow(foodItemToRow(bare).map(String))).toEqual(bare);
+  });
+
+  it('rejects rows missing a code or name, or with negative macros', () => {
+    expect(parseFoodItemRow(['', 'IPA', '', '', '200', '0', '18', '0', '2'])).toBeNull();
+    expect(parseFoodItemRow(['code', '', '', '', '200', '0', '18', '0', '2'])).toBeNull();
+    expect(parseFoodItemRow(['code', 'IPA', '', '', '-1', '0', '18', '0', '2'])).toBeNull();
   });
 });

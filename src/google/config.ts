@@ -44,11 +44,17 @@ export const WORKOUT_SCHEDULE_TAB_NAME = 'Stronger - Workout Schedule'
 /** Name of the tab that holds cardio activity definitions (id + name). */
 export const CARDIO_TAB_NAME = 'Stronger - Cardio'
 
-/** Name of the tab that holds saved food and drink items. */
+/** Name of the tab that holds saved food and drink items. Deprecated: no longer read or written by the app (superseded by favorites/recents). */
 export const MEAL_ITEMS_TAB_NAME = 'Stronger - Meal Items'
 
 /** Name of the tab that holds daily food and drink entries. */
 export const MEAL_LOG_TAB_NAME = 'Stronger - Meal Log'
+
+/** Name of the tab that holds starred (favorite) foods from Open Food Facts. */
+export const MEAL_FAVORITES_TAB_NAME = 'Stronger - Meal Favorites'
+
+/** Name of the tab that holds the most recently logged foods from Open Food Facts. */
+export const MEAL_RECENTS_TAB_NAME = 'Stronger - Meal Recents'
 
 /** Name of the tab that holds Strava synced activity data. */
 export const STRAVA_TAB_NAME = 'Stronger - Strava'
