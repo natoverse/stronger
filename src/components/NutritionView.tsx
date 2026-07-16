@@ -106,7 +106,7 @@ interface OFFSearchResult {
   protein: number;
 }
 
-const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/api/v3/search';
+const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/cgi/search.pl';
 const OPEN_FOOD_FACTS_STAGING_AUTH = 'Basic b2ZmOm9mZg==';
 
 function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
@@ -142,7 +142,10 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
 
 async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<OFFSearchResult[]> {
   const params = new URLSearchParams({
-    q: query,
+    search_terms: query,
+    search_simple: '1',
+    action: 'process',
+    json: '1',
     page_size: '20',
     fields: 'code,product_name,brands,serving_size,serving_quantity,nutriments',
   });
