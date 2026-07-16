@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronRight, Plus, Search, Trash2 } from 'lucide-react';
 import type { MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
@@ -68,6 +68,215 @@ type GoalStatus = 'good' | 'warn' | 'over' | null;
 
 function statusClass(status: GoalStatus): string {
   return status ? `nutrition-goal-${status}` : '';
+}
+
+/* ── Open Food Facts search ─────────────────────────────────────────────── */
+
+interface OFFNutriments {
+  'energy-kcal_serving'?: number;
+  'energy-kcal_100g'?: number;
+  fat_serving?: number;
+  fat_100g?: number;
+  carbohydrates_serving?: number;
+  carbohydrates_100g?: number;
+  fiber_serving?: number;
+  fiber_100g?: number;
+  proteins_serving?: number;
+  proteins_100g?: number;
+}
+
+interface OFFProduct {
+  code?: string;
+  product_name?: string;
+  brands?: string;
+  serving_size?: string;
+  serving_quantity?: number;
+  nutriments?: OFFNutriments;
+}
+
+interface OFFSearchResult {
+  code: string;
+  product_name: string;
+  brand: string;
+  servingLabel: string;
+  calories: number;
+  fat: number;
+  carbs: number;
+  fiber: number;
+  protein: number;
+}
+
+const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/api/v3/search';
+const OPEN_FOOD_FACTS_STAGING_AUTH = 'Basic b2ZmOm9mZg==';
+
+function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
+  const name = (product.product_name ?? '').trim();
+  if (!name) return null;
+  const code = (product.code ?? '').trim();
+  if (!code) return null;
+  const n = product.nutriments ?? {};
+  const servingQty = product.serving_quantity ?? 100;
+
+  // Prefer per-serving values; fall back to per-100g scaled by serving size
+  const cal = n['energy-kcal_serving'] ?? ((n['energy-kcal_100g'] ?? 0) * servingQty / 100);
+  const fat = n['fat_serving'] ?? ((n['fat_100g'] ?? 0) * servingQty / 100);
+  const carbs = n['carbohydrates_serving'] ?? ((n['carbohydrates_100g'] ?? 0) * servingQty / 100);
+  const fiber = n['fiber_serving'] ?? ((n['fiber_100g'] ?? 0) * servingQty / 100);
+  const protein = n['proteins_serving'] ?? ((n['proteins_100g'] ?? 0) * servingQty / 100);
+
+  // Drop products where all macros are zero (likely incomplete data)
+  if (cal === 0 && fat === 0 && carbs === 0 && protein === 0) return null;
+
+  return {
+    code,
+    product_name: name,
+    brand: (product.brands ?? '').split(',')[0].trim(),
+    servingLabel: product.serving_size ?? `${servingQty}g`,
+    calories: Math.round(cal * 10) / 10,
+    fat: Math.round(fat * 10) / 10,
+    carbs: Math.round(carbs * 10) / 10,
+    fiber: Math.round(fiber * 10) / 10,
+    protein: Math.round(protein * 10) / 10,
+  };
+}
+
+async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<OFFSearchResult[]> {
+  const params = new URLSearchParams({
+    q: query,
+    page_size: '20',
+    fields: 'code,product_name,brands,serving_size,serving_quantity,nutriments',
+  });
+  const response = await fetch(`${OPEN_FOOD_FACTS_STAGING_SEARCH_URL}?${params.toString()}`, {
+    signal,
+    headers: {
+      Authorization: OPEN_FOOD_FACTS_STAGING_AUTH,
+    },
+  });
+  if (!response.ok) throw new Error(`Search failed: ${response.statusText || 'request error'} (${response.status})`);
+  const data = (await response.json()) as { products?: OFFProduct[] };
+  return (data.products ?? []).flatMap((product) => {
+    const parsed = parseOFFProduct(product);
+    return parsed ? [parsed] : [];
+  });
+}
+
+interface FoodSearchProps {
+  date: string;
+  onLogEntry: (entry: MealLogEntry) => void;
+}
+
+function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<OFFSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+  const [resultCategories, setResultCategories] = useState<Record<number, MealCategory>>({});
+  const [resultQuantities, setResultQuantities] = useState<Record<number, string>>({});
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleSearch = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = query.trim();
+    if (!trimmed) return;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    setLoading(true);
+    setError(null);
+    setSearched(false);
+    setResults([]);
+    setResultCategories({});
+    setResultQuantities({});
+    try {
+      const found = await searchOpenFoodFacts(trimmed, abortRef.current.signal);
+      setResults(found);
+      setSearched(true);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setError('Search failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const categoryFor = (index: number): MealCategory => resultCategories[index] ?? 'Snacks';
+  const quantityFor = (index: number): number => {
+    const value = Number(resultQuantities[index] ?? '1');
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  };
+
+  const addToDay = (result: OFFSearchResult, index: number) => {
+    const entry: MealLogEntry = {
+      id: newId(),
+      date,
+      name: result.product_name,
+      category: categoryFor(index),
+      calories: result.calories,
+      fat: result.fat,
+      carbs: result.carbs,
+      fiber: result.fiber,
+      protein: result.protein,
+      quantity: quantityFor(index),
+    };
+    onLogEntry(entry);
+    setResultQuantities((previous) => ({ ...previous, [index]: '1' }));
+  };
+
+  return (
+    <section className="nutrition-search">
+      <form className="nutrition-search-form" onSubmit={handleSearch}>
+        <input
+          placeholder="Search food database…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          aria-label="Food search query"
+        />
+        <button className="btn-primary nutrition-search-btn" type="submit" disabled={loading} aria-label="Search">
+          <Search size={18} />
+        </button>
+      </form>
+      {loading && <p className="nutrition-search-status">Searching…</p>}
+      {error && <p className="nutrition-search-status nutrition-search-error">{error}</p>}
+      {searched && !loading && results.length === 0 && (
+        <p className="nutrition-search-status">No results found.</p>
+      )}
+      {results.length > 0 && (
+        <ul className="nutrition-search-results">
+          {results.map((result, index) => (
+            <li className="nutrition-search-result" key={`${result.code}-${index}`}>
+              <div className="nutrition-search-result-info">
+                <span className="nutrition-search-result-name">{result.product_name}</span>
+                {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
+                <small>
+                  {result.servingLabel} · {result.calories} cal · Fat {result.fat}g · Carbs {result.carbs}g · Fiber {result.fiber}g · Protein {result.protein}g
+                </small>
+              </div>
+              <div className="nutrition-search-result-add">
+                <select
+                  aria-label="Category"
+                  value={categoryFor(index)}
+                  onChange={(event) => setResultCategories((previous) => ({ ...previous, [index]: event.target.value as MealCategory }))}
+                >
+                  {CATEGORIES.map((category) => <option key={category}>{category}</option>)}
+                </select>
+                <input
+                  aria-label="Servings"
+                  type="number"
+                  min="0.1"
+                  step="any"
+                  value={resultQuantities[index] ?? '1'}
+                  onChange={(event) => setResultQuantities((previous) => ({ ...previous, [index]: event.target.value }))}
+                />
+                <button aria-label={`Add ${result.product_name} to day`} onClick={() => addToDay(result, index)}>
+                  <Plus size={18} />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGoalGrams, onSaveItems, onLogEntry, onDeleteEntry }: Props) {
@@ -200,6 +409,8 @@ export function NutritionView({ items, entries, dailyCalorieGoal, dailyProteinGo
           </section>
         );
       })}
+
+      <FoodSearch date={date} onLogEntry={onLogEntry} />
 
       <section className="nutrition-actions">
         <button className="btn-new-workout" onClick={() => setShowSavedForm((show) => !show)}>
