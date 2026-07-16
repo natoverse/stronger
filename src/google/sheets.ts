@@ -1758,10 +1758,16 @@ const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:J`
 const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:J1`
 
 export function mealItemToRow(item: MealItem): (string | number)[] {
-	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein]
+	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein, item.standardDrinks]
 }
 
-function parseMealValues(row: string[], offset: number): Omit<MealItem, 'id'> | null {
+/** Parse a non-negative drink count, defaulting to 0 for missing or invalid values. */
+function parseDrinks(raw: string | undefined): number {
+	const value = Number((raw ?? '').trim())
+	return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function parseMealValues(row: string[], offset: number): Omit<MealItem, 'id' | 'standardDrinks'> | null {
 	const name = (row[offset] ?? '').trim()
 	const category = (row[offset + 1] ?? '').trim() as MealCategory
 	const macroValues = row.slice(offset + 2, offset + 7).map(Number)
@@ -1786,11 +1792,11 @@ function parseNonNegativeNumber(raw: string | undefined): number {
 export function parseMealItemRow(row: string[]): MealItem | null {
 	const id = (row[0] ?? '').trim()
 	const values = parseMealValues(row, 1)
-	return id && values ? { id, ...values } : null
+	return id && values ? { id, ...values, standardDrinks: parseDrinks(row[8]) } : null
 }
 
 export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {
-	return [entry.date, ...mealItemToRow(entry), entry.quantity, entry.standardDrinks]
+	return [entry.date, entry.id, entry.name, entry.category, entry.calories, entry.fat, entry.carbs, entry.fiber, entry.protein, entry.quantity, entry.standardDrinks]
 }
 
 export function parseMealLogRow(row: string[]): MealLogEntry | null {
@@ -2696,6 +2702,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	dailyCalorieGoal: 0,
 	dailyProteinGoalGrams: 0,
 	weeklyAlcoholGoal: 0,
+	drinksPerDayGoal: 0,
 	garminDailyStepsGoal: 0,
 	garminDailyFloorsGoal: 0,
 	garminWeeklyIntensityMinGoal: 0,
@@ -2721,6 +2728,7 @@ const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min
 	'app.dailyCalorieGoal': { field: 'dailyCalorieGoal', min: 0, max: 20000 },
 	'app.dailyProteinGoalGrams': { field: 'dailyProteinGoalGrams', min: 0, max: 1000 },
 	'app.weeklyAlcoholGoal': { field: 'weeklyAlcoholGoal', min: 0, max: 100 },
+	'app.drinksPerDayGoal': { field: 'drinksPerDayGoal', min: 0, max: 100 },
 	'app.garminDailyStepsGoal': { field: 'garminDailyStepsGoal', min: 0, max: 100000 },
 	'app.garminDailyFloorsGoal': { field: 'garminDailyFloorsGoal', min: 0, max: 500 },
 	'app.garminWeeklyIntensityMinGoal': { field: 'garminWeeklyIntensityMinGoal', min: 0, max: 10000 },

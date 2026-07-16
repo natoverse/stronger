@@ -274,6 +274,8 @@ export interface MealItem {
 	carbs: number;
 	fiber: number;
 	protein: number;
+	/** Number of standard alcoholic drinks per serving. Defaults to 0 for non-alcoholic items. */
+	standardDrinks: number;
 }
 
 /** A food or drink logged for a specific day. */
@@ -397,6 +399,8 @@ export interface AppSettings {
 	dailyProteinGoalGrams: number;
 	/** Weekly standard-drink goal used to color the weekly drinks count (0 disables goal coloring). */
 	weeklyAlcoholGoal: number;
+	/** Daily target for number of standard alcoholic drinks (0 disables goal coloring). */
+	drinksPerDayGoal: number;
 	/** Daily step goal used to color the Garmin steps chart (0 disables goal coloring). Auto-synced from Garmin. */
 	garminDailyStepsGoal: number;
 	/** Daily floors goal used to color the Garmin floors chart (0 disables goal coloring). Auto-synced from Garmin. */
@@ -419,6 +423,7 @@ export type AppNumericSettingKey =
 	| 'dailyCalorieGoal'
 	| 'dailyProteinGoalGrams'
 	| 'weeklyAlcoholGoal'
+	| 'drinksPerDayGoal'
 	| 'garminDailyStepsGoal'
 	| 'garminDailyFloorsGoal'
 	| 'garminWeeklyIntensityMinGoal';
