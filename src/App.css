@@ -3450,6 +3450,7 @@ body {
 /* Quantity stepper (- [value] +) */
 .nutrition-qty-stepper { display: flex; align-items: center; gap: .25rem; }
 .nutrition-qty-stepper button { display: flex; align-items: center; justify-content: center; width: 1.6rem; height: 1.6rem; padding: 0; background: var(--color-bg); color: var(--color-primary); border: 1px solid var(--color-border); border-radius: var(--radius); cursor: pointer; }
+.nutrition-qty-stepper button:hover, .nutrition-qty-stepper button:focus-visible { border-color: var(--color-primary); outline: none; }
 .nutrition-qty-stepper input { width: 3rem; padding: .3rem .2rem; text-align: center; color: var(--color-text); background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius); font-size: .85rem; }
 
 .nutrition-search { margin-top: .25rem; }

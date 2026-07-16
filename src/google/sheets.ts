@@ -1803,6 +1803,8 @@ export function parseFoodItemRow(row: string[]): FoodItem | null {
 	const code = (row[0] ?? '').trim()
 	const name = (row[1] ?? '').trim()
 	if (!code || !name) return null
+	// Macros occupy columns E–I (indices 4–8); a short row yields fewer than 5
+	// values and is rejected below so the destructuring never sees undefined.
 	const macroValues = row.slice(4, 9).map(Number)
 	if (macroValues.length !== 5 || macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
 	const [calories, fat, carbs, fiber, protein] = macroValues
