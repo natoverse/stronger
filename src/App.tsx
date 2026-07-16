@@ -1504,7 +1504,6 @@ function App() {
           entries={mealLog}
           dailyCalorieGoal={appSettings.dailyCalorieGoal}
           dailyProteinGoalGrams={appSettings.dailyProteinGoalGrams}
-          weeklyAlcoholGoal={appSettings.weeklyAlcoholGoal}
           drinksPerDayGoal={appSettings.drinksPerDayGoal}
           onFavoritesChange={handleSaveMealFavorites}
           onRecentsChange={handleSaveMealRecents}

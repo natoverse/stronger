@@ -21,7 +21,6 @@ interface Props {
   entries: MealLogEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
-  weeklyAlcoholGoal: number;
   drinksPerDayGoal: number;
   onFavoritesChange: (favorites: FoodItem[]) => void;
   onRecentsChange: (recents: FoodItem[]) => void;
@@ -285,7 +284,6 @@ export function NutritionView({
   entries,
   dailyCalorieGoal,
   dailyProteinGoalGrams,
-  weeklyAlcoholGoal,
   drinksPerDayGoal,
   onFavoritesChange,
   onRecentsChange,
@@ -373,6 +371,7 @@ export function NutritionView({
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
     return diff <= dailyProteinGoalGrams * GOAL_PROXIMITY_THRESHOLD ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
+  const weeklyAlcoholGoal = drinksPerDayGoal > 0 ? drinksPerDayGoal * 7 : 0;
   const weeklyAlcoholStatus = useMemo<GoalStatus>(() => {
     if (weeklyAlcoholGoal <= 0) return null;
     if (weeklyDrinks > weeklyAlcoholGoal) return 'over';
@@ -417,9 +416,8 @@ export function NutritionView({
       carbs: food.carbs,
       fiber: food.fiber,
       protein: food.protein,
-      standardDrinks: food.standardDrinks,
       quantity: quantityFor(food.code),
-      standardDrinks: category === 'Drinks' ? drinksFor(food.code) : 0,
+      standardDrinks: category === 'Drinks' ? drinksFor(food.code) : food.standardDrinks,
     };
     onLogEntry(entry);
     onRecentsChange(withRecent(recents, food));
