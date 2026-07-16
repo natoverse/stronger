@@ -104,6 +104,9 @@ interface OFFSearchResult {
   protein: number;
 }
 
+const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/api/v2/search';
+const OPEN_FOOD_FACTS_STAGING_AUTH = 'Basic b2ZmOm9mZg==';
+
 function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
   const name = (product.product_name ?? '').trim();
   if (!name) return null;
@@ -133,8 +136,17 @@ function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {
 }
 
 async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<OFFSearchResult[]> {
-  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&json=1&page_size=20&fields=product_name,brands,serving_size,serving_quantity,nutriments`;
-  const response = await fetch(url, { signal });
+  const params = new URLSearchParams({
+    q: query,
+    page_size: '20',
+    fields: 'product_name,brands,serving_size,serving_quantity,nutriments',
+  });
+  const response = await fetch(`${OPEN_FOOD_FACTS_STAGING_SEARCH_URL}?${params.toString()}`, {
+    signal,
+    headers: {
+      Authorization: OPEN_FOOD_FACTS_STAGING_AUTH,
+    },
+  });
   if (!response.ok) throw new Error(`Search failed (${response.status})`);
   const data = (await response.json()) as { products?: OFFProduct[] };
   return (data.products ?? []).flatMap((product) => {
