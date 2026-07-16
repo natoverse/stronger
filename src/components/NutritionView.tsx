@@ -242,7 +242,7 @@ function FoodSearch({ date, onLogEntry }: FoodSearchProps) {
       {results.length > 0 && (
         <ul className="nutrition-search-results">
           {results.map((result, index) => (
-            <li className="nutrition-search-result" key={result.code || `${result.product_name}-${result.brand}`}>
+            <li className="nutrition-search-result" key={result.code || String(index)}>
               <div className="nutrition-search-result-info">
                 <span className="nutrition-search-result-name">{result.product_name}</span>
                 {result.brand && <span className="nutrition-search-result-brand">{result.brand}</span>}
