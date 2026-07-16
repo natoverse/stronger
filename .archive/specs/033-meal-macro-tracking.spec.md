@@ -44,3 +44,9 @@ Add lightweight food and drink tracking for calories, fat, carbs, fiber, and pro
 
 - Nutrition keyword search now uses the Open Food Facts staging v3 endpoint `https://world.openfoodfacts.net/api/v3/search` instead of the legacy `cgi/search.pl` route.
 - Requests use the documented `q`, `page_size`, and `fields` query parameters and include the staging basic-auth header `off:off`.
+
+## Iteration: revert search to cgi/search.pl (2026-07)
+
+- The `/api/v3/search` endpoint returned HTTP 400 with `invalid_api_action` (`search` is not a valid v3 API action — OFF v3 has no free-text search endpoint).
+- Reverted keyword search back to the staging `https://world.openfoodfacts.net/cgi/search.pl` route, which supports free-text search and returns the same `{ products: [...] }` shape the parser already expects.
+- Query params are now `search_terms`, `search_simple=1`, `action=process`, `json=1`, plus the existing `page_size` and `fields`. The `off:off` basic-auth header is retained for the staging host.
