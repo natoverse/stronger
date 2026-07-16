@@ -106,7 +106,7 @@ interface OFFSearchResult {
   protein: number;
 }
 
-const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/api/v2/search';
+const OPEN_FOOD_FACTS_STAGING_SEARCH_URL = 'https://world.openfoodfacts.net/api/v3/search';
 const OPEN_FOOD_FACTS_STAGING_AUTH = 'Basic b2ZmOm9mZg==';
 
 function parseOFFProduct(product: OFFProduct): OFFSearchResult | null {

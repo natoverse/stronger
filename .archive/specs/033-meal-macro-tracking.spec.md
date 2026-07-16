@@ -42,5 +42,5 @@ Add lightweight food and drink tracking for calories, fat, carbs, fiber, and pro
 
 ## Iteration: Open Food Facts search endpoint (2026-07)
 
-- Nutrition keyword search now uses the documented Open Food Facts staging v2 endpoint `https://world.openfoodfacts.net/api/v2/search` instead of the legacy `cgi/search.pl` route.
+- Nutrition keyword search now uses the Open Food Facts staging v3 endpoint `https://world.openfoodfacts.net/api/v3/search` instead of the legacy `cgi/search.pl` route.
 - Requests use the documented `q`, `page_size`, and `fields` query parameters and include the staging basic-auth header `off:off`.
