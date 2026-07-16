@@ -281,6 +281,8 @@ export interface MealLogEntry extends MealItem {
 	date: string;
 	/** Number of servings logged. Defaults to 1; fractional values (e.g. 0.5) are allowed. Macros are per serving and scaled by this quantity. */
 	quantity: number;
+	/** Standard drinks per serving (US standard: 1 drink = 14 g pure alcohol). 0 for non-alcoholic items. */
+	standardDrinks: number;
 }
 
 /**
@@ -300,6 +302,8 @@ export interface FoodItem {
 	carbs: number;
 	fiber: number;
 	protein: number;
+	/** Standard drinks per serving (US standard: 1 drink = 14 g pure alcohol). 0 for non-alcoholic items. */
+	standardDrinks: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -391,6 +395,8 @@ export interface AppSettings {
 	dailyCalorieGoal: number;
 	/** Daily protein target in grams used in the nutrition summary (0 disables goal coloring). */
 	dailyProteinGoalGrams: number;
+	/** Weekly standard-drink goal used to color the weekly drinks count (0 disables goal coloring). */
+	weeklyAlcoholGoal: number;
 	/** Daily step goal used to color the Garmin steps chart (0 disables goal coloring). Auto-synced from Garmin. */
 	garminDailyStepsGoal: number;
 	/** Daily floors goal used to color the Garmin floors chart (0 disables goal coloring). Auto-synced from Garmin. */
@@ -412,6 +418,7 @@ export type AppNumericSettingKey =
 	| 'progressDipThresholdPercent'
 	| 'dailyCalorieGoal'
 	| 'dailyProteinGoalGrams'
+	| 'weeklyAlcoholGoal'
 	| 'garminDailyStepsGoal'
 	| 'garminDailyFloorsGoal'
 	| 'garminWeeklyIntensityMinGoal';

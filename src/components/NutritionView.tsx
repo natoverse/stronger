@@ -18,6 +18,7 @@ interface Props {
   entries: MealLogEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
+  weeklyAlcoholGoal: number;
   onFavoritesChange: (favorites: FoodItem[]) => void;
   onRecentsChange: (recents: FoodItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
@@ -90,6 +91,8 @@ interface OFFNutriments {
   fiber_100g?: number;
   proteins_serving?: number;
   proteins_100g?: number;
+  alcohol_serving?: number;
+  alcohol_100g?: number;
 }
 
 interface OFFProduct {
@@ -118,6 +121,9 @@ function parseOFFProduct(product: OFFProduct): FoodItem | null {
   const carbs = n['carbohydrates_serving'] ?? ((n['carbohydrates_100g'] ?? 0) * servingQty / 100);
   const fiber = n['fiber_serving'] ?? ((n['fiber_100g'] ?? 0) * servingQty / 100);
   const protein = n['proteins_serving'] ?? ((n['proteins_100g'] ?? 0) * servingQty / 100);
+  // Standard drinks: 1 US standard drink = 14 g pure alcohol
+  const alcoholGrams = n['alcohol_serving'] ?? ((n['alcohol_100g'] ?? 0) * servingQty / 100);
+  const standardDrinks = Math.round(alcoholGrams / 14 * 100) / 100;
 
   // Drop products where all macros are zero (likely incomplete data)
   if (cal === 0 && fat === 0 && carbs === 0 && protein === 0) return null;
@@ -132,6 +138,7 @@ function parseOFFProduct(product: OFFProduct): FoodItem | null {
     carbs: Math.round(carbs * 10) / 10,
     fiber: Math.round(fiber * 10) / 10,
     protein: Math.round(protein * 10) / 10,
+    standardDrinks,
   };
 }
 
@@ -236,6 +243,7 @@ export function NutritionView({
   entries,
   dailyCalorieGoal,
   dailyProteinGoalGrams,
+  weeklyAlcoholGoal,
   onFavoritesChange,
   onRecentsChange,
   onLogEntry,
@@ -295,9 +303,28 @@ export function NutritionView({
       calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
       carbs: sum.carbs + entry.carbs * entry.quantity, fiber: sum.fiber + entry.fiber * entry.quantity,
       protein: sum.protein + entry.protein * entry.quantity,
-    }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0 }),
+      standardDrinks: sum.standardDrinks + (entry.standardDrinks ?? 0) * entry.quantity,
+    }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0, standardDrinks: 0 }),
     [dayEntries],
   );
+
+  // Weekly standard drinks: sum for the 7-day window containing the selected date (Mon–Sun)
+  const weeklyDrinks = useMemo(() => {
+    const d = new Date(`${date}T00:00:00`);
+    const dayOfWeek = d.getDay(); // 0=Sun
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const fmt = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    const start = fmt(monday);
+    const end = fmt(sunday);
+    return entries
+      .filter((e) => e.date >= start && e.date <= end)
+      .reduce((sum, e) => sum + (e.standardDrinks ?? 0) * e.quantity, 0);
+  }, [entries, date]);
+
   const calorieGoalStatus = useMemo<GoalStatus>(() => {
     if (dailyCalorieGoal <= 0) return null;
     if (totals.calories > dailyCalorieGoal) return 'over';
@@ -308,6 +335,11 @@ export function NutritionView({
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
     return diff <= dailyProteinGoalGrams * 0.1 ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
+  const weeklyAlcoholStatus = useMemo<GoalStatus>(() => {
+    if (weeklyAlcoholGoal <= 0) return null;
+    if (weeklyDrinks > weeklyAlcoholGoal) return 'over';
+    return weeklyDrinks >= weeklyAlcoholGoal * 0.9 ? 'good' : 'warn';
+  }, [weeklyAlcoholGoal, weeklyDrinks]);
 
   const categoryFor = (code: string): MealCategory => categories[code] ?? 'Snacks';
   const quantityValue = (code: string): string => quantities[code] ?? '1';
@@ -335,6 +367,7 @@ export function NutritionView({
       carbs: food.carbs,
       fiber: food.fiber,
       protein: food.protein,
+      standardDrinks: food.standardDrinks,
       quantity: quantityFor(food.code),
     };
     onLogEntry(entry);
@@ -402,6 +435,11 @@ export function NutritionView({
         <span className={statusClass(proteinGoalStatus)}>
           Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
         </span>
+        {(totals.standardDrinks > 0 || weeklyAlcoholGoal > 0) && (
+          <span className={`nutrition-drinks${weeklyAlcoholStatus ? ` ${statusClass(weeklyAlcoholStatus)}` : ''}`}>
+            🍺 {round(totals.standardDrinks)} drinks today · {round(weeklyDrinks)} this week{weeklyAlcoholGoal > 0 ? ` / ${weeklyAlcoholGoal}` : ''}
+          </span>
+        )}
       </section>
 
       <div className="nutrition-finder-toggle" role="tablist" aria-label="Find food">

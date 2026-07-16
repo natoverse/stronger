@@ -1743,19 +1743,19 @@ export async function writeCardioActivities(
 /*  Meal tabs                                                           */
 /* ------------------------------------------------------------------ */
 
-const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:J1`
-const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:J2`
-const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:J`
+const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:K1`
+const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K2`
+const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K`
 const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein']
-const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity']
+const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity', 'standardDrinks']
 const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
 
-/* Open Food Facts foods (favorites + recents) share one 9-column schema. */
-const FOOD_ITEM_HEADER = ['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein']
-const MEAL_FAVORITES_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A:I`
-const MEAL_FAVORITES_HEADER_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A1:I1`
-const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:I`
-const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:I1`
+/* Open Food Facts foods (favorites + recents) share one 10-column schema. */
+const FOOD_ITEM_HEADER = ['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks']
+const MEAL_FAVORITES_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A:J`
+const MEAL_FAVORITES_HEADER_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A1:J1`
+const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:J`
+const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:J1`
 
 export function mealItemToRow(item: MealItem): (string | number)[] {
 	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein]
@@ -1784,7 +1784,7 @@ export function parseMealItemRow(row: string[]): MealItem | null {
 }
 
 export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {
-	return [entry.date, ...mealItemToRow(entry), entry.quantity]
+	return [entry.date, ...mealItemToRow(entry), entry.quantity, entry.standardDrinks]
 }
 
 export function parseMealLogRow(row: string[]): MealLogEntry | null {
@@ -1792,11 +1792,12 @@ export function parseMealLogRow(row: string[]): MealLogEntry | null {
 	const id = (row[1] ?? '').trim()
 	const values = parseMealValues(row, 2)
 	if (!date || !id || !values) return null
-	return { date, id, ...values, quantity: parseQuantity(row[9]) }
+	const standardDrinks = Number((row[10] ?? '').trim())
+	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: Number.isFinite(standardDrinks) && standardDrinks >= 0 ? standardDrinks : 0 }
 }
 
 export function foodItemToRow(food: FoodItem): (string | number)[] {
-	return [food.code, food.name, food.brand, food.servingLabel, food.calories, food.fat, food.carbs, food.fiber, food.protein]
+	return [food.code, food.name, food.brand, food.servingLabel, food.calories, food.fat, food.carbs, food.fiber, food.protein, food.standardDrinks]
 }
 
 export function parseFoodItemRow(row: string[]): FoodItem | null {
@@ -1808,12 +1809,14 @@ export function parseFoodItemRow(row: string[]): FoodItem | null {
 	const macroValues = row.slice(4, 9).map(Number)
 	if (macroValues.length !== 5 || macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
 	const [calories, fat, carbs, fiber, protein] = macroValues
+	const rawStdDrinks = Number((row[9] ?? '').trim())
 	return {
 		code,
 		name,
 		brand: (row[2] ?? '').trim(),
 		servingLabel: (row[3] ?? '').trim(),
 		calories, fat, carbs, fiber, protein,
+		standardDrinks: Number.isFinite(rawStdDrinks) && rawStdDrinks >= 0 ? rawStdDrinks : 0,
 	}
 }
 
@@ -2688,6 +2691,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	skipBodyCompDips: true,
 	dailyCalorieGoal: 0,
 	dailyProteinGoalGrams: 0,
+	weeklyAlcoholGoal: 0,
 	garminDailyStepsGoal: 0,
 	garminDailyFloorsGoal: 0,
 	garminWeeklyIntensityMinGoal: 0,
@@ -2712,6 +2716,7 @@ const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min
 	'app.progressDipThresholdPercent': { field: 'progressDipThresholdPercent', min: 0.1, max: 100 },
 	'app.dailyCalorieGoal': { field: 'dailyCalorieGoal', min: 0, max: 20000 },
 	'app.dailyProteinGoalGrams': { field: 'dailyProteinGoalGrams', min: 0, max: 1000 },
+	'app.weeklyAlcoholGoal': { field: 'weeklyAlcoholGoal', min: 0, max: 100 },
 	'app.garminDailyStepsGoal': { field: 'garminDailyStepsGoal', min: 0, max: 100000 },
 	'app.garminDailyFloorsGoal': { field: 'garminDailyFloorsGoal', min: 0, max: 500 },
 	'app.garminWeeklyIntensityMinGoal': { field: 'garminWeeklyIntensityMinGoal', min: 0, max: 10000 },

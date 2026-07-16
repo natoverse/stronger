@@ -24,18 +24,28 @@ describe('meal item data', () => {
   });
 
   it('round-trips a daily log entry', () => {
-    const entry = { ...item, id: 'log-1', date: '2026-07-12', quantity: 1 };
+    const entry = { ...item, id: 'log-1', date: '2026-07-12', quantity: 1, standardDrinks: 0 };
     expect(parseMealLogRow(mealLogEntryToRow(entry).map(String))).toEqual(entry);
   });
 
   it('round-trips a fractional serving quantity', () => {
-    const entry = { ...item, id: 'log-2', date: '2026-07-12', quantity: 0.5 };
+    const entry = { ...item, id: 'log-2', date: '2026-07-12', quantity: 0.5, standardDrinks: 0 };
     expect(parseMealLogRow(mealLogEntryToRow(entry).map(String))).toEqual(entry);
   });
 
   it('defaults legacy log rows without a quantity column to 1 serving', () => {
     const legacyRow = ['2026-07-12', 'log-3', 'Oats', 'Breakfast', '150', '3', '27', '4', '5'];
     expect(parseMealLogRow(legacyRow)?.quantity).toBe(1);
+  });
+
+  it('defaults legacy log rows without a standardDrinks column to 0', () => {
+    const legacyRow = ['2026-07-12', 'log-4', 'Oats', 'Breakfast', '150', '3', '27', '4', '5', '2'];
+    expect(parseMealLogRow(legacyRow)?.standardDrinks).toBe(0);
+  });
+
+  it('round-trips a log entry with non-zero standardDrinks', () => {
+    const entry = { ...item, id: 'log-5', date: '2026-07-12', quantity: 1, standardDrinks: 1.43 };
+    expect(parseMealLogRow(mealLogEntryToRow(entry).map(String))?.standardDrinks).toBeCloseTo(1.43);
   });
 });
 
@@ -50,6 +60,7 @@ describe('food item data (favorites / recents)', () => {
     carbs: 18,
     fiber: 0,
     protein: 2,
+    standardDrinks: 0,
   };
 
   it('round-trips a food item with brand, serving, and macros', () => {
@@ -65,5 +76,14 @@ describe('food item data (favorites / recents)', () => {
     expect(parseFoodItemRow(['', 'IPA', '', '', '200', '0', '18', '0', '2'])).toBeNull();
     expect(parseFoodItemRow(['code', '', '', '', '200', '0', '18', '0', '2'])).toBeNull();
     expect(parseFoodItemRow(['code', 'IPA', '', '', '-1', '0', '18', '0', '2'])).toBeNull();
+  });
+
+  it('defaults standardDrinks to 0 for legacy 9-column rows', () => {
+    expect(parseFoodItemRow(['code', 'IPA', 'Brewery', '355 ml', '200', '0', '18', '0', '2'])?.standardDrinks).toBe(0);
+  });
+
+  it('round-trips a food item with non-zero standardDrinks', () => {
+    const alcoholic = { ...food, standardDrinks: 1.43 };
+    expect(parseFoodItemRow(foodItemToRow(alcoholic).map(String))?.standardDrinks).toBeCloseTo(1.43);
   });
 });
