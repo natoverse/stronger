@@ -1131,8 +1131,7 @@ function App() {
     if (configs.length > 0) {
       setWorkouts(buildWorkoutsFromConfigs(configs, definitions, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appSettings.roundWarmupPlateMath]);
+  }, [appSettings.roundWarmupPlateMath, configs, definitions]);
 
   useEffect(() => {
     if (route.view === 'wellness') {
