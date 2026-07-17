@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
-import type { FoodItem, MealCategory, MealLogEntry } from '../model/index.js';
+import type { FoodItem, MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
 import { getTimeRangeOptions } from '../model/strava.js';
 import { NutritionCharts } from './NutritionCharts.js';
@@ -13,11 +13,12 @@ const RECENTS_CAP = 50;
 /** Servings step for the quantity +/- controls. */
 const QTY_STEP = 0.25;
 
-type FinderView = 'favorites' | 'recent' | 'search';
+type FinderView = 'favorites' | 'recent' | 'items' | 'search';
 
 interface Props {
   favorites: FoodItem[];
   recents: FoodItem[];
+  mealItems: MealItem[];
   entries: MealLogEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
@@ -278,9 +279,83 @@ function FoodRow({ food, isFavorite, category, quantity, drinks, onCategoryChang
   );
 }
 
+interface MealItemRowProps {
+  item: MealItem;
+  category: MealCategory;
+  quantity: string;
+  drinks: string;
+  onCategoryChange: (category: MealCategory) => void;
+  onQuantityChange: (quantity: string) => void;
+  onDrinksChange: (drinks: string) => void;
+  onAdd: () => void;
+}
+
+function MealItemRow({ item, category, quantity, drinks, onCategoryChange, onQuantityChange, onDrinksChange, onAdd }: MealItemRowProps) {
+  return (
+    <li className="nutrition-food-row">
+      <div className="nutrition-food-info">
+        <span className="nutrition-food-name">{item.name}</span>
+        <small>
+          {item.calories} cal · Fat {item.fat}g · Carbs {item.carbs}g · Fiber {item.fiber}g · Protein {item.protein}g
+        </small>
+      </div>
+      <div className="nutrition-food-add">
+        <select
+          aria-label={`Meal for ${item.name}`}
+          value={category}
+          onChange={(event) => onCategoryChange(event.target.value as MealCategory)}
+        >
+          {CATEGORIES.map((option) => <option key={option}>{option}</option>)}
+        </select>
+        <div className="nutrition-qty-stepper">
+          <button
+            type="button"
+            aria-label={`Decrease servings of ${item.name}`}
+            onClick={() => onQuantityChange(stepQuantity(quantity, -QTY_STEP))}
+          >
+            <Minus size={14} />
+          </button>
+          <input
+            aria-label={`Servings of ${item.name}`}
+            type="number"
+            min={QTY_STEP}
+            step={QTY_STEP}
+            value={quantity}
+            onChange={(event) => onQuantityChange(event.target.value)}
+          />
+          <button
+            type="button"
+            aria-label={`Increase servings of ${item.name}`}
+            onClick={() => onQuantityChange(stepQuantity(quantity, QTY_STEP))}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+        {category === 'Drinks' && (
+          <input
+            className="nutrition-drinks-input"
+            aria-label={`Alcoholic drinks per serving of ${item.name}`}
+            type="number"
+            min={0}
+            step="any"
+            placeholder="drinks"
+            value={drinks}
+            onChange={(event) => onDrinksChange(event.target.value)}
+          />
+        )}
+        <button className="nutrition-food-add-btn" aria-label={`Add ${item.name} to day`} onClick={onAdd}>
+          <Plus size={18} />
+        </button>
+      </div>
+    </li>
+  );
+}
+
+
 export function NutritionView({
   favorites,
   recents,
+  mealItems,
   entries,
   dailyCalorieGoal,
   dailyProteinGoalGrams,
@@ -450,6 +525,40 @@ export function NutritionView({
     />
   );
 
+  const addMealItemToDay = (item: MealItem) => {
+    const category = categoryFor(item.id);
+    const entry: MealLogEntry = {
+      id: newId(),
+      date,
+      name: item.name,
+      category,
+      calories: item.calories,
+      fat: item.fat,
+      carbs: item.carbs,
+      fiber: item.fiber,
+      protein: item.protein,
+      quantity: quantityFor(item.id),
+      standardDrinks: category === 'Drinks' ? (drinksFor(item.id) || item.standardDrinks) : item.standardDrinks,
+    };
+    onLogEntry(entry);
+    setQuantities((previous) => ({ ...previous, [item.id]: '1' }));
+    setDrinks((previous) => ({ ...previous, [item.id]: '' }));
+  };
+
+  const renderMealItemRow = (item: MealItem) => (
+    <MealItemRow
+      key={item.id}
+      item={item}
+      category={categoryFor(item.id)}
+      quantity={quantityValue(item.id)}
+      drinks={drinksValue(item.id)}
+      onCategoryChange={(category) => setCategories((previous) => ({ ...previous, [item.id]: category }))}
+      onQuantityChange={(quantity) => setQuantities((previous) => ({ ...previous, [item.id]: quantity }))}
+      onDrinksChange={(value) => setDrinks((previous) => ({ ...previous, [item.id]: value }))}
+      onAdd={() => addMealItemToDay(item)}
+    />
+  );
+
   const handleSearch = async (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = query.trim();
@@ -495,7 +604,7 @@ export function NutritionView({
       </section>
 
       <div className="nutrition-finder-toggle" role="tablist" aria-label="Find food">
-        {(['favorites', 'recent', 'search'] as const).map((option) => (
+        {(['favorites', 'recent', 'items', 'search'] as const).map((option) => (
           <button
             key={option}
             role="tab"
@@ -503,7 +612,7 @@ export function NutritionView({
             className={`nutrition-finder-tab${view === option ? ' is-active' : ''}`}
             onClick={() => setView(option)}
           >
-            {option === 'favorites' ? 'Favorites' : option === 'recent' ? 'Recent' : 'Search'}
+            {option === 'favorites' ? 'Favorites' : option === 'recent' ? 'Recent' : option === 'items' ? 'My Items' : 'Search'}
           </button>
         ))}
       </div>
@@ -545,6 +654,14 @@ export function NutritionView({
           {recents.length === 0
             ? <p className="nutrition-empty">No recent foods yet. Foods you log will appear here.</p>
             : <ul className="nutrition-food-list">{recents.map(renderFoodRow)}</ul>}
+        </section>
+      )}
+
+      {view === 'items' && (
+        <section className="nutrition-finder">
+          {mealItems.length === 0
+            ? <p className="nutrition-empty">No custom items found. Add items to the Meal Items sheet tab.</p>
+            : <ul className="nutrition-food-list">{mealItems.map(renderMealItemRow)}</ul>}
         </section>
       )}
 

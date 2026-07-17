@@ -5,7 +5,7 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_LOG_TAB_NAME, MEAL_FAVORITES_TAB_NAME, MEAL_RECENTS_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, MEAL_FAVORITES_TAB_NAME, MEAL_RECENTS_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
 import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, FoodItem, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
@@ -1747,6 +1747,7 @@ const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:K1`
 const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K2`
 const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K`
 const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein']
+const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:H`
 const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity', 'standardDrinks']
 const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
 
@@ -1793,6 +1794,14 @@ export function parseMealItemRow(row: string[]): MealItem | null {
 	const id = (row[0] ?? '').trim()
 	const values = parseMealValues(row, 1)
 	return id && values ? { id, ...values, standardDrinks: parseDrinks(row[8]) } : null
+}
+
+export async function readMealItems(spreadsheetId: string): Promise<MealItem[]> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_ITEMS_RANGE })
+	const rows = response.result.values ?? []
+	return rows.slice(1).map(parseMealItemRow).filter((item): item is MealItem => item !== null)
 }
 
 export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {
