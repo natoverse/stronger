@@ -168,7 +168,7 @@ function NutritionChart({ data }: { data: NutritionChartData }) {
                 y={yVal(b.value)}
                 width={Math.max(barInner, 1)}
                 height={Math.max((b.value / maxBar) * plotH, 0)}
-                fill={nutritionColor(b.colorKey, BAR_FALLBACK)}
+                style={{ fill: nutritionColor(b.colorKey, BAR_FALLBACK) }}
                 className={`strava-bar${i === activeIndex ? ' active' : ''}`}
                 rx={2}
               />
