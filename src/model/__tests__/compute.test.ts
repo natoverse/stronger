@@ -386,7 +386,7 @@ describe('computeSet', () => {
 	});
 
 	it('snaps warmup weight to easy plate math when roundWarmupPlateMath is true', () => {
-		// benchConfig: topSetWeight=200, roundingFactor=5, minimumWeight=95, gear=barbell
+		// benchConfig: topSetWeight=200, roundingFactor=5, minimumWeight=95
 		// 60% of 200 = 120 → nearest easy plate weight within 5 is 115 (5 away)
 		const set: SetTemplate = {
 			setType: 'warmup',
@@ -401,8 +401,8 @@ describe('computeSet', () => {
 		expect(result!.weight).toBe(115); // 120 snaps to 115
 	});
 
-	it('snaps work set weight to easy plate math when roundWarmupPlateMath is true', () => {
-		// 60% of 200 = 120, nearest easy plate is 115 (5 away) — all barbell set types are snapped
+	it('does not snap non-warmup sets even when roundWarmupPlateMath is true', () => {
+		// 60% of 200 = 120, nearest easy plate is 115 (5 away), but work sets are not snapped
 		const set: SetTemplate = {
 			setType: 'work',
 			percentage: 0.60,
@@ -413,30 +413,10 @@ describe('computeSet', () => {
 		};
 		const result = computeSet(set, benchConfig, configs, { roundWarmupPlateMath: true });
 		expect(result).not.toBeNull();
-		expect(result!.weight).toBe(115); // work sets now also snap
+		expect(result!.weight).toBe(120); // no plate-math rounding for work sets
 	});
 
-	it('does not snap non-barbell sets even when roundWarmupPlateMath is true', () => {
-		const dumbbellConfig: LiftConfig = {
-			...benchConfig,
-			id: 'db-curl',
-			gear: 'dumbbell',
-		};
-		const dbConfigs = configMap(dumbbellConfig);
-		const set: SetTemplate = {
-			setType: 'work',
-			percentage: 0.60,
-			weightBasis: { kind: 'topSet' },
-			minReps: 5,
-			maxReps: 5,
-			amrap: false,
-		};
-		const result = computeSet(set, dumbbellConfig, dbConfigs, { roundWarmupPlateMath: true });
-		expect(result).not.toBeNull();
-		expect(result!.weight).toBe(120); // dumbbell sets are not snapped to barbell plate math
-	});
-
-	it('leaves weight unchanged when not within tolerance', () => {
+	it('leaves warmup weight unchanged when not within tolerance', () => {
 		// benchConfig: topSetWeight=200
 		// 62% of 200 = 124 → rounded to 125; |125 - 115| = 10, |125 - 135| = 10 — no snap
 		const set: SetTemplate = {

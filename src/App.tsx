@@ -1126,7 +1126,7 @@ function App() {
     }
   }, [spreadsheetId, loadSettingsData]);
 
-  // Rebuild computed workouts whenever roundWarmupPlateMath changes so set weights update immediately.
+  // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {
     if (configs.length > 0) {
       setWorkouts(buildWorkoutsFromConfigs(configs, definitions, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));

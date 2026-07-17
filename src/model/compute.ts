@@ -147,7 +147,7 @@ export function computeSet(
 	const weight = computeSetWeight(set, liftConfig, allConfigs);
 	if (weight === null) return null;
 	const finalWeight =
-		options?.roundWarmupPlateMath && liftConfig.gear === 'barbell'
+		options?.roundWarmupPlateMath && set.setType === 'warmup'
 			? roundToEasyPlateMath(weight)
 			: weight;
 	return {
