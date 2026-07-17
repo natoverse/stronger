@@ -28,6 +28,7 @@ interface Props {
   onLogEntry: (entry: MealLogEntry) => void;
   onAdjustEntry: (id: string, quantity: number) => void;
   onDeleteEntry: (id: string) => void;
+  onChangeCategoryEntry: (id: string, category: MealCategory) => void;
 }
 
 function localDate(): string {
@@ -375,6 +376,7 @@ export function NutritionView({
   onLogEntry,
   onAdjustEntry,
   onDeleteEntry,
+  onChangeCategoryEntry,
 }: Props) {
   const [date, setDate] = useState(localDate);
   const [view, setView] = useState<FinderView | null>(null);
@@ -517,6 +519,10 @@ export function NutritionView({
 
   const deleteGroup = (group: DayGroup) => {
     for (const id of group.ids) onDeleteEntry(id);
+  };
+
+  const changeCategoryGroup = (group: DayGroup, category: MealCategory) => {
+    for (const id of group.ids) onChangeCategoryEntry(id, category);
   };
 
   const renderFoodRow = (food: FoodItem) => (
@@ -694,6 +700,14 @@ export function NutritionView({
                     <small>{round(group.caloriesPerServing * group.quantity)} cal</small>
                   </span>
                   <div className="nutrition-entry-controls">
+                    <select
+                      className="nutrition-entry-category-select"
+                      aria-label={`Category for ${group.name}`}
+                      value={group.category}
+                      onChange={(event) => changeCategoryGroup(group, event.target.value as MealCategory)}
+                    >
+                      {CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
                     <div className="nutrition-qty-stepper">
                       <button type="button" aria-label={`Decrease servings of ${group.name}`} onClick={() => adjustGroup(group, -QTY_STEP)}>
                         <Minus size={14} />
