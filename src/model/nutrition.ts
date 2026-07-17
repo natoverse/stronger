@@ -55,14 +55,17 @@ export const NUTRITION_GREEN = '#00e676';
 export const NUTRITION_RED = '#ff1744';
 export const NUTRITION_BLUE = '#2979ff';
 
-/** Goal-band colors: yellow under, green met, red over (calories/alcohol), blue over (protein). */
+/** Goal-band colors: yellow under, green met, red over (calories/alcohol), blue over (protein) or under (alcohol). */
 export type NutritionColorKey = 'under' | 'met' | 'over' | 'bonus' | '';
 
 /** Resolve a color-band value/goal comparison into a color key. */
 export function nutritionColorKey(value: number, goal: number, metric: NutritionMetric): NutritionColorKey {
   if (goal <= 0) return '';
   const ratio = value / goal;
-  if (ratio < 0.9) return 'under';
+  if (ratio < 0.9) {
+    // Under-drinking is a positive outcome (blue); under-eating calories/protein is a warning (yellow).
+    return metric === 'drinks' ? 'bonus' : 'under';
+  }
   if (ratio <= 1.1) return 'met';
   // Protein over goal is a positive outcome (blue); calories/alcohol over is negative (red).
   return metric === 'protein' ? 'bonus' : 'over';
