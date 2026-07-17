@@ -44,10 +44,20 @@ function round(value: number): number {
   return Math.round(value);
 }
 
+/** Round quantity values to 2 decimals to avoid floating-point drift. */
+function roundQuantity(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Format quantity values with up to two decimals, trimming trailing zeroes. */
+function formatQuantity(value: number): string {
+  return roundQuantity(value).toString();
+}
+
 /** Snap a servings value to the nearest step, clamped to a single step minimum. */
 function snapQuantity(value: number): number {
   const snapped = Math.round(value / QTY_STEP) * QTY_STEP;
-  return round(Math.max(QTY_STEP, snapped));
+  return roundQuantity(Math.max(QTY_STEP, snapped));
 }
 
 /** Step a servings string by delta, clamped to a positive multiple of QTY_STEP. */
@@ -398,7 +408,7 @@ export function NutritionView({
       const key = `${entry.name}\u0000${entry.calories}`;
       const existing = groups.find((group) => group.key === key);
       if (existing) {
-        existing.quantity = round(existing.quantity + entry.quantity);
+        existing.quantity = roundQuantity(existing.quantity + entry.quantity);
         existing.ids.push(entry.id);
       } else {
         groups.push({
@@ -688,7 +698,7 @@ export function NutritionView({
                       <button type="button" aria-label={`Decrease servings of ${group.name}`} onClick={() => adjustGroup(group, -QTY_STEP)}>
                         <Minus size={14} />
                       </button>
-                      <span className="nutrition-entry-qty" aria-label={`${round(group.quantity)} servings`}>&times;{round(group.quantity)}</span>
+                      <span className="nutrition-entry-qty" aria-label={`${formatQuantity(group.quantity)} servings`}>&times;{formatQuantity(group.quantity)}</span>
                       <button type="button" aria-label={`Increase servings of ${group.name}`} onClick={() => adjustGroup(group, QTY_STEP)}>
                         <Plus size={14} />
                       </button>
