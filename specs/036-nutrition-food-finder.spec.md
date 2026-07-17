@@ -86,3 +86,9 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
 - The nutrition totals bar shows a 🍺 drinks line when any drinks are logged for the day or a goal is set: `X drinks today · Y this week [/ goal]`. The weekly count spans the Mon–Sun week containing the selected date.
 - Weekly alcohol goal (`weeklyAlcoholGoal`) added to `AppSettings` and persisted in the Settings tab as `app.weeklyAlcoholGoal` (0–100, default 0). When set, the drinks line uses the same green/yellow/pink goal-coloring scheme as calories and protein.
 - Settings page gains a "Weekly Drinks" field under Nutrition Goals.
+
+## Iteration: quantity stepper bugfix (2026-07)
+
+- Fixed servings stepper math to preserve 0.25 increments instead of rounding stepped values to whole numbers.
+- Day-entry grouping now keeps summed servings at 2-decimal precision so grouped quantities don't jump to integers.
+- "Today's Meals" quantity badges now show fractional servings (up to two decimals) so stepper changes are visible.
