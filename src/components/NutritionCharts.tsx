@@ -151,9 +151,11 @@ function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData;
   // which has fewer elapsed days than a complete period.
   const fullPeriodGoal = Math.max(...buckets.map((b) => b.goal), 0);
 
-  // Build SVG polyline points string for the Garmin calorie line.
-  const garminPolylinePoints = useMemo(() => {
-    if (!garminCalorieLine || garminCalorieLine.length !== n) return null;
+  // Build SVG polyline points string for the Garmin calorie line (inline, no
+  // memoization needed — computation is O(n) and all dependencies are already
+  // in scope from this render).
+  let garminPolylinePoints: string | null = null;
+  if (garminCalorieLine && garminCalorieLine.length === n) {
     const pts: string[] = [];
     for (let i = 0; i < n; i++) {
       const v = garminCalorieLine[i];
@@ -161,9 +163,8 @@ function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData;
         pts.push(`${xCenter(i)},${yVal(v)}`);
       }
     }
-    return pts.length >= 2 ? pts.join(' ') : null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [garminCalorieLine, n, plotW, maxBar]);
+    garminPolylinePoints = pts.length >= 2 ? pts.join(' ') : null;
+  }
 
   const xPositions = useMemo(
     () => Array.from({ length: n }, (_, i) => xCenter(i)),
