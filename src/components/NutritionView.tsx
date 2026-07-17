@@ -38,9 +38,9 @@ function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Round to at most two decimals for tidy macro display. */
+/** Round to nearest whole number for tidy macro display. */
 function round(value: number): number {
-  return Math.round(value * 100) / 100;
+  return Math.round(value);
 }
 
 /** Snap a servings value to the nearest step, clamped to a single step minimum. */
@@ -152,11 +152,11 @@ function parseOFFProduct(product: OFFProduct): FoodItem | null {
     name,
     brand: (product.brands ?? '').split(',')[0].trim(),
     servingLabel: product.serving_size ?? `${servingQty}g`,
-    calories: Math.round(cal * 10) / 10,
-    fat: Math.round(fat * 10) / 10,
-    carbs: Math.round(carbs * 10) / 10,
-    fiber: Math.round(fiber * 10) / 10,
-    protein: Math.round(protein * 10) / 10,
+    calories: Math.round(cal),
+    fat: Math.round(fat),
+    carbs: Math.round(carbs),
+    fiber: Math.round(fiber),
+    protein: Math.round(protein),
     standardDrinks,
   };
 }
