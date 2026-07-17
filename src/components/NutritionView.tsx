@@ -417,7 +417,7 @@ export function NutritionView({
       fiber: food.fiber,
       protein: food.protein,
       quantity: quantityFor(food.code),
-      standardDrinks: category === 'Drinks' ? drinksFor(food.code) : food.standardDrinks,
+      standardDrinks: category === 'Drinks' ? (drinksFor(food.code) || food.standardDrinks) : food.standardDrinks,
     };
     onLogEntry(entry);
     onRecentsChange(withRecent(recents, food));
