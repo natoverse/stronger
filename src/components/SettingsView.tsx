@@ -280,7 +280,7 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
         <div className="settings-percent-row">
           <span className="settings-toggle-label">
             <span className="settings-toggle-name">Drinks Per Day</span>
-            <span className="settings-toggle-description">Alcoholic drinks target for the nutrition chart</span>
+            <span className="settings-toggle-description">Alcoholic drinks target per day (×7 used for weekly bar)</span>
           </span>
           <div className="settings-percent-input-group">
             <input

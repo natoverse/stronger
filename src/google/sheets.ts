@@ -1746,16 +1746,16 @@ export async function writeCardioActivities(
 const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:K1`
 const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K2`
 const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K`
-// Log columns keep `quantity` at index 9 for backward compatibility; `standardDrinks` is appended after it.
-const MEAL_LOG_HEADER = ['date', 'id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'quantity', 'standardDrinks']
+const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein']
+const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity', 'standardDrinks']
 const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
 
-/* Open Food Facts foods (favorites + recents) share one 9-column schema. */
-const FOOD_ITEM_HEADER = ['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein']
-const MEAL_FAVORITES_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A:I`
-const MEAL_FAVORITES_HEADER_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A1:I1`
-const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:I`
-const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:I1`
+/* Open Food Facts foods (favorites + recents) share one 10-column schema. */
+const FOOD_ITEM_HEADER = ['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks']
+const MEAL_FAVORITES_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A:J`
+const MEAL_FAVORITES_HEADER_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A1:J1`
+const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:J`
+const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:J1`
 
 export function mealItemToRow(item: MealItem): (string | number)[] {
 	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein, item.standardDrinks]
@@ -1783,6 +1783,12 @@ function parseQuantity(raw: string | undefined): number {
 	return Number.isFinite(value) && value > 0 ? value : 1
 }
 
+/** Parse a non-negative number, returning 0 for missing, invalid, or negative values. */
+function parseNonNegativeNumber(raw: string | undefined): number {
+	const value = Number((raw ?? '').trim())
+	return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
 export function parseMealItemRow(row: string[]): MealItem | null {
 	const id = (row[0] ?? '').trim()
 	const values = parseMealValues(row, 1)
@@ -1798,11 +1804,11 @@ export function parseMealLogRow(row: string[]): MealLogEntry | null {
 	const id = (row[1] ?? '').trim()
 	const values = parseMealValues(row, 2)
 	if (!date || !id || !values) return null
-	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: parseDrinks(row[10]) }
+	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: parseNonNegativeNumber(row[10]) }
 }
 
 export function foodItemToRow(food: FoodItem): (string | number)[] {
-	return [food.code, food.name, food.brand, food.servingLabel, food.calories, food.fat, food.carbs, food.fiber, food.protein]
+	return [food.code, food.name, food.brand, food.servingLabel, food.calories, food.fat, food.carbs, food.fiber, food.protein, food.standardDrinks]
 }
 
 export function parseFoodItemRow(row: string[]): FoodItem | null {
@@ -1820,6 +1826,7 @@ export function parseFoodItemRow(row: string[]): FoodItem | null {
 		brand: (row[2] ?? '').trim(),
 		servingLabel: (row[3] ?? '').trim(),
 		calories, fat, carbs, fiber, protein,
+		standardDrinks: parseNonNegativeNumber(row[9]),
 	}
 }
 

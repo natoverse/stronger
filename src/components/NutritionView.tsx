@@ -56,10 +56,26 @@ function stepQuantity(current: string, delta: number): string {
   return String(snapQuantity(base + delta));
 }
 
+/** Fraction of a goal that counts as "close enough" (within 10%). */
+const GOAL_PROXIMITY_THRESHOLD = 0.1;
+
 type GoalStatus = 'good' | 'warn' | 'over' | null;
 
 function statusClass(status: GoalStatus): string {
   return status ? `nutrition-goal-${status}` : '';
+}
+
+/** Return the ISO dates for the Monday and Sunday of the week containing the given YYYY-MM-DD date. */
+function getWeekBounds(date: string): { start: string; end: string } {
+  const d = new Date(`${date}T00:00:00`);
+  const dayOfWeek = d.getDay(); // 0=Sun
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7));
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  const fmt = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  return { start: fmt(monday), end: fmt(sunday) };
 }
 
 /** Prepend a food to the recents list, de-duplicating by code and capping the length. */
@@ -94,6 +110,8 @@ interface OFFNutriments {
   fiber_100g?: number;
   proteins_serving?: number;
   proteins_100g?: number;
+  alcohol_serving?: number;
+  alcohol_100g?: number;
 }
 
 interface OFFProduct {
@@ -122,6 +140,9 @@ function parseOFFProduct(product: OFFProduct): FoodItem | null {
   const carbs = n['carbohydrates_serving'] ?? ((n['carbohydrates_100g'] ?? 0) * servingQty / 100);
   const fiber = n['fiber_serving'] ?? ((n['fiber_100g'] ?? 0) * servingQty / 100);
   const protein = n['proteins_serving'] ?? ((n['proteins_100g'] ?? 0) * servingQty / 100);
+  // Standard drinks: 1 US standard drink = 14 g pure alcohol
+  const alcoholGrams = n['alcohol_serving'] ?? ((n['alcohol_100g'] ?? 0) * servingQty / 100);
+  const standardDrinks = Math.round(alcoholGrams / 14 * 100) / 100;
 
   // Drop products where all macros are zero (likely incomplete data)
   if (cal === 0 && fat === 0 && carbs === 0 && protein === 0) return null;
@@ -136,6 +157,7 @@ function parseOFFProduct(product: OFFProduct): FoodItem | null {
     carbs: Math.round(carbs),
     fiber: Math.round(fiber),
     protein: Math.round(protein),
+    standardDrinks,
   };
 }
 
@@ -325,20 +347,36 @@ export function NutritionView({
     () => dayEntries.reduce((sum, entry) => ({
       calories: sum.calories + entry.calories * entry.quantity, fat: sum.fat + entry.fat * entry.quantity,
       carbs: sum.carbs + entry.carbs * entry.quantity, fiber: sum.fiber + entry.fiber * entry.quantity,
-      protein: sum.protein + entry.protein * entry.quantity, drinks: sum.drinks + entry.standardDrinks * entry.quantity,
+      protein: sum.protein + entry.protein * entry.quantity,
+      drinks: sum.drinks + (entry.standardDrinks ?? 0) * entry.quantity,
     }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0, drinks: 0 }),
     [dayEntries],
   );
+
+  // Weekly standard drinks: sum for the 7-day window containing the selected date (Mon–Sun)
+  const weeklyDrinks = useMemo(() => {
+    const { start, end } = getWeekBounds(date);
+    return entries
+      .filter((e) => e.date >= start && e.date <= end)
+      .reduce((sum, e) => sum + (e.standardDrinks ?? 0) * e.quantity, 0);
+  }, [entries, date]);
+
   const calorieGoalStatus = useMemo<GoalStatus>(() => {
     if (dailyCalorieGoal <= 0) return null;
     if (totals.calories > dailyCalorieGoal) return 'over';
-    return totals.calories >= dailyCalorieGoal * 0.9 ? 'good' : 'warn';
+    return totals.calories >= dailyCalorieGoal * (1 - GOAL_PROXIMITY_THRESHOLD) ? 'good' : 'warn';
   }, [dailyCalorieGoal, totals.calories]);
   const proteinGoalStatus = useMemo<GoalStatus>(() => {
     if (dailyProteinGoalGrams <= 0) return null;
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
-    return diff <= dailyProteinGoalGrams * 0.1 ? 'good' : 'warn';
+    return diff <= dailyProteinGoalGrams * GOAL_PROXIMITY_THRESHOLD ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
+  const weeklyAlcoholGoal = drinksPerDayGoal > 0 ? drinksPerDayGoal * 7 : 0;
+  const weeklyAlcoholStatus = useMemo<GoalStatus>(() => {
+    if (weeklyAlcoholGoal <= 0) return null;
+    if (weeklyDrinks > weeklyAlcoholGoal) return 'over';
+    return weeklyDrinks >= weeklyAlcoholGoal * (1 - GOAL_PROXIMITY_THRESHOLD) ? 'good' : 'warn';
+  }, [weeklyAlcoholGoal, weeklyDrinks]);
   const drinksGoalStatus = useMemo<GoalStatus>(() => {
     if (drinksPerDayGoal <= 0) return null;
     const ratio = totals.drinks / drinksPerDayGoal;
@@ -379,7 +417,7 @@ export function NutritionView({
       fiber: food.fiber,
       protein: food.protein,
       quantity: quantityFor(food.code),
-      standardDrinks: category === 'Drinks' ? drinksFor(food.code) : 0,
+      standardDrinks: category === 'Drinks' ? (drinksFor(food.code) || food.standardDrinks) : food.standardDrinks,
     };
     onLogEntry(entry);
     onRecentsChange(withRecent(recents, food));
@@ -449,9 +487,9 @@ export function NutritionView({
         <span className={statusClass(proteinGoalStatus)}>
           Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
         </span>
-        {(drinksPerDayGoal > 0 || totals.drinks > 0) && (
-          <span className={statusClass(drinksGoalStatus)}>
-            Drinks {round(totals.drinks)}{drinksPerDayGoal > 0 ? ` / ${round(drinksPerDayGoal)}` : ''}
+        {(totals.drinks > 0 || weeklyAlcoholGoal > 0) && (
+          <span className={`nutrition-drinks${weeklyAlcoholStatus ? ` ${statusClass(weeklyAlcoholStatus)}` : ''}`}>
+            🍺 {round(totals.drinks)} drinks today · {round(weeklyDrinks)} this week{weeklyAlcoholGoal > 0 ? ` / ${weeklyAlcoholGoal}` : ''}
           </span>
         )}
       </section>

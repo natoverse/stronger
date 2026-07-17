@@ -76,3 +76,13 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
   that adjust the underlying log row's quantity in place via a new
   `updateMealLogEntry` sheet helper, so servings can be changed without
   deleting and re-adding. The trash button deletes all rows in the group.
+
+## Iteration: standard drinks tracking (2026-07)
+
+- Added `standardDrinks: number` to `FoodItem` and `MealLogEntry` (per-serving count, 0 for non-alcoholic).
+- OFF search responses are parsed for `alcohol_100g` and `alcohol_serving` nutriments. Standard drinks per serving are computed as `alcoholGrams / 14` (US standard: 1 drink = 14 g pure alcohol) and stored on both `FoodItem` and carried into the logged `MealLogEntry`.
+- Favorites and Recents storage extended from 9 to 10 columns (A:J); `standardDrinks` is the new column J. Legacy 9-column rows default `standardDrinks` to 0.
+- Meal Log extended from 10 to 11 columns (A:K); `standardDrinks` follows `quantity` at column K. Legacy rows without column K default to 0.
+- The nutrition totals bar shows a 🍺 drinks line when any drinks are logged for the day or a goal is set: `X drinks today · Y this week [/ goal]`. The weekly count spans the Mon–Sun week containing the selected date.
+- Weekly alcohol goal (`weeklyAlcoholGoal`) added to `AppSettings` and persisted in the Settings tab as `app.weeklyAlcoholGoal` (0–100, default 0). When set, the drinks line uses the same green/yellow/pink goal-coloring scheme as calories and protein.
+- Settings page gains a "Weekly Drinks" field under Nutrition Goals.

@@ -283,6 +283,8 @@ export interface MealLogEntry extends MealItem {
 	date: string;
 	/** Number of servings logged. Defaults to 1; fractional values (e.g. 0.5) are allowed. Macros are per serving and scaled by this quantity. */
 	quantity: number;
+	/** Standard drinks per serving (US standard: 1 drink = 14 g pure alcohol). 0 for non-alcoholic items. */
+	standardDrinks: number;
 }
 
 /**
@@ -302,6 +304,8 @@ export interface FoodItem {
 	carbs: number;
 	fiber: number;
 	protein: number;
+	/** Standard drinks per serving (US standard: 1 drink = 14 g pure alcohol). 0 for non-alcoholic items. */
+	standardDrinks: number;
 }
 
 // ---------------------------------------------------------------------------
