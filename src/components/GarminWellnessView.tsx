@@ -805,8 +805,8 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
 
   const legendItems: LegendItem[] = [
-    { label: 'Active', color: ACCENT },
-    { label: 'Resting (BMR)', color: GRAY },
+    { label: 'Active', color: BLUE },
+    { label: 'Resting (BMR)', color: ORANGE },
     ...(scaledGoal > 0 ? [{ label: 'Goal', color: YELLOW }] : []),
   ];
 
@@ -883,7 +883,7 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
                     y={CHART_PADDING.top + PLOT_H - bmrH}
                     width={Math.max(barInner, 1)}
                     height={bmrH}
-                    fill={GRAY}
+                    fill={ORANGE}
                     opacity={opacity}
                     rx={2}
                   />
@@ -894,7 +894,7 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
                     y={CHART_PADDING.top + PLOT_H - bmrH - activeH}
                     width={Math.max(barInner, 1)}
                     height={activeH}
-                    fill={ACCENT}
+                    fill={BLUE}
                     opacity={opacity}
                     rx={2}
                   />
