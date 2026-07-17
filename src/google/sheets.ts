@@ -2168,10 +2168,10 @@ export async function readStravaActivities(
 /* ------------------------------------------------------------------ */
 
 /**
- * A1 range for reading Garmin data (row 2 onward, open-ended, 19 columns).
+ * A1 range for reading Garmin data (row 2 onward, open-ended, 17 columns).
  * The tab is written by `scripts/garmin-sync.py`; the app only reads it.
  */
-const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:S`
+const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:Q`
 
 /**
  * Column order of the "Stronger - Garmin" tab (see scripts/garmin-sync.py).
@@ -2185,10 +2185,8 @@ const GARMIN_COL = {
 	duration: 4,
 	distance: 6,
 	elevationGain: 7,
-	activeCalories: 9,
-	totalCalories: 10,
-	avgHR: 11,
-	maxHR: 12,
+	avgHR: 9,
+	maxHR: 10,
 } as const
 
 /* ------------------------------------------------------------------ */
@@ -2220,7 +2218,7 @@ export function normalizeGarminActivityType(typeKey: string): string {
  * Returns `null` for incomplete or invalid rows.
  */
 export function parseGarminRow(row: string[]): StravaActivity | null {
-	// Need at least through the maxHR column (index 12).
+	// Need at least through the maxHR column (index 10).
 	if (!row || row.length < GARMIN_COL.maxHR + 1) return null
 
 	const date = (row[GARMIN_COL.date] ?? '').trim()
@@ -2234,16 +2232,12 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	const duration = Number((row[GARMIN_COL.duration] ?? '').trim())
 	const distance = Number((row[GARMIN_COL.distance] ?? '').trim())
 	const elevationGain = Number((row[GARMIN_COL.elevationGain] ?? '').trim())
-	const activeCalories = Number((row[GARMIN_COL.activeCalories] ?? '').trim())
-	const totalCalories = Number((row[GARMIN_COL.totalCalories] ?? '').trim())
 	const avgHR = Number((row[GARMIN_COL.avgHR] ?? '').trim())
 	const maxHR = Number((row[GARMIN_COL.maxHR] ?? '').trim())
 
 	if (!Number.isFinite(duration) || duration < 0) return null
 	if (!Number.isFinite(distance) || distance < 0) return null
 	if (!Number.isFinite(elevationGain) || elevationGain < 0) return null
-	if (!Number.isFinite(activeCalories) || activeCalories < 0) return null
-	if (!Number.isFinite(totalCalories) || totalCalories < 0) return null
 	if (!Number.isFinite(avgHR) || avgHR < 0) return null
 	if (!Number.isFinite(maxHR) || maxHR < 0) return null
 
@@ -2255,9 +2249,9 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 		duration,
 		distance,
 		elevationGain,
-		calories: totalCalories,
-		activeCalories,
-		totalCalories,
+		// Per-activity calories are not tracked in the Garmin activity tab; daily
+		// active/BMR calories are synced instead via the Garmin Wellness tab.
+		calories: 0,
 		avgHR,
 		maxHR,
 	}
@@ -2854,10 +2848,11 @@ export const GARMIN_WELLNESS_HEADER: string[] = [
 	'steps', 'floors', 'restingHR', 'vo2Max',
 	'intensityMinModerate', 'intensityMinVigorous',
 	'hillScore', 'enduranceScore',
+	'activeCalories', 'bmrCalories',
 ]
 
-/** A1 range for reading Garmin wellness data (row 2 onward, 23 columns = A:W). */
-const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:W`
+/** A1 range for reading Garmin wellness data (row 2 onward, 25 columns = A:Y). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:Y`
 
 /** Column index map for the Garmin wellness row (0-based). */
 const WC = {
@@ -2871,6 +2866,7 @@ const WC = {
 	steps: 15, floors: 16, restingHR: 17, vo2Max: 18,
 	intensityMinModerate: 19, intensityMinVigorous: 20,
 	hillScore: 21, enduranceScore: 22,
+	activeCalories: 23, bmrCalories: 24,
 } as const
 
 function parseNum(raw: string | undefined): number | null {
@@ -2947,6 +2943,8 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 		intensityMinVigorous: parseNum(row[WC.intensityMinVigorous]),
 		hillScore:            parseNum(row[WC.hillScore]),
 		enduranceScore:       parseNum(row[WC.enduranceScore]),
+		activeCalories:       parseNum(row[WC.activeCalories]),
+		bmrCalories:          parseNum(row[WC.bmrCalories]),
 	}
 }
 

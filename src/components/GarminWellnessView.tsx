@@ -809,6 +809,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const stepsData       = useMemo(() => buildWellnessChartData(entries, 'steps',                range, aggregation, today), [entries, range, aggregation, today]);
   const floorsData      = useMemo(() => buildWellnessChartData(entries, 'floors',               range, aggregation, today), [entries, range, aggregation, today]);
   const intensityData   = useMemo(() => buildIntensityMinCombinedChartData(entries, range, aggregation, weeklyIntensityMinGoal, today), [entries, range, aggregation, weeklyIntensityMinGoal, today]);
+  const activeCalData   = useMemo(() => buildWellnessChartData(entries, 'activeCalories',       range, aggregation, today), [entries, range, aggregation, today]);
+  const bmrCalData      = useMemo(() => buildWellnessChartData(entries, 'bmrCalories',          range, aggregation, today), [entries, range, aggregation, today]);
 
   if (entries.length === 0) {
     return (
@@ -989,6 +991,22 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('intensityMinModerate')}
         legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v, key) => goalColorFromKey(key, v !== null ? ACCENT : GRAY)}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.activeCalories}
+        unit={WELLNESS_METRIC_UNITS.activeCalories}
+        buckets={activeCalData.buckets}
+        summaryLabel={summaryStr(summaryValue(activeCalData), 'activeCalories', WELLNESS_METRIC_UNITS.activeCalories)}
+        formatValue={numFmt('activeCalories')}
+        colorFn={(v) => v !== null ? ACCENT : GRAY}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.bmrCalories}
+        unit={WELLNESS_METRIC_UNITS.bmrCalories}
+        buckets={bmrCalData.buckets}
+        summaryLabel={summaryStr(summaryValue(bmrCalData), 'bmrCalories', WELLNESS_METRIC_UNITS.bmrCalories)}
+        formatValue={numFmt('bmrCalories')}
+        colorFn={() => GRAY}
       />
     </div>
   );

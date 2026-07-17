@@ -38,7 +38,7 @@ from urllib.parse import quote
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 TAB_NAME = "Stronger - Garmin Wellness"
 
-# 23 columns — keep in sync with src/google/config.ts GARMIN_WELLNESS_HEADER
+# 25 columns — keep in sync with src/google/config.ts GARMIN_WELLNESS_HEADER
 HEADER = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
@@ -50,9 +50,10 @@ HEADER = [
     "steps", "floors", "restingHR", "vo2Max",
     "intensityMinModerate", "intensityMinVigorous",
     "hillScore", "enduranceScore",
+    "activeCalories", "bmrCalories",
 ]
-COLUMN_COUNT = len(HEADER)   # 23 → A:W
-assert COLUMN_COUNT == 23, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # 25 → A:Y
+assert COLUMN_COUNT == 25, "Header count mismatch"
 
 ROLLING_DAYS = 14
 BACKFILL_START_DATE = "2021-01-01"
@@ -324,6 +325,8 @@ def _fetch_daily_summary(client, cdate: str) -> dict:
             "bodyBatteryLow":      _num(data.get("bodyBatteryLowestValue"), 0),
             "intensityMinModerate": _num(data.get("moderateIntensityMinutes"), 0),
             "intensityMinVigorous": _num(data.get("vigorousIntensityMinutes"), 0),
+            "activeCalories":      _num(data.get("activeKilocalories"), 0),
+            "bmrCalories":         _num(data.get("bmrKilocalories"), 0),
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] daily_summary: {exc}", file=sys.stderr)

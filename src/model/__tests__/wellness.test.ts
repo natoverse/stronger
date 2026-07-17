@@ -31,6 +31,8 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     intensityMinVigorous: null,
     hillScore: null,
     enduranceScore: null,
+    activeCalories: null,
+    bmrCalories: null,
     ...overrides,
   };
 }

@@ -156,6 +156,20 @@ def test_parse_goals_empty_payload():
     assert garmin_wellness_sync.parse_goals(None) == {}
 
 
+def test_fetch_daily_summary_calorie_fields():
+    class FakeClient:
+        def get_user_summary(self, _cdate):
+            return {
+                "totalSteps": 8000,
+                "activeKilocalories": 420,
+                "bmrKilocalories": 1800,
+            }
+
+    row = garmin_wellness_sync._fetch_daily_summary(FakeClient(), "2026-07-14")
+    assert row["activeCalories"] == "420", row
+    assert row["bmrCalories"] == "1800", row
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
