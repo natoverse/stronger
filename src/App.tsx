@@ -847,9 +847,9 @@ function App() {
     if (spreadsheetId) void withAuthRetry(() => deleteMealLogEntry(spreadsheetId, id));
   }, [spreadsheetId]);
 
-  const handleChangeMealEntryCategory = useCallback((id: string, category: MealCategory) => {
-    setMealLog((previous) => previous.map((entry) => (entry.id === id ? { ...entry, category } : entry)));
-    if (spreadsheetId) void withAuthRetry(() => updateMealLogEntryCategory(spreadsheetId, id, category));
+  const handleChangeMealEntryCategory = useCallback((ids: string[], category: MealCategory) => {
+    setMealLog((previous) => previous.map((entry) => (ids.includes(entry.id) ? { ...entry, category } : entry)));
+    if (spreadsheetId) void withAuthRetry(() => updateMealLogEntryCategory(spreadsheetId, ids, category));
   }, [spreadsheetId]);
 
   const handleWithingsGoalChange = useCallback((metric: WithingsMetric, value: number | null) => {

@@ -99,6 +99,10 @@ export interface GapiClient {
 					valueInputOption: string
 					resource: { values: (string | number)[][] }
 				}) => Promise<ValuesUpdateResponse>
+				batchUpdate: (params: {
+					spreadsheetId: string
+					resource: { valueInputOption: string; data: { range: string; values: (string | number)[][] }[] }
+				}) => Promise<unknown>
 				append: (params: {
 					spreadsheetId: string
 					range: string

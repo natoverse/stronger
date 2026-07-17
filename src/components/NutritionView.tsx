@@ -28,7 +28,7 @@ interface Props {
   onLogEntry: (entry: MealLogEntry) => void;
   onAdjustEntry: (id: string, quantity: number) => void;
   onDeleteEntry: (id: string) => void;
-  onChangeCategoryEntry: (id: string, category: MealCategory) => void;
+  onChangeCategoryEntry: (ids: string[], category: MealCategory) => void;
 }
 
 function localDate(): string {
@@ -522,7 +522,7 @@ export function NutritionView({
   };
 
   const changeCategoryGroup = (group: DayGroup, category: MealCategory) => {
-    for (const id of group.ids) onChangeCategoryEntry(id, category);
+    onChangeCategoryEntry(group.ids, category);
   };
 
   const renderFoodRow = (food: FoodItem) => (

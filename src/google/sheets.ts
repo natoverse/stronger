@@ -1981,22 +1981,30 @@ export async function updateMealLogEntry(spreadsheetId: string, id: string, quan
 }
 
 /**
- * Update the category of a single logged meal entry by its id.
- * Reads all rows to locate the matching row, then writes the new category to
- * that row's category cell (column D). No-op when the id is not found.
+ * Update the category of one or more logged meal entries by their ids.
+ * Reads all rows once to locate matching rows, then writes the new category
+ * to each matching row's category cell (column D) in a single batchUpdate.
+ * No-op when none of the ids are found.
  */
-export async function updateMealLogEntryCategory(spreadsheetId: string, id: string, category: MealCategory): Promise<void> {
+export async function updateMealLogEntryCategory(spreadsheetId: string, ids: string[], category: MealCategory): Promise<void> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
 	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
 	const rawRows = response.result.values
 	if (!rawRows || rawRows.length === 0) return
-	const rawIdx = rawRows.findIndex((raw) => (raw[1] ?? '').trim() === id)
-	if (rawIdx === -1) return
-	// Sheet row = rawIdx + 2 (header is row 1); category lives in column D.
-	await gapi.client.sheets.spreadsheets.values.update({
-		spreadsheetId, range: `'${MEAL_LOG_TAB_NAME}'!D${rawIdx + 2}`, valueInputOption: 'RAW',
-		resource: { values: [[category]] },
+	const idSet = new Set(ids)
+	const data = rawRows
+		.map((raw, rawIdx) => ({ raw, rawIdx }))
+		.filter(({ raw }) => idSet.has((raw[1] ?? '').trim()))
+		.map(({ rawIdx }) => ({
+			// Sheet row = rawIdx + 2 (header is row 1); category lives in column D.
+			range: `'${MEAL_LOG_TAB_NAME}'!D${rawIdx + 2}`,
+			values: [[category]],
+		}))
+	if (data.length === 0) return
+	await gapi.client.sheets.spreadsheets.values.batchUpdate({
+		spreadsheetId,
+		resource: { valueInputOption: 'RAW', data },
 	})
 }
 
