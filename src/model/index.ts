@@ -35,6 +35,7 @@ export {
 	computeSet,
 	computeSetWeight,
 	computeWeight,
+	roundToEasyPlateMath,
 	roundToNearest,
 } from './compute.js';
 

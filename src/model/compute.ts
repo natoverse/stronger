@@ -11,9 +11,42 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * Round `value` to the nearest multiple of `factor`.
- * Uses standard "round half up" behaviour.
+ * Pre-computed list of "easy plate math" barbell weights:
+ * 45 lb bar + any number of 45 lb pairs + at most one 25 lb pair + at most one 10 lb pair.
+ *
+ * Sequence: 45, 65, 95, 115, 135, 155, 185, 205, 225, 245, 275, 295, 315, ...
  */
+const EASY_PLATE_WEIGHTS: readonly number[] = (() => {
+	const weights: number[] = [];
+	for (let n = 0; n <= 12; n++) {
+		for (let b = 0; b <= 1; b++) {
+			for (let a = 0; a <= 1; a++) {
+				weights.push(45 + 90 * n + 50 * b + 20 * a);
+			}
+		}
+	}
+	return weights.sort((x, y) => x - y);
+})();
+
+/**
+ * If `weight` is within `tolerance` lbs of an "easy plate math" value, return
+ * the nearest such value; otherwise return `weight` unchanged.
+ */
+export function roundToEasyPlateMath(weight: number, tolerance = 5): number {
+	let best: number | null = null;
+	let bestDiff = Infinity;
+	for (const candidate of EASY_PLATE_WEIGHTS) {
+		if (candidate > weight + tolerance) break;
+		const diff = Math.abs(candidate - weight);
+		if (diff <= tolerance && diff < bestDiff) {
+			best = candidate;
+			bestDiff = diff;
+		}
+	}
+	return best ?? weight;
+}
+
+
 export function roundToNearest(value: number, factor: number): number {
 	if (factor <= 0) return value;
 	return Math.round(value / factor) * factor;
@@ -109,12 +142,17 @@ export function computeSet(
 	set: SetTemplate,
 	liftConfig: LiftConfig,
 	allConfigs: ReadonlyMap<string, LiftConfig>,
+	options?: { roundWarmupPlateMath?: boolean },
 ): ComputedSet | null {
 	const weight = computeSetWeight(set, liftConfig, allConfigs);
 	if (weight === null) return null;
+	const finalWeight =
+		options?.roundWarmupPlateMath && set.setType === 'warmup'
+			? roundToEasyPlateMath(weight)
+			: weight;
 	return {
 		setType: set.setType,
-		weight,
+		weight: finalWeight,
 		minReps: set.minReps,
 		maxReps: set.maxReps,
 		amrap: set.amrap,
@@ -137,6 +175,7 @@ export function computeSet(
 export function computeExercise(
 	template: ExerciseTemplate,
 	allConfigs: ReadonlyMap<string, LiftConfig>,
+	options?: { roundWarmupPlateMath?: boolean },
 ): ComputedExercise | null {
 	const liftConfig = allConfigs.get(template.liftId);
 	if (!liftConfig) {
@@ -145,7 +184,7 @@ export function computeExercise(
 
 	const sets: ComputedSet[] = [];
 	for (const s of template.sets) {
-		const computed = computeSet(s, liftConfig, allConfigs);
+		const computed = computeSet(s, liftConfig, allConfigs, options);
 		if (computed) sets.push(computed);
 	}
 

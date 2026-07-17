@@ -10,6 +10,7 @@ import {
 	computeSet,
 	computeSetWeight,
 	computeWeight,
+	roundToEasyPlateMath,
 	roundToNearest,
 } from '../compute.js';
 
@@ -109,8 +110,44 @@ describe('roundToNearest', () => {
 });
 
 // ---------------------------------------------------------------------------
-// computeWeight
+// roundToEasyPlateMath
 // ---------------------------------------------------------------------------
+
+describe('roundToEasyPlateMath', () => {
+	it('snaps to the nearest easy plate weight within tolerance', () => {
+		expect(roundToEasyPlateMath(60)).toBe(65);  // 60 → 65 (within 5)
+		expect(roundToEasyPlateMath(91)).toBe(95);  // 91 → 95 (within 5, not 85 which is 6 away)
+		expect(roundToEasyPlateMath(132)).toBe(135); // 132 → 135
+	});
+
+	it('returns the value unchanged when not within tolerance', () => {
+		expect(roundToEasyPlateMath(71)).toBe(71);  // 71 is 6 away from 65 and 24 away from 95 — no snap
+		expect(roundToEasyPlateMath(80)).toBe(80);  // between 65 and 95, both >5 away
+	});
+
+	it('snaps exactly at the tolerance boundary (5 lbs)', () => {
+		expect(roundToEasyPlateMath(90)).toBe(95);  // 90 is exactly 5 away from 95
+		expect(roundToEasyPlateMath(70)).toBe(65);  // 70 is exactly 5 away from 65
+	});
+
+	it('covers the sequence: 45, 65, 95, 115, 135, 155, 185, 205, 225', () => {
+		for (const w of [45, 65, 95, 115, 135, 155, 185, 205, 225]) {
+			expect(roundToEasyPlateMath(w)).toBe(w);
+		}
+	});
+
+	it('snaps in the higher range', () => {
+		expect(roundToEasyPlateMath(272)).toBe(275); // 275 = 45 + 2×90 + 50
+		expect(roundToEasyPlateMath(313)).toBe(315); // 315 = 45 + 3×90
+	});
+
+	it('respects a custom tolerance', () => {
+		expect(roundToEasyPlateMath(88, 5)).toBe(88);  // 88 is 7 from 95, not within 5
+		expect(roundToEasyPlateMath(88, 10)).toBe(95); // within 10
+	});
+});
+
+
 
 describe('computeWeight', () => {
 	it('applies percentage, rounds, and clamps', () => {
@@ -345,6 +382,53 @@ describe('computeSet', () => {
 		expect(result).not.toBeNull();
 		expect(result!.setType).toBe('joker');
 		expect(result!.weight).toBe(200);
+	});
+
+	it('snaps warmup weight to easy plate math when roundWarmupPlateMath is true', () => {
+		// benchConfig: topSetWeight=200, roundingFactor=5, minimumWeight=95
+		// 60% of 200 = 120 → nearest easy plate weight within 5 is 115 (5 away)
+		const set: SetTemplate = {
+			setType: 'warmup',
+			percentage: 0.60,
+			weightBasis: { kind: 'topSet' },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		const result = computeSet(set, benchConfig, configs, { roundWarmupPlateMath: true });
+		expect(result).not.toBeNull();
+		expect(result!.weight).toBe(115); // 120 snaps to 115
+	});
+
+	it('does not snap non-warmup sets even when roundWarmupPlateMath is true', () => {
+		// 60% of 200 = 120, nearest easy plate is 115 (5 away), but work sets are not snapped
+		const set: SetTemplate = {
+			setType: 'work',
+			percentage: 0.60,
+			weightBasis: { kind: 'topSet' },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		const result = computeSet(set, benchConfig, configs, { roundWarmupPlateMath: true });
+		expect(result).not.toBeNull();
+		expect(result!.weight).toBe(120); // no plate-math rounding for work sets
+	});
+
+	it('leaves warmup weight unchanged when not within tolerance', () => {
+		// benchConfig: topSetWeight=200
+		// 62% of 200 = 124 → rounded to 125; |125 - 115| = 10, |125 - 135| = 10 — no snap
+		const set: SetTemplate = {
+			setType: 'warmup',
+			percentage: 0.62,
+			weightBasis: { kind: 'topSet' },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		const result = computeSet(set, benchConfig, configs, { roundWarmupPlateMath: true });
+		expect(result).not.toBeNull();
+		expect(result!.weight).toBe(125); // not within 5 of any easy plate weight
 	});
 });
 

@@ -377,6 +377,12 @@ export interface AppSettings {
 	showSetComments: boolean;
 	/** Whether to acquire a wake lock to prevent the phone from sleeping during workouts. */
 	keepScreenOn: boolean;
+	/**
+	 * When true, warmup set weights are snapped to the nearest "easy plate math"
+	 * weight (45 lb bar + pairs of 10, 25, or 45 lb plates) if the computed
+	 * weight is within 5 lbs of such a value.
+	 */
+	roundWarmupPlateMath: boolean;
 	/** Whether to show the Garmin activities/wellness tab in the toolbar. */
 	showGarminTab: boolean;
 	/** Whether to show the nutrition tab in the toolbar. */
@@ -407,6 +413,7 @@ export type AppBooleanSettingKey =
 	| 'showRestTimer'
 	| 'showSetComments'
 	| 'keepScreenOn'
+	| 'roundWarmupPlateMath'
 	| 'showGarminTab'
 	| 'showNutritionTab'
 	| 'skipProgressDips'

@@ -71,6 +71,8 @@ function App() {
   } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const settingsRef = useRef(new Map<string, string>());
+  // Ref so callbacks can read the current value without being in their dependency arrays.
+  const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
   // Lazy-loading flags: track whether secondary data has been fetched
   const flagsLoadedRef = useRef(false);
@@ -136,7 +138,7 @@ function App() {
       }
       setCardioActivities(cardio);
 
-      const builtWorkouts = buildWorkoutsFromConfigs(configs, defs);
+      const builtWorkouts = buildWorkoutsFromConfigs(configs, defs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current });
       setWorkouts(builtWorkouts);
       setNeedsSetup(false);
     },
@@ -285,7 +287,7 @@ function App() {
 
       // Update local state so the next workout uses the new weights
       setConfigs(updatedConfigs);
-      setWorkouts(buildWorkoutsFromConfigs(updatedConfigs, definitions));
+      setWorkouts(buildWorkoutsFromConfigs(updatedConfigs, definitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       setProgressionProposals(null);
       setPendingFinish(null);
       setActiveWorkout(null);
@@ -367,7 +369,9 @@ function App() {
         setStravaGoals(goalsFromSettings(settings));
         setWithingsGoals(bodyGoalsFromSettings(settings));
         setLiftGoals(liftGoalsFromSettings(settings));
-        setAppSettings(appSettingsFromMap(settings));
+        const parsed = appSettingsFromMap(settings);
+        roundWarmupPlateMathRef.current = parsed.roundWarmupPlateMath;
+        setAppSettings(parsed);
       });
     } catch {
       // Silently ignore — settings data is optional
@@ -886,6 +890,9 @@ function App() {
   const handleAppSettingChange = useCallback((key: AppBooleanSettingKey, value: boolean) => {
     setAppSettings((prev) => {
       const updated = { ...prev, [key]: value };
+      if (key === 'roundWarmupPlateMath') {
+        roundWarmupPlateMathRef.current = value;
+      }
       if (spreadsheetId) {
         appSettingsToMap(updated, settingsRef.current);
         void withAuthRetry(() => writeSettings(spreadsheetId, settingsRef.current)).catch(() => {});
@@ -929,7 +936,7 @@ function App() {
       const newDef = { ...source, id: newId, name: `${source.name} (Copy)`, favorite: false };
       const updatedDefs = [...definitions, newDef];
       setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs));
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       if (spreadsheetId) {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
       }
@@ -943,7 +950,7 @@ function App() {
       if (!confirm('Delete this workout?')) return;
       const updatedDefs = definitions.filter((d) => d.id !== workoutId);
       setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs));
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       if (spreadsheetId) {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
       }
@@ -957,7 +964,7 @@ function App() {
         d.id === workoutId ? { ...d, favorite } : d,
       );
       setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs));
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       if (spreadsheetId) {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
       }
@@ -983,7 +990,7 @@ function App() {
     (workoutId: string) => {
       const updatedDefs = definitions.filter((d) => d.id !== workoutId);
       setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs));
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       if (spreadsheetId) {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
       }
@@ -1013,7 +1020,7 @@ function App() {
         : configs.map((c) => (c.id === config.id ? config : c));
 
       setConfigs(updatedConfigs);
-      setWorkouts(buildWorkoutsFromConfigs(updatedConfigs, definitions));
+      setWorkouts(buildWorkoutsFromConfigs(updatedConfigs, definitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
 
       if (spreadsheetId) {
         void withAuthRetry(() => writeConfigValues(spreadsheetId, updatedConfigs));
@@ -1032,7 +1039,7 @@ function App() {
         : definitions.map((d) => (d.id === definition.id ? definition : d));
 
       setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs));
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
 
       if (spreadsheetId) {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
@@ -1118,6 +1125,14 @@ function App() {
       void loadSettingsData(spreadsheetId);
     }
   }, [spreadsheetId, loadSettingsData]);
+
+  // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
+  useEffect(() => {
+    if (configs.length > 0) {
+      setWorkouts(buildWorkoutsFromConfigs(configs, definitions, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appSettings.roundWarmupPlateMath]);
 
   useEffect(() => {
     if (route.view === 'wellness') {
