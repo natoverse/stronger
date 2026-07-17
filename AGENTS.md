@@ -54,7 +54,7 @@ The app uses seven tabs in the user's spreadsheet. Each tab has a header constan
 | `Stronger - Workout Schedule` | `WORKOUT_SCHEDULE_READ_RANGE = A2:D10000`, `WORKOUT_SCHEDULE_FULL_RANGE = A1:D10000` | 4 (`date`, `workoutId`, `calendarEventId`, `strongerId`) | A–D |
 | `Stronger - Cardio`     | `CARDIO_RANGE = A:B`  | 2 (`id`, `name`) | A–B |
 | `Stronger - Strava`     | `STRAVA_SYNC_RANGE = A:J`, `STRAVA_HEADER_RANGE = A1:J1`, `STRAVA_READ_RANGE = A2:J` | 10 (`date` → `maxHR`) | A–J |
-| `Stronger - Garmin`     | Written by `scripts/garmin-sync.py` (`HEADER`, `A:R`); read by the app via `readGarminActivities` (`GARMIN_READ_RANGE = A2:R`) | 18 (`date` → `vo2Max`) | A–R |
+| `Stronger - Garmin`     | Written by `scripts/garmin-sync.py` (`HEADER`, `A:S`); read by the app via `readGarminActivities` (`GARMIN_READ_RANGE = A2:S`) | 19 (`date` → `vo2Max`) | A–S |
 
 ### Critical rule: keep ranges in sync with the data model
 

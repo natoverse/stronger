@@ -2168,10 +2168,10 @@ export async function readStravaActivities(
 /* ------------------------------------------------------------------ */
 
 /**
- * A1 range for reading Garmin data (row 2 onward, open-ended, 18 columns).
+ * A1 range for reading Garmin data (row 2 onward, open-ended, 19 columns).
  * The tab is written by `scripts/garmin-sync.py`; the app only reads it.
  */
-const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:R`
+const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:S`
 
 /**
  * Column order of the "Stronger - Garmin" tab (see scripts/garmin-sync.py).
@@ -2185,9 +2185,10 @@ const GARMIN_COL = {
 	duration: 4,
 	distance: 6,
 	elevationGain: 7,
-	calories: 9,
-	avgHR: 10,
-	maxHR: 11,
+	activeCalories: 9,
+	totalCalories: 10,
+	avgHR: 11,
+	maxHR: 12,
 } as const
 
 /* ------------------------------------------------------------------ */
@@ -2219,7 +2220,7 @@ export function normalizeGarminActivityType(typeKey: string): string {
  * Returns `null` for incomplete or invalid rows.
  */
 export function parseGarminRow(row: string[]): StravaActivity | null {
-	// Need at least through the maxHR column (index 11).
+	// Need at least through the maxHR column (index 12).
 	if (!row || row.length < GARMIN_COL.maxHR + 1) return null
 
 	const date = (row[GARMIN_COL.date] ?? '').trim()
@@ -2233,18 +2234,33 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	const duration = Number((row[GARMIN_COL.duration] ?? '').trim())
 	const distance = Number((row[GARMIN_COL.distance] ?? '').trim())
 	const elevationGain = Number((row[GARMIN_COL.elevationGain] ?? '').trim())
-	const calories = Number((row[GARMIN_COL.calories] ?? '').trim())
+	const activeCalories = Number((row[GARMIN_COL.activeCalories] ?? '').trim())
+	const totalCalories = Number((row[GARMIN_COL.totalCalories] ?? '').trim())
 	const avgHR = Number((row[GARMIN_COL.avgHR] ?? '').trim())
 	const maxHR = Number((row[GARMIN_COL.maxHR] ?? '').trim())
 
 	if (!Number.isFinite(duration) || duration < 0) return null
 	if (!Number.isFinite(distance) || distance < 0) return null
 	if (!Number.isFinite(elevationGain) || elevationGain < 0) return null
-	if (!Number.isFinite(calories) || calories < 0) return null
+	if (!Number.isFinite(activeCalories) || activeCalories < 0) return null
+	if (!Number.isFinite(totalCalories) || totalCalories < 0) return null
 	if (!Number.isFinite(avgHR) || avgHR < 0) return null
 	if (!Number.isFinite(maxHR) || maxHR < 0) return null
 
-	return { date, stravaId: activityId, activityType, name, duration, distance, elevationGain, calories, avgHR, maxHR }
+	return {
+		date,
+		stravaId: activityId,
+		activityType,
+		name,
+		duration,
+		distance,
+		elevationGain,
+		calories: totalCalories,
+		activeCalories,
+		totalCalories,
+		avgHR,
+		maxHR,
+	}
 }
 
 /* ------------------------------------------------------------------ */

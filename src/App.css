@@ -3729,6 +3729,16 @@ body {
 	opacity: 0.8;
 }
 
+.strava-bar-resting {
+	fill: #6b7280;
+	opacity: 0.85;
+}
+
+.strava-bar-active {
+	fill: #2563eb;
+	opacity: 0.9;
+}
+
 .strava-cumulative-line {
 	fill: none;
 	stroke: var(--color-accent);
@@ -3756,6 +3766,16 @@ body {
 .strava-bar.active {
 	opacity: 1;
 	filter: drop-shadow(0 0 3px var(--color-primary));
+}
+
+.strava-bar-resting.active {
+	opacity: 1;
+	filter: drop-shadow(0 0 3px rgba(107, 114, 128, 0.8));
+}
+
+.strava-bar-active.active {
+	opacity: 1;
+	filter: drop-shadow(0 0 3px rgba(37, 99, 235, 0.9));
 }
 
 /* ------------------------------------------------------------------ */

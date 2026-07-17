@@ -22,6 +22,12 @@ export interface StravaActivity {
   distance: number;
   /** Elevation gain in meters */
   elevationGain: number;
+  /** Calories burned (optional; populated by Garmin/Strava sheet parsers). */
+  calories?: number;
+  /** Active calories burned (optional; Garmin only). */
+  activeCalories?: number;
+  /** Total calories burned (optional; Garmin only). */
+  totalCalories?: number;
 }
 
 /** An annual goal for a single metric. */

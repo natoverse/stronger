@@ -31,7 +31,8 @@ Each activity row in the `Stronger - Garmin` tab contains:
 | `distance` | Distance in meters (0 for stationary activities) |
 | `elevationGain` | Total elevation gain in meters |
 | `elevationLoss` | Total elevation loss in meters |
-| `calories` | Calories burned |
+| `activeCalories` | Active calories burned |
+| `totalCalories` | Total calories burned (active + resting) |
 | `avgHR` | Average heart rate in bpm (0 if not recorded) |
 | `maxHR` | Max heart rate in bpm (0 if not recorded) |
 | `avgSpeed` | Average speed in m/s (0 if not recorded) |
