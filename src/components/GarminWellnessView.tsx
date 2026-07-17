@@ -910,9 +910,7 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
               y1={yBar(scaledGoal)}
               x2={VIEW_BOX_W - CHART_PADDING.right}
               y2={yBar(scaledGoal)}
-              stroke={YELLOW}
-              strokeWidth={1.5}
-              strokeDasharray="4 3"
+              className="strava-goal-line"
             />
           )}
 
