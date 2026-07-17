@@ -486,7 +486,7 @@ export interface StackedCaloriesBucket {
 
 export interface StackedCaloriesChartData {
   buckets: StackedCaloriesBucket[];
-  /** Sum of (active + bmr) for summary display. */
+  /** Average daily total (active + bmr) across all non-empty buckets. */
   summary: number | null;
   latestActive: number | null;
   latestBmr: number | null;

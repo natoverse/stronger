@@ -775,6 +775,7 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
   const n = buckets.length;
   if (n === 0) return null;
 
+  // Month uses ×30 as an approximation (same convention as goalColor in wellness.ts).
   const scaledGoal = goalKcal > 0
     ? goalKcal * (aggregation === 'week' ? 7 : aggregation === 'month' ? 30 : 1)
     : 0;
