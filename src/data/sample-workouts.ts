@@ -53,16 +53,18 @@ export const workoutDefinitions: WorkoutDefinition[] = workoutsJson as WorkoutDe
  * @param configs - lift configurations (weights, rounding, etc.)
  * @param definitions - workout definitions; defaults to the hard-coded
  *   `workoutDefinitions` for backward compatibility during first-connect seeding.
+ * @param options - optional computation options (e.g. roundWarmupPlateMath)
  */
 export function buildWorkoutsFromConfigs(
 	configs: LiftConfig[],
 	definitions: WorkoutDefinition[] = workoutDefinitions,
+	options?: { roundWarmupPlateMath?: boolean },
 ): Workout[] {
 	const map = new Map(configs.map((c) => [c.id, c]));
 	return definitions
 		.map((def) => {
 			const exercises = def.templates
-				.map((t) => computeExercise(t, map))
+				.map((t) => computeExercise(t, map, options))
 				.filter((e): e is ComputedExercise => e !== null && e.sets.length > 0);
 			return {
 				id: def.id,
