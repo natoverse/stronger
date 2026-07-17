@@ -608,19 +608,23 @@ export function NutritionView({
         <input aria-label="Log date" type="date" max={localDate()} value={date} onChange={(event) => setDate(event.target.value)} />
       </div>
       <section className="nutrition-totals">
-        <strong className={statusClass(calorieGoalStatus)}>
-          {round(totals.calories)} cal{dailyCalorieGoal > 0 ? ` / ${round(dailyCalorieGoal)}` : ''}
-        </strong>
-        <span>Fat {round(totals.fat)}g</span><span>Carbs {round(totals.carbs)}g</span>
-        <span>Fiber {round(totals.fiber)}g</span>
-        <span className={statusClass(proteinGoalStatus)}>
-          Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
-        </span>
-        {(totals.drinks > 0 || weeklyAlcoholGoal > 0) && (
-          <span className={`nutrition-drinks${weeklyAlcoholStatus ? ` ${statusClass(weeklyAlcoholStatus)}` : ''}`}>
-            🍺 {round(totals.drinks)} drinks today · {round(weeklyDrinks)} this week{weeklyAlcoholGoal > 0 ? ` / ${weeklyAlcoholGoal}` : ''}
+        <div className="nutrition-totals-row nutrition-totals-row-top">
+          <strong className={statusClass(calorieGoalStatus)}>
+            {round(totals.calories)} cal{dailyCalorieGoal > 0 ? ` / ${round(dailyCalorieGoal)}` : ''}
+          </strong>
+          <span className={statusClass(proteinGoalStatus)}>
+            Protein {round(totals.protein)}{dailyProteinGoalGrams > 0 ? ` / ${round(dailyProteinGoalGrams)}` : ''}g
           </span>
-        )}
+        </div>
+        <div className="nutrition-totals-row nutrition-totals-row-bottom">
+          <span>Fat {round(totals.fat)}g</span><span>Carbs {round(totals.carbs)}g</span>
+          <span>Fiber {round(totals.fiber)}g</span>
+          {(totals.drinks > 0 || weeklyAlcoholGoal > 0) && (
+            <span className={`nutrition-drinks${weeklyAlcoholStatus ? ` ${statusClass(weeklyAlcoholStatus)}` : ''}`}>
+              🍺 {round(totals.drinks)} drinks today · {round(weeklyDrinks)} this week{weeklyAlcoholGoal > 0 ? ` / ${weeklyAlcoholGoal}` : ''}
+            </span>
+          )}
+        </div>
       </section>
 
       <div className="nutrition-finder-toggle" role="tablist" aria-label="Find food">
