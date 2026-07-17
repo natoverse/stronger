@@ -18,9 +18,6 @@ import { generateBucketSlots, getBucketKey, getRangeStart, getRangeEnd } from '.
 
 export type NutritionMetric = 'calories' | 'protein' | 'drinks';
 
-/** Goal-comparison color band for a bucket. */
-export type NutritionColorKey = 'under' | 'met' | 'over' | '';
-
 export interface NutritionBucket {
   label: string;
   value: number;
@@ -52,18 +49,26 @@ export const NUTRITION_METRIC_UNITS: Record<NutritionMetric, string> = {
   drinks: 'drinks',
 };
 
-/** Goal-band colors: yellow under 90%, green within ±10%, red over by >10%. */
+/** Goal-band colors: yellow under 90%, green within ±10%, red over by >10% (blue for protein over). */
 export const NUTRITION_YELLOW = '#ffea00';
 export const NUTRITION_GREEN = '#00e676';
 export const NUTRITION_RED = '#ff1744';
+export const NUTRITION_BLUE = '#2979ff';
+
+/** Goal-band colors: yellow under, green met, red over (calories/alcohol), blue over (protein) or under (alcohol). */
+export type NutritionColorKey = 'under' | 'met' | 'over' | 'bonus' | '';
 
 /** Resolve a color-band value/goal comparison into a color key. */
-export function nutritionColorKey(value: number, goal: number): NutritionColorKey {
+export function nutritionColorKey(value: number, goal: number, metric: NutritionMetric): NutritionColorKey {
   if (goal <= 0) return '';
   const ratio = value / goal;
-  if (ratio < 0.9) return 'under';
+  if (ratio < 0.9) {
+    // Under-drinking is a positive outcome (blue); under-eating calories/protein is a warning (yellow).
+    return metric === 'drinks' ? 'bonus' : 'under';
+  }
   if (ratio <= 1.1) return 'met';
-  return 'over';
+  // Protein over goal is a positive outcome (blue); calories/alcohol over is negative (red).
+  return metric === 'protein' ? 'bonus' : 'over';
 }
 
 /** Map a color key to its rendered fill color; `fallback` for the empty key. */
@@ -72,6 +77,7 @@ export function nutritionColor(colorKey: NutritionColorKey, fallback: string): s
     case 'under': return NUTRITION_YELLOW;
     case 'met': return NUTRITION_GREEN;
     case 'over': return NUTRITION_RED;
+    case 'bonus': return NUTRITION_BLUE;
     default: return fallback;
   }
 }
@@ -145,10 +151,16 @@ export function buildNutritionChartData(
     const value = valueByBucket.get(key) ?? 0;
     total += value;
     const goal = goalPerDay > 0 ? goalPerDay * (goalDaysByBucket.get(key) ?? 0) : 0;
-    return { label, value, goal, colorKey: nutritionColorKey(value, goal) };
+    return { label, value, goal, colorKey: nutritionColorKey(value, goal, metric) };
   });
 
-  const latestValue = [...buckets].reverse().find((b) => b.value > 0)?.value ?? null;
+  // Show the value for the bucket that contains today (even if 0), rather than
+  // the last bucket that happened to have a non-zero value.
+  const todayKey = getBucketKey(todayISO, aggregation);
+  const todayBucket = slots.findIndex(({ key }) => key === todayKey);
+  const latestValue = todayBucket >= 0
+    ? buckets[todayBucket].value
+    : ([...buckets].reverse().find((b) => b.value > 0)?.value ?? null);
 
   return { metric, buckets, total, goalPerDay, latestValue };
 }

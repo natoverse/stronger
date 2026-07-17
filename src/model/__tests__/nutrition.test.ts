@@ -21,13 +21,22 @@ function entry(date: string, over: Partial<MealLogEntry> = {}): MealLogEntry {
 
 describe('nutritionColorKey', () => {
   it('returns empty when goal is disabled', () => {
-    expect(nutritionColorKey(500, 0)).toBe('');
+    expect(nutritionColorKey(500, 0, 'calories')).toBe('');
   });
-  it('bands under 90%, within 10%, and over 10%', () => {
-    expect(nutritionColorKey(89, 100)).toBe('under');
-    expect(nutritionColorKey(90, 100)).toBe('met');
-    expect(nutritionColorKey(110, 100)).toBe('met');
-    expect(nutritionColorKey(111, 100)).toBe('over');
+  it('bands under 90%, within 10%, and over 10% for calories', () => {
+    expect(nutritionColorKey(89, 100, 'calories')).toBe('under');
+    expect(nutritionColorKey(90, 100, 'calories')).toBe('met');
+    expect(nutritionColorKey(110, 100, 'calories')).toBe('met');
+    expect(nutritionColorKey(111, 100, 'calories')).toBe('over');
+  });
+  it('uses bonus (blue) instead of over (red) when protein exceeds goal', () => {
+    expect(nutritionColorKey(111, 100, 'protein')).toBe('bonus');
+    expect(nutritionColorKey(90, 100, 'protein')).toBe('met');
+    expect(nutritionColorKey(89, 100, 'protein')).toBe('under');
+  });
+  it('uses over (red) when drinks exceed goal, bonus (blue) when under goal', () => {
+    expect(nutritionColorKey(111, 100, 'drinks')).toBe('over');
+    expect(nutritionColorKey(89, 100, 'drinks')).toBe('bonus');
   });
 });
 
@@ -82,5 +91,13 @@ describe('buildNutritionChartData', () => {
     // A past day within range gets the daily goal.
     const past = data.buckets.find((b) => b.label === '6/10');
     expect(past?.goal).toBe(2000);
+  });
+
+  it('latestValue shows today bucket value even when 0 (e.g. no drinks today)', () => {
+    // Yesterday had drinks; today has none.
+    const entries = [entry('2026-06-14', { standardDrinks: 2, category: 'Drinks' })];
+    const data = buildNutritionChartData(entries, 'drinks', 'month', 1, today, 'day');
+    // latestValue should be today's value (0), not yesterday's (2).
+    expect(data.latestValue).toBe(0);
   });
 });
