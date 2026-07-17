@@ -2249,6 +2249,8 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 		duration,
 		distance,
 		elevationGain,
+		// Per-activity calories are not tracked in the Garmin activity tab; daily
+		// active/BMR calories are synced instead via the Garmin Wellness tab.
 		calories: 0,
 		avgHR,
 		maxHR,

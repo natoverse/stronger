@@ -1006,7 +1006,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={bmrCalData.buckets}
         summaryLabel={summaryStr(summaryValue(bmrCalData), 'bmrCalories', WELLNESS_METRIC_UNITS.bmrCalories)}
         formatValue={numFmt('bmrCalories')}
-        colorFn={(v) => v !== null ? GRAY : GRAY}
+        colorFn={() => GRAY}
       />
     </div>
   );
