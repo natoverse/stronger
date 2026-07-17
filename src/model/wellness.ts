@@ -475,6 +475,66 @@ export function goalColorFromKey(colorKey: string | undefined, fallback: string)
 }
 
 // ---------------------------------------------------------------------------
+// Stacked calorie chart data builder
+// ---------------------------------------------------------------------------
+
+export interface StackedCaloriesBucket {
+  label: string;
+  active: number | null;
+  bmr: number | null;
+}
+
+export interface StackedCaloriesChartData {
+  buckets: StackedCaloriesBucket[];
+  /** Average daily total (active + bmr) across all non-empty buckets. */
+  summary: number | null;
+  latestActive: number | null;
+  latestBmr: number | null;
+}
+
+/**
+ * Build per-bucket stacked calories data combining activeCalories (on top) and
+ * bmrCalories (below). Values are summed within the aggregation period.
+ */
+export function buildStackedCaloriesChartData(
+  entries: GarminWellnessEntry[],
+  range: string,
+  aggregation: StravaAggregation,
+  today: Date = new Date(),
+): StackedCaloriesChartData {
+  const active = buildWellnessChartData(entries, 'activeCalories', range, aggregation, today);
+  const bmr = buildWellnessChartData(entries, 'bmrCalories', range, aggregation, today);
+
+  let totalSum = 0;
+  let totalCount = 0;
+
+  const buckets: StackedCaloriesBucket[] = active.buckets.map((ab, i) => {
+    const bb = bmr.buckets[i];
+    const total = (ab.value ?? 0) + (bb?.value ?? 0);
+    if (ab.value !== null || bb?.value !== null) {
+      totalSum += total;
+      totalCount++;
+    }
+    return {
+      label: ab.label,
+      active: ab.value,
+      bmr: bb?.value ?? null,
+    };
+  });
+
+  const reversedBuckets = [...buckets].reverse();
+  const latestActive = reversedBuckets.find((b) => b.active !== null)?.active ?? null;
+  const latestBmr = reversedBuckets.find((b) => b.bmr !== null)?.bmr ?? null;
+
+  return {
+    buckets,
+    summary: totalCount > 0 ? totalSum / totalCount : null,
+    latestActive,
+    latestBmr,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Display formatting
 // ---------------------------------------------------------------------------
 

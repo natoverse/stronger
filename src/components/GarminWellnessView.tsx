@@ -8,12 +8,13 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { GarminWellnessEntry } from '../model/types.js';
-import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData } from '../model/wellness.js';
+import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData, StackedCaloriesBucket } from '../model/wellness.js';
 import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
   buildStatusChartData,
   buildIntensityMinCombinedChartData,
+  buildStackedCaloriesChartData,
   formatWellnessRatio,
   formatWellnessValue,
   WELLNESS_METRIC_LABELS,
@@ -759,6 +760,190 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
 }
 
 /* ------------------------------------------------------------------ */
+/*  WellnessStackedCaloriesChart — active + BMR stacked bar + goal    */
+/* ------------------------------------------------------------------ */
+
+interface StackedCaloriesChartProps {
+  buckets: StackedCaloriesBucket[];
+  summaryLabel: string;
+  /** Scaled goal line value (kcal). 0 = no line. */
+  goalKcal: number;
+  aggregation: WellnessAggregation;
+}
+
+function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggregation }: StackedCaloriesChartProps) {
+  const n = buckets.length;
+  if (n === 0) return null;
+
+  // Month uses ×30 as an approximation (same convention as goalColor in wellness.ts).
+  const scaledGoal = goalKcal > 0
+    ? goalKcal * (aggregation === 'week' ? 7 : aggregation === 'month' ? 30 : 1)
+    : 0;
+
+  const maxStackValue = Math.max(...buckets.map((b) => (b.active ?? 0) + (b.bmr ?? 0)), scaledGoal, 0.001);
+
+  const barWidth = PLOT_W / n;
+  const barGap = Math.max(1, barWidth * 0.15);
+  const barInner = barWidth - barGap * 2;
+
+  const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
+  const yBar = (v: number) => CHART_PADDING.top + PLOT_H - (v / maxStackValue) * PLOT_H;
+
+  const yTicks = niceTicksFor(0, maxStackValue, 4);
+
+  const maxLabels = Math.min(n, 8);
+  const xLabelIndices: number[] = [];
+  if (n <= maxLabels) {
+    for (let i = 0; i < n; i++) xLabelIndices.push(i);
+  } else {
+    for (let i = 0; i < maxLabels; i++) {
+      xLabelIndices.push(Math.round((i / (maxLabels - 1)) * (n - 1)));
+    }
+  }
+
+  const xPositions = buckets.map((_, i) => xCenter(i));
+  const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
+
+  const legendItems: LegendItem[] = [
+    { label: 'Active', color: ACCENT },
+    { label: 'Resting (BMR)', color: GRAY },
+    ...(scaledGoal > 0 ? [{ label: 'Goal', color: YELLOW }] : []),
+  ];
+
+  const activeBucket = activeIndex !== null ? buckets[activeIndex] : null;
+  const activeTotal = activeBucket
+    ? ((activeBucket.active ?? 0) + (activeBucket.bmr ?? 0))
+    : null;
+
+  return (
+    <div className="strava-chart-card">
+      <WellnessChartHeader label="Calories" summaryLabel={summaryLabel} legendItems={legendItems} />
+
+      <div className="strava-chart-container" {...containerHandlers}>
+        <svg
+          ref={svgRef}
+          className="strava-chart-svg"
+          viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {/* Grid lines */}
+          {yTicks.map((tick) => (
+            <line
+              key={`grid-${tick}`}
+              x1={CHART_PADDING.left} y1={yBar(tick)}
+              x2={VIEW_BOX_W - CHART_PADDING.right} y2={yBar(tick)}
+              className="strava-grid-line"
+            />
+          ))}
+
+          {/* Left axis labels */}
+          {yTicks.map((tick) => (
+            <text
+              key={`lbl-${tick}`}
+              x={CHART_PADDING.left - 4} y={yBar(tick)}
+              className="strava-axis-label"
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {Math.round(tick)}
+            </text>
+          ))}
+
+          {/* X-axis labels */}
+          {xLabelIndices.map((i) => (
+            <text
+              key={`xlbl-${i}`}
+              x={xCenter(i)} y={CHART_HEIGHT - 4}
+              className="strava-axis-label"
+              textAnchor="middle"
+            >
+              {buckets[i].label}
+            </text>
+          ))}
+
+          {/* Stacked bars */}
+          {buckets.map((b, i) => {
+            const bmrVal = b.bmr ?? 0;
+            const activeVal = b.active ?? 0;
+            const total = bmrVal + activeVal;
+            if (total === 0 && b.bmr === null && b.active === null) return null;
+            const opacity = i === activeIndex ? 1 : 0.75;
+            const bx = CHART_PADDING.left + barWidth * i + barGap;
+
+            // BMR segment (bottom)
+            const bmrH = Math.max((bmrVal / maxStackValue) * PLOT_H, 0);
+            // Active segment (top)
+            const activeH = Math.max((activeVal / maxStackValue) * PLOT_H, 0);
+
+            return (
+              <g key={`stack-${i}`}>
+                {bmrVal > 0 && (
+                  <rect
+                    x={bx}
+                    y={CHART_PADDING.top + PLOT_H - bmrH}
+                    width={Math.max(barInner, 1)}
+                    height={bmrH}
+                    fill={GRAY}
+                    opacity={opacity}
+                    rx={2}
+                  />
+                )}
+                {activeVal > 0 && (
+                  <rect
+                    x={bx}
+                    y={CHART_PADDING.top + PLOT_H - bmrH - activeH}
+                    width={Math.max(barInner, 1)}
+                    height={activeH}
+                    fill={ACCENT}
+                    opacity={opacity}
+                    rx={2}
+                  />
+                )}
+              </g>
+            );
+          })}
+
+          {/* Goal line */}
+          {scaledGoal > 0 && (
+            <line
+              x1={CHART_PADDING.left}
+              y1={yBar(scaledGoal)}
+              x2={VIEW_BOX_W - CHART_PADDING.right}
+              y2={yBar(scaledGoal)}
+              stroke={YELLOW}
+              strokeWidth={1.5}
+              strokeDasharray="4 3"
+            />
+          )}
+
+          {/* Crosshair */}
+          {activeIndex !== null && (
+            <line
+              x1={xCenter(activeIndex)} y1={CHART_PADDING.top}
+              x2={xCenter(activeIndex)} y2={CHART_PADDING.top + PLOT_H}
+              className="chart-crosshair"
+            />
+          )}
+        </svg>
+
+        {/* Tooltip */}
+        {activeBucket !== null && activeIndex !== null && (
+          <div
+            className="chart-tooltip"
+            style={{ left: `${(xCenter(activeIndex) / VIEW_BOX_W) * 100}%` }}
+          >
+            <span className="chart-tooltip-value">
+              {activeTotal !== null ? `${Math.round(activeTotal)} kcal` : '—'}
+            </span>
+            <span className="chart-tooltip-date">{activeBucket.label}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main view                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -773,9 +958,11 @@ interface Props {
   floorsGoal?: number;
   /** Weekly intensity minutes goal (0 = no goal). Auto-synced from Garmin. */
   weeklyIntensityMinGoal?: number;
+  /** Daily calorie goal (0 = no goal line). From app settings. */
+  dailyCalorieGoal?: number;
 }
 
-export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, weeklyIntensityMinGoal = 0 }: Props) {
+export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, weeklyIntensityMinGoal = 0, dailyCalorieGoal = 0 }: Props) {
   const today = useMemo(() => new Date(), []);
 
   // Build chart data
@@ -809,8 +996,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const stepsData       = useMemo(() => buildWellnessChartData(entries, 'steps',                range, aggregation, today), [entries, range, aggregation, today]);
   const floorsData      = useMemo(() => buildWellnessChartData(entries, 'floors',               range, aggregation, today), [entries, range, aggregation, today]);
   const intensityData   = useMemo(() => buildIntensityMinCombinedChartData(entries, range, aggregation, weeklyIntensityMinGoal, today), [entries, range, aggregation, weeklyIntensityMinGoal, today]);
-  const activeCalData   = useMemo(() => buildWellnessChartData(entries, 'activeCalories',       range, aggregation, today), [entries, range, aggregation, today]);
-  const bmrCalData      = useMemo(() => buildWellnessChartData(entries, 'bmrCalories',          range, aggregation, today), [entries, range, aggregation, today]);
+  const caloriesData    = useMemo(() => buildStackedCaloriesChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
 
   if (entries.length === 0) {
     return (
@@ -992,21 +1178,18 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v, key) => goalColorFromKey(key, v !== null ? ACCENT : GRAY)}
       />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.activeCalories}
-        unit={WELLNESS_METRIC_UNITS.activeCalories}
-        buckets={activeCalData.buckets}
-        summaryLabel={summaryStr(summaryValue(activeCalData), 'activeCalories', WELLNESS_METRIC_UNITS.activeCalories)}
-        formatValue={numFmt('activeCalories')}
-        colorFn={(v) => v !== null ? ACCENT : GRAY}
-      />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.bmrCalories}
-        unit={WELLNESS_METRIC_UNITS.bmrCalories}
-        buckets={bmrCalData.buckets}
-        summaryLabel={summaryStr(summaryValue(bmrCalData), 'bmrCalories', WELLNESS_METRIC_UNITS.bmrCalories)}
-        formatValue={numFmt('bmrCalories')}
-        colorFn={() => GRAY}
+      <WellnessStackedCaloriesChart
+        buckets={caloriesData.buckets}
+        summaryLabel={(() => {
+          const latestVal = aggregation === 'day'
+            ? (caloriesData.latestActive !== null || caloriesData.latestBmr !== null
+                ? (caloriesData.latestActive ?? 0) + (caloriesData.latestBmr ?? 0)
+                : null)
+            : caloriesData.summary;
+          return latestVal !== null ? `${Math.round(latestVal)} kcal` : '';
+        })()}
+        goalKcal={dailyCalorieGoal}
+        aggregation={aggregation}
       />
     </div>
   );

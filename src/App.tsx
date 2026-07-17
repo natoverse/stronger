@@ -1492,6 +1492,7 @@ function App() {
             stepsGoal={appSettings.garminDailyStepsGoal}
             floorsGoal={appSettings.garminDailyFloorsGoal}
             weeklyIntensityMinGoal={appSettings.garminWeeklyIntensityMinGoal}
+            dailyCalorieGoal={appSettings.dailyCalorieGoal}
             embedded
           />
         </div>
