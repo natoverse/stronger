@@ -85,6 +85,7 @@ export {
 	writeMealFavorites,
 	readMealRecents,
 	writeMealRecents,
+	readMealItems,
 	stravaActivityToRow,
 	parseStravaRow,
 	verifyStravaTab,
