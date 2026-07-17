@@ -89,11 +89,11 @@ function NutritionChart({ data }: { data: NutritionChartData }) {
     }
   }
 
-  // Goal line: connect only buckets that have an aggregated goal (> 0).
-  const goalPoints = buckets
-    .map((b, i) => (b.goal > 0 ? `${xCenter(i)},${yVal(b.goal)}` : null))
-    .filter((p): p is string => p !== null)
-    .join(' ');
+  // Goal line: draw a flat horizontal line at the full-period goal (the maximum
+  // bucket goal, which equals goalPerDay × daysInPeriod for complete periods).
+  // Using max avoids the line dipping for the current in-progress week/month,
+  // which has fewer elapsed days than a complete period.
+  const fullPeriodGoal = Math.max(...buckets.map((b) => b.goal), 0);
 
   const xPositions = useMemo(
     () => Array.from({ length: n }, (_, i) => xCenter(i)),
@@ -174,8 +174,14 @@ function NutritionChart({ data }: { data: NutritionChartData }) {
               />
             ))}
 
-            {goalPoints && (
-              <polyline points={goalPoints} className="strava-goal-line" />
+            {fullPeriodGoal > 0 && (
+              <line
+                x1={CHART_PADDING.left}
+                y1={yVal(fullPeriodGoal)}
+                x2={viewBoxWidth - CHART_PADDING.right}
+                y2={yVal(fullPeriodGoal)}
+                className="strava-goal-line"
+              />
             )}
 
             {activeIndex !== null && (
