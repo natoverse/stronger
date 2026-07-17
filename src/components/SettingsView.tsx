@@ -130,7 +130,7 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
         <label className="settings-toggle-row">
           <span className="settings-toggle-label">
             <span className="settings-toggle-name">Round Warmup Plate Math</span>
-            <span className="settings-toggle-description">Snap warmup weights to the nearest easy plate combination (45 lb bar + pairs of 10, 25, or 45 lb plates) when within 5 lbs</span>
+            <span className="settings-toggle-description">Snap warmup weights to the nearest easy plate combination (45 lb bar + up to two pairs of 10 lb plates, up to one pair of 25 lb plates, any number of 45 lb pairs) when within 5 lbs</span>
           </span>
           <input
             type="checkbox"

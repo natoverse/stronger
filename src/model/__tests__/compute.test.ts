@@ -121,17 +121,18 @@ describe('roundToEasyPlateMath', () => {
 	});
 
 	it('returns the value unchanged when not within tolerance', () => {
-		expect(roundToEasyPlateMath(71)).toBe(71);  // 71 is 6 away from 65 and 24 away from 95 — no snap
-		expect(roundToEasyPlateMath(80)).toBe(80);  // between 65 and 95, both >5 away
+		expect(roundToEasyPlateMath(71)).toBe(71);  // 71 is 6 away from 65 and 14 away from 85 — no snap
+		expect(roundToEasyPlateMath(78)).toBe(78);  // 78 is 7 away from 85 — no snap
 	});
 
 	it('snaps exactly at the tolerance boundary (5 lbs)', () => {
-		expect(roundToEasyPlateMath(90)).toBe(95);  // 90 is exactly 5 away from 95
+		expect(roundToEasyPlateMath(90)).toBe(85);  // 90 is exactly 5 away from both 85 and 95; 85 wins (lower)
 		expect(roundToEasyPlateMath(70)).toBe(65);  // 70 is exactly 5 away from 65
+		expect(roundToEasyPlateMath(100)).toBe(95); // 100 is exactly 5 away from 95 (85 is 15 away)
 	});
 
-	it('covers the sequence: 45, 65, 95, 115, 135, 155, 185, 205, 225', () => {
-		for (const w of [45, 65, 95, 115, 135, 155, 185, 205, 225]) {
+	it('covers the sequence: 45, 65, 85, 95, 115, 135, 155, 175, 185, 205, 225', () => {
+		for (const w of [45, 65, 85, 95, 115, 135, 155, 175, 185, 205, 225]) {
 			expect(roundToEasyPlateMath(w)).toBe(w);
 		}
 	});
@@ -142,8 +143,8 @@ describe('roundToEasyPlateMath', () => {
 	});
 
 	it('respects a custom tolerance', () => {
-		expect(roundToEasyPlateMath(88, 5)).toBe(88);  // 88 is 7 from 95, not within 5
-		expect(roundToEasyPlateMath(88, 10)).toBe(95); // within 10
+		expect(roundToEasyPlateMath(78, 5)).toBe(78);  // 78 is 7 from 85, not within 5
+		expect(roundToEasyPlateMath(78, 10)).toBe(85); // within 10
 	});
 });
 

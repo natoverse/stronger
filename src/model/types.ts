@@ -379,7 +379,7 @@ export interface AppSettings {
 	keepScreenOn: boolean;
 	/**
 	 * When true, warmup set weights are snapped to the nearest "easy plate math"
-	 * weight (45 lb bar + pairs of 10, 25, or 45 lb plates) if the computed
+	 * weight (45 lb bar + up to two pairs of 10 lb plates, up to one pair of 25 lb plates, any number of 45 lb pairs) if the computed
 	 * weight is within 5 lbs of such a value.
 	 */
 	roundWarmupPlateMath: boolean;

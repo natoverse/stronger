@@ -12,20 +12,20 @@ import type {
 
 /**
  * Pre-computed list of "easy plate math" barbell weights:
- * 45 lb bar + any number of 45 lb pairs + at most one 25 lb pair + at most one 10 lb pair.
+ * 45 lb bar + any number of 45 lb pairs + at most one 25 lb pair + at most two 10 lb pairs.
  *
- * Sequence: 45, 65, 95, 115, 135, 155, 185, 205, 225, 245, 275, 295, 315, ...
+ * Sequence: 45, 65, 85, 95, 115, 135, 155, 175, 185, 205, 225, 245, 265, 275, 295, 315, ...
  */
 const EASY_PLATE_WEIGHTS: readonly number[] = (() => {
 	const weights: number[] = [];
 	for (let n = 0; n <= 12; n++) {
 		for (let b = 0; b <= 1; b++) {
-			for (let a = 0; a <= 1; a++) {
+			for (let a = 0; a <= 2; a++) {
 				weights.push(45 + 90 * n + 50 * b + 20 * a);
 			}
 		}
 	}
-	return weights.sort((x, y) => x - y);
+	return [...new Set(weights)].sort((x, y) => x - y);
 })();
 
 /**
