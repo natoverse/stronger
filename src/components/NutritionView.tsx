@@ -367,7 +367,7 @@ export function NutritionView({
   onDeleteEntry,
 }: Props) {
   const [date, setDate] = useState(localDate);
-  const [view, setView] = useState<FinderView>('favorites');
+  const [view, setView] = useState<FinderView | null>(null);
   const [categories, setCategories] = useState<Record<string, MealCategory>>({});
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [drinks, setDrinks] = useState<Record<string, string>>({});
@@ -581,6 +581,10 @@ export function NutritionView({
     }
   };
 
+  const toggleView = (option: FinderView) => {
+    setView((current) => (current === option ? null : option));
+  };
+
   return (
     <main className="nutrition-view">
       <div className="nutrition-heading">
@@ -607,10 +611,11 @@ export function NutritionView({
         {(['favorites', 'recent', 'items', 'search'] as const).map((option) => (
           <button
             key={option}
+            type="button"
             role="tab"
             aria-selected={view === option}
             className={`nutrition-finder-tab${view === option ? ' is-active' : ''}`}
-            onClick={() => setView(option)}
+            onClick={() => toggleView(option)}
           >
             {option === 'favorites' ? 'Favorites' : option === 'recent' ? 'Recent' : option === 'items' ? 'My Items' : 'Search'}
           </button>
