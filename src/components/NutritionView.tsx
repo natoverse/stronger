@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
-import type { FoodItem, MealCategory, MealItem, MealLogEntry } from '../model/index.js';
+import type { FoodItem, GarminWellnessEntry, MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
 import { getTimeRangeOptions } from '../model/strava.js';
 import { NutritionCharts } from './NutritionCharts.js';
@@ -20,6 +20,7 @@ interface Props {
   recents: FoodItem[];
   mealItems: MealItem[];
   entries: MealLogEntry[];
+  wellnessEntries?: GarminWellnessEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
   drinksPerDayGoal: number;
@@ -368,6 +369,7 @@ export function NutritionView({
   recents,
   mealItems,
   entries,
+  wellnessEntries,
   dailyCalorieGoal,
   dailyProteinGoalGrams,
   drinksPerDayGoal,
@@ -761,6 +763,7 @@ export function NutritionView({
         </div>
         <NutritionCharts
           entries={entries}
+          wellnessEntries={wellnessEntries}
           range={chartRange}
           aggregation={chartAggregation}
           calorieGoal={dailyCalorieGoal}
