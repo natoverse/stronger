@@ -81,6 +81,7 @@ export {
 	appendMealLogEntry,
 	deleteMealLogEntry,
 	updateMealLogEntry,
+	updateMealLogEntryCategory,
 	readMealFavorites,
 	writeMealFavorites,
 	readMealRecents,
