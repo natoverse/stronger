@@ -492,7 +492,7 @@ export function NutritionView({
       fiber: food.fiber,
       protein: food.protein,
       quantity: quantityFor(food.code),
-      standardDrinks: category === 'Drinks' ? (drinksFor(food.code) || food.standardDrinks) : food.standardDrinks,
+      standardDrinks: category === 'Drinks' ? (drinksFor(food.code) || food.standardDrinks || 1) : food.standardDrinks,
     };
     onLogEntry(entry);
     onRecentsChange(withRecent(recents, food));
@@ -538,7 +538,7 @@ export function NutritionView({
       fiber: item.fiber,
       protein: item.protein,
       quantity: quantityFor(item.id),
-      standardDrinks: category === 'Drinks' ? (drinksFor(item.id) || item.standardDrinks) : item.standardDrinks,
+      standardDrinks: category === 'Drinks' ? (drinksFor(item.id) || item.standardDrinks || 1) : item.standardDrinks,
     };
     onLogEntry(entry);
     setQuantities((previous) => ({ ...previous, [item.id]: '1' }));
