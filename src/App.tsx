@@ -1526,6 +1526,7 @@ function App() {
           recents={mealRecents}
           mealItems={mealItems}
           entries={mealLog}
+          wellnessEntries={wellnessEntries}
           dailyCalorieGoal={appSettings.dailyCalorieGoal}
           dailyProteinGoalGrams={appSettings.dailyProteinGoalGrams}
           drinksPerDayGoal={appSettings.drinksPerDayGoal}
