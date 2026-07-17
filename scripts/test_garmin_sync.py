@@ -4,7 +4,7 @@
 Run with:  python scripts/test_garmin_sync.py
 
 These tests exercise only the pure ``activity_to_row`` mapping — no network,
-no Garmin/Google auth. They mirror the sheet's 19-column layout expected by
+no Garmin/Google auth. They mirror the sheet's 17-column layout expected by
 the app (src/google/config.ts).
 """
 
@@ -52,8 +52,6 @@ def test_maps_full_activity():
         "5013",
         "43",
         "40",
-        "275",
-        "380",
         "148",
         "172",
         "2.73",
@@ -71,7 +69,7 @@ def test_row_matches_header_length():
         "startTimeLocal": "2026-01-02 06:30:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    assert len(row) == len(garmin_sync.HEADER) == 19, row
+    assert len(row) == len(garmin_sync.HEADER) == 17, row
 
 
 def test_missing_optional_fields_default_to_zero():
@@ -80,10 +78,10 @@ def test_missing_optional_fields_default_to_zero():
         "startTimeLocal": "2026-03-04 12:00:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    # date, id, type, name, then fifteen numeric zeros
+    # date, id, type, name, then thirteen numeric zeros
     assert row == [
         "2026-03-04", "42", "", "",
-        "0", "0", "0", "0", "0", "0", "0", "0",
+        "0", "0", "0", "0", "0", "0",
         "0", "0", "0", "0", "0", "0", "0",
     ], row
 
@@ -112,16 +110,15 @@ def test_non_numeric_metric_defaults_to_zero():
         "activityId": 5,
         "startTimeLocal": "2026-01-02 06:30:00",
         "distance": None,
-        "activeKilocalories": "n/a",
-        "calories": "n/a",
+        "averageHR": "n/a",
     }
     row = garmin_sync.activity_to_row(activity)
-    assert row[6] == "0" and row[9] == "0" and row[10] == "0", row
+    assert row[6] == "0" and row[9] == "0", row
 
 
 def test_column_letter_matches_span():
-    # 19 columns -> S
-    assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "S"
+    # 17 columns -> Q
+    assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "Q"
 
 
 def _run():

@@ -330,10 +330,6 @@ export interface StravaActivity {
 	elevationGain: number;
 	/** Calories burned. */
 	calories: number;
-	/** Active calories burned (0 if not recorded). */
-	activeCalories?: number;
-	/** Total calories burned (0 if not recorded). */
-	totalCalories?: number;
 	/** Average heart rate in bpm (0 if not recorded). */
 	avgHR: number;
 	/** Max heart rate in bpm (0 if not recorded). */
@@ -508,6 +504,12 @@ export interface GarminWellnessEntry {
 	hillScore: number | null;
 	/** Endurance Score (0–100). */
 	enduranceScore: number | null;
+
+	// Calories
+	/** Active (exercise) calories burned during the day, in kcal. */
+	activeCalories: number | null;
+	/** Basal metabolic rate (resting) calories for the day, in kcal. */
+	bmrCalories: number | null;
 }
 
 // ---------------------------------------------------------------------------

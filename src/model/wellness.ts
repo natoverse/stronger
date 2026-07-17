@@ -38,7 +38,9 @@ export type WellnessNumericMetric =
   | 'intensityMinModerate'
   | 'intensityMinVigorous'
   | 'hillScore'
-  | 'enduranceScore';
+  | 'enduranceScore'
+  | 'activeCalories'
+  | 'bmrCalories';
 
 /** Metrics that are SUMmed when aggregating (vs averaged). */
 const SUM_METRICS = new Set<WellnessNumericMetric>([
@@ -46,6 +48,8 @@ const SUM_METRICS = new Set<WellnessNumericMetric>([
   'floors',
   'intensityMinModerate',
   'intensityMinVigorous',
+  'activeCalories',
+  'bmrCalories',
 ]);
 
 export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
@@ -65,6 +69,8 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
   intensityMinVigorous: 'Vigorous Intensity Min',
   hillScore: 'Hill Score',
   enduranceScore: 'Endurance Score',
+  activeCalories: 'Active Calories',
+  bmrCalories: 'Resting Calories (BMR)',
 };
 
 export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
@@ -84,6 +90,8 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   intensityMinVigorous: 'min',
   hillScore: '',
   enduranceScore: '',
+  activeCalories: 'kcal',
+  bmrCalories: 'kcal',
 };
 
 // ---------------------------------------------------------------------------

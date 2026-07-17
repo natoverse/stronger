@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { parseGarminRow, normalizeGarminActivityType } from '../sheets.ts'
 
 /**
- * Full 19-column Garmin row (see scripts/garmin-sync.py HEADER):
+ * Full 17-column Garmin row (see scripts/garmin-sync.py HEADER):
  * date, activityId, activityType, name, duration, movingDuration, distance,
- * elevationGain, elevationLoss, activeCalories, totalCalories, avgHR, maxHR, avgSpeed, maxSpeed,
+ * elevationGain, elevationLoss, avgHR, maxHR, avgSpeed, maxSpeed,
  * steps, aerobicTE, anaerobicTE, vo2Max
  */
 function garminRow(overrides: Record<number, string> = {}): string[] {
 	const row = [
 		'2026-04-01', '123456789', 'running', 'Morning Run',
-		'1800', '1790', '5000', '50', '45', '240', '300',
+		'1800', '1790', '5000', '50', '45',
 		'145', '170', '2.7', '3.5', '5100', '3.5', '0.5', '52',
 	]
 	for (const [idx, val] of Object.entries(overrides)) {
@@ -48,9 +48,7 @@ describe('parseGarminRow', () => {
 			duration: 1800,
 			distance: 5000,
 			elevationGain: 50,
-			calories: 300,
-			activeCalories: 240,
-			totalCalories: 300,
+			calories: 0,
 			avgHR: 145,
 			maxHR: 170,
 		})
@@ -81,7 +79,7 @@ describe('parseGarminRow', () => {
 	})
 
 	it('accepts zero values', () => {
-		const result = parseGarminRow(garminRow({ 6: '0', 7: '0', 9: '0', 10: '0', 11: '0', 12: '0' }))
+		const result = parseGarminRow(garminRow({ 6: '0', 7: '0', 9: '0', 10: '0' }))
 		expect(result).not.toBeNull()
 		expect(result!.distance).toBe(0)
 		expect(result!.avgHR).toBe(0)

@@ -52,8 +52,6 @@ HEADER = [
     "distance",
     "elevationGain",
     "elevationLoss",
-    "activeCalories",
-    "totalCalories",
     "avgHR",
     "maxHR",
     "avgSpeed",
@@ -63,7 +61,7 @@ HEADER = [
     "anaerobicTE",
     "vo2Max",
 ]
-COLUMN_COUNT = len(HEADER)  # 19 -> columns A:S
+COLUMN_COUNT = len(HEADER)  # 17 -> columns A:Q
 ACTIVITY_LIMIT = 30
 
 # One-time backfill window (used only with the --backfill flag): 2021-01-01.
@@ -152,21 +150,6 @@ def activity_to_row(activity):
     if isinstance(type_info, dict):
         activity_type = type_info.get("typeKey") or ""
 
-    # Garmin payloads vary a bit by activity/device; keep these fallbacks so we
-    # preserve both active and total calories when available.
-    active_calories = (
-        activity.get("activeKilocalories")
-        or activity.get("activeCalories")
-        or activity.get("netCalories")
-        or 0
-    )
-    total_calories = (
-        activity.get("calories")
-        or activity.get("totalKilocalories")
-        or activity.get("totalCalories")
-        or 0
-    )
-
     return [
         date,
         activity_id,
@@ -177,8 +160,6 @@ def activity_to_row(activity):
         _round_int(activity.get("distance", 0)),
         _round_int(activity.get("elevationGain", 0)),
         _round_int(activity.get("elevationLoss", 0)),
-        _round_int(active_calories),
-        _round_int(total_calories),
         _round_int(activity.get("averageHR", 0)),
         _round_int(activity.get("maxHR", 0)),
         _round_dec(activity.get("averageSpeed", 0)),
