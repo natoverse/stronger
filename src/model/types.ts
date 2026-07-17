@@ -330,6 +330,10 @@ export interface StravaActivity {
 	elevationGain: number;
 	/** Calories burned. */
 	calories: number;
+	/** Active calories burned (0 if not recorded). */
+	activeCalories?: number;
+	/** Total calories burned (0 if not recorded). */
+	totalCalories?: number;
 	/** Average heart rate in bpm (0 if not recorded). */
 	avgHR: number;
 	/** Max heart rate in bpm (0 if not recorded). */
