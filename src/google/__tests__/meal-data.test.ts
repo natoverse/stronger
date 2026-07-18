@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { mealItemToRow, mealLogEntryToRow, parseMealItemRow, parseMealLogRow, foodItemToRow, parseFoodItemRow } from '../sheets.ts';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mealItemToRow, mealLogEntryToRow, parseMealItemRow, parseMealLogRow, foodItemToRow, parseFoodItemRow, readMealItems } from '../sheets.ts';
 
 const item = {
   id: 'oats',
@@ -14,8 +14,16 @@ const item = {
 };
 
 describe('meal item data', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('round-trips a saved meal item with all macros', () => {
     expect(parseMealItemRow(mealItemToRow(item).map(String))).toEqual(item);
+  });
+
+  it('serializes all 9 meal-item columns including standard drinks', () => {
+    expect(mealItemToRow(item)).toHaveLength(9);
   });
 
   it('round-trips a saved item that records standard drinks', () => {
@@ -32,6 +40,36 @@ describe('meal item data', () => {
   it('defaults legacy item rows without a standardDrinks column to 0', () => {
     const legacyRow = ['oats', 'Oats', 'Breakfast', '150', '3', '27', '4', '5'];
     expect(parseMealItemRow(legacyRow)?.standardDrinks).toBe(0);
+  });
+
+  it('reads standardDrinks from the 9th meal-items column', async () => {
+    const get = vi.fn().mockResolvedValue({
+      result: {
+        values: [
+          ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks'],
+          mealItemToRow({ ...item, id: 'beer', name: 'IPA', category: 'Drinks', standardDrinks: 1.5 }).map(String),
+        ],
+      },
+    });
+    vi.stubGlobal('window', {
+      gapi: {
+        client: {
+          sheets: {
+            spreadsheets: {
+              values: { get },
+            },
+          },
+        },
+      },
+    });
+
+    const rows = await readMealItems('sheet-123');
+
+    expect(get).toHaveBeenCalledWith({
+      spreadsheetId: 'sheet-123',
+      range: "'Stronger - Meal Items'!A:I",
+    });
+    expect(rows).toEqual([{ ...item, id: 'beer', name: 'IPA', category: 'Drinks', standardDrinks: 1.5 }]);
   });
 
   it('round-trips a daily log entry', () => {
