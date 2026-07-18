@@ -32,6 +32,7 @@ import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
 import { NutritionView } from './components/NutritionView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
+import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
 import './App.css';
 
 function App() {
@@ -1485,6 +1486,10 @@ function App() {
             title={null}
             emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
             embedded
+          />
+          <GarminActivitiesListView
+            activities={garminActivities}
+            range={garminRange}
           />
           <GarminWellnessView
             entries={wellnessEntries}

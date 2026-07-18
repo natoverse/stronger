@@ -16,6 +16,8 @@ export interface StravaActivity {
   date: string;
   /** Activity type (e.g. "Run", "Ride", "Hike") */
   activityType: string;
+  /** Activity name (e.g. "Morning Run"). Set by Garmin/Strava parsers. */
+  name?: string;
   /** Duration in seconds */
   duration: number;
   /** Distance in meters */
