@@ -39,7 +39,7 @@ import {
 	GOOGLE_CLIENT_ID,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
-import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Watch, HeartPulse, Pizza, SportShoe } from 'lucide-react'
+import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, HeartPulse, Pizza, SportShoe } from 'lucide-react'
 
 type Phase =
 	| 'loading' // loading Google scripts
