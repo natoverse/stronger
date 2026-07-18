@@ -26,7 +26,7 @@ import { useHashRouter } from './hooks/useHashRouter.js';
 import { loadDraft, saveDraft, clearDraft } from './hooks/useWorkoutDraft.js';
 import { clearSentinel as clearTimerSentinel } from './hooks/useRestTimer.js';
 import type { StravaActivity, StravaGoal, StravaMetric, StravaTimeRange, StravaAggregation } from './model/strava.js';
-import { getTimeRangeOptions } from './model/strava.js';
+import { filterActivitiesByRange, getTimeRangeOptions } from './model/strava.js';
 import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
@@ -1508,7 +1508,9 @@ function App() {
   }
 
   if (route.view === 'garmin-activities') {
-    const timeRanges = getTimeRangeOptions(new Date());
+    const today = new Date();
+    const timeRanges = getTimeRangeOptions(today);
+    const visibleGarminActivities = filterActivitiesByRange(garminActivities, garminRange, today);
     return (
       <>
         <GoogleAuth
@@ -1560,7 +1562,7 @@ function App() {
             emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
             embedded
           />
-          <GarminActivitiesListView activities={garminActivities} />
+          <GarminActivitiesListView activities={visibleGarminActivities} />
         </div>
       </>
     );

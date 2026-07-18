@@ -219,6 +219,15 @@ export function filterActivities(
   );
 }
 
+/** Filter activities only by the selected time range, keeping all types. */
+export function filterActivitiesByRange(
+  activities: StravaActivity[],
+  range: StravaTimeRange,
+  today: Date = new Date(),
+): StravaActivity[] {
+  return filterActivities(activities, range, new Set(getActivityTypes(activities)), today);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Bucketing                                                          */
 /* ------------------------------------------------------------------ */
