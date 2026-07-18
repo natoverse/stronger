@@ -39,7 +39,7 @@ import {
 	GOOGLE_CLIENT_ID,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
-import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, Watch, HeartPulse, Pizza, SportShoe } from 'lucide-react'
+import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, HeartPulse, Pizza, SportShoe } from 'lucide-react'
 
 type Phase =
 	| 'loading' // loading Google scripts
@@ -461,12 +461,12 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 					</button>
 				)}
 				{onOpenGarminWellness && (
-					<button className="btn-toolbar" onClick={onOpenGarminWellness} title="Activities & Wellness">
-						<Watch size={20} />
+					<button className="btn-toolbar" onClick={onOpenGarminWellness} title="Wellness">
+						<HeartPulse size={20} />
 					</button>
 				)}
 				{onOpenGarminActivities && (
-					<button className="btn-toolbar" onClick={onOpenGarminActivities} title="Activity Log">
+					<button className="btn-toolbar" onClick={onOpenGarminActivities} title="Activities">
 						<SportShoe size={20} />
 					</button>
 				)}
