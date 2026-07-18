@@ -1164,9 +1164,10 @@ function App() {
     }
   }, [route.view, spreadsheetId, loadGarminData]);
 
-  // Lazy-load Garmin wellness data when the combined activities/wellness view is first visited.
+  // Lazy-load Garmin wellness data when the combined activities/wellness view or
+  // nutrition view (which overlays Garmin calories on its calorie chart) is first visited.
   useEffect(() => {
-    if (route.view === 'garmin' && spreadsheetId && !wellnessLoadedRef.current) {
+    if ((route.view === 'garmin' || route.view === 'nutrition') && spreadsheetId && !wellnessLoadedRef.current) {
       wellnessLoadedRef.current = true;
       void loadWellnessData(spreadsheetId);
     }
