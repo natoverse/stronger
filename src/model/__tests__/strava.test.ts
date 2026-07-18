@@ -5,6 +5,7 @@ import {
   getRangeEnd,
   getActivityTypes,
   filterActivities,
+  filterActivitiesByRange,
   generateBucketSlots,
   prorateGoal,
   buildMetricChartData,
@@ -176,6 +177,22 @@ describe('filterActivities', () => {
     const result = filterActivities(activities, '2025', new Set(['Run']), today);
     expect(result).toHaveLength(1);
     expect(result[0].date).toBe('2025-03-01');
+  });
+});
+
+describe('filterActivitiesByRange', () => {
+  it('keeps every in-range activity type while excluding out-of-range rows', () => {
+    const today = new Date(2025, 5, 18);
+    const activities = [
+      makeActivity({ date: '2025-06-16', activityType: 'Run' }),
+      makeActivity({ date: '2025-06-17', activityType: 'Ride' }),
+      makeActivity({ date: '2025-04-01', activityType: 'Hike' }),
+    ];
+
+    expect(filterActivitiesByRange(activities, 'month', today)).toEqual([
+      activities[0],
+      activities[1],
+    ]);
   });
 });
 
