@@ -10,6 +10,7 @@ export type Route =
   | { view: 'progress' }
   | { view: 'settings' }
   | { view: 'garmin' }
+  | { view: 'garmin-activities' }
   | { view: 'wellness' }
   | { view: 'withings' }
   | { view: 'nutrition' };
@@ -36,6 +37,7 @@ export function parseHash(hash: string = window.location.hash): Route {
   if (stripped === 'progress') return { view: 'progress' };
   if (stripped === 'settings') return { view: 'settings' };
   if (stripped === 'garmin') return { view: 'garmin' };
+  if (stripped === 'garmin-activities') return { view: 'garmin-activities' };
   if (stripped === 'wellness') return { view: 'wellness' };
   if (stripped === 'withings') return { view: 'withings' };
   if (stripped === 'nutrition') return { view: 'nutrition' };
@@ -63,6 +65,7 @@ export function routeToHash(route: Route): string {
   if (route.view === 'progress') return '/progress';
   if (route.view === 'settings') return '/settings';
   if (route.view === 'garmin') return '/garmin';
+  if (route.view === 'garmin-activities') return '/garmin-activities';
   if (route.view === 'wellness') return '/wellness';
   if (route.view === 'withings') return '/withings';
   if (route.view === 'nutrition') return '/nutrition';

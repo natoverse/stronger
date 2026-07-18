@@ -799,6 +799,10 @@ function App() {
     navigateTo({ view: 'garmin' });
   }, [navigateTo]);
 
+  const handleOpenGarminActivities = useCallback(() => {
+    navigateTo({ view: 'garmin-activities' });
+  }, [navigateTo]);
+
   const handleOpenWellness = useCallback(() => {
     navigateTo({ view: 'wellness' });
   }, [navigateTo]);
@@ -1151,15 +1155,19 @@ function App() {
       replaceTo({ view: 'list' });
       return;
     }
+    if (route.view === 'garmin-activities' && !appSettings.showGarminTab) {
+      replaceTo({ view: 'list' });
+      return;
+    }
     if (route.view === 'nutrition' && !appSettings.showNutritionTab) {
       replaceTo({ view: 'list' });
       return;
     }
   }, [route.view, appSettings.showGarminTab, appSettings.showNutritionTab, replaceTo]);
 
-  // Lazy-load Garmin activities when the combined activities/wellness view is first visited.
+  // Lazy-load Garmin activities when the combined activities/wellness view or activity log is first visited.
   useEffect(() => {
-    if (route.view === 'garmin' && spreadsheetId && !garminLoadedRef.current) {
+    if ((route.view === 'garmin' || route.view === 'garmin-activities') && spreadsheetId && !garminLoadedRef.current) {
       garminLoadedRef.current = true;
       void loadGarminData(spreadsheetId);
     }
@@ -1212,6 +1220,7 @@ function App() {
 
   const onOpenGarmin = appSettings.showGarminTab ? handleOpenGarmin : undefined;
   const onOpenWellness = appSettings.showGarminTab ? handleOpenWellness : undefined;
+  const onOpenGarminActivities = appSettings.showGarminTab ? handleOpenGarminActivities : undefined;
   const onOpenWithings = undefined;
   const onOpenNutrition = appSettings.showNutritionTab ? handleOpenNutrition : undefined;
 
@@ -1260,6 +1269,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1286,6 +1296,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1314,6 +1325,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1342,6 +1354,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1379,6 +1392,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1448,6 +1462,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1489,7 +1504,6 @@ function App() {
           />
           <GarminActivitiesListView
             activities={garminActivities}
-            range={garminRange}
           />
           <GarminWellnessView
             entries={wellnessEntries}
@@ -1501,6 +1515,30 @@ function App() {
             dailyCalorieGoal={appSettings.dailyCalorieGoal}
             embedded
           />
+        </div>
+      </>
+    );
+  }
+
+  if (route.view === 'garmin-activities') {
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onGoToList={handleGoToList}
+          onOpenCalendar={handleOpenCalendar}
+          onOpenExercises={handleOpenExercises}
+          onOpenProgress={handleOpenProgress}
+          onOpenGarmin={onOpenGarmin}
+          onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
+          onOpenWithings={onOpenWithings}
+          onOpenNutrition={onOpenNutrition}
+          onOpenSettings={handleOpenSettings}
+        />
+        <div className="strava-view">
+          <GarminActivitiesListView activities={garminActivities} />
         </div>
       </>
     );
@@ -1523,6 +1561,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1559,6 +1598,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1597,6 +1637,7 @@ function App() {
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
@@ -1622,6 +1663,7 @@ function App() {
         onOpenProgress={handleOpenProgress}
         onOpenGarmin={onOpenGarmin}
           onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
         onOpenWithings={onOpenWithings}
         onOpenNutrition={onOpenNutrition}
         onOpenSettings={handleOpenSettings}
