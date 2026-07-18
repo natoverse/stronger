@@ -461,12 +461,12 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 					</button>
 				)}
 				{onOpenGarminWellness && (
-					<button className="btn-toolbar" onClick={onOpenGarminWellness} title="Activities & Wellness">
-						<Watch size={20} />
+					<button className="btn-toolbar" onClick={onOpenGarminWellness} title="Wellness">
+						<HeartPulse size={20} />
 					</button>
 				)}
 				{onOpenGarminActivities && (
-					<button className="btn-toolbar" onClick={onOpenGarminActivities} title="Activity Log">
+					<button className="btn-toolbar" onClick={onOpenGarminActivities} title="Activities">
 						<SportShoe size={20} />
 					</button>
 				)}

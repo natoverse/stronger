@@ -1492,19 +1492,6 @@ function App() {
           </div>
         </div>
         <div className="strava-view">
-          <ActivitiesView
-            activities={garminActivities}
-            goals={stravaGoals}
-            range={garminRange}
-            aggregation={chartAggregation}
-            onGoalChange={handleStravaGoalChange}
-            title={null}
-            emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
-            embedded
-          />
-          <GarminActivitiesListView
-            activities={garminActivities}
-          />
           <GarminWellnessView
             entries={wellnessEntries}
             range={garminRange}
@@ -1521,6 +1508,7 @@ function App() {
   }
 
   if (route.view === 'garmin-activities') {
+    const timeRanges = getTimeRangeOptions(new Date());
     return (
       <>
         <GoogleAuth
@@ -1537,7 +1525,41 @@ function App() {
           onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
+        <div className="chart-controls-sticky">
+          <div className="strava-range-group">
+            {timeRanges.map((r) => (
+              <button
+                key={r.value}
+                className={`strava-range-btn${garminRange === r.value ? ' active' : ''}`}
+                onClick={() => setGarminRange(r.value)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="strava-agg-group">
+            {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
+              <button
+                key={agg}
+                className={`strava-agg-btn${chartAggregation === agg ? ' active' : ''}`}
+                onClick={() => setChartAggregation(agg)}
+              >
+                {agg.charAt(0).toUpperCase() + agg.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="strava-view">
+          <ActivitiesView
+            activities={garminActivities}
+            goals={stravaGoals}
+            range={garminRange}
+            aggregation={chartAggregation}
+            onGoalChange={handleStravaGoalChange}
+            title={null}
+            emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
+            embedded
+          />
           <GarminActivitiesListView activities={garminActivities} />
         </div>
       </>
