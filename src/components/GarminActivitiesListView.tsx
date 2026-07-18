@@ -25,13 +25,13 @@ function formatDuration(seconds: number): string {
 }
 
 function formatDistance(meters: number): string {
-  if (meters <= 0) return null!;
+  if (meters <= 0) return '';
   const miles = toDisplayUnit('distance', meters);
   return `${formatMetricValue(miles, 'distance')} mi`;
 }
 
 function formatElevation(meters: number): string {
-  if (meters <= 0) return null!;
+  if (meters <= 0) return '';
   const feet = toDisplayUnit('elevationGain', meters);
   return `${formatMetricValue(feet, 'elevationGain')} ft`;
 }
