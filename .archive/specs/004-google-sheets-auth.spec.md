@@ -47,3 +47,5 @@ This spec covers only the auth and connection plumbing — no reading or writing
 ## Post-merge iterations
 
 - **Token persistence**: Initially persisted in `localStorage`. Later switched to a `Secure; SameSite=Strict` cookie for better security posture. Cookie max-age set to 7 days (not tied to token `expiresIn`) so the user stays logged in for a week between gym sessions.
+- **Reload behavior hardening**: On app load, the client now hydrates a persisted Google API access token into `gapi` before attempting Firebase popup sign-in, reducing repeated login prompts on normal reloads; if API calls return 401, auth is cleared and re-established.
+- **403 guidance**: Spreadsheet permission errors now include the signed-in account email when available and explicitly advise sharing the sheet with that account or switching accounts.

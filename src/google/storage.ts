@@ -43,18 +43,52 @@ export function clearCalendarId(): void {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Access token persistence (cookie-based)                            */
+/* ------------------------------------------------------------------ */
+
+const ACCESS_TOKEN_COOKIE = 'stronger_google_access_token'
+
+/**
+ * Cookie lifetime for OAuth access token reuse: 7 days in seconds.
+ * The token itself may expire sooner; 401 handling triggers re-auth.
+ */
+const ACCESS_TOKEN_MAX_AGE = 7 * 24 * 60 * 60
+
+/** Persist the current Google API access token for reload reuse. */
+export function saveAccessToken(token: string): void {
+	setCookie(ACCESS_TOKEN_COOKIE, token, ACCESS_TOKEN_MAX_AGE)
+}
+
+/** Read the stored Google API access token, or `null` if not set. */
+export function loadAccessToken(): string | null {
+	return getCookie(ACCESS_TOKEN_COOKIE)
+}
+
+/** Remove the stored Google API access token. */
+export function clearAccessToken(): void {
+	deleteCookie(ACCESS_TOKEN_COOKIE)
+}
+
+/* ------------------------------------------------------------------ */
 /*  Cookie helpers                                                     */
 /* ------------------------------------------------------------------ */
 
 function setCookie(name: string, value: string, maxAgeSecs: number): void {
+	if (!hasDocument()) return
 	document.cookie = `${name}=${encodeURIComponent(value)};max-age=${maxAgeSecs};path=/;SameSite=Strict;Secure`
 }
 
 function getCookie(name: string): string | null {
+	if (!hasDocument()) return null
 	const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
 	return match ? decodeURIComponent(match[1]) : null
 }
 
 function deleteCookie(name: string): void {
+	if (!hasDocument()) return
 	document.cookie = `${name}=;max-age=0;path=/;SameSite=Strict;Secure`
+}
+
+function hasDocument(): boolean {
+	return typeof document !== 'undefined'
 }
