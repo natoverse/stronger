@@ -29,5 +29,5 @@ try {
 	// module load time, so importing code is not affected.
 }
 
-/** Firebase Auth instance — null when Firebase is not configured. */
-export const firebaseAuth = _auth as Auth
+/** Firebase Auth instance — null when Firebase is not configured (e.g. test env). */
+export const firebaseAuth: Auth | null = _auth

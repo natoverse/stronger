@@ -105,13 +105,19 @@ export function signIn(): Promise<string> {
 	if (pendingSignIn) return pendingSignIn
 
 	pendingSignIn = (async () => {
+		if (!firebaseAuth) {
+			throw new Error('Firebase Auth is not configured. Set VITE_FIREBASE_* environment variables.')
+		}
+		if (!window.gapi?.client) {
+			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
+		}
 		const result = await signInWithPopup(firebaseAuth, googleProvider)
 		const credential = GoogleAuthProvider.credentialFromResult(result)
 		if (!credential?.accessToken) {
 			throw new Error('No access token returned from Google sign-in.')
 		}
 		const accessToken = credential.accessToken
-		window.gapi?.client.setToken({ access_token: accessToken })
+		window.gapi.client.setToken({ access_token: accessToken })
 		return accessToken
 	})().finally(() => {
 		pendingSignIn = null
@@ -125,7 +131,7 @@ export function signIn(): Promise<string> {
  */
 export async function signOut(): Promise<void> {
 	clearAuth()
-	await fbSignOut(firebaseAuth)
+	if (firebaseAuth) await fbSignOut(firebaseAuth)
 }
 
 /** Check whether gapi currently holds an access token. */

@@ -82,6 +82,12 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				await initGapiClient()
 				if (cancelled) return
 
+				if (!firebaseAuth) {
+					setError('Firebase Auth is not configured. Set VITE_FIREBASE_* environment variables.')
+					setPhase('error')
+					return
+				}
+
 				// Subscribe to Firebase auth state. Fires immediately (async)
 				// with the persisted user — no sign-in click needed for
 				// returning users whose Firebase session is still active.
