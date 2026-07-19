@@ -276,6 +276,8 @@ export interface MealItem {
 	protein: number;
 	/** Number of standard alcoholic drinks per serving. Defaults to 0 for non-alcoholic items. */
 	standardDrinks: number;
+	/** Whether this item is starred as a favorite. Defaults to false. */
+	favorite?: boolean;
 }
 
 /** A food or drink logged for a specific day. */
