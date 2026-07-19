@@ -198,9 +198,10 @@ export function describeSheetError(err: unknown): string {
 		case 403: {
 			const guidance = 'Share the sheet with this account, or sign out and use a different Google account.'
 			const email = firebaseAuth?.currentUser?.email
-			return email
-				? `The signed-in account (${email}) doesn’t have access to this spreadsheet. ${guidance}`
-				: `You don't have permission to access this spreadsheet. ${guidance}`
+			const accountMessage = email
+				? `The signed-in account (${email}) doesn’t have access to this spreadsheet.`
+				: 'You don\'t have permission to access this spreadsheet.'
+			return `${accountMessage} ${guidance}`
 		}
 		default:
 			return err instanceof Error

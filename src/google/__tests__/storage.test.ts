@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { saveSheetId, loadSheetId, clearSheetId, saveAccessToken, loadAccessToken, clearAccessToken } from '../storage.ts'
 
-function mockDocumentCookieApi() {
+function mockDocument() {
 	const store = new Map<string, string>()
 	return {
 		get cookie() {
@@ -27,7 +27,7 @@ function mockDocumentCookieApi() {
 
 describe('sheet ID storage', () => {
 	beforeEach(() => {
-		vi.stubGlobal('document', mockDocumentCookieApi())
+		vi.stubGlobal('document', mockDocument())
 	})
 
 	it('returns null when no sheet ID is stored', () => {
