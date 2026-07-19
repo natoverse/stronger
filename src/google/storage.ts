@@ -74,17 +74,21 @@ export function clearAccessToken(): void {
 /* ------------------------------------------------------------------ */
 
 function setCookie(name: string, value: string, maxAgeSecs: number): void {
-	if (typeof document === 'undefined') return
+	if (!hasDocument()) return
 	document.cookie = `${name}=${encodeURIComponent(value)};max-age=${maxAgeSecs};path=/;SameSite=Strict;Secure`
 }
 
 function getCookie(name: string): string | null {
-	if (typeof document === 'undefined') return null
+	if (!hasDocument()) return null
 	const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
 	return match ? decodeURIComponent(match[1]) : null
 }
 
 function deleteCookie(name: string): void {
-	if (typeof document === 'undefined') return
+	if (!hasDocument()) return
 	document.cookie = `${name}=;max-age=0;path=/;SameSite=Strict;Secure`
+}
+
+function hasDocument(): boolean {
+	return typeof document !== 'undefined'
 }

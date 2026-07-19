@@ -57,4 +57,10 @@ describe('sheet ID storage', () => {
 		clearAccessToken()
 		expect(loadAccessToken()).toBeNull()
 	})
+
+	it('round-trips URL-unsafe token characters', () => {
+		const token = 'tok.with/slash+plus=='
+		saveAccessToken(token)
+		expect(loadAccessToken()).toBe(token)
+	})
 })
