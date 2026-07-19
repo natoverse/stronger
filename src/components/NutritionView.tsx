@@ -686,18 +686,21 @@ export function NutritionView({
         </section>
       )}
 
-      {view === 'favorites' && (
-        <section className="nutrition-finder">
-          {favorites.length === 0 && mealItems.filter((m) => m.favorite === true).length === 0
-            ? <p className="nutrition-empty">No favorites yet. Star a food or custom item to keep it here.</p>
-            : <>
-                {favorites.length > 0 && <ul className="nutrition-food-list">{favorites.map(renderFoodRow)}</ul>}
-                {mealItems.filter((m) => m.favorite === true).length > 0 && (
-                  <ul className="nutrition-food-list">{mealItems.filter((m) => m.favorite === true).map(renderMealItemRow)}</ul>
-                )}
-              </>}
-        </section>
-      )}
+      {view === 'favorites' && (() => {
+        const starredItems = mealItems.filter((m) => m.favorite === true);
+        return (
+          <section className="nutrition-finder">
+            {favorites.length === 0 && starredItems.length === 0
+              ? <p className="nutrition-empty">No favorites yet. Star a food or custom item to keep it here.</p>
+              : <>
+                  {favorites.length > 0 && <ul className="nutrition-food-list">{favorites.map(renderFoodRow)}</ul>}
+                  {starredItems.length > 0 && (
+                    <ul className="nutrition-food-list">{starredItems.map(renderMealItemRow)}</ul>
+                  )}
+                </>}
+          </section>
+        );
+      })()}
 
       {view === 'recent' && (
         <section className="nutrition-finder">
