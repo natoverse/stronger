@@ -7,7 +7,6 @@ import {
 	initGapiClient,
 	signIn,
 	signOut,
-	hasToken,
 	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
@@ -98,26 +97,19 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 
 					if (user !== null) {
 						// Firebase session exists — restore any persisted Google
-						// API token first; fall back to interactive sign-in only
-						// when no token is available.
-						try {
-							hydrateStoredAccessToken()
-							if (!hasToken()) {
-								await signIn()
-							}
-							if (cancelled) return
+						// API token. Do NOT attempt signIn() here: that opens a
+						// popup which browsers block in non-user-initiated contexts.
+						// If the stored token is stale, tryConnect will get a 401
+						// and show the sign-in screen cleanly.
+						hydrateStoredAccessToken()
+						if (cancelled) return
 
-							const storedId = loadSheetId()
-							if (storedId) {
-								setPhase('connecting')
-								await tryConnect(storedId)
-							} else {
-								setPhase('sheet-input')
-							}
-						} catch {
-							// Popup was blocked or the user dismissed it —
-							// fall back to the explicit sign-in button.
-							if (!cancelled) setPhase('sign-in')
+						const storedId = loadSheetId()
+						if (storedId) {
+							setPhase('connecting')
+							await tryConnect(storedId)
+						} else {
+							setPhase('sheet-input')
 						}
 					} else {
 						if (!cancelled) setPhase('sign-in')
@@ -227,25 +219,13 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 			setError(null)
 			await attemptConnect()
 		} catch (err) {
-			// If the token expired / was revoked, try to re-authenticate
-			// via Google sign-in and retry the connection once.
+			// If the token expired / was revoked, show the sign-in screen so
+			// the user can re-authenticate with a button click (user-initiated
+			// popups are not blocked by browsers).
 			if (isAuthError(err)) {
 				clearAuth()
-				try {
-					await signIn()
-					try {
-						await attemptConnect()
-						return
-					} catch (retryErr) {
-						setError(describeSheetError(retryErr))
-						setPhase('error')
-						return
-					}
-				} catch {
-					// Re-authentication failed — show sign-in button
-					setPhase('sign-in')
-					return
-				}
+				setPhase('sign-in')
+				return
 			}
 			setError(describeSheetError(err))
 			setPhase('error')
