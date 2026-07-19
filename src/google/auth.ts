@@ -1,17 +1,23 @@
 /**
- * Google OAuth authentication using Google Identity Services (GIS).
+ * Google OAuth authentication via Firebase Auth.
  *
- * This module handles the client-side implicit-grant OAuth flow.
- * It loads the GIS and gapi libraries, initialises a token client,
- * and exposes helpers for sign-in, sign-out, and token access.
+ * Firebase Auth persists the user session in IndexedDB so the app
+ * loads without requiring a sign-in click on every page reload.
+ * Google API access tokens (for Sheets and Calendar) are obtained by
+ * calling signInWithPopup, which completes silently when the user
+ * already has an active Google session.
+ *
+ * gapi is still loaded for the Sheets and Calendar REST APIs.
  */
 
-import { GOOGLE_CLIENT_ID, SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC, OAUTH_SCOPES } from './config.ts'
-import { saveToken, loadToken, clearToken } from './storage.ts'
-import type { TokenClient, TokenResponse } from './types.ts'
+import { GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
+import { firebaseAuth } from '../firebase/config.ts'
+import { SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC, SHEETS_SCOPE, CALENDAR_SCOPE } from './config.ts'
+
+export { onAuthStateChanged, firebaseAuth }
 
 /* ------------------------------------------------------------------ */
-/*  Script-loading helpers                                             */
+/*  Script-loading helper (for gapi)                                   */
 /* ------------------------------------------------------------------ */
 
 /** Cache of in-flight or completed script-loading promises. */
@@ -24,8 +30,6 @@ function loadScript(src: string): Promise<void> {
 	const promise = new Promise<void>((resolve, reject) => {
 		const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`)
 		if (existing) {
-			// Script tag already in the DOM (e.g. StrictMode double-mount).
-			// If it has finished loading, resolve immediately; otherwise wait.
 			if (existing.dataset.loaded === 'true') {
 				resolve()
 				return
@@ -53,11 +57,6 @@ function loadScript(src: string): Promise<void> {
 	return promise
 }
 
-/** Load Google Identity Services library. */
-export function loadGis(): Promise<void> {
-	return loadScript('https://accounts.google.com/gsi/client')
-}
-
 /** Load gapi client library. */
 export function loadGapi(): Promise<void> {
 	return loadScript('https://apis.google.com/js/api.js')
@@ -81,118 +80,58 @@ export async function initGapiClient(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Token client (GIS)                                                 */
-/* ------------------------------------------------------------------ */
-
-let tokenClient: TokenClient | null = null
-
-/**
- * Handler invoked by GIS when the OAuth flow itself fails (e.g. user
- * closes the popup, popup blocked, or other pre-consent errors).
- * Set by `signIn()` so the promise can be rejected.
- */
-let pendingErrorHandler: ((err: Error) => void) | null = null
-
-/**
- * Create (or return existing) GIS token client.
- *
- * `onToken` is called each time the user completes authentication.
- */
-export function getTokenClient(
-	onToken: (response: TokenResponse) => void,
-): TokenClient {
-	if (tokenClient) {
-		tokenClient.callback = onToken
-		return tokenClient
-	}
-
-	const google = window.google
-	if (!google) throw new Error('Google Identity Services not loaded')
-
-	tokenClient = google.accounts.oauth2.initTokenClient({
-		client_id: GOOGLE_CLIENT_ID,
-		scope: OAUTH_SCOPES,
-		callback: onToken,
-		error_callback: (err) => {
-			if (pendingErrorHandler) {
-				pendingErrorHandler(
-					new Error(err.message ?? err.type ?? 'Authentication flow failed'),
-				)
-				pendingErrorHandler = null
-			}
-		},
-	})
-	return tokenClient
-}
-
-/* ------------------------------------------------------------------ */
 /*  Sign-in / sign-out                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Timeout for the sign-in promise (ms). */
-const SIGN_IN_TIMEOUT_MS = 60_000
+/** Reusable Google provider with Sheets + Calendar scopes. */
+const googleProvider = new GoogleAuthProvider()
+googleProvider.addScope(SHEETS_SCOPE)
+googleProvider.addScope(CALENDAR_SCOPE)
 
 /**
- * Prompt the user to sign in via Google OAuth.
- * Resolves with the access token on success.
+ * In-flight sign-in promise. Used to deduplicate concurrent attempts
+ * so only one popup is opened at a time.
+ */
+let pendingSignIn: Promise<string> | null = null
+
+/**
+ * Sign in via Firebase + Google OAuth.
+ * Opens a Google sign-in popup, resolves with the Google OAuth access
+ * token, and sets it on gapi so Sheets/Calendar calls succeed.
  *
- * The promise will reject if:
- * - the user closes the popup / denies consent (via GIS error_callback)
- * - GIS returns an error in the token response
- * - the flow doesn't complete within 60 seconds
+ * Concurrent callers share a single in-flight popup.
  */
 export function signIn(): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const timer = setTimeout(() => {
-			pendingErrorHandler = null
-			reject(new Error('Sign-in timed out. Please try again.'))
-		}, SIGN_IN_TIMEOUT_MS)
+	if (pendingSignIn) return pendingSignIn
 
-		pendingErrorHandler = (err) => {
-			clearTimeout(timer)
-			reject(err)
+	pendingSignIn = (async () => {
+		if (!firebaseAuth) {
+			throw new Error('Firebase Auth is not configured. Set VITE_FIREBASE_* environment variables.')
 		}
-
-		const client = getTokenClient((resp) => {
-			clearTimeout(timer)
-			pendingErrorHandler = null
-			if (resp.error) {
-				reject(new Error(resp.error_description ?? resp.error))
-			} else {
-				saveToken(resp.access_token, resp.expires_in)
-				resolve(resp.access_token)
-			}
-		})
-		client.requestAccessToken({ prompt: '' })
+		if (!window.gapi?.client) {
+			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
+		}
+		const result = await signInWithPopup(firebaseAuth, googleProvider)
+		const credential = GoogleAuthProvider.credentialFromResult(result)
+		if (!credential?.accessToken) {
+			throw new Error('No access token returned from Google sign-in.')
+		}
+		const accessToken = credential.accessToken
+		window.gapi.client.setToken({ access_token: accessToken })
+		return accessToken
+	})().finally(() => {
+		pendingSignIn = null
 	})
+
+	return pendingSignIn
 }
 
-/** Timeout for the revoke call (ms). */
-const REVOKE_TIMEOUT_MS = 5_000
-
 /**
- * Sign out: revoke the current token and clear it from gapi.
+ * Sign out: revoke the Firebase session and clear the gapi token.
  */
-export function signOut(): Promise<void> {
-	return new Promise<void>((resolve) => {
-		clearToken()
-		const gapi = window.gapi
-		const token = gapi?.client.getToken()
-		if (token) {
-			const timer = setTimeout(() => {
-				gapi?.client.setToken(null)
-				resolve()
-			}, REVOKE_TIMEOUT_MS)
-
-			window.google?.accounts.oauth2.revoke(token.access_token, () => {
-				clearTimeout(timer)
-				gapi?.client.setToken(null)
-				resolve()
-			})
-		} else {
-			resolve()
-		}
-	})
+export async function signOut(): Promise<void> {
+	clearAuth()
+	if (firebaseAuth) await fbSignOut(firebaseAuth)
 }
 
 /** Check whether gapi currently holds an access token. */
@@ -201,26 +140,10 @@ export function hasToken(): boolean {
 }
 
 /**
- * Restore a previously saved access token into gapi.
- * Returns `true` if a valid (non-expired) token was restored.
- */
-export function restoreToken(): boolean {
-	const accessToken = loadToken()
-	if (!accessToken) return false
-
-	const gapi = window.gapi
-	if (!gapi) return false
-
-	gapi.client.setToken({ access_token: accessToken })
-	return true
-}
-
-/**
- * Clear a stale token from both the cookie and gapi client.
- * Use when a stored token turns out to be expired / revoked.
+ * Clear the gapi token. Use when a stored token turns out to be
+ * expired / revoked so the next call will re-authenticate.
  */
 export function clearAuth(): void {
-	clearToken()
 	window.gapi?.client.setToken(null)
 }
 

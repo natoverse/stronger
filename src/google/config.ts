@@ -1,12 +1,12 @@
 /**
  * Google API configuration.
  *
- * Replace the client ID with your own from the Google Cloud Console.
- * The project must have the Google Sheets API enabled and an OAuth 2.0
- * client ID configured for a web application with the correct origins.
+ * Replace the OAuth client ID and Firebase config with values from
+ * the Google Cloud Console and Firebase Console respectively.
+ * Set all VITE_* variables in your .env file.
  */
 
-/** OAuth 2.0 client ID from Google Cloud Console. */
+/** OAuth 2.0 client ID from Google Cloud Console (still required by gapi). */
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 
 /** OAuth scope – read/write access to Google Sheets. */
@@ -14,9 +14,6 @@ export const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
 
 /** OAuth scope – full access to Google Calendar (list calendars + manage events). */
 export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar'
-
-/** Combined OAuth scopes requested during sign-in. */
-export const OAUTH_SCOPES = `${SHEETS_SCOPE} ${CALENDAR_SCOPE}`
 
 /** Sheets API discovery document URL for gapi client initialization. */
 export const SHEETS_DISCOVERY_DOC =
