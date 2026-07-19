@@ -1746,8 +1746,8 @@ export async function writeCardioActivities(
 const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:K1`
 const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K2`
 const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K`
-const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks']
-const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:I`
+const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks', 'favorite']
+const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:J`
 const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity', 'standardDrinks']
 const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
 
@@ -1759,7 +1759,7 @@ const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:J`
 const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:J1`
 
 export function mealItemToRow(item: MealItem): (string | number)[] {
-	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein, item.standardDrinks]
+	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein, item.standardDrinks, item.favorite ? 'true' : 'false']
 }
 
 /** Parse a non-negative drink count, defaulting to 0 for missing or invalid values. */
@@ -1793,7 +1793,10 @@ function parseNonNegativeNumber(raw: string | undefined): number {
 export function parseMealItemRow(row: string[]): MealItem | null {
 	const id = (row[0] ?? '').trim()
 	const values = parseMealValues(row, 1)
-	return id && values ? { id, ...values, standardDrinks: parseDrinks(row[8]) } : null
+	if (!id || !values) return null
+	const standardDrinks = parseDrinks(row[8])
+	const favorite = (row[9] ?? '').trim() === 'true'
+	return { id, ...values, standardDrinks, favorite }
 }
 
 export async function readMealItems(spreadsheetId: string): Promise<MealItem[]> {
@@ -1802,6 +1805,16 @@ export async function readMealItems(spreadsheetId: string): Promise<MealItem[]> 
 	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_ITEMS_RANGE })
 	const rows = response.result.values ?? []
 	return rows.slice(1).map(parseMealItemRow).filter((item): item is MealItem => item !== null)
+}
+
+export async function writeMealItems(spreadsheetId: string, items: MealItem[]): Promise<void> {
+	const gapi = window.gapi
+	if (!gapi) throw new Error('gapi not loaded')
+	await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId, range: MEAL_ITEMS_RANGE })
+	await gapi.client.sheets.spreadsheets.values.update({
+		spreadsheetId, range: MEAL_ITEMS_RANGE, valueInputOption: 'RAW',
+		resource: { values: [MEAL_ITEMS_HEADER, ...items.map(mealItemToRow)] },
+	})
 }
 
 export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {

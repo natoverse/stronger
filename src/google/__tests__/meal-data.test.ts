@@ -19,16 +19,21 @@ describe('meal item data', () => {
   });
 
   it('round-trips a saved meal item with all macros', () => {
-    expect(parseMealItemRow(mealItemToRow(item).map(String))).toEqual(item);
+    expect(parseMealItemRow(mealItemToRow(item).map(String))).toEqual({ ...item, favorite: false });
   });
 
-  it('serializes all 9 meal-item columns including standard drinks', () => {
-    expect(mealItemToRow(item)).toHaveLength(9);
+  it('serializes all 10 meal-item columns including standard drinks and favorite', () => {
+    expect(mealItemToRow(item)).toHaveLength(10);
   });
 
   it('round-trips a saved item that records standard drinks', () => {
     const beer = { ...item, id: 'beer', name: 'IPA', category: 'Drinks' as const, standardDrinks: 1.5 };
-    expect(parseMealItemRow(mealItemToRow(beer).map(String))).toEqual(beer);
+    expect(parseMealItemRow(mealItemToRow(beer).map(String))).toEqual({ ...beer, favorite: false });
+  });
+
+  it('round-trips a favorited item', () => {
+    const fav = { ...item, favorite: true };
+    expect(parseMealItemRow(mealItemToRow(fav).map(String))).toEqual(fav);
   });
 
   it('rejects missing names, invalid categories, and negative macros', () => {
@@ -42,11 +47,16 @@ describe('meal item data', () => {
     expect(parseMealItemRow(legacyRow)?.standardDrinks).toBe(0);
   });
 
+  it('defaults legacy item rows without a favorite column to false', () => {
+    const legacyRow = ['oats', 'Oats', 'Breakfast', '150', '3', '27', '4', '5', '0'];
+    expect(parseMealItemRow(legacyRow)?.favorite).toBe(false);
+  });
+
   it('reads standardDrinks from the 9th meal-items column', async () => {
     const get = vi.fn().mockResolvedValue({
       result: {
         values: [
-          ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks'],
+          ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks', 'favorite'],
           mealItemToRow({ ...item, id: 'beer', name: 'IPA', category: 'Drinks', standardDrinks: 1.5 }).map(String),
         ],
       },
@@ -67,9 +77,9 @@ describe('meal item data', () => {
 
     expect(get).toHaveBeenCalledWith({
       spreadsheetId: 'sheet-123',
-      range: "'Stronger - Meal Items'!A:I",
+      range: "'Stronger - Meal Items'!A:J",
     });
-    expect(rows).toEqual([{ ...item, id: 'beer', name: 'IPA', category: 'Drinks', standardDrinks: 1.5 }]);
+    expect(rows).toEqual([{ ...item, id: 'beer', name: 'IPA', category: 'Drinks', standardDrinks: 1.5, favorite: false }]);
   });
 
   it('round-trips a daily log entry', () => {

@@ -26,6 +26,7 @@ interface Props {
   drinksPerDayGoal: number;
   onFavoritesChange: (favorites: FoodItem[]) => void;
   onRecentsChange: (recents: FoodItem[]) => void;
+  onMealItemsChange: (items: MealItem[]) => void;
   onLogEntry: (entry: MealLogEntry) => void;
   onAdjustEntry: (id: string, quantity: number) => void;
   onDeleteEntry: (id: string) => void;
@@ -293,18 +294,28 @@ function FoodRow({ food, isFavorite, category, quantity, drinks, onCategoryChang
 
 interface MealItemRowProps {
   item: MealItem;
+  isFavorite: boolean;
   category: MealCategory;
   quantity: string;
   drinks: string;
   onCategoryChange: (category: MealCategory) => void;
   onQuantityChange: (quantity: string) => void;
   onDrinksChange: (drinks: string) => void;
+  onToggleFavorite: () => void;
   onAdd: () => void;
 }
 
-function MealItemRow({ item, category, quantity, drinks, onCategoryChange, onQuantityChange, onDrinksChange, onAdd }: MealItemRowProps) {
+function MealItemRow({ item, isFavorite, category, quantity, drinks, onCategoryChange, onQuantityChange, onDrinksChange, onToggleFavorite, onAdd }: MealItemRowProps) {
   return (
     <li className="nutrition-food-row">
+      <button
+        className={`nutrition-star${isFavorite ? ' is-active' : ''}`}
+        aria-label={isFavorite ? `Remove ${item.name} from favorites` : `Add ${item.name} to favorites`}
+        aria-pressed={isFavorite}
+        onClick={onToggleFavorite}
+      >
+        <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+      </button>
       <div className="nutrition-food-info">
         <span className="nutrition-food-name">{item.name}</span>
         <small>
@@ -375,6 +386,7 @@ export function NutritionView({
   drinksPerDayGoal,
   onFavoritesChange,
   onRecentsChange,
+  onMealItemsChange,
   onLogEntry,
   onAdjustEntry,
   onDeleteEntry,
@@ -493,6 +505,10 @@ export function NutritionView({
     );
   };
 
+  const toggleMealItemFavorite = (item: MealItem) => {
+    onMealItemsChange(mealItems.map((m) => m.id === item.id ? { ...m, favorite: !m.favorite } : m));
+  };
+
   const addToDay = (food: FoodItem) => {
     const category = categoryFor(food.code);
     const entry: MealLogEntry = {
@@ -567,12 +583,14 @@ export function NutritionView({
     <MealItemRow
       key={item.id}
       item={item}
+      isFavorite={item.favorite === true}
       category={categoryFor(item.id)}
       quantity={quantityValue(item.id)}
       drinks={drinksValue(item.id)}
       onCategoryChange={(category) => setCategories((previous) => ({ ...previous, [item.id]: category }))}
       onQuantityChange={(quantity) => setQuantities((previous) => ({ ...previous, [item.id]: quantity }))}
       onDrinksChange={(value) => setDrinks((previous) => ({ ...previous, [item.id]: value }))}
+      onToggleFavorite={() => toggleMealItemFavorite(item)}
       onAdd={() => addMealItemToDay(item)}
     />
   );
@@ -670,9 +688,14 @@ export function NutritionView({
 
       {view === 'favorites' && (
         <section className="nutrition-finder">
-          {favorites.length === 0
-            ? <p className="nutrition-empty">No favorites yet. Star a food to keep it here.</p>
-            : <ul className="nutrition-food-list">{favorites.map(renderFoodRow)}</ul>}
+          {favorites.length === 0 && mealItems.filter((m) => m.favorite === true).length === 0
+            ? <p className="nutrition-empty">No favorites yet. Star a food or custom item to keep it here.</p>
+            : <>
+                {favorites.length > 0 && <ul className="nutrition-food-list">{favorites.map(renderFoodRow)}</ul>}
+                {mealItems.filter((m) => m.favorite === true).length > 0 && (
+                  <ul className="nutrition-food-list">{mealItems.filter((m) => m.favorite === true).map(renderMealItemRow)}</ul>
+                )}
+              </>}
         </section>
       )}
 

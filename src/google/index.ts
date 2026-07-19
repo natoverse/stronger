@@ -87,6 +87,7 @@ export {
 	readMealRecents,
 	writeMealRecents,
 	readMealItems,
+	writeMealItems,
 	stravaActivityToRow,
 	parseStravaRow,
 	verifyStravaTab,
