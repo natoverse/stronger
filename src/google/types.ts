@@ -1,40 +1,10 @@
 /**
- * Minimal type declarations for the Google Identity Services (GIS) library
- * and the gapi Sheets client used by this app.
+ * Minimal type declarations for the gapi Sheets and Calendar clients
+ * used by this app.
  *
  * These cover only the surface area we actually use so we don't need the
  * full @types/gapi packages as dependencies.
  */
-
-/* ------------------------------------------------------------------ */
-/*  Google Identity Services (loaded from accounts.google.com/gsi)    */
-/* ------------------------------------------------------------------ */
-
-export interface TokenResponse {
-	access_token: string
-	expires_in: number
-	scope: string
-	token_type: string
-	error?: string
-	error_description?: string
-}
-
-export interface TokenClient {
-	requestAccessToken: (opts?: { prompt?: string }) => void
-	callback: (response: TokenResponse) => void
-}
-
-export interface TokenClientConfig {
-	client_id: string
-	scope: string
-	callback: (response: TokenResponse) => void
-	error_callback?: (error: { type: string; message?: string }) => void
-}
-
-export interface GoogleAccountsOAuth2 {
-	initTokenClient: (config: TokenClientConfig) => TokenClient
-	revoke: (token: string, done?: () => void) => void
-}
 
 /* ------------------------------------------------------------------ */
 /*  gapi client (loaded from apis.google.com/js/api.js)               */
@@ -244,11 +214,6 @@ export interface CalendarEventItem {
 
 declare global {
 	interface Window {
-		google?: {
-			accounts: {
-				oauth2: GoogleAccountsOAuth2
-			}
-		}
 		gapi?: Gapi
 	}
 }

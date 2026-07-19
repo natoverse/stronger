@@ -3,13 +3,10 @@ import type { Workout, LiftConfig, CardioActivity } from '../model/index.ts'
 import { buildWorkoutsFromConfigs, workoutDefinitions } from '../data/sample-workouts.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import {
-	loadGis,
 	loadGapi,
 	initGapiClient,
 	signIn,
 	signOut,
-	hasToken,
-	restoreToken,
 	clearAuth,
 	isAuthError,
 	extractSheetId,
@@ -36,7 +33,8 @@ import {
 	readCardioActivities,
 	writeDefaultCardioActivities,
 	describeSheetError,
-	GOOGLE_CLIENT_ID,
+	onAuthStateChanged,
+	firebaseAuth,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
 import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, HeartPulse, Pizza, SportShoe } from 'lucide-react'
@@ -72,57 +70,48 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 	const [sheetName, setSheetName] = useState('Stronger')
 
 	/* ---------------------------------------------------------------- */
-	/*  Load Google scripts on mount                                     */
+	/*  Load Google scripts and subscribe to Firebase auth state       */
 	/* ---------------------------------------------------------------- */
 	useEffect(() => {
 		let cancelled = false
+		let unsubscribeAuth: (() => void) | null = null
 
 		async function init() {
-			if (!GOOGLE_CLIENT_ID) {
-				setError(
-					'Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID in your environment.',
-				)
-				setPhase('error')
-				return
-			}
 			try {
-				await Promise.all([loadGis(), loadGapi()])
+				await loadGapi()
 				await initGapiClient()
 				if (cancelled) return
 
-				// Restore a previously saved token (survives page reloads)
-				restoreToken()
+				// Subscribe to Firebase auth state. Fires immediately (async)
+				// with the persisted user — no sign-in click needed for
+				// returning users whose Firebase session is still active.
+				unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
+					if (cancelled) return
 
-				// If gapi already has a token (e.g. same page session), skip sign-in
-				if (hasToken()) {
-					const storedId = loadSheetId()
-					if (storedId) {
-						setPhase('connecting')
-						await tryConnect(storedId)
-					} else {
-						setPhase('sheet-input')
-					}
-				} else {
-					// No valid token — but if we recognise a returning user
-					// (stored sheet ID), try to auto-sign-in via GIS popup.
-					// If the user has an active Google session the popup
-					// resolves instantly with no manual interaction needed.
-					const storedId = loadSheetId()
-					if (storedId) {
+					if (user !== null) {
+						// Firebase session exists — get a fresh Google OAuth
+						// access token. For users with an active Google session
+						// this popup completes without any visible interaction.
 						try {
-							setPhase('connecting')
 							await signIn()
 							if (cancelled) return
-							await tryConnect(storedId)
+
+							const storedId = loadSheetId()
+							if (storedId) {
+								setPhase('connecting')
+								await tryConnect(storedId)
+							} else {
+								setPhase('sheet-input')
+							}
 						} catch {
-							// Auto-sign-in failed (popup blocked, no Google
-							// session, user dismissed) — fall back to manual.
+							// Popup was blocked or the user dismissed it —
+							// fall back to the explicit sign-in button.
 							if (!cancelled) setPhase('sign-in')
 						}
 					} else {
-						setPhase('sign-in')
+						if (!cancelled) setPhase('sign-in')
 					}
-				}
+				})
 			} catch (err) {
 				if (!cancelled) {
 					setError(err instanceof Error ? err.message : String(err))
@@ -134,6 +123,7 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 		init()
 		return () => {
 			cancelled = true
+			unsubscribeAuth?.()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])

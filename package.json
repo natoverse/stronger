@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "firebase": "^12.16.0",
     "lucide-react": "^1.7.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"

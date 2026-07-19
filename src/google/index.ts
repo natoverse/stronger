@@ -1,17 +1,17 @@
 export { extractSheetId } from './url.ts'
 export { saveSheetId, loadSheetId, clearSheetId, saveCalendarId, loadCalendarId, clearCalendarId } from './storage.ts'
 export {
-	loadGis,
 	loadGapi,
 	initGapiClient,
 	signIn,
 	signOut,
 	hasToken,
-	restoreToken,
 	clearAuth,
 	isAuthError,
 	describeSheetError,
 	withAuthRetry,
+	onAuthStateChanged,
+	firebaseAuth,
 } from './auth.ts'
 export {
 	verifySheetAccess,
