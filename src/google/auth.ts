@@ -195,10 +195,13 @@ export function describeSheetError(err: unknown): string {
 	switch (status) {
 		case 404:
 			return 'This spreadsheet was not found — it may have been deleted or moved to Trash.'
-		case 403:
-			return firebaseAuth?.currentUser?.email
-				? `The signed-in account (${firebaseAuth.currentUser.email}) doesn’t have access to this spreadsheet. Share the sheet with this account, or sign out and use a different Google account.`
-				: 'You don\'t have permission to access this spreadsheet. Share the sheet with your signed-in Google account, or sign out and switch accounts.'
+		case 403: {
+			const guidance = 'Share the sheet with this account, or sign out and use a different Google account.'
+			const email = firebaseAuth?.currentUser?.email
+			return email
+				? `The signed-in account (${email}) doesn’t have access to this spreadsheet. ${guidance}`
+				: `You don't have permission to access this spreadsheet. ${guidance}`
+		}
 		default:
 			return err instanceof Error
 				? err.message

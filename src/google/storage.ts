@@ -48,7 +48,10 @@ export function clearCalendarId(): void {
 
 const ACCESS_TOKEN_COOKIE = 'stronger_google_access_token'
 
-/** Cookie lifetime for OAuth access token reuse: 7 days in seconds. */
+/**
+ * Cookie lifetime for OAuth access token reuse: 7 days in seconds.
+ * The token itself may expire sooner; 401 handling triggers re-auth.
+ */
 const ACCESS_TOKEN_MAX_AGE = 7 * 24 * 60 * 60
 
 /** Persist the current Google API access token for reload reuse. */
