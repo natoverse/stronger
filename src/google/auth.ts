@@ -13,6 +13,7 @@
 import { GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
 import { firebaseAuth } from '../firebase/config.ts'
 import { SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC, SHEETS_SCOPE, CALENDAR_SCOPE } from './config.ts'
+import { saveAccessToken, loadAccessToken, clearAccessToken } from './storage.ts'
 
 export { onAuthStateChanged, firebaseAuth }
 
@@ -118,6 +119,7 @@ export function signIn(): Promise<string> {
 		}
 		const accessToken = credential.accessToken
 		window.gapi.client.setToken({ access_token: accessToken })
+		saveAccessToken(accessToken)
 		return accessToken
 	})().finally(() => {
 		pendingSignIn = null
@@ -145,6 +147,18 @@ export function hasToken(): boolean {
  */
 export function clearAuth(): void {
 	window.gapi?.client.setToken(null)
+	clearAccessToken()
+}
+
+/**
+ * Restore a previously persisted Google API access token into gapi.
+ * Returns true when a stored token was found and applied.
+ */
+export function hydrateStoredAccessToken(): boolean {
+	const accessToken = loadAccessToken()
+	if (!accessToken) return false
+	window.gapi?.client.setToken({ access_token: accessToken })
+	return true
 }
 
 /**
@@ -182,7 +196,9 @@ export function describeSheetError(err: unknown): string {
 		case 404:
 			return 'This spreadsheet was not found — it may have been deleted or moved to Trash.'
 		case 403:
-			return 'You don\'t have permission to access this spreadsheet. Check that it hasn\'t been unshared.'
+			return firebaseAuth?.currentUser?.email
+				? `The signed-in account (${firebaseAuth.currentUser.email}) doesn’t have access to this spreadsheet. Share the sheet with this account, or sign out and use a different Google account.`
+				: 'You don\'t have permission to access this spreadsheet. Share the sheet with your signed-in Google account, or sign out and switch accounts.'
 		default:
 			return err instanceof Error
 				? err.message

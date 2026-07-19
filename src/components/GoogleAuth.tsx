@@ -7,6 +7,8 @@ import {
 	initGapiClient,
 	signIn,
 	signOut,
+	hasToken,
+	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
 	extractSheetId,
@@ -95,11 +97,14 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 					if (cancelled) return
 
 					if (user !== null) {
-						// Firebase session exists — get a fresh Google OAuth
-						// access token. For users with an active Google session
-						// this popup completes without any visible interaction.
+						// Firebase session exists — restore any persisted Google
+						// API token first; fall back to interactive sign-in only
+						// when no token is available.
 						try {
-							await signIn()
+							hydrateStoredAccessToken()
+							if (!hasToken()) {
+								await signIn()
+							}
 							if (cancelled) return
 
 							const storedId = loadSheetId()

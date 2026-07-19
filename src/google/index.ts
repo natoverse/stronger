@@ -6,6 +6,7 @@ export {
 	signIn,
 	signOut,
 	hasToken,
+	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
 	describeSheetError,
