@@ -84,11 +84,6 @@ export async function initGapiClient(): Promise<void> {
 /*  Sign-in / sign-out                                                 */
 /* ------------------------------------------------------------------ */
 
-/** Reusable Google provider with Sheets + Calendar scopes. */
-const googleProvider = new GoogleAuthProvider()
-googleProvider.addScope(SHEETS_SCOPE)
-googleProvider.addScope(CALENDAR_SCOPE)
-
 /**
  * In-flight sign-in promise. Used to deduplicate concurrent attempts
  * so only one popup is opened at a time.
@@ -101,6 +96,10 @@ let pendingSignIn: Promise<string> | null = null
  * token, and sets it on gapi so Sheets/Calendar calls succeed.
  *
  * Concurrent callers share a single in-flight popup.
+ *
+ * When Firebase already knows the signed-in user's email, a `login_hint`
+ * is passed to Google so the popup can auto-select the account and close
+ * without requiring manual interaction.
  */
 export function signIn(): Promise<string> {
 	if (pendingSignIn) return pendingSignIn
@@ -112,7 +111,16 @@ export function signIn(): Promise<string> {
 		if (!window.gapi?.client) {
 			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
 		}
-		const result = await signInWithPopup(firebaseAuth, googleProvider)
+		const provider = new GoogleAuthProvider()
+		provider.addScope(SHEETS_SCOPE)
+		provider.addScope(CALENDAR_SCOPE)
+		// Pre-select the account Google already knows about so the popup
+		// can resolve silently (no account-picker click needed).
+		const knownEmail = firebaseAuth.currentUser?.email
+		if (knownEmail) {
+			provider.setCustomParameters({ login_hint: knownEmail })
+		}
+		const result = await signInWithPopup(firebaseAuth, provider)
 		const credential = GoogleAuthProvider.credentialFromResult(result)
 		if (!credential?.accessToken) {
 			throw new Error('No access token returned from Google sign-in.')
