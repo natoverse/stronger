@@ -2,10 +2,10 @@ import { describe, expect, it, beforeEach, vi } from 'vitest'
 import { saveSheetId, loadSheetId, clearSheetId, saveAccessToken, loadAccessToken, clearAccessToken } from '../storage.ts'
 
 function mockDocument() {
-	const store = new Map<string, string>()
+	const encodedCookieStore = new Map<string, string>()
 	return {
 		get cookie() {
-			return Array.from(store.entries())
+			return Array.from(encodedCookieStore.entries())
 				.map(([k, v]) => `${k}=${v}`)
 				.join('; ')
 		},
@@ -13,19 +13,19 @@ function mockDocument() {
 			const [pair, ...attrs] = value.split(';')
 			const [rawName, rawVal = ''] = pair.split('=')
 			const name = rawName.trim()
-			const val = rawVal.trim()
+			const encodedValue = rawVal.trim()
 			const maxAgeAttr = attrs.find((a) => a.trim().toLowerCase().startsWith('max-age='))
 			const maxAge = maxAgeAttr ? Number(maxAgeAttr.split('=')[1]) : undefined
 			if (maxAge === 0) {
-				store.delete(name)
+				encodedCookieStore.delete(name)
 				return
 			}
-			store.set(name, val)
+			encodedCookieStore.set(name, encodedValue)
 		},
 	} as unknown as Document
 }
 
-describe('sheet ID storage', () => {
+describe('storage', () => {
 	beforeEach(() => {
 		vi.stubGlobal('document', mockDocument())
 	})
@@ -61,6 +61,7 @@ describe('sheet ID storage', () => {
 	it('round-trips URL-unsafe token characters', () => {
 		const token = 'tok.with/slash+plus=='
 		saveAccessToken(token)
+		expect(document.cookie).toContain(`stronger_google_access_token=${encodeURIComponent(token)}`)
 		expect(loadAccessToken()).toBe(token)
 	})
 })
