@@ -21,7 +21,15 @@
  *   SPREADSHEET_ID             – Google Sheets spreadsheet ID
  *
  * Usage:
- *   node scripts/withings-sync.mjs
+ *   node scripts/withings-sync.mjs [--backfill] [--overwrite]
+ *
+ * Flags:
+ *   --backfill   One-time import of full history since BACKFILL_START
+ *                (2021-01-01) instead of the rolling 60-day window. Implies
+ *                --overwrite.
+ *   --overwrite  Upsert mode: rewrite existing rows (matched by grpId) in place
+ *                instead of skipping them, so edited weigh-ins and partial
+ *                mid-day rows are refreshed. New groups are still appended.
  */
 
 const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2'
@@ -341,6 +349,62 @@ async function readExistingGroupIds(spreadsheetId, googleToken) {
 	return ids
 }
 
+/**
+ * Read a map of grpId → 1-based sheet row number for existing data rows.
+ * The header is row 1, so the first data row is row 2. If the sheet already
+ * holds duplicate grpIds, the first occurrence wins.
+ */
+async function readExistingGroupRows(spreadsheetId, googleToken) {
+	const rows = await readRange(spreadsheetId, googleToken, `'${TAB_NAME}'!B2:B`)
+	const map = new Map()
+	rows.forEach((row, offset) => {
+		const key = (row[0] ?? '').trim()
+		if (key && !map.has(key)) map.set(key, offset + 2)
+	})
+	return map
+}
+
+/**
+ * Split rows into { updates, appends } for an upsert. `existingRows` maps a
+ * row key to its 1-based sheet row number. `updates` is a list of
+ * `{ rowNumber, row }` for keys already present; `appends` holds the rest.
+ */
+function partitionRows(rows, existingRows, keyIndex = 1) {
+	const updates = []
+	const appends = []
+	for (const row of rows) {
+		const key = row[keyIndex]
+		if (existingRows.has(key)) updates.push({ rowNumber: existingRows.get(key), row })
+		else appends.push(row)
+	}
+	return { updates, appends }
+}
+
+/** Rewrite specific rows in place via values:batchUpdate. */
+async function batchUpdateRows(spreadsheetId, googleToken, updates) {
+	if (updates.length === 0) return
+	const colLetter = String.fromCharCode(64 + COLUMN_COUNT)
+	const data = updates.map(({ rowNumber, row }) => ({
+		range: `'${TAB_NAME}'!A${rowNumber}:${colLetter}${rowNumber}`,
+		values: [row],
+	}))
+	const res = await fetch(
+		`${SHEETS_API_BASE}/${spreadsheetId}/values:batchUpdate`,
+		{
+			method: 'POST',
+			headers: {
+				Authorization: `Bearer ${googleToken}`,
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({ valueInputOption: 'RAW', data }),
+		},
+	)
+	if (!res.ok) {
+		const text = await res.text()
+		throw new Error(`Batch update rows failed (${res.status}): ${text}`)
+	}
+}
+
 async function appendRows(spreadsheetId, googleToken, rows) {
 	if (rows.length === 0) return
 	const colLetter = String.fromCharCode(64 + COLUMN_COUNT)
@@ -416,6 +480,8 @@ async function main() {
 	//    idempotency); with --backfill, everything since BACKFILL_START instead,
 	//    for a one-time import of full history. Dedup by grpId makes both safe.
 	const backfill = process.argv.includes('--backfill')
+	// Backfill implies overwrite so a full re-sync also refreshes edited weigh-ins.
+	const overwrite = backfill || process.argv.includes('--overwrite')
 	const startdate = backfill
 		? BACKFILL_START
 		: Math.floor(Date.now() / 1000) - LOOKBACK_DAYS * 86400
@@ -427,22 +493,43 @@ async function main() {
 	const groups = await fetchMeasurements(accessToken, startdate)
 	console.log(`Fetched ${groups.length} measurement groups from Withings.`)
 
-	// 6. Read existing group IDs for deduplication.
+	// 6. Convert groups to rows (oldest first for readability).
+	const rows = groups.map(groupToRow).filter((row) => row !== null)
+	rows.reverse()
+
+	if (overwrite) {
+		// Upsert mode: rewrite existing rows (matched by grpId) in place and
+		// append the rest. Refreshes edited weigh-ins and partial mid-day rows.
+		const existingRows = await readExistingGroupRows(SPREADSHEET_ID, googleToken)
+		console.log(`Found ${existingRows.size} existing measurements in sheet.`)
+		const { updates, appends } = partitionRows(rows, existingRows) // key = row[1] (grpId)
+
+		if (updates.length === 0 && appends.length === 0) {
+			console.log('No measurements to sync.')
+			return
+		}
+		if (updates.length > 0) {
+			console.log(`Updating ${updates.length} existing measurements...`)
+			await batchUpdateRows(SPREADSHEET_ID, googleToken, updates)
+		}
+		if (appends.length > 0) {
+			console.log(`Appending ${appends.length} new measurements...`)
+			await appendRows(SPREADSHEET_ID, googleToken, appends)
+		}
+		console.log(`Done — updated ${updates.length}, appended ${appends.length} measurements.`)
+		return
+	}
+
+	// Append-only mode: skip groups whose grpId is already in the sheet.
 	const existingIds = await readExistingGroupIds(SPREADSHEET_ID, googleToken)
 	console.log(`Found ${existingIds.size} existing measurements in sheet.`)
-
-	// 7. Convert and filter new groups.
-	const newRows = groups
-		.map(groupToRow)
-		.filter((row) => row !== null && !existingIds.has(row[1])) // row[1] = grpId
+	const newRows = rows.filter((row) => !existingIds.has(row[1])) // row[1] = grpId
 
 	if (newRows.length === 0) {
 		console.log('No new measurements to sync.')
 		return
 	}
 
-	// 8. Append new rows (oldest first for readability).
-	newRows.reverse()
 	console.log(`Appending ${newRows.length} new measurements...`)
 	await appendRows(SPREADSHEET_ID, googleToken, newRows)
 	console.log(`Done — synced ${newRows.length} new measurements.`)

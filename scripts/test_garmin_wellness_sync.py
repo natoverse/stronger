@@ -170,6 +170,18 @@ def test_fetch_daily_summary_calorie_fields():
     assert row["bmrCalories"] == "1800", row
 
 
+def test_partition_rows_keys_on_date_column():
+    existing = {"2026-01-01": 2, "2026-01-03": 4}
+    rows = [
+        ["2026-01-01", "a"],   # existing -> update row 2
+        ["2026-01-02", "b"],   # new -> append
+        ["2026-01-03", "c"],   # existing -> update row 4
+    ]
+    updates, appends = garmin_wellness_sync.partition_rows(rows, existing)
+    assert updates == [(2, ["2026-01-01", "a"]), (4, ["2026-01-03", "c"])]
+    assert appends == [["2026-01-02", "b"]]
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
