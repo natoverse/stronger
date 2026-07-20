@@ -209,11 +209,63 @@ export interface CalendarEventItem {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Google Identity Services (loaded from accounts.google.com/gsi)     */
+/* ------------------------------------------------------------------ */
+
+/** Response passed to a token client's success callback. */
+export interface TokenResponse {
+	access_token?: string
+	expires_in?: number | string
+	scope?: string
+	token_type?: string
+	error?: string
+	error_description?: string
+}
+
+/** Error passed to a token client's error_callback. */
+export interface TokenError {
+	type?: string
+	message?: string
+}
+
+/** Per-request overrides accepted by requestAccessToken. */
+export interface TokenRequestOverrides {
+	prompt?: string
+	login_hint?: string
+}
+
+/** Token client returned by initTokenClient. */
+export interface TokenClient {
+	callback: (resp: TokenResponse) => void
+	error_callback?: (err: TokenError) => void
+	requestAccessToken: (overrides?: TokenRequestOverrides) => void
+}
+
+/** Configuration passed to initTokenClient. */
+export interface TokenClientConfig {
+	client_id: string
+	scope: string
+	callback: (resp: TokenResponse) => void
+	error_callback?: (err: TokenError) => void
+	prompt?: string
+}
+
+export interface GoogleIdentityServices {
+	accounts: {
+		oauth2: {
+			initTokenClient: (config: TokenClientConfig) => TokenClient
+			revoke: (token: string, done?: () => void) => void
+		}
+	}
+}
+
+/* ------------------------------------------------------------------ */
 /*  Global augmentations                                               */
 /* ------------------------------------------------------------------ */
 
 declare global {
 	interface Window {
 		gapi?: Gapi
+		google?: GoogleIdentityServices
 	}
 }

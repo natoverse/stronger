@@ -1,24 +1,51 @@
 /**
- * Google OAuth authentication via Firebase Auth.
+ * Google OAuth authentication via Google Identity Services (GIS).
  *
- * Firebase Auth persists the user session in IndexedDB so the app
- * loads without requiring a sign-in click on every page reload.
- * Google API access tokens (for Sheets and Calendar) are obtained by
- * calling signInWithPopup, which completes silently when the user
- * already has an active Google session.
+ * Access tokens for the Sheets and Calendar APIs are obtained from the
+ * GIS OAuth2 token client. Unlike a popup-based flow, the token client
+ * can refresh tokens **silently** (no popup, no user gesture) whenever
+ * the browser still has an active Google session for a previously
+ * consented account. This keeps returning users signed in across
+ * reloads without repeatedly clicking a sign-in button.
+ *
+ * The signed-in account email is persisted in a cookie and used as a
+ * `login_hint` so silent refreshes resolve without an account picker.
  *
  * gapi is still loaded for the Sheets and Calendar REST APIs.
  */
 
-import { GoogleAuthProvider, signInWithPopup, signOut as fbSignOut, onAuthStateChanged } from 'firebase/auth'
-import { firebaseAuth } from '../firebase/config.ts'
-import { SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC, SHEETS_SCOPE, CALENDAR_SCOPE } from './config.ts'
-import { saveAccessToken, loadAccessToken, clearAccessToken } from './storage.ts'
+import { GOOGLE_CLIENT_ID, SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC, SHEETS_SCOPE, CALENDAR_SCOPE } from './config.ts'
+import {
+	saveAccessToken,
+	loadAccessToken,
+	clearAccessToken,
+	saveAccessTokenExpiry,
+	loadAccessTokenExpiry,
+	clearAccessTokenExpiry,
+	saveUserEmail,
+	loadUserEmail,
+	clearUserEmail,
+} from './storage.ts'
+import type { TokenClient, TokenResponse, TokenRequestOverrides } from './types.ts'
 
-export { onAuthStateChanged, firebaseAuth }
+/** OAuth scopes required for identifying the signed-in account. */
+const EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
+
+/**
+ * Maximum time to wait for a token request to resolve before treating
+ * it as failed. Prevents the UI from hanging indefinitely when GIS
+ * neither invokes the success nor the error callback.
+ */
+const TOKEN_REQUEST_TIMEOUT_MS = 20_000
+
+/**
+ * Refresh the token this many milliseconds before its real expiry so a
+ * stored token is never used right at the edge of expiring.
+ */
+const TOKEN_EXPIRY_SKEW_MS = 60_000
 
 /* ------------------------------------------------------------------ */
-/*  Script-loading helper (for gapi)                                   */
+/*  Script-loading helper (for gapi + GIS)                             */
 /* ------------------------------------------------------------------ */
 
 /** Cache of in-flight or completed script-loading promises. */
@@ -63,6 +90,11 @@ export function loadGapi(): Promise<void> {
 	return loadScript('https://apis.google.com/js/api.js')
 }
 
+/** Load the Google Identity Services client library. */
+export function loadGis(): Promise<void> {
+	return loadScript('https://accounts.google.com/gsi/client')
+}
+
 /* ------------------------------------------------------------------ */
 /*  gapi client initialisation                                        */
 /* ------------------------------------------------------------------ */
@@ -81,53 +113,131 @@ export async function initGapiClient(): Promise<void> {
 }
 
 /* ------------------------------------------------------------------ */
+/*  GIS token client                                                   */
+/* ------------------------------------------------------------------ */
+
+let tokenClient: TokenClient | null = null
+
+/**
+ * Initialise the GIS OAuth2 token client. Idempotent — safe to call
+ * multiple times. The per-request success/error callbacks are set on
+ * each `requestAccessToken` call (see `requestToken`).
+ */
+export function initTokenClient(): void {
+	if (tokenClient) return
+	const google = window.google
+	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
+	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
+
+	tokenClient = google.accounts.oauth2.initTokenClient({
+		client_id: GOOGLE_CLIENT_ID,
+		scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+		// Placeholder — replaced per request.
+		callback: () => {},
+	})
+}
+
+/**
+ * Request an access token from the GIS token client, wrapped in a
+ * promise. A `none` prompt performs a silent refresh (no UI); an empty
+ * prompt allows GIS to show consent / account selection only when
+ * required. Rejects on error or after a timeout.
+ */
+function requestToken(opts: { interactive: boolean; loginHint?: string }): Promise<TokenResponse> {
+	return new Promise((resolve, reject) => {
+		if (!tokenClient) {
+			reject(new Error('Token client is not initialised. Call initTokenClient() first.'))
+			return
+		}
+
+		let settled = false
+		const timer = setTimeout(() => {
+			if (settled) return
+			settled = true
+			reject(new Error('Google sign-in timed out.'))
+		}, TOKEN_REQUEST_TIMEOUT_MS)
+
+		tokenClient.callback = (resp: TokenResponse) => {
+			if (settled) return
+			settled = true
+			clearTimeout(timer)
+			if (resp.error || !resp.access_token) {
+				reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
+				return
+			}
+			resolve(resp)
+		}
+		tokenClient.error_callback = (err) => {
+			if (settled) return
+			settled = true
+			clearTimeout(timer)
+			reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
+		}
+
+		const overrides: TokenRequestOverrides = { prompt: opts.interactive ? '' : 'none' }
+		if (opts.loginHint) overrides.login_hint = opts.loginHint
+		tokenClient.requestAccessToken(overrides)
+	})
+}
+
+/** Apply a freshly obtained token to gapi and persist it for reuse. */
+function applyTokenResponse(resp: TokenResponse): string {
+	const accessToken = resp.access_token as string
+	window.gapi?.client.setToken({ access_token: accessToken })
+	saveAccessToken(accessToken)
+	const expiresInSec = Number(resp.expires_in) || 3600
+	saveAccessTokenExpiry(Date.now() + expiresInSec * 1000)
+	return accessToken
+}
+
+/**
+ * Look up the signed-in account's email via the userinfo endpoint and
+ * persist it for use as a login_hint. Best-effort — failures are
+ * ignored so they never block sign-in.
+ */
+async function fetchAndStoreEmail(accessToken: string): Promise<void> {
+	try {
+		const authHeader = 'Bearer ' + accessToken
+		const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+			headers: { Authorization: authHeader },
+		})
+		if (!res.ok) return
+		const data = (await res.json()) as { email?: string }
+		if (data.email) saveUserEmail(data.email)
+	} catch {
+		/* ignore — email is a convenience, not required */
+	}
+}
+
+/* ------------------------------------------------------------------ */
 /*  Sign-in / sign-out                                                 */
 /* ------------------------------------------------------------------ */
 
 /**
  * In-flight sign-in promise. Used to deduplicate concurrent attempts
- * so only one popup is opened at a time.
+ * so only one token request is issued at a time.
  */
 let pendingSignIn: Promise<string> | null = null
 
 /**
- * Sign in via Firebase + Google OAuth.
- * Opens a Google sign-in popup, resolves with the Google OAuth access
- * token, and sets it on gapi so Sheets/Calendar calls succeed.
+ * Interactive sign-in. Requests an access token, allowing GIS to show
+ * consent or account selection when necessary. Must be called from a
+ * user gesture so any popup GIS opens is not blocked.
  *
- * Concurrent callers share a single in-flight popup.
- *
- * When Firebase already knows the signed-in user's email, a `login_hint`
- * is passed to Google so the popup can auto-select the account and close
- * without requiring manual interaction.
+ * Concurrent callers share a single in-flight request.
  */
 export function signIn(): Promise<string> {
 	if (pendingSignIn) return pendingSignIn
 
 	pendingSignIn = (async () => {
-		if (!firebaseAuth) {
-			throw new Error('Firebase Auth is not configured. Set VITE_FIREBASE_* environment variables.')
-		}
 		if (!window.gapi?.client) {
 			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
 		}
-		const provider = new GoogleAuthProvider()
-		provider.addScope(SHEETS_SCOPE)
-		provider.addScope(CALENDAR_SCOPE)
-		// Pre-select the account Google already knows about so the popup
-		// can resolve silently (no account-picker click needed).
-		const knownEmail = firebaseAuth.currentUser?.email
-		if (knownEmail) {
-			provider.setCustomParameters({ login_hint: knownEmail })
-		}
-		const result = await signInWithPopup(firebaseAuth, provider)
-		const credential = GoogleAuthProvider.credentialFromResult(result)
-		if (!credential?.accessToken) {
-			throw new Error('No access token returned from Google sign-in.')
-		}
-		const accessToken = credential.accessToken
-		window.gapi.client.setToken({ access_token: accessToken })
-		saveAccessToken(accessToken)
+		initTokenClient()
+		const loginHint = loadUserEmail() ?? undefined
+		const resp = await requestToken({ interactive: true, loginHint })
+		const accessToken = applyTokenResponse(resp)
+		await fetchAndStoreEmail(accessToken)
 		return accessToken
 	})().finally(() => {
 		pendingSignIn = null
@@ -137,11 +247,35 @@ export function signIn(): Promise<string> {
 }
 
 /**
- * Sign out: revoke the Firebase session and clear the gapi token.
+ * Silent sign-in. Attempts to obtain an access token without any UI,
+ * using the persisted account email as a login_hint. Resolves for
+ * returning users whose Google session is still active and who have
+ * already consented; rejects otherwise (caller should then show the
+ * interactive sign-in button).
+ */
+export async function silentSignIn(): Promise<string> {
+	if (!window.gapi?.client) {
+		throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
+	}
+	initTokenClient()
+	const loginHint = loadUserEmail() ?? undefined
+	const resp = await requestToken({ interactive: false, loginHint })
+	const accessToken = applyTokenResponse(resp)
+	if (!loadUserEmail()) await fetchAndStoreEmail(accessToken)
+	return accessToken
+}
+
+/**
+ * Sign out: revoke the access token, clear it from gapi, and drop the
+ * persisted account email.
  */
 export async function signOut(): Promise<void> {
+	const token = loadAccessToken()
 	clearAuth()
-	if (firebaseAuth) await fbSignOut(firebaseAuth)
+	clearUserEmail()
+	if (token && window.google?.accounts?.oauth2?.revoke) {
+		window.google.accounts.oauth2.revoke(token)
+	}
 }
 
 /** Check whether gapi currently holds an access token. */
@@ -156,15 +290,22 @@ export function hasToken(): boolean {
 export function clearAuth(): void {
 	window.gapi?.client.setToken(null)
 	clearAccessToken()
+	clearAccessTokenExpiry()
 }
 
 /**
  * Restore a previously persisted Google API access token into gapi.
- * Returns true when a stored token was found and applied.
+ * Returns true when a valid (non-expired) stored token was applied.
+ * An expired token is cleared and `false` is returned.
  */
 export function hydrateStoredAccessToken(): boolean {
 	const accessToken = loadAccessToken()
 	if (!accessToken) return false
+	const expiry = loadAccessTokenExpiry()
+	if (expiry !== null && Date.now() >= expiry - TOKEN_EXPIRY_SKEW_MS) {
+		clearAuth()
+		return false
+	}
 	window.gapi?.client.setToken({ access_token: accessToken })
 	return true
 }
@@ -205,7 +346,7 @@ export function describeSheetError(err: unknown): string {
 			return 'This spreadsheet was not found — it may have been deleted or moved to Trash.'
 		case 403: {
 			const guidance = 'Share the sheet with this account, or sign out and use a different Google account.'
-			const email = firebaseAuth?.currentUser?.email
+			const email = loadUserEmail()
 			const accountMessage = email
 				? `The signed-in account (${email}) doesn’t have access to this spreadsheet.`
 				: 'You don\'t have permission to access this spreadsheet.'
@@ -224,16 +365,17 @@ export function describeSheetError(err: unknown): string {
 
 /**
  * In-flight re-authentication promise. Used to deduplicate concurrent
- * retry attempts so only one sign-in popup is opened at a time.
+ * retry attempts so only one token request is issued at a time.
  */
 let reauthPromise: Promise<string> | null = null
 
 /**
  * Execute an async operation, and if it fails with a 401 auth error,
- * re-authenticate via `signIn()` and retry once.
+ * silently refresh the access token via `silentSignIn()` and retry once.
  *
- * Concurrent callers share a single re-auth attempt to avoid opening
- * multiple sign-in popups.
+ * Concurrent callers share a single re-auth attempt. If the silent
+ * refresh fails (session expired), the error propagates so the caller
+ * can surface the interactive sign-in screen.
  */
 export async function withAuthRetry<T>(fn: () => Promise<T>): Promise<T> {
 	try {
@@ -241,8 +383,7 @@ export async function withAuthRetry<T>(fn: () => Promise<T>): Promise<T> {
 	} catch (err) {
 		if (!isAuthError(err)) throw err
 		if (!reauthPromise) {
-			clearAuth()
-			reauthPromise = signIn().finally(() => { reauthPromise = null })
+			reauthPromise = silentSignIn().finally(() => { reauthPromise = null })
 		}
 		await reauthPromise
 		return await fn()

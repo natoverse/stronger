@@ -1,9 +1,8 @@
 /**
  * Google API configuration.
  *
- * Replace the OAuth client ID and Firebase config with values from
- * the Google Cloud Console and Firebase Console respectively.
- * Set all VITE_* variables in your .env file.
+ * Replace the OAuth client ID with the value from the Google Cloud
+ * Console. Set the VITE_GOOGLE_CLIENT_ID variable in your .env file.
  */
 
 /** OAuth 2.0 client ID from Google Cloud Console (still required by gapi). */

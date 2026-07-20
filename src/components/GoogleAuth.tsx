@@ -4,9 +4,12 @@ import { buildWorkoutsFromConfigs, workoutDefinitions } from '../data/sample-wor
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import {
 	loadGapi,
+	loadGis,
 	initGapiClient,
+	initTokenClient,
 	signIn,
 	signOut,
+	silentSignIn,
 	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
@@ -34,8 +37,6 @@ import {
 	readCardioActivities,
 	writeDefaultCardioActivities,
 	describeSheetError,
-	onAuthStateChanged,
-	firebaseAuth,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
 import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, HeartPulse, Pizza, SportShoe } from 'lucide-react'
@@ -71,50 +72,46 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 	const [sheetName, setSheetName] = useState('Stronger')
 
 	/* ---------------------------------------------------------------- */
-	/*  Load Google scripts and subscribe to Firebase auth state       */
+	/*  Load Google scripts and restore access silently on load        */
 	/* ---------------------------------------------------------------- */
 	useEffect(() => {
 		let cancelled = false
-		let unsubscribeAuth: (() => void) | null = null
 
 		async function init() {
 			try {
-				await loadGapi()
+				await Promise.all([loadGapi(), loadGis()])
 				await initGapiClient()
 				if (cancelled) return
+				initTokenClient()
 
-				if (!firebaseAuth) {
-					setError('Firebase Auth is not configured. Set VITE_FIREBASE_* environment variables.')
-					setPhase('error')
+				// Try to restore access silently. A valid persisted token is
+				// applied immediately; otherwise attempt a silent token refresh
+				// (no popup, no user gesture) for returning users whose Google
+				// session is still active. Only fall back to the sign-in button
+				// when silent restore fails.
+				let authed = hydrateStoredAccessToken()
+				if (!authed) {
+					try {
+						await silentSignIn()
+						authed = true
+					} catch {
+						authed = false
+					}
+				}
+				if (cancelled) return
+
+				if (!authed) {
+					setPhase('sign-in')
 					return
 				}
 
-				// Subscribe to Firebase auth state. Fires immediately (async)
-				// with the persisted user — no sign-in click needed for
-				// returning users whose Firebase session is still active.
-				unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (user) => {
-					if (cancelled) return
-
-					if (user !== null) {
-						// Firebase session exists — restore any persisted Google
-						// API token. Do NOT attempt signIn() here: that opens a
-						// popup which browsers block in non-user-initiated contexts.
-						// If the stored token is stale, tryConnect will get a 401
-						// and show the sign-in screen cleanly.
-						hydrateStoredAccessToken()
-						if (cancelled) return
-
-						const storedId = loadSheetId()
-						if (storedId) {
-							setPhase('connecting')
-							await tryConnect(storedId)
-						} else {
-							setPhase('sheet-input')
-						}
-					} else {
-						if (!cancelled) setPhase('sign-in')
-					}
-				})
+				const storedId = loadSheetId()
+				if (storedId) {
+					setPhase('connecting')
+					await tryConnect(storedId)
+				} else {
+					setPhase('sheet-input')
+				}
 			} catch (err) {
 				if (!cancelled) {
 					setError(err instanceof Error ? err.message : String(err))
@@ -126,7 +123,6 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 		init()
 		return () => {
 			cancelled = true
-			unsubscribeAuth?.()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [])
@@ -219,13 +215,19 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 			setError(null)
 			await attemptConnect()
 		} catch (err) {
-			// If the token expired / was revoked, show the sign-in screen so
-			// the user can re-authenticate with a button click (user-initiated
-			// popups are not blocked by browsers).
+			// If the token expired / was revoked, first try a silent refresh
+			// (no popup, no user gesture) and retry once. Only fall back to the
+			// sign-in button when the silent refresh also fails.
 			if (isAuthError(err)) {
-				clearAuth()
-				setPhase('sign-in')
-				return
+				try {
+					await silentSignIn()
+					await attemptConnect()
+					return
+				} catch {
+					clearAuth()
+					setPhase('sign-in')
+					return
+				}
 			}
 			setError(describeSheetError(err))
 			setPhase('error')

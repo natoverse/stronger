@@ -1,5 +1,18 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { saveSheetId, loadSheetId, clearSheetId, saveAccessToken, loadAccessToken, clearAccessToken } from '../storage.ts'
+import {
+	saveSheetId,
+	loadSheetId,
+	clearSheetId,
+	saveAccessToken,
+	loadAccessToken,
+	clearAccessToken,
+	saveAccessTokenExpiry,
+	loadAccessTokenExpiry,
+	clearAccessTokenExpiry,
+	saveUserEmail,
+	loadUserEmail,
+	clearUserEmail,
+} from '../storage.ts'
 
 function mockDocument() {
 	const encodedCookieStore = new Map<string, string>()
@@ -63,5 +76,26 @@ describe('storage', () => {
 		saveAccessToken(token)
 		expect(document.cookie).toContain(`stronger_google_access_token=${encodeURIComponent(token)}`)
 		expect(loadAccessToken()).toBe(token)
+	})
+
+	it('persists and clears the access token expiry', () => {
+		expect(loadAccessTokenExpiry()).toBeNull()
+		saveAccessTokenExpiry(1_700_000_000_000)
+		expect(loadAccessTokenExpiry()).toBe(1_700_000_000_000)
+		clearAccessTokenExpiry()
+		expect(loadAccessTokenExpiry()).toBeNull()
+	})
+
+	it('returns null for an unparseable stored expiry', () => {
+		document.cookie = 'stronger_google_access_token_expiry=notanumber'
+		expect(loadAccessTokenExpiry()).toBeNull()
+	})
+
+	it('persists and clears the signed-in user email', () => {
+		expect(loadUserEmail()).toBeNull()
+		saveUserEmail('lifter@example.com')
+		expect(loadUserEmail()).toBe('lifter@example.com')
+		clearUserEmail()
+		expect(loadUserEmail()).toBeNull()
 	})
 })
