@@ -12,12 +12,14 @@ Environment variables (all required):
   SPREADSHEET_ID              – Google Sheets spreadsheet ID
 
 Flags:
-  --backfill  Sync every date since BACKFILL_START_DATE (2021-01-01) instead
-              of the rolling 14-day window. Idempotent: skips dates already in
-              the sheet.
+  --backfill   Sync every date since BACKFILL_START_DATE (2021-01-01) instead
+               of the rolling 14-day window. Implies ``--overwrite``.
+  --overwrite  Upsert mode: re-fetch every date in the window and rewrite
+               existing rows (matched by date) in place instead of skipping
+               them, so partial mid-day rows and edited days are refreshed.
 
 Usage:
-  python scripts/garmin-wellness-sync.py [--backfill]
+  python scripts/garmin-wellness-sync.py [--backfill] [--overwrite]
 """
 
 from __future__ import annotations
@@ -594,6 +596,66 @@ def read_existing_dates(session, spreadsheet_id: str, token: str) -> set[str]:
     return {row[0].strip() for row in data.get("values", []) if row and row[0]}
 
 
+def read_existing_date_rows(session, spreadsheet_id: str, token: str) -> dict[str, int]:
+    """Return ``{date: row_number}`` for existing data rows (1-based).
+
+    The header is row 1, so the first data row is row 2. If the sheet already
+    holds duplicate dates, the first occurrence wins.
+    """
+    date_range = quote(f"'{TAB_NAME}'!A2:A")
+    data = _sheets_get(
+        session,
+        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{date_range}",
+        token,
+    )
+    rows: dict[str, int] = {}
+    for offset, row in enumerate(data.get("values", [])):
+        if row and row[0]:
+            key = row[0].strip()
+            if key not in rows:
+                rows[key] = offset + 2
+    return rows
+
+
+def partition_rows(rows, existing_rows, key_index=0):
+    """Split ``rows`` into (updates, appends) for an upsert.
+
+    ``existing_rows`` maps a row key to its 1-based sheet row number.
+    ``updates`` is a list of ``(row_number, row)`` for keys already present;
+    ``appends`` is the list of rows whose key is new.
+    """
+    updates = []
+    appends = []
+    for row in rows:
+        key = row[key_index]
+        if key in existing_rows:
+            updates.append((existing_rows[key], row))
+        else:
+            appends.append(row)
+    return updates, appends
+
+
+def batch_update_rows(session, spreadsheet_id: str, token: str, updates) -> None:
+    """Rewrite specific rows in place via values:batchUpdate."""
+    if not updates:
+        return
+    col = _column_letter(COLUMN_COUNT)
+    data = [
+        {
+            "range": f"'{TAB_NAME}'!A{row_number}:{col}{row_number}",
+            "values": [row],
+        }
+        for row_number, row in updates
+    ]
+    res = session.post(
+        f"{SHEETS_API_BASE}/{spreadsheet_id}/values:batchUpdate",
+        headers={"Authorization": "Bearer " + token},
+        json={"valueInputOption": "RAW", "data": data},
+    )
+    if not res.ok:
+        raise RuntimeError(f"Batch update failed ({res.status_code}): {res.text}")
+
+
 def append_rows(session, spreadsheet_id: str, token: str, rows: list[list[str]]) -> None:
     if not rows:
         return
@@ -620,6 +682,8 @@ def main() -> None:
     service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
     spreadsheet_id = os.environ.get("SPREADSHEET_ID")
     backfill = "--backfill" in sys.argv
+    # Backfill implies overwrite so a full re-sync also refreshes edited days.
+    overwrite = backfill or "--overwrite" in sys.argv
 
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS")
@@ -640,11 +704,7 @@ def main() -> None:
     # 3. Ensure tab exists
     ensure_tab(session, spreadsheet_id, google_token)
 
-    # 4. Read existing dates for deduplication
-    existing = read_existing_dates(session, spreadsheet_id, google_token)
-    print(f"Found {len(existing)} existing wellness rows in sheet.")
-
-    # 5. Determine date range to sync
+    # 4. Determine date range to sync
     today_str = date.today().isoformat()
     if backfill:
         start_str = BACKFILL_START_DATE
@@ -654,29 +714,56 @@ def main() -> None:
         print(f"Syncing rolling {ROLLING_DAYS}-day window ({start_str} → {today_str})...")
 
     all_dates = _date_range(start_str, today_str)
-    missing = [d for d in all_dates if d not in existing]
-    print(f"{len(missing)} date(s) to fetch.")
 
-    if not missing:
+    # 5. Read existing rows. In overwrite mode we refetch every date in the
+    #    window (and rewrite existing rows in place); otherwise only the dates
+    #    missing from the sheet are fetched and appended.
+    if overwrite:
+        existing_rows = read_existing_date_rows(session, spreadsheet_id, google_token)
+        print(f"Found {len(existing_rows)} existing wellness rows in sheet.")
+        dates_to_fetch = all_dates
+    else:
+        existing = read_existing_dates(session, spreadsheet_id, google_token)
+        print(f"Found {len(existing)} existing wellness rows in sheet.")
+        dates_to_fetch = [d for d in all_dates if d not in existing]
+    print(f"{len(dates_to_fetch)} date(s) to fetch.")
+
+    if not dates_to_fetch:
         print("Nothing to sync.")
+        _sync_goals(garmin, session, spreadsheet_id, google_token)
         return
 
     # 6. Fetch and build rows
-    new_rows: list[list[str]] = []
-    for idx, cdate in enumerate(missing, 1):
+    rows: list[list[str]] = []
+    for idx, cdate in enumerate(dates_to_fetch, 1):
         if backfill and idx % 20 == 0:
-            print(f"  Progress: {idx}/{len(missing)} dates fetched...")
-        row = build_row(garmin, cdate)
-        new_rows.append(row)
-        if idx < len(missing):
+            print(f"  Progress: {idx}/{len(dates_to_fetch)} dates fetched...")
+        rows.append(build_row(garmin, cdate))
+        if idx < len(dates_to_fetch):
             time.sleep(PER_DATE_DELAY)
 
-    # 7. Append to sheet
-    print(f"Appending {len(new_rows)} new wellness rows...")
-    append_rows(session, spreadsheet_id, google_token, new_rows)
-    print(f"Done — synced {len(new_rows)} days of wellness data.")
+    # 7. Write to sheet — upsert in overwrite mode, plain append otherwise.
+    if overwrite:
+        updates, appends = partition_rows(rows, existing_rows)  # key = row[0] (date)
+        if updates:
+            print(f"Updating {len(updates)} existing wellness rows...")
+            batch_update_rows(session, spreadsheet_id, google_token, updates)
+        if appends:
+            print(f"Appending {len(appends)} new wellness rows...")
+            append_rows(session, spreadsheet_id, google_token, appends)
+        print(
+            f"Done — updated {len(updates)}, appended {len(appends)} days of wellness data."
+        )
+    else:
+        print(f"Appending {len(rows)} new wellness rows...")
+        append_rows(session, spreadsheet_id, google_token, rows)
+        print(f"Done — synced {len(rows)} days of wellness data.")
 
     # 8. Update goal settings in the Settings tab
+    _sync_goals(garmin, session, spreadsheet_id, google_token)
+
+
+def _sync_goals(garmin, session, spreadsheet_id: str, google_token: str) -> None:
     print("Fetching Garmin goals...")
     goals = _fetch_goals(garmin)
     if goals:

@@ -18,12 +18,16 @@ Environment variables (all required):
   SPREADSHEET_ID              – Google Sheets spreadsheet ID
 
 Flags:
-  --backfill  One-time import of full history since ``BACKFILL_START_DATE``
-              (2021-01-01) instead of the rolling recent-activity fetch. Dedup
-              by activity ID keeps it idempotent.
+  --backfill   One-time import of full history since ``BACKFILL_START_DATE``
+               (2021-01-01) instead of the rolling recent-activity fetch. Dedup
+               by activity ID keeps it idempotent. Implies ``--overwrite``.
+  --overwrite  Upsert mode: rewrite existing rows (matched by activityId) in
+               place instead of skipping them, so edits to older activities and
+               partial mid-day rows are refreshed. New activities are still
+               appended.
 
 Usage:
-  python scripts/garmin-sync.py [--backfill]
+  python scripts/garmin-sync.py [--backfill] [--overwrite]
 """
 
 from __future__ import annotations
@@ -256,6 +260,69 @@ def read_existing_ids(session, spreadsheet_id, token):
     return ids
 
 
+def read_existing_id_rows(session, spreadsheet_id, token):
+    """Return ``{activityId: row_number}`` for existing data rows.
+
+    Row numbers are 1-based to match the sheet (the header is row 1, so the
+    first data row is row 2). When the sheet already holds duplicate ids, the
+    first occurrence wins.
+    """
+    id_range = quote(f"'{TAB_NAME}'!B2:B")
+    data = _sheets_get(
+        session,
+        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{id_range}",
+        token,
+    )
+    rows = {}
+    for offset, row in enumerate(data.get("values", [])):
+        if row and row[0]:
+            key = row[0].strip()
+            if key not in rows:
+                rows[key] = offset + 2
+    return rows
+
+
+def partition_rows(rows, existing_rows, key_index=1):
+    """Split ``rows`` into (updates, appends) for an upsert.
+
+    ``existing_rows`` maps a row key to its 1-based sheet row number.
+    ``updates`` is a list of ``(row_number, row)`` for keys already present;
+    ``appends`` is the list of rows whose key is new.
+    """
+    updates = []
+    appends = []
+    for row in rows:
+        key = row[key_index]
+        if key in existing_rows:
+            updates.append((existing_rows[key], row))
+        else:
+            appends.append(row)
+    return updates, appends
+
+
+def batch_update_rows(session, spreadsheet_id, token, updates):
+    """Rewrite specific rows in place via values:batchUpdate."""
+    if not updates:
+        return
+    col = _column_letter(COLUMN_COUNT)
+    data = [
+        {
+            "range": f"'{TAB_NAME}'!A{row_number}:{col}{row_number}",
+            "values": [row],
+        }
+        for row_number, row in updates
+    ]
+    res = session.post(
+        f"{SHEETS_API_BASE}/{spreadsheet_id}/values:batchUpdate",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"valueInputOption": "RAW", "data": data},
+    )
+    if not res.ok:
+        raise RuntimeError(
+            f"Batch update rows failed ({res.status_code}): {res.text}"
+        )
+
+
 def append_rows(session, spreadsheet_id, token, rows):
     if not rows:
         return
@@ -282,6 +349,9 @@ def main():
     service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
     spreadsheet_id = os.environ.get("SPREADSHEET_ID")
     backfill = "--backfill" in sys.argv
+    # Backfill implies overwrite so re-running a full sync also refreshes edits
+    # to older activities (not just appends new ones).
+    overwrite = backfill or "--overwrite" in sys.argv
 
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
@@ -315,22 +385,41 @@ def main():
     # 4. Ensure the tab exists.
     ensure_tab(session, spreadsheet_id, google_token)
 
-    # 5. Read existing IDs for deduplication.
+    # 5. Convert fetched activities to rows.
+    rows = [r for r in (activity_to_row(a) for a in activities) if r is not None]
+
+    if overwrite:
+        # Upsert mode: rewrite existing rows (matched by activityId) in place and
+        # append the rest. Refreshes edited activities and partial mid-day rows.
+        existing_rows = read_existing_id_rows(session, spreadsheet_id, google_token)
+        print(f"Found {len(existing_rows)} existing activities in sheet.")
+        updates, appends = partition_rows(rows, existing_rows)  # key = row[1] (id)
+
+        if not updates and not appends:
+            print("No activities to sync.")
+            return
+
+        if updates:
+            print(f"Updating {len(updates)} existing activities...")
+            batch_update_rows(session, spreadsheet_id, google_token, updates)
+        if appends:
+            print(f"Appending {len(appends)} new activities...")
+            append_rows(session, spreadsheet_id, google_token, appends)
+        print(
+            f"Done — updated {len(updates)}, appended {len(appends)} activities."
+        )
+        return
+
+    # Append-only mode: skip activities whose id is already in the sheet.
     existing_ids = read_existing_ids(session, spreadsheet_id, google_token)
     print(f"Found {len(existing_ids)} existing activities in sheet.")
-
-    # 6. Convert and filter new activities.
-    new_rows = []
-    for activity in activities:
-        row = activity_to_row(activity)
-        if row is not None and row[1] not in existing_ids:  # row[1] = id
-            new_rows.append(row)
+    new_rows = [row for row in rows if row[1] not in existing_ids]  # row[1] = id
 
     if not new_rows:
         print("No new activities to sync.")
         return
 
-    # 7. Append new rows.
+    # Append new rows.
     print(f"Appending {len(new_rows)} new activities...")
     append_rows(session, spreadsheet_id, google_token, new_rows)
     print(f"Done — synced {len(new_rows)} new activities.")

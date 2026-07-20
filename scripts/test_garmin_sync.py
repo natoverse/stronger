@@ -121,6 +121,28 @@ def test_column_letter_matches_span():
     assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "Q"
 
 
+def test_partition_rows_splits_updates_and_appends():
+    existing = {"100": 2, "200": 3}
+    rows = [
+        ["2026-01-01", "100", "running"],   # existing -> update row 2
+        ["2026-01-02", "300", "cycling"],   # new -> append
+        ["2026-01-03", "200", "walking"],   # existing -> update row 3
+    ]
+    updates, appends = garmin_sync.partition_rows(rows, existing)
+    assert updates == [
+        (2, ["2026-01-01", "100", "running"]),
+        (3, ["2026-01-03", "200", "walking"]),
+    ]
+    assert appends == [["2026-01-02", "300", "cycling"]]
+
+
+def test_partition_rows_all_new_when_no_existing():
+    rows = [["2026-01-01", "1"], ["2026-01-02", "2"]]
+    updates, appends = garmin_sync.partition_rows(rows, {})
+    assert updates == []
+    assert appends == rows
+
+
 def _run():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
