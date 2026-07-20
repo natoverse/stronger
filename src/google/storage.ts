@@ -70,6 +70,61 @@ export function clearAccessToken(): void {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Access token expiry persistence (cookie-based)                     */
+/* ------------------------------------------------------------------ */
+
+const ACCESS_TOKEN_EXPIRY_COOKIE = 'stronger_google_access_token_expiry'
+
+/** Persist the access token's absolute expiry time (epoch milliseconds). */
+export function saveAccessTokenExpiry(expiryMs: number): void {
+	setCookie(ACCESS_TOKEN_EXPIRY_COOKIE, String(expiryMs), ACCESS_TOKEN_MAX_AGE)
+}
+
+/**
+ * Read the stored access token expiry (epoch milliseconds), or `null`
+ * if not set or unparseable.
+ */
+export function loadAccessTokenExpiry(): number | null {
+	const raw = getCookie(ACCESS_TOKEN_EXPIRY_COOKIE)
+	if (raw === null) return null
+	const parsed = Number(raw)
+	return Number.isFinite(parsed) ? parsed : null
+}
+
+/** Remove the stored access token expiry. */
+export function clearAccessTokenExpiry(): void {
+	deleteCookie(ACCESS_TOKEN_EXPIRY_COOKIE)
+}
+
+/* ------------------------------------------------------------------ */
+/*  Signed-in user email persistence (cookie-based)                    */
+/* ------------------------------------------------------------------ */
+
+const USER_EMAIL_COOKIE = 'stronger_google_user_email'
+
+/** Cookie lifetime for the signed-in email: 1 year in seconds. */
+const USER_EMAIL_MAX_AGE = 365 * 24 * 60 * 60
+
+/**
+ * Persist the signed-in Google account email. Used as a `login_hint`
+ * so silent token refreshes can pick the account without a picker, and
+ * to show which account lacks access in permission-error messages.
+ */
+export function saveUserEmail(email: string): void {
+	setCookie(USER_EMAIL_COOKIE, email, USER_EMAIL_MAX_AGE)
+}
+
+/** Read the stored signed-in email, or `null` if not set. */
+export function loadUserEmail(): string | null {
+	return getCookie(USER_EMAIL_COOKIE)
+}
+
+/** Remove the stored signed-in email. */
+export function clearUserEmail(): void {
+	deleteCookie(USER_EMAIL_COOKIE)
+}
+
+/* ------------------------------------------------------------------ */
 /*  Cookie helpers                                                     */
 /* ------------------------------------------------------------------ */
 
