@@ -192,6 +192,10 @@ async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<
     tagtype_1: 'categories',
     tag_contains_1: 'does_not_contain',
     tag_1: 'en:meats-and-their-products',
+    // Restrict to products sold in the US to reduce irrelevant international results
+    tagtype_2: 'countries',
+    tag_contains_2: 'contains',
+    tag_2: 'en:united-states',
   });
   const response = await fetch(`${OPEN_FOOD_FACTS_STAGING_SEARCH_URL}?${params.toString()}`, {
     signal,
