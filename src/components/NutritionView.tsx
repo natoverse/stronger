@@ -23,6 +23,7 @@ interface Props {
   wellnessEntries?: GarminWellnessEntry[];
   dailyCalorieGoal: number;
   dailyProteinGoalGrams: number;
+  dailyFiberGoalGrams: number;
   drinksPerDayGoal: number;
   onFavoritesChange: (favorites: FoodItem[]) => void;
   onRecentsChange: (recents: FoodItem[]) => void;
@@ -383,6 +384,7 @@ export function NutritionView({
   wellnessEntries,
   dailyCalorieGoal,
   dailyProteinGoalGrams,
+  dailyFiberGoalGrams,
   drinksPerDayGoal,
   onFavoritesChange,
   onRecentsChange,
@@ -472,6 +474,11 @@ export function NutritionView({
     const diff = Math.abs(totals.protein - dailyProteinGoalGrams);
     return diff <= dailyProteinGoalGrams * GOAL_PROXIMITY_THRESHOLD ? 'good' : 'warn';
   }, [dailyProteinGoalGrams, totals.protein]);
+  const fiberGoalStatus = useMemo<GoalStatus>(() => {
+    if (dailyFiberGoalGrams <= 0) return null;
+    const diff = Math.abs(totals.fiber - dailyFiberGoalGrams);
+    return diff <= dailyFiberGoalGrams * GOAL_PROXIMITY_THRESHOLD ? 'good' : 'warn';
+  }, [dailyFiberGoalGrams, totals.fiber]);
   const weeklyAlcoholGoal = drinksPerDayGoal > 0 ? drinksPerDayGoal * 7 : 0;
   const weeklyAlcoholStatus = useMemo<GoalStatus>(() => {
     if (weeklyAlcoholGoal <= 0) return null;
@@ -638,7 +645,9 @@ export function NutritionView({
         </div>
         <div className="nutrition-totals-row nutrition-totals-row-bottom">
           <span>Fat {round(totals.fat)}g</span><span>Carbs {round(totals.carbs)}g</span>
-          <span>Fiber {round(totals.fiber)}g</span>
+          <span className={statusClass(fiberGoalStatus)}>
+            Fiber {round(totals.fiber)}{dailyFiberGoalGrams > 0 ? ` / ${round(dailyFiberGoalGrams)}` : ''}g
+          </span>
           {(totals.drinks > 0 || weeklyAlcoholGoal > 0) && (
             <span className={`nutrition-drinks${weeklyAlcoholStatus ? ` ${statusClass(weeklyAlcoholStatus)}` : ''}`}>
               🍺 {round(totals.drinks)} drinks today · {round(weeklyDrinks)} this week{weeklyAlcoholGoal > 0 ? ` / ${weeklyAlcoholGoal}` : ''}
@@ -794,6 +803,7 @@ export function NutritionView({
           aggregation={chartAggregation}
           calorieGoal={dailyCalorieGoal}
           proteinGoal={dailyProteinGoalGrams}
+          fiberGoal={dailyFiberGoalGrams}
           drinksGoal={drinksPerDayGoal}
         />
       </section>

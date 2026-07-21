@@ -16,7 +16,7 @@ import type { MealLogEntry } from './types.js';
 import type { StravaAggregation, StravaTimeRange } from './strava.js';
 import { generateBucketSlots, getBucketKey, getRangeStart, getRangeEnd } from './strava.js';
 
-export type NutritionMetric = 'calories' | 'protein' | 'drinks';
+export type NutritionMetric = 'calories' | 'protein' | 'fiber' | 'drinks';
 
 export interface NutritionBucket {
   label: string;
@@ -40,12 +40,14 @@ export interface NutritionChartData {
 export const NUTRITION_METRIC_LABELS: Record<NutritionMetric, string> = {
   calories: 'Calories',
   protein: 'Protein',
+  fiber: 'Fiber',
   drinks: 'Alcoholic Drinks',
 };
 
 export const NUTRITION_METRIC_UNITS: Record<NutritionMetric, string> = {
   calories: 'cal',
   protein: 'g',
+  fiber: 'g',
   drinks: 'drinks',
 };
 
@@ -63,12 +65,12 @@ export function nutritionColorKey(value: number, goal: number, metric: Nutrition
   if (goal <= 0) return '';
   const ratio = value / goal;
   if (ratio < 0.9) {
-    // Under-drinking is a positive outcome (blue); under-eating calories/protein is a warning (yellow).
+    // Under-drinking is a positive outcome (blue); under-eating calories/protein/fiber is a warning (yellow).
     return metric === 'drinks' ? 'bonus' : 'under';
   }
   if (ratio <= 1.1) return 'met';
-  // Protein over goal is a positive outcome (blue); calories/alcohol over is negative (red).
-  return metric === 'protein' ? 'bonus' : 'over';
+  // Protein/fiber over goal is a positive outcome (blue); calories/alcohol over is negative (red).
+  return metric === 'protein' || metric === 'fiber' ? 'bonus' : 'over';
 }
 
 /** Map a color key to its rendered fill color; `fallback` for the empty key. */
@@ -90,6 +92,7 @@ function toISODate(d: Date): string {
 function entryValue(entry: MealLogEntry, metric: NutritionMetric): number {
   const base = metric === 'calories' ? entry.calories
     : metric === 'protein' ? entry.protein
+    : metric === 'fiber' ? entry.fiber
     : entry.standardDrinks;
   return base * entry.quantity;
 }

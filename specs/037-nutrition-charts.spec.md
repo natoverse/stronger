@@ -65,3 +65,18 @@ Decisions adapted during the merge:
 - The Trends charts and their day/week/month controls render at the bottom of the
   finder page, below "Today's Meals"; the goal-banded totals chips (including the
   drinks chip) remain at the top.
+
+## Iteration: daily fiber goal, display, and chart
+
+Added a fiber goal that mirrors protein end-to-end:
+
+- **Setting**: new per-day `app.dailyFiberGoalGrams` (default `0` = disabled),
+  added to `AppSettings`/`AppNumericSettingKey`, `DEFAULT_APP_SETTINGS`, and the
+  Settings tab number-key map (0–1000g). A "Daily Fiber" input sits below
+  "Daily Protein" in `SettingsView`.
+- **Display**: the Fiber totals chip is now color-coded (`fiberGoalStatus`) and
+  shows `current / goal` g, exactly like protein.
+- **Chart**: a Fiber chart renders directly below the Protein chart. The `fiber`
+  metric was added to `NutritionMetric` (label `Fiber`, unit `g`, `entryValue`
+  reads `entry.fiber`). Like protein, fiber over goal is a positive outcome
+  (blue `bonus`); under goal is a yellow `under` warning.

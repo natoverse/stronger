@@ -405,6 +405,8 @@ export interface AppSettings {
 	dailyCalorieGoal: number;
 	/** Daily protein target in grams used in the nutrition summary (0 disables goal coloring). */
 	dailyProteinGoalGrams: number;
+	/** Daily fiber target in grams used in the nutrition summary (0 disables goal coloring). */
+	dailyFiberGoalGrams: number;
 	/** Daily target for number of standard alcoholic drinks (0 disables goal coloring). */
 	drinksPerDayGoal: number;
 	/** Daily step goal used to color the Garmin steps chart (0 disables goal coloring). Auto-synced from Garmin. */
@@ -429,6 +431,7 @@ export type AppNumericSettingKey =
 	| 'progressDipThresholdPercent'
 	| 'dailyCalorieGoal'
 	| 'dailyProteinGoalGrams'
+	| 'dailyFiberGoalGrams'
 	| 'drinksPerDayGoal'
 	| 'garminDailyStepsGoal'
 	| 'garminDailyFloorsGoal'

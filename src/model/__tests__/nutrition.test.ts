@@ -34,6 +34,11 @@ describe('nutritionColorKey', () => {
     expect(nutritionColorKey(90, 100, 'protein')).toBe('met');
     expect(nutritionColorKey(89, 100, 'protein')).toBe('under');
   });
+  it('uses bonus (blue) instead of over (red) when fiber exceeds goal', () => {
+    expect(nutritionColorKey(111, 100, 'fiber')).toBe('bonus');
+    expect(nutritionColorKey(90, 100, 'fiber')).toBe('met');
+    expect(nutritionColorKey(89, 100, 'fiber')).toBe('under');
+  });
   it('uses over (red) when drinks exceed goal, bonus (blue) when under goal', () => {
     expect(nutritionColorKey(111, 100, 'drinks')).toBe('over');
     expect(nutritionColorKey(89, 100, 'drinks')).toBe('bonus');
