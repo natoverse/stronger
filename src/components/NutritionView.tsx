@@ -455,6 +455,18 @@ export function NutritionView({
     }), { calories: 0, fat: 0, carbs: 0, fiber: 0, protein: 0, drinks: 0 }),
     [dayEntries],
   );
+  const macroCaloriePercentages = useMemo(() => {
+    const carbsCalories = totals.carbs * 4;
+    const proteinCalories = totals.protein * 4;
+    const fatCalories = totals.fat * 9;
+    const macroCalories = carbsCalories + proteinCalories + fatCalories;
+    if (macroCalories <= 0) return { carbs: 0, protein: 0, fat: 0 };
+    return {
+      carbs: round((carbsCalories / macroCalories) * 100),
+      protein: round((proteinCalories / macroCalories) * 100),
+      fat: round((fatCalories / macroCalories) * 100),
+    };
+  }, [totals.carbs, totals.fat, totals.protein]);
 
   // Weekly standard drinks: sum for the 7-day window containing the selected date (Mon–Sun)
   const weeklyDrinks = useMemo(() => {
@@ -653,6 +665,11 @@ export function NutritionView({
               🍺 {round(totals.drinks)} drinks today · {round(weeklyDrinks)} this week{weeklyAlcoholGoal > 0 ? ` / ${weeklyAlcoholGoal}` : ''}
             </span>
           )}
+        </div>
+        <div className="nutrition-totals-row nutrition-totals-row-macro-percent">
+          <span>
+            Calories by macro: Carbs {macroCaloriePercentages.carbs}% · Protein {macroCaloriePercentages.protein}% · Fat {macroCaloriePercentages.fat}%
+          </span>
         </div>
       </section>
 

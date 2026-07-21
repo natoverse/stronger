@@ -92,3 +92,10 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
 - Fixed servings stepper math to preserve 0.25 increments instead of rounding stepped values to whole numbers.
 - Day-entry grouping now keeps summed servings at 2-decimal precision so grouped quantities don't jump to integers.
 - "Today's Meals" quantity badges now show fractional servings (up to two decimals) so stepper changes are visible.
+
+## Iteration: macro calorie percentages in header (2026-07)
+
+- Added a new nutrition-header line below the macro grams row showing calorie share by macro:
+  `Carbs X% · Protein Y% · Fat Z%`.
+- Percentages are computed from macro calories (`carbs*4`, `protein*4`, `fat*9`) rather than logged total calories.
+- When all macro calories are zero, all percentages render as `0%` to avoid division-by-zero behavior.
