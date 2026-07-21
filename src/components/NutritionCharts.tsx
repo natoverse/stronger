@@ -31,6 +31,7 @@ interface Props {
   aggregation: StravaAggregation;
   calorieGoal: number;
   proteinGoal: number;
+  fiberGoal: number;
   drinksGoal: number;
 }
 
@@ -77,19 +78,20 @@ function buildGarminCalorieLine(
   });
 }
 
-export function NutritionCharts({ entries, wellnessEntries, range, aggregation, calorieGoal, proteinGoal, drinksGoal }: Props) {
+export function NutritionCharts({ entries, wellnessEntries, range, aggregation, calorieGoal, proteinGoal, fiberGoal, drinksGoal }: Props) {
   const today = useMemo(() => new Date(), []);
 
   const charts = useMemo(() => {
     const specs: { metric: NutritionMetric; goal: number }[] = [
       { metric: 'calories', goal: calorieGoal },
       { metric: 'protein', goal: proteinGoal },
+      { metric: 'fiber', goal: fiberGoal },
       { metric: 'drinks', goal: drinksGoal },
     ];
     return specs.map(({ metric, goal }) =>
       buildNutritionChartData(entries, metric, range, goal, today, aggregation),
     );
-  }, [entries, range, aggregation, calorieGoal, proteinGoal, drinksGoal, today]);
+  }, [entries, range, aggregation, calorieGoal, proteinGoal, fiberGoal, drinksGoal, today]);
 
   const garminCalorieLine = useMemo(() => {
     if (!wellnessEntries || wellnessEntries.length === 0) return null;

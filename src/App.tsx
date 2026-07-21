@@ -1603,6 +1603,7 @@ function App() {
           wellnessEntries={wellnessEntries}
           dailyCalorieGoal={appSettings.dailyCalorieGoal}
           dailyProteinGoalGrams={appSettings.dailyProteinGoalGrams}
+          dailyFiberGoalGrams={appSettings.dailyFiberGoalGrams}
           drinksPerDayGoal={appSettings.drinksPerDayGoal}
           onFavoritesChange={handleSaveMealFavorites}
           onMealItemsChange={handleSaveMealItems}
