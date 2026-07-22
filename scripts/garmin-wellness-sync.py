@@ -13,7 +13,7 @@ Environment variables (all required):
 
 Flags:
   --backfill   Sync every date since BACKFILL_START_DATE (2021-01-01) instead
-               of the rolling 14-day window. Implies ``--overwrite``.
+               of the default last-24-hours window. Implies ``--overwrite``.
   --overwrite  Upsert mode: re-fetch every date in the window and rewrite
                existing rows (matched by date) in place instead of skipping
                them, so partial mid-day rows and edited days are refreshed.
@@ -57,7 +57,10 @@ HEADER = [
 COLUMN_COUNT = len(HEADER)   # 25 → A:Y
 assert COLUMN_COUNT == 25, "Header count mismatch"
 
-ROLLING_DAYS = 14
+# Default window: the last 24 hours. Wellness data is stored per calendar day,
+# so a 24-hour lookback spans two calendar days (today plus yesterday) to make
+# sure a run just after midnight still refreshes the day that just ended.
+ROLLING_DAYS = 2
 BACKFILL_START_DATE = "2021-01-01"
 PER_DATE_DELAY = 0.15   # seconds between dates (rate-limit courtesy)
 
@@ -711,7 +714,7 @@ def main() -> None:
         print(f"Backfilling all dates since {start_str}...")
     else:
         start_str = (date.today() - timedelta(days=ROLLING_DAYS - 1)).isoformat()
-        print(f"Syncing rolling {ROLLING_DAYS}-day window ({start_str} → {today_str})...")
+        print(f"Syncing last 24 hours ({start_str} → {today_str})...")
 
     all_dates = _date_range(start_str, today_str)
 
