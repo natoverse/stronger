@@ -8,6 +8,12 @@
 
 import type { CalendarListEntry, CalendarEventResource, CalendarEventItem } from './types.ts'
 import type { WorkoutScheduleEntry } from '../model/types.ts'
+import { REST_ID } from '../model/types.ts'
+
+/** Returns true for schedule entries that have no in-app workout to deep-link to (cardio, rest). */
+function hasNoDeepLink(workoutId: string): boolean {
+	return workoutId.startsWith('cardio:') || workoutId === REST_ID
+}
 
 /* ------------------------------------------------------------------ */
 /*  Stronger ID generation                                             */
@@ -188,8 +194,7 @@ export function buildDeepLink(
  * workouts) and the Stronger ID tag for two-way sync tracking.
  */
 function buildEventDescription(workoutId: string, workoutName: string, strongerId: string): string {
-	const isCardio = workoutId.startsWith('cardio:')
-	const deepLink = isCardio ? null : buildDeepLink(workoutId)
+	const deepLink = hasNoDeepLink(workoutId) ? null : buildDeepLink(workoutId)
 	const base = deepLink ? `Open workout: ${deepLink}` : workoutName
 	return embedStrongerId(base, strongerId)
 }
@@ -271,8 +276,7 @@ export async function pushScheduleToCalendar(
 			continue
 		}
 
-		const isCardio = entry.workoutId.startsWith('cardio:')
-		const deepLink = isCardio ? null : buildDeepLink(entry.workoutId)
+		const deepLink = hasNoDeepLink(entry.workoutId) ? null : buildDeepLink(entry.workoutId)
 		const event: CalendarEventResource = {
 			summary: entry.workoutName,
 			description: deepLink ? `Open workout: ${deepLink}` : entry.workoutName,
@@ -327,8 +331,7 @@ export async function pushEventsToCalendar(
 
 	for (const slot of request.slots) {
 		const dates = generateEventDates(request.startDate, slot.dayIndex, request.weeks)
-		const isCardio = slot.workoutId.startsWith('cardio:')
-		const deepLink = isCardio ? null : buildDeepLink(slot.workoutId)
+		const deepLink = hasNoDeepLink(slot.workoutId) ? null : buildDeepLink(slot.workoutId)
 
 		for (const date of dates) {
 			// Skip if this workout already exists on this date.

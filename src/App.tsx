@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealLogEntry, MealItem, FoodItem, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
-import { computeProgression } from './model/index.js';
+import { computeProgression, REST_ID } from './model/index.js';
 import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, verifyMealFavoritesTab, createMealFavoritesTab, verifyMealRecentsTab, createMealRecentsTab, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, verifyGarminTab, verifyGarminWellnessTab, readGarminWellnessEntries, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
 import type { LiftGoal } from './google/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
@@ -555,6 +555,7 @@ function App() {
   const handleSyncCalendar = useCallback(
     async (calendarId: string): Promise<CalendarSyncResult> => {
       const resolveWorkoutName = (workoutId: string): string | null => {
+        if (workoutId === REST_ID) return 'Rest';
         if (workoutId.startsWith('cardio:')) {
           const cardioId = workoutId.slice('cardio:'.length);
           const c = cardioActivities.find((a) => a.id === cardioId);
@@ -565,6 +566,7 @@ function App() {
       };
 
       const resolveWorkoutId = (name: string): string | null => {
+        if (name === 'Rest') return REST_ID;
         // Try strength workouts first
         const w = workouts.find((wk) => wk.name === name);
         if (w) return w.id;
