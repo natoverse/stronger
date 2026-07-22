@@ -170,6 +170,24 @@ def test_fetch_daily_summary_calorie_fields():
     assert row["bmrCalories"] == "1800", row
 
 
+def test_fetch_daily_summary_stress_field():
+    class FakeClient:
+        def get_user_summary(self, _cdate):
+            return {"totalSteps": 8000, "averageStressLevel": 37}
+
+    row = garmin_wellness_sync._fetch_daily_summary(FakeClient(), "2026-07-14")
+    assert row["avgStress"] == "37", row
+
+
+def test_stress_ignores_no_data_sentinel():
+    # Garmin reports -1/-2 when the device wasn't worn.
+    assert garmin_wellness_sync._stress(-1) == ""
+    assert garmin_wellness_sync._stress(-2) == ""
+    assert garmin_wellness_sync._stress(None) == ""
+    assert garmin_wellness_sync._stress(0) == "0"
+    assert garmin_wellness_sync._stress(62.4) == "62"
+
+
 def test_partition_rows_keys_on_date_column():
     existing = {"2026-01-01": 2, "2026-01-03": 4}
     rows = [

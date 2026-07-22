@@ -2850,7 +2850,7 @@ export function appSettingsToMap(
 
 /**
  * Column header row written to the "Stronger - Garmin Wellness" tab.
- * 23 columns (A–W). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
+ * 26 columns (A–Z). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
  */
 export const GARMIN_WELLNESS_HEADER: string[] = [
 	'date',
@@ -2864,10 +2864,11 @@ export const GARMIN_WELLNESS_HEADER: string[] = [
 	'intensityMinModerate', 'intensityMinVigorous',
 	'hillScore', 'enduranceScore',
 	'activeCalories', 'bmrCalories',
+	'avgStress',
 ]
 
-/** A1 range for reading Garmin wellness data (row 2 onward, 25 columns = A:Y). */
-const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:Y`
+/** A1 range for reading Garmin wellness data (row 2 onward, 26 columns = A:Z). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:Z`
 
 /** Column index map for the Garmin wellness row (0-based). */
 const WC = {
@@ -2882,6 +2883,7 @@ const WC = {
 	intensityMinModerate: 19, intensityMinVigorous: 20,
 	hillScore: 21, enduranceScore: 22,
 	activeCalories: 23, bmrCalories: 24,
+	avgStress: 25,
 } as const
 
 function parseNum(raw: string | undefined): number | null {
@@ -2960,6 +2962,7 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 		enduranceScore:       parseNum(row[WC.enduranceScore]),
 		activeCalories:       parseNum(row[WC.activeCalories]),
 		bmrCalories:          parseNum(row[WC.bmrCalories]),
+		avgStress:            parseNum(row[WC.avgStress]),
 	}
 }
 

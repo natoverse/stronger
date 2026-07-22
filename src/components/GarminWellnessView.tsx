@@ -262,6 +262,28 @@ export function enduranceScoreLegendLabel(value: number): string {
   return thresholdLabel(value, ENDURANCE_SCORE_BANDS, 'Elite');
 }
 
+// Stress bands: 0–25 Rest (blue), 26–50 Low (yellow), 51–75 Medium (orange), 76–100 High (red).
+const STRESS_BANDS: ThresholdBand[] = [
+  { max: 26, color: BLUE, label: 'Rest' },
+  { max: 51, color: YELLOW, label: 'Low' },
+  { max: 76, color: ORANGE, label: 'Medium' },
+];
+
+export const STRESS_LEGEND_ITEMS: LegendItem[] = [
+  { range: '76–100', label: 'High', color: RED },
+  { range: '51–75', label: 'Medium', color: ORANGE },
+  { range: '26–50', label: 'Low', color: YELLOW },
+  { range: '0–25', label: 'Rest', color: BLUE },
+];
+
+export function stressColor(value: number): string {
+  return thresholdColor(value, STRESS_BANDS, RED);
+}
+
+export function stressLegendLabel(value: number): string {
+  return thresholdLabel(value, STRESS_BANDS, 'High');
+}
+
 export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
   { label: 'Exceeded (>125%)', color: BLUE },
   { label: 'Goal met', color: GREEN },
@@ -972,6 +994,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
 
   const hrvData         = useMemo(() => buildWellnessChartData(entries, 'hrvWeeklyAvg',         range, aggregation, today, 'hrvStatus'), [entries, range, aggregation, today]);
+  const stressData      = useMemo(() => buildWellnessChartData(entries, 'avgStress',            range, aggregation, today), [entries, range, aggregation, today]);
   const rhrData         = useMemo(() => buildWellnessChartData(entries, 'restingHR',            range, aggregation, today), [entries, range, aggregation, today]);
   const bbHighData      = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryHigh',      range, aggregation, today), [entries, range, aggregation, today]);
   const bbLowData       = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryLow',       range, aggregation, today), [entries, range, aggregation, today]);
@@ -1090,6 +1113,18 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
 
       {/* Section: Recovery */}
       <h2 className="strava-section-title">Recovery</h2>
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.avgStress}
+        unit={WELLNESS_METRIC_UNITS.avgStress}
+        buckets={stressData.buckets}
+        summaryLabel={withLegendLabel(
+          summaryStr(summaryValue(stressData), 'avgStress', WELLNESS_METRIC_UNITS.avgStress),
+          aggregation === 'day' && summaryValue(stressData) !== null ? stressLegendLabel(summaryValue(stressData)!) : null,
+        )}
+        legendItems={STRESS_LEGEND_ITEMS}
+        colorFn={(v) => v !== null ? stressColor(v) : GRAY}
+        formatValue={numFmt('avgStress')}
+      />
       <WellnessBarChart
         label="HRV Status"
         unit={WELLNESS_METRIC_UNITS.hrvWeeklyAvg}
