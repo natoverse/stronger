@@ -2,11 +2,10 @@ name: Garmin Wellness Sync
 
 on:
   schedule:
-    # Every hour during Pacific daytime. GitHub cron only runs in UTC, so this
-    # fires on every UTC hour that can fall inside the 06:00-22:59 Pacific
-    # window across both PST (UTC-8) and PDT (UTC-7); the "Pacific window" step
-    # below trims the DST edge hours so overnight 23:00-05:59 Pacific is skipped.
-    - cron: "0 0-6,13-23 * * *"
+    # Every hour, on the hour. Kept deliberately simple (no time-zone / DST
+    # gating): the sync only looks back 24 hours, so running around the clock is
+    # cheap and guarantees near-continual updates.
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       backfill:
@@ -30,37 +29,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pacific window
-        id: window
-        # Skip scheduled runs that land in the 23:00-05:59 Pacific overnight
-        # quiet period. Manual (workflow_dispatch) runs always proceed.
-        run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "Manual run - proceeding regardless of the hour."
-            exit 0
-          fi
-          hour=$(TZ="America/Los_Angeles" date +%H)
-          if [ "$hour" -ge 23 ] || [ "$hour" -lt 6 ]; then
-            echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "Pacific hour $hour is inside the overnight quiet period - skipping."
-          else
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "Pacific hour $hour is inside the active window - proceeding."
-          fi
-
       - name: Set up Python
-        if: steps.window.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install dependencies
-        if: steps.window.outputs.run == 'true'
         run: pip install -r scripts/requirements.txt
 
       - name: Run Garmin wellness sync
-        if: steps.window.outputs.run == 'true'
         env:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
@@ -70,10 +47,9 @@ jobs:
         run: python scripts/garmin-wellness-sync.py ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
 
       - name: Open an issue if the hourly sync fails
-        # Only for scheduled runs that actually attempted the sync. If the hourly
-        # cadence causes trouble (e.g. Garmin API rate limits), this surfaces a
-        # single deduplicated issue so the cron can be adjusted.
-        if: failure() && github.event_name == 'schedule' && steps.window.outputs.run == 'true'
+        # If the hourly cadence causes trouble (e.g. Garmin API rate limits),
+        # surface a single deduplicated issue so the cron can be adjusted.
+        if: failure() && github.event_name == 'schedule'
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -90,5 +66,5 @@ jobs:
           gh issue create \
             --title "${title}" \
             --label "garmin-sync" \
-            --body "$(printf 'The Garmin wellness sync now runs hourly during Pacific daytime and a scheduled run just failed.\n\nThis is often a Garmin API rate limit from the hourly cadence. If so, consider reducing the cron frequency in `.github/workflows/garmin-wellness-sync.yml`.\n\nFailing run: %s' "${RUN_URL}")"
+            --body "$(printf 'The Garmin wellness sync now runs hourly and a scheduled run just failed.\n\nThis is often a Garmin API rate limit from the hourly cadence. If so, consider reducing the cron frequency in `.github/workflows/garmin-wellness-sync.yml`.\n\nFailing run: %s' "${RUN_URL}")"
           echo "Opened a new tracking issue."
