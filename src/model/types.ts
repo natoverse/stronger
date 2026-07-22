@@ -233,6 +233,13 @@ export interface WorkoutScheduleEntry {
 export const FLAG_SENTINEL = '__flags__';
 
 /**
+ * Sentinel workoutId used to schedule an intentional Rest day.
+ * A Rest entry is neither strength nor cardio; it is a plannable, visible
+ * schedule item that marks a day as deliberate recovery.
+ */
+export const REST_ID = 'rest';
+
+/**
  * @deprecated Use {@link WorkoutScheduleEntry} and {@link DayFlagEntry} separately.
  * Legacy combined schedule entry type.
  */

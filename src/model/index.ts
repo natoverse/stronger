@@ -28,7 +28,7 @@ export type {
 	WorkoutScheduleEntry,
 } from './types.js';
 
-export { FLAG_SENTINEL } from './types.js';
+export { FLAG_SENTINEL, REST_ID } from './types.js';
 
 export {
 	computeExercise,

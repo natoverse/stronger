@@ -1414,8 +1414,19 @@ body {
 	color: var(--color-text);
 }
 
+.calendar-picker-item-rest {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--color-text-muted);
+}
+
 .calendar-workout-link-cardio {
 	color: var(--color-text);
+}
+
+.calendar-workout-link-rest {
+	color: var(--color-text-muted);
 }
 
 /* Day header actions (flags + add button) */

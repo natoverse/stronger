@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
+import { REST_ID } from '../model/index.js';
 import { CheckCircle, X, CalendarCheck } from 'lucide-react';
 
 interface CalendarPushProps {
@@ -22,7 +23,7 @@ function today(): string {
 
 export function CalendarPush({ workouts, cardioActivities, onClose, onUpdateSchedule }: CalendarPushProps) {
   // Weekly day → activity mapping (7 entries)
-  // '' = no action (skip), '__rest__' = clear workouts, otherwise = workout/cardio id
+  // '' = no action (skip), '__rest__' = clear workouts, REST_ID = plan a Rest day, otherwise = workout/cardio id
   const [daySlots, setDaySlots] = useState<string[]>(Array(7).fill(''));
   const [weeks, setWeeks] = useState(4);
   const [startDate, setStartDate] = useState(today);
@@ -92,7 +93,8 @@ export function CalendarPush({ workouts, cardioActivities, onClose, onUpdateSche
                 onChange={(e) => handleDayChange(i, e.target.value)}
               >
                 <option value="">—</option>
-                <option value="__rest__">— Rest —</option>
+                <option value="__rest__">— Clear —</option>
+                <option value={REST_ID}>Rest</option>
                 <optgroup label="Strength">
                   {workouts.map((w) => (
                     <option key={w.id} value={w.id}>

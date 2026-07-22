@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
+import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2 } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -350,6 +351,7 @@ export function CalendarView({
 		for (const c of cardioActivities) {
 			map.set(`cardio:${c.id}`, c.name);
 		}
+		map.set(REST_ID, 'Rest');
 		return map;
 	}, [workouts, cardioActivities]);
 
@@ -609,11 +611,34 @@ export function CalendarView({
 								<div className="calendar-workouts">
 									{dayInfo.scheduled.map((wid, idx) => {
 										const isCardio = cardioIds.has(wid);
+										const isRest = wid === REST_ID;
 										const hasLog = loggedWorkoutIds.has(wid);
 										const session = sessionByWorkoutId.get(wid);
 										const deleteKey = session ? sessionKeyStr(session) : null;
 										const isConfirming = deleteKey !== null && confirmDeleteKey === deleteKey;
-										const Icon = isCardio ? HeartPulse : Dumbbell;
+										const Icon = isRest ? Moon : isCardio ? HeartPulse : Dumbbell;
+
+										if (isRest) {
+											return (
+												<div key={`sched-${wid}-${idx}`} className="calendar-workout-item">
+													<span className="calendar-workout-link calendar-workout-link-rest">
+														<Icon size={14} />
+														<span className="calendar-workout-name">
+															{workoutNames.get(wid) ?? wid}
+														</span>
+													</span>
+													{!isPast && (
+														<button
+															className="calendar-remove-btn"
+															onClick={() => onRemove(dayInfo.date, wid)}
+															aria-label={`Remove ${workoutNames.get(wid) ?? wid}`}
+														>
+															<X size={14} />
+														</button>
+													)}
+												</div>
+											);
+										}
 
 										if (isCardio) {
 											return (
@@ -758,7 +783,14 @@ export function CalendarView({
 										</button>
 									</div>
 									<div className="calendar-picker-list">
-										{cardioActivities.length > 0 && workouts.length > 0 && (
+										<button
+											className="calendar-picker-item calendar-picker-item-rest"
+											onClick={() => handleAssign(REST_ID)}
+										>
+											<Moon size={14} />
+											Rest
+										</button>
+										{workouts.length > 0 && (
 											<div className="calendar-picker-divider">Strength</div>
 										)}
 										{workouts.map((w) => (
