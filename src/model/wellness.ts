@@ -40,7 +40,8 @@ export type WellnessNumericMetric =
   | 'hillScore'
   | 'enduranceScore'
   | 'activeCalories'
-  | 'bmrCalories';
+  | 'bmrCalories'
+  | 'avgStress';
 
 /** Metrics that are SUMmed when aggregating (vs averaged). */
 const SUM_METRICS = new Set<WellnessNumericMetric>([
@@ -71,6 +72,7 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
   enduranceScore: 'Endurance Score',
   activeCalories: 'Active Calories',
   bmrCalories: 'Resting Calories (BMR)',
+  avgStress: 'Stress',
 };
 
 export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
@@ -92,6 +94,7 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   enduranceScore: '',
   activeCalories: 'kcal',
   bmrCalories: 'kcal',
+  avgStress: '',
 };
 
 // ---------------------------------------------------------------------------

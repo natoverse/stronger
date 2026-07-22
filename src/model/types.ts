@@ -522,6 +522,10 @@ export interface GarminWellnessEntry {
 	activeCalories: number | null;
 	/** Basal metabolic rate (resting) calories for the day, in kcal. */
 	bmrCalories: number | null;
+
+	// Stress
+	/** Daily average stress level (0–100), or null when no data. */
+	avgStress: number | null;
 }
 
 // ---------------------------------------------------------------------------

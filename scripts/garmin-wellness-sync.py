@@ -4,7 +4,7 @@
 Writes one row per day to the "Stronger - Garmin Wellness" tab with all of:
   HRV, sleep, body battery, training readiness, training status, acute/chronic
   load, steps, floors, resting HR, VO2 max (running), intensity minutes, hill
-  score, and endurance score.
+  score, endurance score, and daily average stress.
 
 Environment variables (all required):
   GARMIN_TOKENS               – garminconnect token bundle
@@ -53,9 +53,10 @@ HEADER = [
     "intensityMinModerate", "intensityMinVigorous",
     "hillScore", "enduranceScore",
     "activeCalories", "bmrCalories",
+    "avgStress",
 ]
-COLUMN_COUNT = len(HEADER)   # 25 → A:Y
-assert COLUMN_COUNT == 25, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # 26 → A:Z
+assert COLUMN_COUNT == 26, "Header count mismatch"
 
 # Default window: the last 24 hours. Wellness data is stored per calendar day,
 # so a 24-hour lookback spans two calendar days (today plus yesterday) to make
@@ -81,6 +82,23 @@ def _num(v, decimals: int = 1) -> str:
             return str(int(round(f)))
         txt = f"{round(f, decimals):.{decimals}f}".rstrip("0").rstrip(".")
         return txt or "0"
+    except (ValueError, TypeError):
+        return ""
+
+
+def _stress(v) -> str:
+    """Return a sheet-ready daily average stress level (0–100), or '' if absent.
+
+    Garmin reports -1 or -2 for days with no stress data (device not worn),
+    which must not be written as a real value.
+    """
+    if v is None:
+        return ""
+    try:
+        f = float(v)
+        if f != f or f < 0:   # NaN or Garmin's no-data sentinel
+            return ""
+        return str(int(round(f)))
     except (ValueError, TypeError):
         return ""
 
@@ -332,6 +350,7 @@ def _fetch_daily_summary(client, cdate: str) -> dict:
             "intensityMinVigorous": _num(data.get("vigorousIntensityMinutes"), 0),
             "activeCalories":      _num(data.get("activeKilocalories"), 0),
             "bmrCalories":         _num(data.get("bmrKilocalories"), 0),
+            "avgStress":           _stress(data.get("averageStressLevel")),
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] daily_summary: {exc}", file=sys.stderr)
