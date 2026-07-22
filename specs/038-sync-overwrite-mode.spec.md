@@ -49,3 +49,12 @@ the syncs can run as often as we like and always reflect the latest full data.
   These are covered by the offline test harnesses.
 - `values:batchUpdate` sends one range per updated row (`A{n}:{col}{n}`), so a
   single request refreshes the whole window.
+
+## Post-merge iteration (2026-07)
+
+- **`overwrite` workflow_dispatch input now defaults to `true`.** Since upsert is
+  idempotent (keyed by `activityId` / `date` / `grpId`, so it can't create
+  duplicates) and append-only manual runs can leave stale partial rows, manual
+  runs of all three sync workflows now overwrite by default. Unchecking the box
+  still allows a pure append. Scheduled runs already passed `--overwrite`
+  unconditionally, so this only affects `workflow_dispatch` runs.
