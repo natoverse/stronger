@@ -3,6 +3,7 @@ import type { GarminWellnessEntry } from '../types.js';
 import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
+  buildLoadFocusChartData,
   formatWellnessRatio,
 } from '../wellness.js';
 
@@ -37,6 +38,15 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     activeCalories: null,
     bmrCalories: null,
     avgStress: null,
+    loadFocusAerobicLow: null,
+    loadFocusAerobicLowMin: null,
+    loadFocusAerobicLowMax: null,
+    loadFocusAerobicHigh: null,
+    loadFocusAerobicHighMin: null,
+    loadFocusAerobicHighMax: null,
+    loadFocusAnaerobic: null,
+    loadFocusAnaerobicMin: null,
+    loadFocusAnaerobicMax: null,
     ...overrides,
   };
 }
@@ -111,5 +121,48 @@ describe('formatWellnessRatio', () => {
     expect(formatWellnessRatio(0.8)).toBe('0.8');
     expect(formatWellnessRatio(1.25)).toBe('1.25');
     expect(formatWellnessRatio(1)).toBe('1');
+  });
+});
+
+describe('buildLoadFocusChartData', () => {
+  it('zips per-day load value with its optimal min/max range', () => {
+    const today = new Date('2025-06-20T00:00:00');
+    const entries = [
+      makeEntry({
+        date: '2025-06-18',
+        loadFocusAerobicLow: 320,
+        loadFocusAerobicLowMin: 200,
+        loadFocusAerobicLowMax: 400,
+      }),
+      makeEntry({
+        date: '2025-06-19',
+        loadFocusAerobicLow: 450,
+        loadFocusAerobicLowMin: 210,
+        loadFocusAerobicLowMax: 420,
+      }),
+    ];
+
+    const chart = buildLoadFocusChartData(entries, 'aerobicLow', 'month', 'day', today);
+    const jun18 = chart.buckets.find((b) => b.label === '6/18');
+    const jun19 = chart.buckets.find((b) => b.label === '6/19');
+
+    expect(jun18).toMatchObject({ value: 320, min: 200, max: 400 });
+    expect(jun19).toMatchObject({ value: 450, min: 210, max: 420 });
+    // Latest non-null day drives header value + range.
+    expect(chart.latestValue).toBe(450);
+    expect(chart.latestMin).toBe(210);
+    expect(chart.latestMax).toBe(420);
+  });
+
+  it('averages load values within a week/month bucket', () => {
+    const today = new Date('2025-06-20T00:00:00');
+    const entries = [
+      makeEntry({ date: '2025-06-16', loadFocusAnaerobic: 100, loadFocusAnaerobicMin: 50, loadFocusAnaerobicMax: 150 }),
+      makeEntry({ date: '2025-06-18', loadFocusAnaerobic: 200, loadFocusAnaerobicMin: 60, loadFocusAnaerobicMax: 160 }),
+    ];
+
+    const chart = buildLoadFocusChartData(entries, 'anaerobic', 'month', 'week', today);
+    const populated = chart.buckets.find((b) => b.value !== null);
+    expect(populated?.value).toBeCloseTo(150);
   });
 });

@@ -532,6 +532,28 @@ export interface GarminWellnessEntry {
 	// Stress
 	/** Daily average stress level (0–100), or null when no data. */
 	avgStress: number | null;
+
+	// Load focus (training load balance)
+	// Each bucket is a monthly (rolling ~28-day) load total, with Garmin's
+	// optimal target range (min/max) that shifts daily with recent training.
+	/** Low-aerobic monthly load. */
+	loadFocusAerobicLow: number | null;
+	/** Optimal-range minimum for low-aerobic load. */
+	loadFocusAerobicLowMin: number | null;
+	/** Optimal-range maximum for low-aerobic load. */
+	loadFocusAerobicLowMax: number | null;
+	/** High-aerobic monthly load. */
+	loadFocusAerobicHigh: number | null;
+	/** Optimal-range minimum for high-aerobic load. */
+	loadFocusAerobicHighMin: number | null;
+	/** Optimal-range maximum for high-aerobic load. */
+	loadFocusAerobicHighMax: number | null;
+	/** Anaerobic monthly load. */
+	loadFocusAnaerobic: number | null;
+	/** Optimal-range minimum for anaerobic load. */
+	loadFocusAnaerobicMin: number | null;
+	/** Optimal-range maximum for anaerobic load. */
+	loadFocusAnaerobicMax: number | null;
 }
 
 // ---------------------------------------------------------------------------

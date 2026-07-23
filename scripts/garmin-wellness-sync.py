@@ -4,7 +4,9 @@
 Writes one row per day to the "Stronger - Garmin Wellness" tab with all of:
   HRV, sleep, body battery, training readiness, training status, acute/chronic
   load, steps, floors, resting HR, VO2 max (running), intensity minutes, hill
-  score, endurance score, and daily average stress.
+  score, endurance score, daily average stress, and load focus (training load
+  balance: low-aerobic / high-aerobic / anaerobic monthly load plus each
+  bucket's optimal target range).
 
 Environment variables (all required):
   GARMIN_TOKENS               – garminconnect token bundle
@@ -55,9 +57,14 @@ HEADER = [
     "heatAcclimationPct", "altitudeAcclimationPct", "currentAltitude",
     "activeCalories", "bmrCalories",
     "avgStress",
+    # Load focus (training load balance) — monthly (rolling ~28-day) load per
+    # intensity bucket plus Garmin's optimal target range (min/max) for each.
+    "loadFocusAerobicLow", "loadFocusAerobicLowMin", "loadFocusAerobicLowMax",
+    "loadFocusAerobicHigh", "loadFocusAerobicHighMin", "loadFocusAerobicHighMax",
+    "loadFocusAnaerobic", "loadFocusAnaerobicMin", "loadFocusAnaerobicMax",
 ]
-COLUMN_COUNT = len(HEADER)   # 29 → A:AC
-assert COLUMN_COUNT == 29, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # 38 → A:AL
+assert COLUMN_COUNT == 38, "Header count mismatch"
 
 # Default window: the last 24 hours. Wellness data is stored per calendar day,
 # so a 24-hour lookback spans two calendar days (today plus yesterday) to make
@@ -302,6 +309,36 @@ def _fetch_readiness(client, cdate: str) -> dict:
         return {}
 
 
+def _extract_load_focus(data: dict) -> dict:
+    """Extract load-focus (training load balance) fields from a training-status
+    payload. Returns the 9 sheet columns, using '' for any missing value.
+
+    Shape: mostRecentTrainingLoadBalance → metricsTrainingLoadBalanceDTOMap →
+    {<device-id>: {monthlyLoadAerobicLow, monthlyLoadAerobicLowTargetMin, …}}.
+    """
+    empty = {
+        "loadFocusAerobicLow": "", "loadFocusAerobicLowMin": "", "loadFocusAerobicLowMax": "",
+        "loadFocusAerobicHigh": "", "loadFocusAerobicHighMin": "", "loadFocusAerobicHighMax": "",
+        "loadFocusAnaerobic": "", "loadFocusAnaerobicMin": "", "loadFocusAnaerobicMax": "",
+    }
+    balance = data.get("mostRecentTrainingLoadBalance") or {}
+    load_map = balance.get("metricsTrainingLoadBalanceDTOMap") or {}
+    entry = next((v for v in load_map.values() if isinstance(v, dict)), None)
+    if not entry:
+        return empty
+    return {
+        "loadFocusAerobicLow":     _num(entry.get("monthlyLoadAerobicLow"), 1),
+        "loadFocusAerobicLowMin":  _num(entry.get("monthlyLoadAerobicLowTargetMin"), 1),
+        "loadFocusAerobicLowMax":  _num(entry.get("monthlyLoadAerobicLowTargetMax"), 1),
+        "loadFocusAerobicHigh":    _num(entry.get("monthlyLoadAerobicHigh"), 1),
+        "loadFocusAerobicHighMin": _num(entry.get("monthlyLoadAerobicHighTargetMin"), 1),
+        "loadFocusAerobicHighMax": _num(entry.get("monthlyLoadAerobicHighTargetMax"), 1),
+        "loadFocusAnaerobic":      _num(entry.get("monthlyLoadAnaerobic"), 1),
+        "loadFocusAnaerobicMin":   _num(entry.get("monthlyLoadAnaerobicTargetMin"), 1),
+        "loadFocusAnaerobicMax":   _num(entry.get("monthlyLoadAnaerobicTargetMax"), 1),
+    }
+
+
 def _fetch_training_status(client, cdate: str) -> dict:
     try:
         data = client.get_training_status(cdate)
@@ -348,6 +385,7 @@ def _fetch_training_status(client, cdate: str) -> dict:
                 0,
             ),
             "currentAltitude": _num(acclim.get("currentAltitude"), 0),
+            **_extract_load_focus(data),
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] training_status: {exc}", file=sys.stderr)
