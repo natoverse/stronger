@@ -709,9 +709,13 @@ interface LoadFocusChartProps {
   summaryLabel: string;
   legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
+  /** Latest optimal-range minimum — draws a dashed reference line. */
+  rangeMin: number | null;
+  /** Latest optimal-range maximum — draws a dashed reference line. */
+  rangeMax: number | null;
 }
 
-function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, formatValue }: LoadFocusChartProps) {
+function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, formatValue, rangeMin, rangeMax }: LoadFocusChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -828,6 +832,26 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
               />
             );
           })}
+
+          {/* Min/max range reference lines */}
+          {rangeMin !== null && rangeMin <= maxBar && (
+            <line
+              x1={CHART_PADDING.left}
+              y1={yBar(rangeMin)}
+              x2={VIEW_BOX_W - CHART_PADDING.right}
+              y2={yBar(rangeMin)}
+              className="strava-goal-line"
+            />
+          )}
+          {rangeMax !== null && rangeMax <= maxBar && (
+            <line
+              x1={CHART_PADDING.left}
+              y1={yBar(rangeMax)}
+              x2={VIEW_BOX_W - CHART_PADDING.right}
+              y2={yBar(rangeMax)}
+              className="strava-goal-line"
+            />
+          )}
 
           {activeIndex !== null && (
             <line
@@ -1275,6 +1299,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
             summaryLabel={withLegendLabel(loadStr, rangeStr || null)}
             legendItems={LOAD_FOCUS_LEGEND_ITEMS}
             formatValue={loadFocusFmt}
+            rangeMin={data.latestMin}
+            rangeMax={data.latestMax}
           />
         );
       })}
