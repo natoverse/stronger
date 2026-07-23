@@ -296,6 +296,7 @@ export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
 const LOAD_FOCUS_BELOW = YELLOW;
 const LOAD_FOCUS_IN = GREEN;
 const LOAD_FOCUS_ABOVE = ORANGE;
+const LOAD_FOCUS_BAND = GRAY;
 
 /** Color a load value by its position relative to the optimal [min, max] band. */
 export function loadFocusColor(value: number | null, min: number | null, max: number | null): string {
@@ -804,8 +805,8 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
                 y={yTop}
                 width={barWidth}
                 height={Math.max(yBottom - yTop, 1)}
-                fill={LOAD_FOCUS_IN}
-                opacity={0.16}
+                fill={LOAD_FOCUS_BAND}
+                opacity={0.3}
               />
             );
           })}
