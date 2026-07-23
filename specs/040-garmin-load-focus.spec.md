@@ -51,3 +51,6 @@ mostRecentTrainingLoadBalance
   `scripts/test_garmin_wellness_sync.py`; row parsing and the chart builder
   covered in `src/google/__tests__/garmin-wellness-data.test.ts` and
   `src/model/__tests__/wellness.test.ts`.
+- **Iteration (2026-07).** Switched the optimal-range background band in the
+  load-focus charts from green to transparent gray so the shaded range is easier
+  to distinguish from in-range (green) bars.
