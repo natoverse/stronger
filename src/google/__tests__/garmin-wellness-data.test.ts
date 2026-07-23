@@ -13,7 +13,9 @@ describe('parseGarminWellnessRow', () => {
       '8500', '12', '52', '51.5', // steps/floors/RHR/VO2
       '30', '15',         // intensity min
       '68.2', '72.5',     // hill/endurance
+      '37', '12', '1625', // acclimation
       '520', '1850',      // calories
+      '41',               // stress
     ];
     const entry = parseGarminWellnessRow(row);
     expect(entry).not.toBeNull();
@@ -36,8 +38,12 @@ describe('parseGarminWellnessRow', () => {
     expect(entry!.intensityMinVigorous).toBe(15);
     expect(entry!.hillScore).toBe(68.2);
     expect(entry!.enduranceScore).toBe(72.5);
+    expect(entry!.heatAcclimationPct).toBe(37);
+    expect(entry!.altitudeAcclimationPct).toBe(12);
+    expect(entry!.currentAltitude).toBe(1625);
     expect(entry!.activeCalories).toBe(520);
     expect(entry!.bmrCalories).toBe(1850);
+    expect(entry!.avgStress).toBe(41);
   });
 
   it('returns null for empty date', () => {

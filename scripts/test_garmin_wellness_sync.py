@@ -31,6 +31,11 @@ def test_fetch_training_status_prefers_human_readable_fields():
     class FakeClient:
         def get_training_status(self, _cdate):
             return {
+                "heatAltitudeAcclimationDTO": {
+                    "heatAcclimationPercentage": 37,
+                    "altitudeAcclimationPercentage": 12,
+                    "currentAltitude": 1625,
+                },
                 "mostRecentTrainingStatus": {
                     "latestTrainingStatusData": {
                         "device-1": {
@@ -50,7 +55,40 @@ def test_fetch_training_status_prefers_human_readable_fields():
         "trainingStatus": "MAINTAINING",
         "trainingAcuteLoad": "224",
         "trainingChronicLoad": "252.5",
+        "heatAcclimationPct": "37",
+        "altitudeAcclimationPct": "12",
+        "currentAltitude": "1625",
     }, row
+
+
+def test_fetch_training_status_falls_back_to_vo2_acclimation_shape():
+    class FakeClient:
+        def get_training_status(self, _cdate):
+            return {
+                "mostRecentVO2Max": {
+                    "heatAltitudeAcclimation": {
+                        "heatAcclimationPercentage": 18,
+                        "altitudeAcclimation": 44,
+                        "currentAltitude": 2450,
+                    }
+                },
+                "mostRecentTrainingStatus": {
+                    "latestTrainingStatusData": {
+                        "device-1": {
+                            "trainingStatus": "PRODUCTIVE_1",
+                            "acuteTrainingLoadDTO": {
+                                "dailyTrainingLoadAcute": 180,
+                                "dailyTrainingLoadChronic": 210,
+                            },
+                        }
+                    }
+                },
+            }
+
+    row = garmin_wellness_sync._fetch_training_status(FakeClient(), "2026-07-14")
+    assert row["heatAcclimationPct"] == "18", row
+    assert row["altitudeAcclimationPct"] == "44", row
+    assert row["currentAltitude"] == "2450", row
 
 
 class _MockGarminClient:
@@ -186,6 +224,12 @@ def test_stress_ignores_no_data_sentinel():
     assert garmin_wellness_sync._stress(None) == ""
     assert garmin_wellness_sync._stress(0) == "0"
     assert garmin_wellness_sync._stress(62.4) == "62"
+
+
+def test_column_letter_supports_columns_past_z():
+    assert garmin_wellness_sync._column_letter(26) == "Z"
+    assert garmin_wellness_sync._column_letter(27) == "AA"
+    assert garmin_wellness_sync._column_letter(29) == "AC"
 
 
 def test_partition_rows_keys_on_date_column():

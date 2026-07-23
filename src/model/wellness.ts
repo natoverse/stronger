@@ -39,6 +39,9 @@ export type WellnessNumericMetric =
   | 'intensityMinVigorous'
   | 'hillScore'
   | 'enduranceScore'
+  | 'heatAcclimationPct'
+  | 'altitudeAcclimationPct'
+  | 'currentAltitude'
   | 'activeCalories'
   | 'bmrCalories'
   | 'avgStress';
@@ -70,6 +73,9 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
   intensityMinVigorous: 'Vigorous Intensity Min',
   hillScore: 'Hill Score',
   enduranceScore: 'Endurance Score',
+  heatAcclimationPct: 'Heat Acclimation',
+  altitudeAcclimationPct: 'Altitude Acclimation',
+  currentAltitude: 'Current Altitude',
   activeCalories: 'Active Calories',
   bmrCalories: 'Resting Calories (BMR)',
   avgStress: 'Stress',
@@ -92,6 +98,9 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   intensityMinVigorous: 'min',
   hillScore: '',
   enduranceScore: '',
+  heatAcclimationPct: '%',
+  altitudeAcclimationPct: '%',
+  currentAltitude: 'm',
   activeCalories: 'kcal',
   bmrCalories: 'kcal',
   avgStress: '',

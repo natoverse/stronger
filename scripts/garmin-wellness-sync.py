@@ -40,7 +40,7 @@ from urllib.parse import quote
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 TAB_NAME = "Stronger - Garmin Wellness"
 
-# 25 columns — keep in sync with src/google/config.ts GARMIN_WELLNESS_HEADER
+# 29 columns — keep in sync with src/google/sheets.ts GARMIN_WELLNESS_HEADER
 HEADER = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
@@ -52,11 +52,12 @@ HEADER = [
     "steps", "floors", "restingHR", "vo2Max",
     "intensityMinModerate", "intensityMinVigorous",
     "hillScore", "enduranceScore",
+    "heatAcclimationPct", "altitudeAcclimationPct", "currentAltitude",
     "activeCalories", "bmrCalories",
     "avgStress",
 ]
-COLUMN_COUNT = len(HEADER)   # 26 → A:Z
-assert COLUMN_COUNT == 26, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # 29 → A:AC
+assert COLUMN_COUNT == 29, "Header count mismatch"
 
 # Default window: the last 24 hours. Wellness data is stored per calendar day,
 # so a 24-hour lookback spans two calendar days (today plus yesterday) to make
@@ -318,6 +319,15 @@ def _fetch_training_status(client, cdate: str) -> dict:
         if not entry:
             return {}
         atl = entry.get("acuteTrainingLoadDTO") or {}
+        acclim = (
+            data.get("heatAltitudeAcclimationDTO")
+            or data.get("heatAltitudeAcclimation")
+            or (data.get("mostRecentVO2Max") or {}).get("heatAltitudeAcclimationDTO")
+            or (data.get("mostRecentVO2Max") or {}).get("heatAltitudeAcclimation")
+            or entry.get("heatAltitudeAcclimationDTO")
+            or entry.get("heatAltitudeAcclimation")
+            or {}
+        )
         status = normalize_training_status(
             entry.get("trainingStatusFeedbackPhrase")
             or entry.get("trainingStatusKey")
@@ -327,6 +337,17 @@ def _fetch_training_status(client, cdate: str) -> dict:
             "trainingStatus":      status,
             "trainingAcuteLoad":   _num(atl.get("dailyTrainingLoadAcute"), 1),
             "trainingChronicLoad": _num(atl.get("dailyTrainingLoadChronic"), 1),
+            "heatAcclimationPct": _num(
+                acclim.get("heatAcclimationPercentage") or acclim.get("heatAcclimation"),
+                0,
+            ),
+            "altitudeAcclimationPct": _num(
+                acclim.get("altitudeAcclimationPercentage")
+                or acclim.get("altitudeAcclimation")
+                or acclim.get("acclimationPercentage"),
+                0,
+            ),
+            "currentAltitude": _num(acclim.get("currentAltitude"), 0),
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] training_status: {exc}", file=sys.stderr)
@@ -566,7 +587,11 @@ def get_google_access_token(service_account_key: str) -> str:
 
 
 def _column_letter(n: int) -> str:
-    return chr(64 + n)
+    result = ""
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
 
 
 def _sheets_get(session, url: str, token: str) -> dict:

@@ -2863,12 +2863,13 @@ export const GARMIN_WELLNESS_HEADER: string[] = [
 	'steps', 'floors', 'restingHR', 'vo2Max',
 	'intensityMinModerate', 'intensityMinVigorous',
 	'hillScore', 'enduranceScore',
+	'heatAcclimationPct', 'altitudeAcclimationPct', 'currentAltitude',
 	'activeCalories', 'bmrCalories',
 	'avgStress',
 ]
 
-/** A1 range for reading Garmin wellness data (row 2 onward, 26 columns = A:Z). */
-const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:Z`
+/** A1 range for reading Garmin wellness data (row 2 onward, 29 columns = A:AC). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:AC`
 
 /** Column index map for the Garmin wellness row (0-based). */
 const WC = {
@@ -2882,8 +2883,9 @@ const WC = {
 	steps: 15, floors: 16, restingHR: 17, vo2Max: 18,
 	intensityMinModerate: 19, intensityMinVigorous: 20,
 	hillScore: 21, enduranceScore: 22,
-	activeCalories: 23, bmrCalories: 24,
-	avgStress: 25,
+	heatAcclimationPct: 23, altitudeAcclimationPct: 24, currentAltitude: 25,
+	activeCalories: 26, bmrCalories: 27,
+	avgStress: 28,
 } as const
 
 function parseNum(raw: string | undefined): number | null {
@@ -2960,6 +2962,9 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 		intensityMinVigorous: parseNum(row[WC.intensityMinVigorous]),
 		hillScore:            parseNum(row[WC.hillScore]),
 		enduranceScore:       parseNum(row[WC.enduranceScore]),
+		heatAcclimationPct:   parseNum(row[WC.heatAcclimationPct]),
+		altitudeAcclimationPct: parseNum(row[WC.altitudeAcclimationPct]),
+		currentAltitude:      parseNum(row[WC.currentAltitude]),
 		activeCalories:       parseNum(row[WC.activeCalories]),
 		bmrCalories:          parseNum(row[WC.bmrCalories]),
 		avgStress:            parseNum(row[WC.avgStress]),
