@@ -44,7 +44,16 @@ export type WellnessNumericMetric =
   | 'currentAltitude'
   | 'activeCalories'
   | 'bmrCalories'
-  | 'avgStress';
+  | 'avgStress'
+  | 'loadFocusAerobicLow'
+  | 'loadFocusAerobicLowMin'
+  | 'loadFocusAerobicLowMax'
+  | 'loadFocusAerobicHigh'
+  | 'loadFocusAerobicHighMin'
+  | 'loadFocusAerobicHighMax'
+  | 'loadFocusAnaerobic'
+  | 'loadFocusAnaerobicMin'
+  | 'loadFocusAnaerobicMax';
 
 /** Metrics that are SUMmed when aggregating (vs averaged). */
 const SUM_METRICS = new Set<WellnessNumericMetric>([
@@ -79,6 +88,15 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
   activeCalories: 'Active Calories',
   bmrCalories: 'Resting Calories (BMR)',
   avgStress: 'Stress',
+  loadFocusAerobicLow: 'Low Aerobic',
+  loadFocusAerobicLowMin: 'Low Aerobic (min)',
+  loadFocusAerobicLowMax: 'Low Aerobic (max)',
+  loadFocusAerobicHigh: 'High Aerobic',
+  loadFocusAerobicHighMin: 'High Aerobic (min)',
+  loadFocusAerobicHighMax: 'High Aerobic (max)',
+  loadFocusAnaerobic: 'Anaerobic',
+  loadFocusAnaerobicMin: 'Anaerobic (min)',
+  loadFocusAnaerobicMax: 'Anaerobic (max)',
 };
 
 export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
@@ -104,6 +122,15 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   activeCalories: 'kcal',
   bmrCalories: 'kcal',
   avgStress: '',
+  loadFocusAerobicLow: '',
+  loadFocusAerobicLowMin: '',
+  loadFocusAerobicLowMax: '',
+  loadFocusAerobicHigh: '',
+  loadFocusAerobicHighMin: '',
+  loadFocusAerobicHighMax: '',
+  loadFocusAnaerobic: '',
+  loadFocusAnaerobicMin: '',
+  loadFocusAnaerobicMax: '',
 };
 
 // ---------------------------------------------------------------------------
@@ -543,6 +570,100 @@ export function buildStackedCaloriesChartData(
     summary: totalCount > 0 ? totalSum / totalCount : null,
     latestActive,
     latestBmr,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Load focus (training load balance) chart data builder
+// ---------------------------------------------------------------------------
+
+/** The three Garmin load-focus intensity buckets. */
+export type LoadFocusArea = 'aerobicLow' | 'aerobicHigh' | 'anaerobic';
+
+export const LOAD_FOCUS_AREA_LABELS: Record<LoadFocusArea, string> = {
+  aerobicLow: 'Low Aerobic Load',
+  aerobicHigh: 'High Aerobic Load',
+  anaerobic: 'Anaerobic Load',
+};
+
+/** Map each area to its value/min/max metric field names. */
+const LOAD_FOCUS_METRICS: Record<
+  LoadFocusArea,
+  { value: WellnessNumericMetric; min: WellnessNumericMetric; max: WellnessNumericMetric }
+> = {
+  aerobicLow: {
+    value: 'loadFocusAerobicLow',
+    min: 'loadFocusAerobicLowMin',
+    max: 'loadFocusAerobicLowMax',
+  },
+  aerobicHigh: {
+    value: 'loadFocusAerobicHigh',
+    min: 'loadFocusAerobicHighMin',
+    max: 'loadFocusAerobicHighMax',
+  },
+  anaerobic: {
+    value: 'loadFocusAnaerobic',
+    min: 'loadFocusAnaerobicMin',
+    max: 'loadFocusAnaerobicMax',
+  },
+};
+
+export interface LoadFocusBucket {
+  label: string;
+  /** Load value for the bucket (bar height). */
+  value: number | null;
+  /** Optimal-range minimum for the bucket (band bottom). */
+  min: number | null;
+  /** Optimal-range maximum for the bucket (band top). */
+  max: number | null;
+}
+
+export interface LoadFocusChartData {
+  area: LoadFocusArea;
+  buckets: LoadFocusBucket[];
+  /** Average load across non-empty buckets (or latest in day mode via latestValue). */
+  summary: number | null;
+  /** Most recent non-null load value. */
+  latestValue: number | null;
+  /** Most recent non-null optimal range (min/max), for the header/legend. */
+  latestMin: number | null;
+  latestMax: number | null;
+}
+
+/**
+ * Build load-focus chart data for one intensity bucket: per-period load value
+ * plus the optimal target range (min/max). Values are averaged within a period
+ * (a load-focus reading is a rolling ~28-day total, so summing would be wrong).
+ */
+export function buildLoadFocusChartData(
+  entries: GarminWellnessEntry[],
+  area: LoadFocusArea,
+  range: string,
+  aggregation: StravaAggregation,
+  today: Date = new Date(),
+): LoadFocusChartData {
+  const metrics = LOAD_FOCUS_METRICS[area];
+  const valueData = buildWellnessChartData(entries, metrics.value, range, aggregation, today);
+  const minData = buildWellnessChartData(entries, metrics.min, range, aggregation, today);
+  const maxData = buildWellnessChartData(entries, metrics.max, range, aggregation, today);
+
+  const buckets: LoadFocusBucket[] = valueData.buckets.map((valueBucket, index) => ({
+    label: valueBucket.label,
+    value: valueBucket.value,
+    min: minData.buckets[index]?.value ?? null,
+    max: maxData.buckets[index]?.value ?? null,
+  }));
+
+  const reversed = [...buckets].reverse();
+  const latest = reversed.find((b) => b.value !== null || b.min !== null || b.max !== null) ?? null;
+
+  return {
+    area,
+    buckets,
+    summary: valueData.summary,
+    latestValue: valueData.latestValue,
+    latestMin: latest?.min ?? null,
+    latestMax: latest?.max ?? null,
   };
 }
 

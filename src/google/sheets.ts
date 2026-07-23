@@ -2850,7 +2850,7 @@ export function appSettingsToMap(
 
 /**
  * Column header row written to the "Stronger - Garmin Wellness" tab.
- * 26 columns (A–Z). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
+ * 38 columns (A–AL). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
  */
 export const GARMIN_WELLNESS_HEADER: string[] = [
 	'date',
@@ -2866,10 +2866,13 @@ export const GARMIN_WELLNESS_HEADER: string[] = [
 	'heatAcclimationPct', 'altitudeAcclimationPct', 'currentAltitude',
 	'activeCalories', 'bmrCalories',
 	'avgStress',
+	'loadFocusAerobicLow', 'loadFocusAerobicLowMin', 'loadFocusAerobicLowMax',
+	'loadFocusAerobicHigh', 'loadFocusAerobicHighMin', 'loadFocusAerobicHighMax',
+	'loadFocusAnaerobic', 'loadFocusAnaerobicMin', 'loadFocusAnaerobicMax',
 ]
 
-/** A1 range for reading Garmin wellness data (row 2 onward, 29 columns = A:AC). */
-const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:AC`
+/** A1 range for reading Garmin wellness data (row 2 onward, 38 columns = A:AL). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:AL`
 
 /** Column index map for the Garmin wellness row (0-based). */
 const WC = {
@@ -2886,6 +2889,9 @@ const WC = {
 	heatAcclimationPct: 23, altitudeAcclimationPct: 24, currentAltitude: 25,
 	activeCalories: 26, bmrCalories: 27,
 	avgStress: 28,
+	loadFocusAerobicLow: 29, loadFocusAerobicLowMin: 30, loadFocusAerobicLowMax: 31,
+	loadFocusAerobicHigh: 32, loadFocusAerobicHighMin: 33, loadFocusAerobicHighMax: 34,
+	loadFocusAnaerobic: 35, loadFocusAnaerobicMin: 36, loadFocusAnaerobicMax: 37,
 } as const
 
 function parseNum(raw: string | undefined): number | null {
@@ -2968,6 +2974,15 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 		activeCalories:       parseNum(row[WC.activeCalories]),
 		bmrCalories:          parseNum(row[WC.bmrCalories]),
 		avgStress:            parseNum(row[WC.avgStress]),
+		loadFocusAerobicLow:     parseNum(row[WC.loadFocusAerobicLow]),
+		loadFocusAerobicLowMin:  parseNum(row[WC.loadFocusAerobicLowMin]),
+		loadFocusAerobicLowMax:  parseNum(row[WC.loadFocusAerobicLowMax]),
+		loadFocusAerobicHigh:    parseNum(row[WC.loadFocusAerobicHigh]),
+		loadFocusAerobicHighMin: parseNum(row[WC.loadFocusAerobicHighMin]),
+		loadFocusAerobicHighMax: parseNum(row[WC.loadFocusAerobicHighMax]),
+		loadFocusAnaerobic:      parseNum(row[WC.loadFocusAnaerobic]),
+		loadFocusAnaerobicMin:   parseNum(row[WC.loadFocusAnaerobicMin]),
+		loadFocusAnaerobicMax:   parseNum(row[WC.loadFocusAnaerobicMax]),
 	}
 }
 

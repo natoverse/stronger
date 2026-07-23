@@ -8,13 +8,15 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { GarminWellnessEntry } from '../model/types.js';
-import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData, StackedCaloriesBucket } from '../model/wellness.js';
+import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData, StackedCaloriesBucket, LoadFocusBucket, LoadFocusArea } from '../model/wellness.js';
 import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
   buildStatusChartData,
   buildIntensityMinCombinedChartData,
   buildStackedCaloriesChartData,
+  buildLoadFocusChartData,
+  LOAD_FOCUS_AREA_LABELS,
   formatWellnessRatio,
   formatWellnessValue,
   WELLNESS_METRIC_LABELS,
@@ -288,6 +290,26 @@ export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
   { label: 'Exceeded (>125%)', color: BLUE },
   { label: 'Goal met', color: GREEN },
   { label: 'Below goal', color: YELLOW },
+];
+
+// Load focus: color the daily load bar by where it sits vs. the optimal range.
+const LOAD_FOCUS_BELOW = YELLOW;
+const LOAD_FOCUS_IN = GREEN;
+const LOAD_FOCUS_ABOVE = ORANGE;
+
+/** Color a load value by its position relative to the optimal [min, max] band. */
+export function loadFocusColor(value: number | null, min: number | null, max: number | null): string {
+  if (value === null) return GRAY;
+  if (max !== null && value > max) return LOAD_FOCUS_ABOVE;
+  if (min !== null && value < min) return LOAD_FOCUS_BELOW;
+  if (min !== null || max !== null) return LOAD_FOCUS_IN;
+  return ACCENT;
+}
+
+const LOAD_FOCUS_LEGEND_ITEMS: LegendItem[] = [
+  { label: 'Above optimal range', color: LOAD_FOCUS_ABOVE },
+  { label: 'In optimal range', color: LOAD_FOCUS_IN },
+  { label: 'Below optimal range', color: LOAD_FOCUS_BELOW },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -677,6 +699,160 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
 }
 
 /* ------------------------------------------------------------------ */
+/*  WellnessLoadFocusChart — daily load bars with optimal-range band   */
+/* ------------------------------------------------------------------ */
+
+interface LoadFocusChartProps {
+  label: string;
+  buckets: LoadFocusBucket[];
+  summaryLabel: string;
+  legendItems?: LegendItem[];
+  formatValue: (v: number | null) => string;
+}
+
+function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, formatValue }: LoadFocusChartProps) {
+  const n = buckets.length;
+  if (n === 0) return null;
+
+  // Y domain spans 0 → max of every value/min/max so bars and band both fit.
+  const domainValues = buckets.flatMap((b) => [b.value, b.min, b.max]).filter((v): v is number => v !== null);
+  const maxBar = domainValues.length > 0 ? Math.max(...domainValues, 0.001) : 0.001;
+
+  const barWidth = PLOT_W / n;
+  const barGap = Math.max(1, barWidth * 0.15);
+  const barInner = barWidth - barGap * 2;
+
+  const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
+  const yBar = (v: number) => CHART_PADDING.top + PLOT_H - (v / maxBar) * PLOT_H;
+
+  const yTicks = niceTicksFor(0, maxBar, 4);
+
+  const maxLabels = Math.min(n, 8);
+  const xLabelIndices: number[] = [];
+  if (n <= maxLabels) {
+    for (let i = 0; i < n; i++) xLabelIndices.push(i);
+  } else {
+    for (let i = 0; i < maxLabels; i++) {
+      xLabelIndices.push(Math.round((i / (maxLabels - 1)) * (n - 1)));
+    }
+  }
+
+  const xPositions = buckets.map((_, i) => xCenter(i));
+  const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
+  const activeBucket = activeIndex === null ? null : buckets[activeIndex] ?? null;
+  const activeTooltipValue = activeBucket === null || activeBucket.value === null
+    ? '—'
+    : formatValue(activeBucket.value);
+  const activeTooltipRange = activeBucket && (activeBucket.min !== null || activeBucket.max !== null)
+    ? `optimal ${formatValue(activeBucket.min)}–${formatValue(activeBucket.max)}`
+    : '';
+
+  return (
+    <div className="strava-chart-card">
+      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems} />
+
+      <div className="strava-chart-container" {...containerHandlers}>
+        <svg
+          ref={svgRef}
+          className="strava-chart-svg"
+          viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {yTicks.map((tick) => (
+            <line
+              key={`grid-${tick}`}
+              x1={CHART_PADDING.left} y1={yBar(tick)}
+              x2={VIEW_BOX_W - CHART_PADDING.right} y2={yBar(tick)}
+              className="strava-grid-line"
+            />
+          ))}
+
+          {yTicks.map((tick) => (
+            <text
+              key={`lbl-${tick}`}
+              x={CHART_PADDING.left - 4} y={yBar(tick)}
+              className="strava-axis-label"
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {formatValue(tick)}
+            </text>
+          ))}
+
+          {xLabelIndices.map((i) => (
+            <text
+              key={`xlbl-${i}`}
+              x={xCenter(i)} y={CHART_HEIGHT - 4}
+              className="strava-axis-label"
+              textAnchor="middle"
+            >
+              {buckets[i].label}
+            </text>
+          ))}
+
+          {/* Optimal-range band shading (per-bucket, shifts daily) */}
+          {buckets.map((b, i) => {
+            if (b.min === null && b.max === null) return null;
+            const low = Math.min(b.min ?? b.max!, b.max ?? b.min!);
+            const high = Math.max(b.min ?? b.max!, b.max ?? b.min!);
+            const yTop = yBar(high);
+            const yBottom = yBar(low);
+            return (
+              <rect
+                key={`band-${i}`}
+                x={CHART_PADDING.left + barWidth * i}
+                y={yTop}
+                width={barWidth}
+                height={Math.max(yBottom - yTop, 1)}
+                fill={LOAD_FOCUS_IN}
+                opacity={0.16}
+              />
+            );
+          })}
+
+          {/* Daily load bars */}
+          {buckets.map((b, i) => {
+            if (b.value === null) return null;
+            const h = Math.max((b.value / maxBar) * PLOT_H, 1);
+            return (
+              <rect
+                key={`bar-${i}`}
+                x={CHART_PADDING.left + barWidth * i + barGap}
+                y={CHART_PADDING.top + PLOT_H - h}
+                width={Math.max(barInner, 1)}
+                height={h}
+                fill={loadFocusColor(b.value, b.min, b.max)}
+                opacity={i === activeIndex ? 1 : 0.85}
+                rx={2}
+              />
+            );
+          })}
+
+          {activeIndex !== null && (
+            <line
+              x1={xCenter(activeIndex)} y1={CHART_PADDING.top}
+              x2={xCenter(activeIndex)} y2={CHART_PADDING.top + PLOT_H}
+              className="chart-crosshair"
+            />
+          )}
+        </svg>
+
+        {activeBucket !== null && (
+          <div
+            className="chart-tooltip"
+            style={{ left: `${(xCenter(activeIndex!) / VIEW_BOX_W) * 100}%` }}
+          >
+            <span className="chart-tooltip-value">{activeTooltipValue}</span>
+            {activeTooltipRange ? <span className="chart-tooltip-value">{activeTooltipRange}</span> : null}
+            <span className="chart-tooltip-date">{activeBucket.label}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  WellnessStatusBarChart — categorical full-height color bars       */
 /* ------------------------------------------------------------------ */
 
@@ -994,6 +1170,12 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
   const heatAcclimationData = useMemo(() => buildWellnessChartData(entries, 'heatAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
   const altitudeAcclimationData = useMemo(() => buildWellnessChartData(entries, 'altitudeAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
+  const loadFocusData = useMemo(
+    () => (['aerobicLow', 'aerobicHigh', 'anaerobic'] as LoadFocusArea[]).map(
+      (area) => buildLoadFocusChartData(entries, area, range, aggregation, today),
+    ),
+    [entries, range, aggregation, today],
+  );
 
   const hrvData         = useMemo(() => buildWellnessChartData(entries, 'hrvWeeklyAvg',         range, aggregation, today, 'hrvStatus'), [entries, range, aggregation, today]);
   const stressData      = useMemo(() => buildWellnessChartData(entries, 'avgStress',            range, aggregation, today), [entries, range, aggregation, today]);
@@ -1045,6 +1227,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const numFmt = (metric: Parameters<typeof formatWellnessValue>[1]) =>
     (v: number | null) => formatWellnessValue(v, metric);
 
+  const loadFocusFmt = (v: number | null) => (v === null ? '—' : String(Math.round(v)));
+
   return (
     <div className={embedded ? 'strava-subview' : 'strava-view'}>
       {/* Section: Training */}
@@ -1076,6 +1260,23 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
         formatValue={formatWellnessRatio}
       />
+      {loadFocusData.map((data) => {
+        const load = aggregation === 'day' ? data.latestValue : data.summary;
+        const loadStr = load === null ? '' : String(Math.round(load));
+        const rangeStr = data.latestMin !== null || data.latestMax !== null
+          ? `optimal ${loadFocusFmt(data.latestMin)}–${loadFocusFmt(data.latestMax)}`
+          : '';
+        return (
+          <WellnessLoadFocusChart
+            key={data.area}
+            label={LOAD_FOCUS_AREA_LABELS[data.area]}
+            buckets={data.buckets}
+            summaryLabel={withLegendLabel(loadStr, rangeStr || null)}
+            legendItems={LOAD_FOCUS_LEGEND_ITEMS}
+            formatValue={loadFocusFmt}
+          />
+        );
+      })}
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.vo2Max}
         unit={WELLNESS_METRIC_UNITS.vo2Max}

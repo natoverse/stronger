@@ -16,6 +16,9 @@ describe('parseGarminWellnessRow', () => {
       '37', '12', '1625', // acclimation
       '520', '1850',      // calories
       '41',               // stress
+      '320.4', '200', '400',   // load focus low aerobic (value, min, max)
+      '180.6', '150', '300',   // load focus high aerobic
+      '40.2', '50', '120',     // load focus anaerobic
     ];
     const entry = parseGarminWellnessRow(row);
     expect(entry).not.toBeNull();
@@ -44,6 +47,15 @@ describe('parseGarminWellnessRow', () => {
     expect(entry!.activeCalories).toBe(520);
     expect(entry!.bmrCalories).toBe(1850);
     expect(entry!.avgStress).toBe(41);
+    expect(entry!.loadFocusAerobicLow).toBe(320.4);
+    expect(entry!.loadFocusAerobicLowMin).toBe(200);
+    expect(entry!.loadFocusAerobicLowMax).toBe(400);
+    expect(entry!.loadFocusAerobicHigh).toBe(180.6);
+    expect(entry!.loadFocusAerobicHighMin).toBe(150);
+    expect(entry!.loadFocusAerobicHighMax).toBe(300);
+    expect(entry!.loadFocusAnaerobic).toBe(40.2);
+    expect(entry!.loadFocusAnaerobicMin).toBe(50);
+    expect(entry!.loadFocusAnaerobicMax).toBe(120);
   });
 
   it('returns null for empty date', () => {

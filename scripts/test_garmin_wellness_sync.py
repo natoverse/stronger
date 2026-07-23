@@ -47,7 +47,22 @@ def test_fetch_training_status_prefers_human_readable_fields():
                             },
                         }
                     }
-                }
+                },
+                "mostRecentTrainingLoadBalance": {
+                    "metricsTrainingLoadBalanceDTOMap": {
+                        "device-1": {
+                            "monthlyLoadAerobicLow": 320.4,
+                            "monthlyLoadAerobicLowTargetMin": 200,
+                            "monthlyLoadAerobicLowTargetMax": 400,
+                            "monthlyLoadAerobicHigh": 180.6,
+                            "monthlyLoadAerobicHighTargetMin": 150,
+                            "monthlyLoadAerobicHighTargetMax": 300,
+                            "monthlyLoadAnaerobic": 40.2,
+                            "monthlyLoadAnaerobicTargetMin": 50,
+                            "monthlyLoadAnaerobicTargetMax": 120,
+                        }
+                    }
+                },
             }
 
     row = garmin_wellness_sync._fetch_training_status(FakeClient(), "2026-07-14")
@@ -58,7 +73,43 @@ def test_fetch_training_status_prefers_human_readable_fields():
         "heatAcclimationPct": "37",
         "altitudeAcclimationPct": "12",
         "currentAltitude": "1625",
+        "loadFocusAerobicLow": "320.4",
+        "loadFocusAerobicLowMin": "200",
+        "loadFocusAerobicLowMax": "400",
+        "loadFocusAerobicHigh": "180.6",
+        "loadFocusAerobicHighMin": "150",
+        "loadFocusAerobicHighMax": "300",
+        "loadFocusAnaerobic": "40.2",
+        "loadFocusAnaerobicMin": "50",
+        "loadFocusAnaerobicMax": "120",
     }, row
+
+
+def test_fetch_training_status_omits_load_focus_when_balance_missing():
+    class FakeClient:
+        def get_training_status(self, _cdate):
+            return {
+                "mostRecentTrainingStatus": {
+                    "latestTrainingStatusData": {
+                        "device-1": {
+                            "trainingStatus": 7,
+                            "acuteTrainingLoadDTO": {
+                                "dailyTrainingLoadAcute": 200,
+                                "dailyTrainingLoadChronic": 210,
+                            },
+                        }
+                    }
+                },
+            }
+
+    row = garmin_wellness_sync._fetch_training_status(FakeClient(), "2026-07-14")
+    # All load-focus columns present but blank when no balance data.
+    for key in (
+        "loadFocusAerobicLow", "loadFocusAerobicLowMin", "loadFocusAerobicLowMax",
+        "loadFocusAerobicHigh", "loadFocusAerobicHighMin", "loadFocusAerobicHighMax",
+        "loadFocusAnaerobic", "loadFocusAnaerobicMin", "loadFocusAnaerobicMax",
+    ):
+        assert row[key] == "", (key, row)
 
 
 def test_fetch_training_status_falls_back_to_vo2_acclimation_shape():
