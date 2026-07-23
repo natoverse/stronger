@@ -709,13 +709,9 @@ interface LoadFocusChartProps {
   summaryLabel: string;
   legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
-  /** Latest optimal-range minimum — draws a dashed reference line. */
-  rangeMin: number | null;
-  /** Latest optimal-range maximum — draws a dashed reference line. */
-  rangeMax: number | null;
 }
 
-function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, formatValue, rangeMin, rangeMax }: LoadFocusChartProps) {
+function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, formatValue }: LoadFocusChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -833,25 +829,20 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
             );
           })}
 
-          {/* Min/max range reference lines */}
-          {rangeMin !== null && rangeMin <= maxBar && (
-            <line
-              x1={CHART_PADDING.left}
-              y1={yBar(rangeMin)}
-              x2={VIEW_BOX_W - CHART_PADDING.right}
-              y2={yBar(rangeMin)}
-              className="strava-goal-line"
-            />
-          )}
-          {rangeMax !== null && rangeMax <= maxBar && (
-            <line
-              x1={CHART_PADDING.left}
-              y1={yBar(rangeMax)}
-              x2={VIEW_BOX_W - CHART_PADDING.right}
-              y2={yBar(rangeMax)}
-              className="strava-goal-line"
-            />
-          )}
+          {/* Dynamic min/max reference lines — trace per-bucket optimal range */}
+          {(['min', 'max'] as const).map((key) => {
+            const cmds: string[] = [];
+            let lastWasNull = true;
+            for (let i = 0; i < buckets.length; i++) {
+              const v = buckets[i][key];
+              if (v === null || v > maxBar) { lastWasNull = true; continue; }
+              const cmd = lastWasNull ? 'M' : 'L';
+              cmds.push(`${cmd} ${xCenter(i)} ${yBar(v)}`);
+              lastWasNull = false;
+            }
+            const d = cmds.join(' ');
+            return d ? <path key={key} d={d} className="strava-goal-line" fill="none" /> : null;
+          })}
 
           {activeIndex !== null && (
             <line
@@ -1299,8 +1290,6 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
             summaryLabel={withLegendLabel(loadStr, rangeStr || null)}
             legendItems={LOAD_FOCUS_LEGEND_ITEMS}
             formatValue={loadFocusFmt}
-            rangeMin={data.latestMin}
-            rangeMax={data.latestMax}
           />
         );
       })}
