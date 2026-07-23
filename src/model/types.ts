@@ -516,6 +516,12 @@ export interface GarminWellnessEntry {
 	hillScore: number | null;
 	/** Endurance Score (0–100). */
 	enduranceScore: number | null;
+	/** Heat acclimation percentage (0–100). */
+	heatAcclimationPct: number | null;
+	/** Altitude acclimation percentage (0–100). */
+	altitudeAcclimationPct: number | null;
+	/** Daily altitude seen by Garmin's acclimation model, in meters. */
+	currentAltitude: number | null;
 
 	// Calories
 	/** Active (exercise) calories burned during the day, in kcal. */

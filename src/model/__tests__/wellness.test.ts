@@ -31,6 +31,9 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     intensityMinVigorous: null,
     hillScore: null,
     enduranceScore: null,
+    heatAcclimationPct: null,
+    altitudeAcclimationPct: null,
+    currentAltitude: null,
     activeCalories: null,
     bmrCalories: null,
     avgStress: null,
@@ -53,9 +56,9 @@ describe('buildWellnessChartData', () => {
       'hrvStatus',
     );
 
-    const june15 = data.buckets.find((bucket) => bucket.label === '15');
-    const june16 = data.buckets.find((bucket) => bucket.label === '16');
-    const june17 = data.buckets.find((bucket) => bucket.label === '17');
+    const june15 = data.buckets.find((bucket) => bucket.label === '6/15');
+    const june16 = data.buckets.find((bucket) => bucket.label === '6/16');
+    const june17 = data.buckets.find((bucket) => bucket.label === '6/17');
 
     expect(june15).toMatchObject({ value: 51, colorKey: 'BALANCED' });
     expect(june16).toMatchObject({ value: 47, colorKey: 'LOW' });
@@ -78,11 +81,12 @@ describe('buildTrainingLoadRatioChartData', () => {
 
     const chart = buildTrainingLoadRatioChartData(entries, 'month', 'day', today);
 
-    expect(chart.buckets[0].value).toBeCloseTo(0.7);
-    expect(chart.buckets[1].value).toBeCloseTo(0.8);
-    expect(chart.buckets[2].value).toBeCloseTo(2);
-    expect(chart.buckets[3].value).toBeNull();
-    expect(chart.summary).toBeCloseTo((0.7 + 0.8 + 2) / 3);
+    expect(chart.buckets.find((bucket) => bucket.label === '6/1')?.value).toBeCloseTo(0.7);
+    expect(chart.buckets.find((bucket) => bucket.label === '6/2')?.value).toBeCloseTo(0.8);
+    expect(chart.buckets.find((bucket) => bucket.label === '6/3')?.value).toBeCloseTo(2);
+    expect(chart.buckets.find((bucket) => bucket.label === '6/4')?.value).toBeNull();
+    expect(chart.buckets.find((bucket) => bucket.label === '5/31')?.value).toBeCloseTo(999);
+    expect(chart.summary).toBeCloseTo((999 + 0.7 + 0.8 + 2) / 4);
     expect(chart.latestValue).toBeCloseTo(2);
   });
 

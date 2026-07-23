@@ -992,6 +992,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const vo2Data         = useMemo(() => buildWellnessChartData(entries, 'vo2Max',               range, aggregation, today), [entries, range, aggregation, today]);
   const hillData        = useMemo(() => buildWellnessChartData(entries, 'hillScore',            range, aggregation, today), [entries, range, aggregation, today]);
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
+  const heatAcclimationData = useMemo(() => buildWellnessChartData(entries, 'heatAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
+  const altitudeAcclimationData = useMemo(() => buildWellnessChartData(entries, 'altitudeAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
 
   const hrvData         = useMemo(() => buildWellnessChartData(entries, 'hrvWeeklyAvg',         range, aggregation, today, 'hrvStatus'), [entries, range, aggregation, today]);
   const stressData      = useMemo(() => buildWellnessChartData(entries, 'avgStress',            range, aggregation, today), [entries, range, aggregation, today]);
@@ -1109,6 +1111,20 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={ENDURANCE_SCORE_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? enduranceScoreColor(v) : GRAY}
         formatValue={numFmt('enduranceScore')}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.heatAcclimationPct}
+        unit={WELLNESS_METRIC_UNITS.heatAcclimationPct}
+        buckets={heatAcclimationData.buckets}
+        summaryLabel={summaryStr(summaryValue(heatAcclimationData), 'heatAcclimationPct', WELLNESS_METRIC_UNITS.heatAcclimationPct)}
+        formatValue={numFmt('heatAcclimationPct')}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.altitudeAcclimationPct}
+        unit={WELLNESS_METRIC_UNITS.altitudeAcclimationPct}
+        buckets={altitudeAcclimationData.buckets}
+        summaryLabel={summaryStr(summaryValue(altitudeAcclimationData), 'altitudeAcclimationPct', WELLNESS_METRIC_UNITS.altitudeAcclimationPct)}
+        formatValue={numFmt('altitudeAcclimationPct')}
       />
 
       {/* Section: Recovery */}
