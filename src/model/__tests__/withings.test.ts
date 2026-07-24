@@ -29,6 +29,7 @@ function makeMeasurement(overrides: Partial<WithingsMeasurement> = {}): Withings
     hydration: 45,
     fatFreeMass: 64,
     heartRate: 58,
+    visceralFat: 8,
     ...overrides,
   };
 }
@@ -61,9 +62,10 @@ describe('metric metadata', () => {
     expect(METRIC_UNITS.heartRate).toBe('bpm');
   });
 
-  it('includes fat-free (lean) mass and resting heart rate', () => {
+  it('includes fat-free (lean) mass, resting heart rate, and visceral fat', () => {
     expect(WITHINGS_METRICS).toContain('fatFreeMass');
     expect(WITHINGS_METRICS).toContain('heartRate');
+    expect(WITHINGS_METRICS).toContain('visceralFat');
   });
 });
 
@@ -81,11 +83,13 @@ describe('toDisplayUnit / fromDisplayUnit', () => {
   it('leaves non-mass metrics unchanged', () => {
     expect(toDisplayUnit('fatRatio', 20)).toBe(20);
     expect(toDisplayUnit('heartRate', 58)).toBe(58);
+    expect(toDisplayUnit('visceralFat', 8)).toBe(8);
   });
 
   it('round-trips through fromDisplayUnit', () => {
     expect(fromDisplayUnit('weight', toDisplayUnit('weight', 80))).toBeCloseTo(80, 6);
     expect(fromDisplayUnit('heartRate', 58)).toBe(58);
+    expect(fromDisplayUnit('visceralFat', 8)).toBe(8);
   });
 });
 
@@ -179,6 +183,18 @@ describe('buildMetricTrendData', () => {
     expect(data.points[2].value).toBeNull(); // March had no HR reading
     expect(data.points[3].value).toBe(61); // April (bpm, unconverted)
     expect(data.latest).toBe(61);
+  });
+
+  it('keeps visceral fat in score units', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', visceralFat: 9 }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', visceralFat: 8 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'visceralFat', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBe(9);
+    expect(data.points[3].value).toBe(8);
+    expect(data.latest).toBe(8);
+    expect(data.delta).toBe(-1);
   });
 
   it('tracks min and max across the range', () => {
@@ -326,6 +342,10 @@ describe('formatMetricValue', () => {
 
   it('formats resting heart rate as a whole number', () => {
     expect(formatMetricValue(57.6, 'heartRate')).toBe('58');
+  });
+
+  it('formats visceral fat as a whole number', () => {
+    expect(formatMetricValue(7.6, 'visceralFat')).toBe('8');
   });
 
   it('formats mass under 100 with one decimal', () => {

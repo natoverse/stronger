@@ -376,6 +376,8 @@ export interface WithingsMeasurement {
 	fatFreeMass: number | null;
 	/** Resting heart rate in bpm at weigh-in, or null if not measured. */
 	heartRate: number | null;
+	/** Visceral fat score at weigh-in, or null if not measured. */
+	visceralFat: number | null;
 }
 
 // ---------------------------------------------------------------------------

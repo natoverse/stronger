@@ -29,7 +29,8 @@ export type WithingsMetric =
   | 'boneMass'
   | 'hydration'
   | 'fatFreeMass'
-  | 'heartRate';
+  | 'heartRate'
+  | 'visceralFat';
 
 /** Reuse Strava's range and aggregation vocabulary for a consistent UI. */
 export type WithingsTimeRange = StravaTimeRange;
@@ -89,6 +90,7 @@ export const WITHINGS_METRICS: WithingsMetric[] = [
   'boneMass',
   'hydration',
   'heartRate',
+  'visceralFat',
 ];
 
 /* ------------------------------------------------------------------ */
@@ -131,6 +133,7 @@ export const METRIC_UNITS: Record<WithingsMetric, string> = {
   hydration: 'lb',
   fatFreeMass: 'lb',
   heartRate: 'bpm',
+  visceralFat: 'score',
 };
 
 export const METRIC_LABELS: Record<WithingsMetric, string> = {
@@ -142,6 +145,7 @@ export const METRIC_LABELS: Record<WithingsMetric, string> = {
   hydration: 'Hydration',
   fatFreeMass: 'Lean Mass',
   heartRate: 'Resting Heart Rate',
+  visceralFat: 'Visceral Fat',
 };
 
 /** Whether lower values are "better" for this metric — used only for delta coloring. */
@@ -154,6 +158,7 @@ export const METRIC_LOWER_IS_BETTER: Record<WithingsMetric, boolean> = {
   hydration: false,
   fatFreeMass: false,
   heartRate: true,
+  visceralFat: true,
 };
 
 /* ------------------------------------------------------------------ */
@@ -434,7 +439,7 @@ export function filterTrendDips(
 /** Format a display-unit value for axis labels and headline figures. */
 export function formatMetricValue(v: number, metric: WithingsMetric): string {
   if (metric === 'fatRatio') return v.toFixed(1);
-  if (metric === 'heartRate') return v.toFixed(0);
+  if (metric === 'heartRate' || metric === 'visceralFat') return v.toFixed(0);
   // Mass metrics (lb): one decimal below 100, whole numbers above.
   if (v >= 100) return v.toFixed(0);
   return v.toFixed(1);
