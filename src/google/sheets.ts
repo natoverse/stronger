@@ -2317,14 +2317,14 @@ export async function readGarminActivities(
 /*  Withings tab – constants                                           */
 /* ------------------------------------------------------------------ */
 
-/** A1 range for the Withings tab (open-ended rows, 10 columns). */
-export const WITHINGS_SYNC_RANGE = `'${WITHINGS_TAB_NAME}'!A:J`
+/** A1 range for the Withings tab (open-ended rows, 11 columns). */
+export const WITHINGS_SYNC_RANGE = `'${WITHINGS_TAB_NAME}'!A:K`
 
 /** A1 range for the Withings tab header (row 1). */
-const WITHINGS_HEADER_RANGE = `'${WITHINGS_TAB_NAME}'!A1:J1`
+const WITHINGS_HEADER_RANGE = `'${WITHINGS_TAB_NAME}'!A1:K1`
 
 /** A1 range for reading Withings data (row 2 onward, open-ended). */
-const WITHINGS_READ_RANGE = `'${WITHINGS_TAB_NAME}'!A2:J`
+const WITHINGS_READ_RANGE = `'${WITHINGS_TAB_NAME}'!A2:K`
 
 export const WITHINGS_HEADER: string[] = [
 	'date',
@@ -2337,6 +2337,7 @@ export const WITHINGS_HEADER: string[] = [
 	'hydration',
 	'fatFreeMass',
 	'heartRate',
+	'visceralFat',
 ]
 
 /* ------------------------------------------------------------------ */
@@ -2361,6 +2362,7 @@ export function withingsMeasurementToRow(m: WithingsMeasurement): string[] {
 		optionalNumToCell(m.hydration),
 		optionalNumToCell(m.fatFreeMass),
 		optionalNumToCell(m.heartRate),
+		optionalNumToCell(m.visceralFat),
 	]
 }
 
@@ -2407,6 +2409,7 @@ export function parseWithingsRow(row: string[]): WithingsMeasurement | null {
 		hydration: parseOptionalNum(row[7]),
 		fatFreeMass: parseOptionalNum(row[8]),
 		heartRate: parseOptionalNum(row[9]),
+		visceralFat: parseOptionalNum(row[10]),
 	}
 }
 
@@ -2652,6 +2655,7 @@ const VALID_BODY_GOAL_METRICS = new Set([
 	'hydration',
 	'fatFreeMass',
 	'heartRate',
+	'visceralFat',
 ])
 
 /**

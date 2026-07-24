@@ -10,7 +10,7 @@ import type { WithingsGoal } from '../../model/withings.ts'
 describe('parseWithingsRow', () => {
 	it('parses a full row', () => {
 		expect(
-			parseWithingsRow(['2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45', '64', '58']),
+			parseWithingsRow(['2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45', '64', '58', '8']),
 		).toEqual({
 			date: '2026-06-15',
 			grpId: '1000',
@@ -22,11 +22,12 @@ describe('parseWithingsRow', () => {
 			hydration: 45,
 			fatFreeMass: 64,
 			heartRate: 58,
+			visceralFat: 8,
 		})
 	})
 
 	it('trims whitespace', () => {
-		const result = parseWithingsRow([' 2026-06-15 ', ' 1000 ', ' 80.2 ', '', '', '', '', '', '', ''])
+		const result = parseWithingsRow([' 2026-06-15 ', ' 1000 ', ' 80.2 ', '', '', '', '', '', '', '', ''])
 		expect(result).not.toBeNull()
 		expect(result!.date).toBe('2026-06-15')
 		expect(result!.grpId).toBe('1000')
@@ -43,6 +44,7 @@ describe('parseWithingsRow', () => {
 		expect(result!.hydration).toBeNull()
 		expect(result!.fatFreeMass).toBeNull()
 		expect(result!.heartRate).toBeNull()
+		expect(result!.visceralFat).toBeNull()
 	})
 
 	it('parses a weight-only row (short array)', () => {
@@ -55,10 +57,16 @@ describe('parseWithingsRow', () => {
 	})
 
 	it('parses fat-free mass and heart rate when present', () => {
-		const result = parseWithingsRow(['2026-06-15', '1000', '80', '', '', '', '', '', '64.5', '57'])
+		const result = parseWithingsRow(['2026-06-15', '1000', '80', '', '', '', '', '', '64.5', '57', ''])
 		expect(result).not.toBeNull()
 		expect(result!.fatFreeMass).toBe(64.5)
 		expect(result!.heartRate).toBe(57)
+	})
+
+	it('parses visceral fat when present', () => {
+		const result = parseWithingsRow(['2026-06-15', '1000', '80', '', '', '', '', '', '', '', '9'])
+		expect(result).not.toBeNull()
+		expect(result!.visceralFat).toBe(9)
 	})
 
 	it('rejects a row with no weight', () => {
@@ -67,19 +75,20 @@ describe('parseWithingsRow', () => {
 	})
 
 	it('rejects a row missing date or grpId', () => {
-		expect(parseWithingsRow(['', '1000', '80', '', '', '', '', '', '', ''])).toBeNull()
-		expect(parseWithingsRow(['2026-06-15', '', '80', '', '', '', '', '', '', ''])).toBeNull()
+		expect(parseWithingsRow(['', '1000', '80', '', '', '', '', '', '', '', ''])).toBeNull()
+		expect(parseWithingsRow(['2026-06-15', '', '80', '', '', '', '', '', '', '', ''])).toBeNull()
 	})
 
 	it('rejects a malformed date', () => {
-		expect(parseWithingsRow(['06/15/2026', '1000', '80', '', '', '', '', '', '', ''])).toBeNull()
+		expect(parseWithingsRow(['06/15/2026', '1000', '80', '', '', '', '', '', '', '', ''])).toBeNull()
 	})
 
 	it('treats a negative body-composition value as absent', () => {
-		const result = parseWithingsRow(['2026-06-15', '1000', '80', '-5', '20', '', '', '', '', ''])
+		const result = parseWithingsRow(['2026-06-15', '1000', '80', '-5', '20', '', '', '', '', '', '-1'])
 		expect(result).not.toBeNull()
 		expect(result!.fatMass).toBeNull()
 		expect(result!.fatRatio).toBe(20)
+		expect(result!.visceralFat).toBeNull()
 	})
 })
 
@@ -100,9 +109,10 @@ describe('withingsMeasurementToRow', () => {
 			hydration: 45,
 			fatFreeMass: 64,
 			heartRate: 58,
+			visceralFat: 8,
 		}
 		expect(withingsMeasurementToRow(m)).toEqual([
-			'2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45', '64', '58',
+			'2026-06-15', '1000', '80.2', '16', '20', '60', '3', '45', '64', '58', '8',
 		])
 	})
 
@@ -118,9 +128,10 @@ describe('withingsMeasurementToRow', () => {
 			hydration: null,
 			fatFreeMass: null,
 			heartRate: null,
+			visceralFat: null,
 		}
 		expect(withingsMeasurementToRow(m)).toEqual([
-			'2026-06-15', '1000', '80', '', '', '', '', '', '', '',
+			'2026-06-15', '1000', '80', '', '', '', '', '', '', '', '',
 		])
 	})
 
@@ -136,6 +147,7 @@ describe('withingsMeasurementToRow', () => {
 			hydration: 44,
 			fatFreeMass: 64,
 			heartRate: null,
+			visceralFat: 7,
 		}
 		expect(parseWithingsRow(withingsMeasurementToRow(m))).toEqual(m)
 	})
@@ -150,6 +162,7 @@ describe('bodyGoalsFromSettings / bodyGoalsToSettings', () => {
 		const settings = new Map<string, string>([
 			['bodyGoal.weight', '75'],
 			['bodyGoal.fatRatio', '15'],
+			['bodyGoal.visceralFat', '8'],
 			['goal.distance', '1500'], // Strava goal — must be ignored
 			['unrelated', 'x'],
 		])
@@ -157,6 +170,7 @@ describe('bodyGoalsFromSettings / bodyGoalsToSettings', () => {
 		expect(goals).toEqual([
 			{ metric: 'weight', value: 75 },
 			{ metric: 'fatRatio', value: 15 },
+			{ metric: 'visceralFat', value: 8 },
 		])
 	})
 

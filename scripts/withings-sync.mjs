@@ -37,8 +37,8 @@ const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure'
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 const TAB_NAME = 'Stronger - Withings'
-const HEADER = ['date', 'grpId', 'weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate']
-const COLUMN_COUNT = HEADER.length // 10 → columns A:J
+const HEADER = ['date', 'grpId', 'weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate', 'visceralFat']
+const COLUMN_COUNT = HEADER.length // 11 → columns A:K
 
 // Infra tab: internal key/value store for rotating credentials.
 const INFRA_TAB_NAME = 'Stronger - Infra'
@@ -55,9 +55,10 @@ const MEASTYPE = {
 	hydration: 77,
 	fatFreeMass: 5,
 	heartRate: 11,
+	visceralFat: 170,
 }
 // Order matters — this is the column order after date/grpId.
-const METRIC_KEYS = ['weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate']
+const METRIC_KEYS = ['weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate', 'visceralFat']
 const MEASTYPES_PARAM = METRIC_KEYS.map((k) => MEASTYPE[k]).join(',')
 
 // How far back to fetch on each run. Withings measurements are sparse (one

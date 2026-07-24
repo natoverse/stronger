@@ -1,6 +1,6 @@
 # Withings Sync Setup
 
-Stronger can sync body-composition data (weight, body fat, muscle mass, bone mass, hydration) into Google Sheets via the Withings API. A scheduled GitHub Actions workflow pulls your latest measurements into a "Stronger - Withings" tab in your spreadsheet.
+Stronger can sync body-composition data (weight, body fat, muscle mass, bone mass, hydration, visceral fat, and more) into Google Sheets via the Withings API. A scheduled GitHub Actions workflow pulls your latest measurements into a "Stronger - Withings" tab in your spreadsheet.
 
 The workflow runs daily at 06:30 UTC and can also be triggered manually. It's idempotent — re-runs won't create duplicate rows.
 
@@ -34,10 +34,11 @@ Each row in the "Stronger - Withings" tab is one weigh-in and contains:
 | `hydration` | Body water in kg (blank if not measured) |
 | `fatFreeMass` | Fat-free (lean) mass in kg (blank if not measured) |
 | `heartRate` | Resting heart rate in bpm at weigh-in (blank if not measured) |
+| `visceralFat` | Visceral fat score (blank if not measured) |
 
 Cells are blank when a given weigh-in didn't capture that metric (e.g. a scale without body-composition sensors reports only `weight`).
 
-> **Units:** the sheet stores masses in **kilograms** (matching the Withings API). The app converts to **pounds** for display — you'll only ever see lb in the Body Composition view. Body fat is a percentage and heart rate is bpm; neither is converted.
+> **Units:** the sheet stores masses in **kilograms** (matching the Withings API). The app converts to **pounds** for display — you'll only ever see lb in the Body Composition view. Body fat is a percentage, heart rate is bpm, and visceral fat is a score; none of those are converted.
 
 ## Prerequisites
 
