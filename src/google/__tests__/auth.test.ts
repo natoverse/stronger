@@ -25,6 +25,12 @@ function mockGoogle(
 	}
 }
 
+function mockTokenClient(_config: TokenClientConfig): TokenClient {
+	return {
+		requestAccessToken: vi.fn(),
+	}
+}
+
 async function loadAuth() {
 	vi.stubEnv('VITE_GOOGLE_CLIENT_ID', CLIENT_ID)
 	vi.resetModules()
@@ -44,11 +50,7 @@ describe('Google authentication', () => {
 		let config: TokenClientConfig | undefined
 		window.google = mockGoogle((nextConfig) => {
 			config = nextConfig
-			return {
-				callback: nextConfig.callback,
-				error_callback: nextConfig.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(nextConfig)
 		})
 		const auth = await loadAuth()
 
@@ -66,11 +68,7 @@ describe('Google authentication', () => {
 		const configs: TokenClientConfig[] = []
 		window.google = mockGoogle((config) => {
 			configs.push(config)
-			return {
-				callback: config.callback,
-				error_callback: config.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(config)
 		})
 		const auth = await loadAuth()
 
@@ -88,15 +86,48 @@ describe('Google authentication', () => {
 		vi.useRealTimers()
 	})
 
+	it('reuses the token client after a completed request', async () => {
+		let config: TokenClientConfig | undefined
+		window.google = mockGoogle((nextConfig) => {
+			config = nextConfig
+			return mockTokenClient(nextConfig)
+		})
+		const auth = await loadAuth()
+
+		const first = auth.silentSignIn()
+		config?.callback({ access_token: 'first-token', expires_in: 3600 })
+		await expect(first).resolves.toBe('first-token')
+
+		const second = auth.silentSignIn()
+		expect(window.google.accounts.oauth2.initTokenClient).toHaveBeenCalledTimes(1)
+		config?.callback({ access_token: 'second-token', expires_in: 3600 })
+		await expect(second).resolves.toBe('second-token')
+	})
+
+	it('isolates concurrent silent and interactive requests', async () => {
+		const configs: TokenClientConfig[] = []
+		window.google = mockGoogle((config) => {
+			configs.push(config)
+			return mockTokenClient(config)
+		})
+		const auth = await loadAuth()
+
+		const silentAttempt = auth.silentSignIn()
+		const interactiveAttempt = auth.signIn()
+
+		expect(window.google.accounts.oauth2.initTokenClient).toHaveBeenCalledTimes(2)
+		configs[0].callback({ access_token: 'silent-token', expires_in: 3600 })
+		configs[1].callback({ access_token: 'interactive-token', expires_in: 3600 })
+
+		await expect(silentAttempt).resolves.toBe('silent-token')
+		await expect(interactiveAttempt).resolves.toBe('interactive-token')
+	})
+
 	it('turns popup failures into actionable errors', async () => {
 		let config: TokenClientConfig | undefined
 		window.google = mockGoogle((nextConfig) => {
 			config = nextConfig
-			return {
-				callback: nextConfig.callback,
-				error_callback: nextConfig.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(nextConfig)
 		})
 		const auth = await loadAuth()
 
@@ -104,5 +135,35 @@ describe('Google authentication', () => {
 		config?.error_callback?.({ type: 'popup_failed_to_open' })
 
 		await expect(attempt).rejects.toThrow('Allow popups for this site')
+	})
+
+	it('allows interactive sign-in to remain open while the user completes it', async () => {
+		vi.useFakeTimers()
+		let config: TokenClientConfig | undefined
+		window.google = mockGoogle((nextConfig) => {
+			config = nextConfig
+			return mockTokenClient(nextConfig)
+		})
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		await vi.advanceTimersByTimeAsync(20_000)
+		config?.callback({ access_token: 'token', expires_in: 3600 })
+
+		await expect(attempt).resolves.toBe('token')
+		vi.useRealTimers()
+	})
+
+	it('eventually releases an unresponsive interactive sign-in', async () => {
+		vi.useFakeTimers()
+		window.google = mockGoogle(mockTokenClient)
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		const result = expect(attempt).rejects.toThrow('timed out')
+		await vi.advanceTimersByTimeAsync(5 * 60_000)
+
+		await result
+		vi.useRealTimers()
 	})
 })

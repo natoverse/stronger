@@ -236,8 +236,6 @@ export interface TokenRequestOverrides {
 
 /** Token client returned by initTokenClient. */
 export interface TokenClient {
-	callback: (resp: TokenResponse) => void
-	error_callback?: (err: TokenError) => void
 	requestAccessToken: (overrides?: TokenRequestOverrides) => void
 }
 

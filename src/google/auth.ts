@@ -26,7 +26,7 @@ import {
 	loadUserEmail,
 	clearUserEmail,
 } from './storage.ts'
-import type { TokenClient, TokenResponse, TokenRequestOverrides } from './types.ts'
+import type { TokenClient, TokenError, TokenResponse, TokenRequestOverrides } from './types.ts'
 
 /** OAuth scopes required for identifying the signed-in account. */
 const EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
@@ -37,6 +37,9 @@ const EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
  * neither invokes the success nor the error callback.
  */
 const TOKEN_REQUEST_TIMEOUT_MS = 20_000
+
+/** Allow time for account selection, passwords, 2FA, and consent. */
+const INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS = 5 * 60_000
 
 /**
  * Refresh the token this many milliseconds before its real expiry so a
@@ -116,19 +119,52 @@ export async function initGapiClient(): Promise<void> {
 /*  GIS token client                                                   */
 /* ------------------------------------------------------------------ */
 
-let tokenClientReady = false
+interface ManagedTokenClient {
+	client: TokenClient
+	inUse: boolean
+	setCallbacks: (
+		callback: (resp: TokenResponse) => void,
+		errorCallback: (err: TokenError) => void,
+	) => void
+	clearCallbacks: () => void
+}
 
-/**
- * Validate the GIS OAuth2 configuration. Idempotent — safe to call
- * multiple times. A fresh token client is created for each request so
- * a late callback from a timed-out request cannot settle a newer one.
- */
-export function initTokenClient(): void {
-	if (tokenClientReady) return
+let tokenClient: ManagedTokenClient | null = null
+
+function createTokenClient(): ManagedTokenClient {
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
 	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
-	tokenClientReady = true
+	let callback = (_resp: TokenResponse) => {}
+	let errorCallback = (_err: TokenError) => {}
+	const client = google.accounts.oauth2.initTokenClient({
+		client_id: GOOGLE_CLIENT_ID,
+		scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+		callback: (resp) => callback(resp),
+		error_callback: (err) => errorCallback(err),
+	})
+	return {
+		client,
+		inUse: false,
+		setCallbacks: (nextCallback, nextErrorCallback) => {
+			callback = nextCallback
+			errorCallback = nextErrorCallback
+		},
+		clearCallbacks: () => {
+			callback = () => {}
+			errorCallback = () => {}
+		},
+	}
+}
+
+/**
+ * Initialise the GIS OAuth2 token client. Idempotent — safe to call
+ * multiple times. A timed-out client is discarded before the next
+ * request so its delayed callback cannot settle a newer attempt.
+ */
+export function initTokenClient(): void {
+	if (tokenClient) return
+	tokenClient = createTokenClient()
 }
 
 /**
@@ -139,45 +175,47 @@ export function initTokenClient(): void {
  */
 function requestToken(opts: { interactive: boolean; loginHint?: string }): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
-		if (!tokenClientReady) {
+		if (!tokenClient) {
 			reject(new Error('Token client is not initialised. Call initTokenClient() first.'))
-			return
-		}
-		const google = window.google
-		if (!google) {
-			reject(new Error('Google Identity Services is no longer available. Reload the page and try again.'))
 			return
 		}
 
 		let settled = false
-		let client: TokenClient | null = null
+		if (tokenClient.inUse) tokenClient = createTokenClient()
+		const managedClient = tokenClient
+		managedClient.inUse = true
+		const client = managedClient.client
+		const timeoutMs = opts.interactive
+			? INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS
+			: TOKEN_REQUEST_TIMEOUT_MS
 		const timer = setTimeout(() => {
-			if (settled) return
-			settled = true
-			if (client) {
-				client.callback = () => {}
-				client.error_callback = undefined
-			}
-			reject(new Error('Google sign-in timed out.'))
-		}, TOKEN_REQUEST_TIMEOUT_MS)
+				if (settled) return
+				settled = true
+				managedClient.clearCallbacks()
+				managedClient.inUse = false
+				if (tokenClient === managedClient) tokenClient = null
+				reject(new Error('Google sign-in timed out.'))
+			}, timeoutMs)
 
-		client = google.accounts.oauth2.initTokenClient({
-			client_id: GOOGLE_CLIENT_ID,
-			scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
-			callback: (resp: TokenResponse) => {
+		managedClient.setCallbacks(
+			(resp) => {
 				if (settled) return
 				settled = true
 				clearTimeout(timer)
+				managedClient.clearCallbacks()
+				managedClient.inUse = false
 				if (resp.error || !resp.access_token) {
 					reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
 					return
 				}
 				resolve(resp)
 			},
-			error_callback: (err) => {
+			(err) => {
 				if (settled) return
 				settled = true
 				clearTimeout(timer)
+				managedClient.clearCallbacks()
+				managedClient.inUse = false
 				if (err?.type === 'popup_failed_to_open') {
 					reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
 					return
@@ -188,7 +226,7 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 				}
 				reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
 			},
-		})
+		)
 
 		const overrides: TokenRequestOverrides = { prompt: opts.interactive ? '' : 'none' }
 		if (opts.loginHint) overrides.login_hint = opts.loginHint
