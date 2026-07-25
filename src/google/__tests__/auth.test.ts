@@ -25,20 +25,8 @@ function mockGoogle(
 	}
 }
 
-function mockTokenClient(config: TokenClientConfig): TokenClient {
+function mockTokenClient(_config: TokenClientConfig): TokenClient {
 	return {
-		get callback() {
-			return config.callback
-		},
-		set callback(callback) {
-			config.callback = callback
-		},
-		get error_callback() {
-			return config.error_callback
-		},
-		set error_callback(errorCallback) {
-			config.error_callback = errorCallback
-		},
 		requestAccessToken: vi.fn(),
 	}
 }
