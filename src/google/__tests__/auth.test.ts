@@ -105,4 +105,25 @@ describe('Google authentication', () => {
 
 		await expect(attempt).rejects.toThrow('Allow popups for this site')
 	})
+
+	it('allows interactive sign-in to remain open while the user completes it', async () => {
+		vi.useFakeTimers()
+		let config: TokenClientConfig | undefined
+		window.google = mockGoogle((nextConfig) => {
+			config = nextConfig
+			return {
+				callback: nextConfig.callback,
+				error_callback: nextConfig.error_callback,
+				requestAccessToken: vi.fn(),
+			}
+		})
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		await vi.advanceTimersByTimeAsync(20_000)
+		config?.callback({ access_token: 'token', expires_in: 3600 })
+
+		await expect(attempt).resolves.toBe('token')
+		vi.useRealTimers()
+	})
 })

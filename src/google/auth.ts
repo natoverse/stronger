@@ -151,15 +151,17 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 
 		let settled = false
 		let client: TokenClient | null = null
-		const timer = setTimeout(() => {
-			if (settled) return
-			settled = true
-			if (client) {
-				client.callback = () => {}
-				client.error_callback = undefined
-			}
-			reject(new Error('Google sign-in timed out.'))
-		}, TOKEN_REQUEST_TIMEOUT_MS)
+		const timer = opts.interactive
+			? null
+			: setTimeout(() => {
+				if (settled) return
+				settled = true
+				if (client) {
+					client.callback = () => {}
+					client.error_callback = undefined
+				}
+				reject(new Error('Google sign-in timed out.'))
+			}, TOKEN_REQUEST_TIMEOUT_MS)
 
 		client = google.accounts.oauth2.initTokenClient({
 			client_id: GOOGLE_CLIENT_ID,
@@ -167,7 +169,7 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 			callback: (resp: TokenResponse) => {
 				if (settled) return
 				settled = true
-				clearTimeout(timer)
+				if (timer !== null) clearTimeout(timer)
 				if (resp.error || !resp.access_token) {
 					reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
 					return
@@ -177,7 +179,7 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 			error_callback: (err) => {
 				if (settled) return
 				settled = true
-				clearTimeout(timer)
+				if (timer !== null) clearTimeout(timer)
 				if (err?.type === 'popup_failed_to_open') {
 					reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
 					return
