@@ -104,6 +104,25 @@ describe('Google authentication', () => {
 		await expect(second).resolves.toBe('second-token')
 	})
 
+	it('isolates concurrent silent and interactive requests', async () => {
+		const configs: TokenClientConfig[] = []
+		window.google = mockGoogle((config) => {
+			configs.push(config)
+			return mockTokenClient(config)
+		})
+		const auth = await loadAuth()
+
+		const silentAttempt = auth.silentSignIn()
+		const interactiveAttempt = auth.signIn()
+
+		expect(window.google.accounts.oauth2.initTokenClient).toHaveBeenCalledTimes(2)
+		configs[0].callback({ access_token: 'silent-token', expires_in: 3600 })
+		configs[1].callback({ access_token: 'interactive-token', expires_in: 3600 })
+
+		await expect(silentAttempt).resolves.toBe('silent-token')
+		await expect(interactiveAttempt).resolves.toBe('interactive-token')
+	})
+
 	it('turns popup failures into actionable errors', async () => {
 		let config: TokenClientConfig | undefined
 		window.google = mockGoogle((nextConfig) => {

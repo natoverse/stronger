@@ -118,6 +118,7 @@ export async function initGapiClient(): Promise<void> {
 
 interface ManagedTokenClient {
 	client: TokenClient
+	inUse: boolean
 	setCallbacks: (
 		callback: (resp: TokenResponse) => void,
 		errorCallback: (err: TokenError) => void,
@@ -127,13 +128,7 @@ interface ManagedTokenClient {
 
 let tokenClient: ManagedTokenClient | null = null
 
-/**
- * Initialise the GIS OAuth2 token client. Idempotent — safe to call
- * multiple times. A timed-out client is discarded before the next
- * request so its delayed callback cannot settle a newer attempt.
- */
-export function initTokenClient(): void {
-	if (tokenClient) return
+function createTokenClient(): ManagedTokenClient {
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
 	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
@@ -145,8 +140,9 @@ export function initTokenClient(): void {
 		callback: (resp) => callback(resp),
 		error_callback: (err) => errorCallback(err),
 	})
-	tokenClient = {
+	return {
 		client,
+		inUse: false,
 		setCallbacks: (nextCallback, nextErrorCallback) => {
 			callback = nextCallback
 			errorCallback = nextErrorCallback
@@ -156,6 +152,16 @@ export function initTokenClient(): void {
 			errorCallback = () => {}
 		},
 	}
+}
+
+/**
+ * Initialise the GIS OAuth2 token client. Idempotent — safe to call
+ * multiple times. A timed-out client is discarded before the next
+ * request so its delayed callback cannot settle a newer attempt.
+ */
+export function initTokenClient(): void {
+	if (tokenClient) return
+	tokenClient = createTokenClient()
 }
 
 /**
@@ -172,7 +178,9 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 		}
 
 		let settled = false
+		if (tokenClient.inUse) tokenClient = createTokenClient()
 		const managedClient = tokenClient
+		managedClient.inUse = true
 		const client = managedClient.client
 		const timer = opts.interactive
 			? null
@@ -180,6 +188,7 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 				if (settled) return
 				settled = true
 				managedClient.clearCallbacks()
+				managedClient.inUse = false
 				if (tokenClient === managedClient) tokenClient = null
 				reject(new Error('Google sign-in timed out.'))
 			}, TOKEN_REQUEST_TIMEOUT_MS)
@@ -189,6 +198,8 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 				if (settled) return
 				settled = true
 				if (timer !== null) clearTimeout(timer)
+				managedClient.clearCallbacks()
+				managedClient.inUse = false
 				if (resp.error || !resp.access_token) {
 					reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
 					return
@@ -199,6 +210,8 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 				if (settled) return
 				settled = true
 				if (timer !== null) clearTimeout(timer)
+				managedClient.clearCallbacks()
+				managedClient.inUse = false
 				if (err?.type === 'popup_failed_to_open') {
 					reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
 					return
