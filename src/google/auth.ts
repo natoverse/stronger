@@ -116,25 +116,19 @@ export async function initGapiClient(): Promise<void> {
 /*  GIS token client                                                   */
 /* ------------------------------------------------------------------ */
 
-let tokenClient: TokenClient | null = null
+let tokenClientReady = false
 
 /**
- * Initialise the GIS OAuth2 token client. Idempotent — safe to call
- * multiple times. The per-request success/error callbacks are set on
- * each `requestAccessToken` call (see `requestToken`).
+ * Validate the GIS OAuth2 configuration. Idempotent — safe to call
+ * multiple times. A fresh token client is created for each request so
+ * a late callback from a timed-out request cannot settle a newer one.
  */
 export function initTokenClient(): void {
-	if (tokenClient) return
+	if (tokenClientReady) return
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
 	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
-
-	tokenClient = google.accounts.oauth2.initTokenClient({
-		client_id: GOOGLE_CLIENT_ID,
-		scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
-		// Placeholder — replaced per request.
-		callback: () => {},
-	})
+	tokenClientReady = true
 }
 
 /**
@@ -145,38 +139,60 @@ export function initTokenClient(): void {
  */
 function requestToken(opts: { interactive: boolean; loginHint?: string }): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
-		if (!tokenClient) {
+		if (!tokenClientReady) {
 			reject(new Error('Token client is not initialised. Call initTokenClient() first.'))
+			return
+		}
+		const google = window.google
+		if (!google) {
+			reject(new Error('Google Identity Services is no longer available. Reload the page and try again.'))
 			return
 		}
 
 		let settled = false
+		let client: TokenClient | null = null
 		const timer = setTimeout(() => {
 			if (settled) return
 			settled = true
+			if (client) {
+				client.callback = () => {}
+				client.error_callback = undefined
+			}
 			reject(new Error('Google sign-in timed out.'))
 		}, TOKEN_REQUEST_TIMEOUT_MS)
 
-		tokenClient.callback = (resp: TokenResponse) => {
-			if (settled) return
-			settled = true
-			clearTimeout(timer)
-			if (resp.error || !resp.access_token) {
-				reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
-				return
-			}
-			resolve(resp)
-		}
-		tokenClient.error_callback = (err) => {
-			if (settled) return
-			settled = true
-			clearTimeout(timer)
-			reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
-		}
+		client = google.accounts.oauth2.initTokenClient({
+			client_id: GOOGLE_CLIENT_ID,
+			scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+			callback: (resp: TokenResponse) => {
+				if (settled) return
+				settled = true
+				clearTimeout(timer)
+				if (resp.error || !resp.access_token) {
+					reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
+					return
+				}
+				resolve(resp)
+			},
+			error_callback: (err) => {
+				if (settled) return
+				settled = true
+				clearTimeout(timer)
+				if (err?.type === 'popup_failed_to_open') {
+					reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
+					return
+				}
+				if (err?.type === 'popup_closed') {
+					reject(new Error('Google sign-in was canceled. Try again when you are ready.'))
+					return
+				}
+				reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
+			},
+		})
 
 		const overrides: TokenRequestOverrides = { prompt: opts.interactive ? '' : 'none' }
 		if (opts.loginHint) overrides.login_hint = opts.loginHint
-		tokenClient.requestAccessToken(overrides)
+		client.requestAccessToken(overrides)
 	})
 }
 
@@ -218,6 +234,7 @@ async function fetchAndStoreEmail(accessToken: string): Promise<void> {
  * so only one token request is issued at a time.
  */
 let pendingSignIn: Promise<string> | null = null
+let pendingSilentSignIn: Promise<string> | null = null
 
 /**
  * Interactive sign-in. Requests an access token, allowing GIS to show
@@ -253,16 +270,24 @@ export function signIn(): Promise<string> {
  * already consented; rejects otherwise (caller should then show the
  * interactive sign-in button).
  */
-export async function silentSignIn(): Promise<string> {
-	if (!window.gapi?.client) {
-		throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
-	}
-	initTokenClient()
-	const loginHint = loadUserEmail() ?? undefined
-	const resp = await requestToken({ interactive: false, loginHint })
-	const accessToken = applyTokenResponse(resp)
-	if (!loadUserEmail()) await fetchAndStoreEmail(accessToken)
-	return accessToken
+export function silentSignIn(): Promise<string> {
+	if (pendingSilentSignIn) return pendingSilentSignIn
+
+	pendingSilentSignIn = (async () => {
+		if (!window.gapi?.client) {
+			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
+		}
+		initTokenClient()
+		const loginHint = loadUserEmail() ?? undefined
+		const resp = await requestToken({ interactive: false, loginHint })
+		const accessToken = applyTokenResponse(resp)
+		if (!loadUserEmail()) await fetchAndStoreEmail(accessToken)
+		return accessToken
+	})().finally(() => {
+		pendingSilentSignIn = null
+	})
+
+	return pendingSilentSignIn
 }
 
 /**

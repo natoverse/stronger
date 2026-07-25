@@ -70,6 +70,7 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 	const [error, setError] = useState<string | null>(null)
 	const [sheetUrl, setSheetUrl] = useState('')
 	const [sheetName, setSheetName] = useState('Stronger')
+	const [signInPending, setSignInPending] = useState(false)
 
 	/* ---------------------------------------------------------------- */
 	/*  Load Google scripts and restore access silently on load        */
@@ -235,9 +236,12 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 	}, [onConnected, onNeedsSetup])
 
 	const handleSignIn = useCallback(async () => {
+		if (signInPending) return
+		const signInPromise = signIn()
+		setSignInPending(true)
 		try {
 			setError(null)
-			await signIn()
+			await signInPromise
 			// Signed in – check for stored sheet
 			const storedId = loadSheetId()
 			if (storedId) {
@@ -247,9 +251,11 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 			}
 		} catch (err) {
 			setError(err instanceof Error ? err.message : 'Sign-in failed.')
-			setPhase('error')
+			setPhase('sign-in')
+		} finally {
+			setSignInPending(false)
 		}
-	}, [tryConnect])
+	}, [signInPending, tryConnect])
 
 	const handleSheetSubmit = useCallback(
 		async (e: React.FormEvent) => {
@@ -334,8 +340,8 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 						: 'Sign in to connect your Google Sheet'}
 				</p>
 				{error && <p className="auth-error">{error}</p>}
-				<button className="btn-google" onClick={handleSignIn}>
-					Sign in with Google
+				<button className="btn-google" onClick={handleSignIn} disabled={signInPending}>
+					{signInPending ? 'Signing in…' : 'Sign in with Google'}
 				</button>
 			</div>
 		)
