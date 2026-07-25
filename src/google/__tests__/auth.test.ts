@@ -37,8 +37,7 @@ describe('Google authentication', () => {
 		vi.unstubAllEnvs()
 		vi.stubGlobal('document', { cookie: '' })
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
-		vi.stubGlobal('gapi', undefined)
-		window.gapi = mockGapi()
+		vi.stubGlobal('window', { gapi: mockGapi() })
 	})
 
 	it('deduplicates concurrent silent token requests', async () => {
@@ -76,8 +75,9 @@ describe('Google authentication', () => {
 		const auth = await loadAuth()
 
 		const first = auth.silentSignIn()
+		const firstResult = expect(first).rejects.toThrow('timed out')
 		await vi.advanceTimersByTimeAsync(20_000)
-		await expect(first).rejects.toThrow('timed out')
+		await firstResult
 
 		const second = auth.silentSignIn()
 		configs[0].callback({ access_token: 'stale-token', expires_in: 3600 })
