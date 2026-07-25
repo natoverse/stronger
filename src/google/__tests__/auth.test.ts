@@ -153,4 +153,17 @@ describe('Google authentication', () => {
 		await expect(attempt).resolves.toBe('token')
 		vi.useRealTimers()
 	})
+
+	it('eventually releases an unresponsive interactive sign-in', async () => {
+		vi.useFakeTimers()
+		window.google = mockGoogle(mockTokenClient)
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		const result = expect(attempt).rejects.toThrow('timed out')
+		await vi.advanceTimersByTimeAsync(5 * 60_000)
+
+		await result
+		vi.useRealTimers()
+	})
 })

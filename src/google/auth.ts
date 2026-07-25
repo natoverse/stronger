@@ -38,6 +38,9 @@ const EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
  */
 const TOKEN_REQUEST_TIMEOUT_MS = 20_000
 
+/** Allow time for account selection, passwords, 2FA, and consent. */
+const INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS = 5 * 60_000
+
 /**
  * Refresh the token this many milliseconds before its real expiry so a
  * stored token is never used right at the edge of expiring.
@@ -182,22 +185,23 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 		const managedClient = tokenClient
 		managedClient.inUse = true
 		const client = managedClient.client
-		const timer = opts.interactive
-			? null
-			: setTimeout(() => {
+		const timeoutMs = opts.interactive
+			? INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS
+			: TOKEN_REQUEST_TIMEOUT_MS
+		const timer = setTimeout(() => {
 				if (settled) return
 				settled = true
 				managedClient.clearCallbacks()
 				managedClient.inUse = false
 				if (tokenClient === managedClient) tokenClient = null
 				reject(new Error('Google sign-in timed out.'))
-			}, TOKEN_REQUEST_TIMEOUT_MS)
+			}, timeoutMs)
 
 		managedClient.setCallbacks(
 			(resp) => {
 				if (settled) return
 				settled = true
-				if (timer !== null) clearTimeout(timer)
+				clearTimeout(timer)
 				managedClient.clearCallbacks()
 				managedClient.inUse = false
 				if (resp.error || !resp.access_token) {
@@ -209,7 +213,7 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 			(err) => {
 				if (settled) return
 				settled = true
-				if (timer !== null) clearTimeout(timer)
+				clearTimeout(timer)
 				managedClient.clearCallbacks()
 				managedClient.inUse = false
 				if (err?.type === 'popup_failed_to_open') {
