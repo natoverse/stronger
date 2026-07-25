@@ -12,7 +12,7 @@
  * shows a weekly goal line at 7 while an in-progress bucket scales to the days
  * so far — keeping the goal-vs-actual color coding fair.
  */
-import type { MealLogEntry } from './types.js';
+import type { FoodItem, MealLogEntry } from './types.js';
 import type { StravaAggregation, StravaTimeRange } from './strava.js';
 import { generateBucketSlots, getBucketKey, getRangeStart, getRangeEnd } from './strava.js';
 
@@ -56,6 +56,51 @@ export const NUTRITION_YELLOW = '#ffea00';
 export const NUTRITION_GREEN = '#00e676';
 export const NUTRITION_RED = '#ff1744';
 export const NUTRITION_BLUE = '#2979ff';
+
+function normalizeFoodLabel(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function canonicalFoodCode(code: string): string {
+  if (!/^\d+$/.test(code)) return code;
+  return code.replace(/^0+(?=\d)/, '');
+}
+
+function foodSearchFingerprint(food: FoodItem): string {
+  return [
+    normalizeFoodLabel(food.name),
+    normalizeFoodLabel(food.brand),
+    food.calories,
+    food.fat,
+    food.carbs,
+    food.fiber,
+    food.protein,
+    food.standardDrinks,
+  ].join('\u0000');
+}
+
+/**
+ * Remove repeated OFF search results while preserving the API's relevance order.
+ * OFF can return the same product under UPC/EAN aliases or separate records with
+ * cosmetic label differences, so identity includes both barcode and food data.
+ */
+export function deduplicateFoodSearchResults(foods: FoodItem[]): FoodItem[] {
+  const seenCodes = new Set<string>();
+  const seenFingerprints = new Set<string>();
+  return foods.filter((food) => {
+    const code = canonicalFoodCode(food.code);
+    const fingerprint = foodSearchFingerprint(food);
+    if (seenCodes.has(code) || seenFingerprints.has(fingerprint)) return false;
+    seenCodes.add(code);
+    seenFingerprints.add(fingerprint);
+    return true;
+  });
+}
 
 /** Goal-band colors: yellow under, green met, red over (calories/alcohol), blue over (protein) or under (alcohol). */
 export type NutritionColorKey = 'under' | 'met' | 'over' | 'bonus' | '';

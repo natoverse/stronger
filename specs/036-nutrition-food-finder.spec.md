@@ -99,3 +99,9 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
   `Carbs X% · Protein Y% · Fat Z%`.
 - Percentages are computed from macro calories (`carbs*4`, `protein*4`, `fat*9`) rather than logged total calories.
 - When all macro calories are zero, all percentages render as `0%` to avoid division-by-zero behavior.
+
+## Iteration: improved OFF search duplicate detection (2026-07)
+
+- OFF search results are deduplicated before display while preserving the API's relevance order.
+- Products are considered duplicates when their barcodes match after normalizing UPC/EAN leading-zero aliases, or when normalized names, brands, and per-serving nutrition all match.
+- Serving-label formatting is excluded from the product fingerprint because OFF records for the same product can describe the same serving differently.

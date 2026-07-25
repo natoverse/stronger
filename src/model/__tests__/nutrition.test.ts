@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { MealLogEntry } from '../types.ts';
-import { buildNutritionChartData, nutritionColorKey, formatNutritionValue } from '../nutrition.ts';
+import type { FoodItem, MealLogEntry } from '../types.ts';
+import {
+  buildNutritionChartData,
+  deduplicateFoodSearchResults,
+  nutritionColorKey,
+  formatNutritionValue,
+} from '../nutrition.ts';
 
 function entry(date: string, over: Partial<MealLogEntry> = {}): MealLogEntry {
   return {
@@ -18,6 +23,49 @@ function entry(date: string, over: Partial<MealLogEntry> = {}): MealLogEntry {
     ...over,
   };
 }
+
+function food(code: string, over: Partial<FoodItem> = {}): FoodItem {
+  return {
+    code,
+    name: 'Peanut Butter',
+    brand: 'Example Foods',
+    servingLabel: '2 tbsp (32 g)',
+    calories: 190,
+    fat: 16,
+    carbs: 7,
+    fiber: 2,
+    protein: 8,
+    standardDrinks: 0,
+    ...over,
+  };
+}
+
+describe('deduplicateFoodSearchResults', () => {
+  it('collapses repeated barcodes, including UPC/EAN leading-zero aliases', () => {
+    const first = food('0123456789012');
+    expect(deduplicateFoodSearchResults([first, food('123456789012')])).toEqual([first]);
+  });
+
+  it('collapses equivalent records with cosmetic label and serving differences', () => {
+    const first = food('1');
+    const duplicate = food('2', {
+      name: '  peanut-butter ',
+      brand: 'EXAMPLE FOODS',
+      servingLabel: '32g',
+    });
+    expect(deduplicateFoodSearchResults([first, duplicate])).toEqual([first]);
+  });
+
+  it('keeps products with a different brand, name, or nutrition', () => {
+    const foods = [
+      food('1'),
+      food('2', { brand: 'Other Foods' }),
+      food('3', { name: 'Crunchy Peanut Butter' }),
+      food('4', { calories: 200 }),
+    ];
+    expect(deduplicateFoodSearchResults(foods)).toEqual(foods);
+  });
+});
 
 describe('nutritionColorKey', () => {
   it('returns empty when goal is disabled', () => {

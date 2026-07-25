@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
 import type { FoodItem, GarminWellnessEntry, MealCategory, MealItem, MealLogEntry } from '../model/index.js';
+import { deduplicateFoodSearchResults } from '../model/nutrition.js';
 import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
 import { getTimeRangeOptions } from '../model/strava.js';
 import { NutritionCharts } from './NutritionCharts.js';
@@ -205,10 +206,11 @@ async function searchOpenFoodFacts(query: string, signal: AbortSignal): Promise<
   });
   if (!response.ok) throw new Error(`Search failed: ${response.statusText || 'request error'} (${response.status})`);
   const data = (await response.json()) as { products?: OFFProduct[] };
-  return (data.products ?? []).flatMap((product) => {
+  const foods = (data.products ?? []).flatMap((product) => {
     const parsed = parseOFFProduct(product);
     return parsed ? [parsed] : [];
   });
+  return deduplicateFoodSearchResults(foods);
 }
 
 /* ── Food finder row ────────────────────────────────────────────────────── */
