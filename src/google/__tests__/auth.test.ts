@@ -25,6 +25,24 @@ function mockGoogle(
 	}
 }
 
+function mockTokenClient(config: TokenClientConfig): TokenClient {
+	return {
+		get callback() {
+			return config.callback
+		},
+		set callback(callback) {
+			config.callback = callback
+		},
+		get error_callback() {
+			return config.error_callback
+		},
+		set error_callback(errorCallback) {
+			config.error_callback = errorCallback
+		},
+		requestAccessToken: vi.fn(),
+	}
+}
+
 async function loadAuth() {
 	vi.stubEnv('VITE_GOOGLE_CLIENT_ID', CLIENT_ID)
 	vi.resetModules()
@@ -44,11 +62,7 @@ describe('Google authentication', () => {
 		let config: TokenClientConfig | undefined
 		window.google = mockGoogle((nextConfig) => {
 			config = nextConfig
-			return {
-				callback: nextConfig.callback,
-				error_callback: nextConfig.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(nextConfig)
 		})
 		const auth = await loadAuth()
 
@@ -66,11 +80,7 @@ describe('Google authentication', () => {
 		const configs: TokenClientConfig[] = []
 		window.google = mockGoogle((config) => {
 			configs.push(config)
-			return {
-				callback: config.callback,
-				error_callback: config.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(config)
 		})
 		const auth = await loadAuth()
 
@@ -88,15 +98,29 @@ describe('Google authentication', () => {
 		vi.useRealTimers()
 	})
 
+	it('reuses the token client after a completed request', async () => {
+		let config: TokenClientConfig | undefined
+		window.google = mockGoogle((nextConfig) => {
+			config = nextConfig
+			return mockTokenClient(nextConfig)
+		})
+		const auth = await loadAuth()
+
+		const first = auth.silentSignIn()
+		config?.callback({ access_token: 'first-token', expires_in: 3600 })
+		await expect(first).resolves.toBe('first-token')
+
+		const second = auth.silentSignIn()
+		expect(window.google.accounts.oauth2.initTokenClient).toHaveBeenCalledTimes(1)
+		config?.callback({ access_token: 'second-token', expires_in: 3600 })
+		await expect(second).resolves.toBe('second-token')
+	})
+
 	it('turns popup failures into actionable errors', async () => {
 		let config: TokenClientConfig | undefined
 		window.google = mockGoogle((nextConfig) => {
 			config = nextConfig
-			return {
-				callback: nextConfig.callback,
-				error_callback: nextConfig.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(nextConfig)
 		})
 		const auth = await loadAuth()
 
@@ -111,11 +135,7 @@ describe('Google authentication', () => {
 		let config: TokenClientConfig | undefined
 		window.google = mockGoogle((nextConfig) => {
 			config = nextConfig
-			return {
-				callback: nextConfig.callback,
-				error_callback: nextConfig.error_callback,
-				requestAccessToken: vi.fn(),
-			}
+			return mockTokenClient(nextConfig)
 		})
 		const auth = await loadAuth()
 

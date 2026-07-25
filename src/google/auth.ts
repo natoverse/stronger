@@ -116,19 +116,23 @@ export async function initGapiClient(): Promise<void> {
 /*  GIS token client                                                   */
 /* ------------------------------------------------------------------ */
 
-let tokenClientReady = false
+let tokenClient: TokenClient | null = null
 
 /**
- * Validate the GIS OAuth2 configuration. Idempotent — safe to call
- * multiple times. A fresh token client is created for each request so
- * a late callback from a timed-out request cannot settle a newer one.
+ * Initialise the GIS OAuth2 token client. Idempotent — safe to call
+ * multiple times. A timed-out client is discarded before the next
+ * request so its delayed callback cannot settle a newer attempt.
  */
 export function initTokenClient(): void {
-	if (tokenClientReady) return
+	if (tokenClient) return
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
 	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
-	tokenClientReady = true
+	tokenClient = google.accounts.oauth2.initTokenClient({
+		client_id: GOOGLE_CLIENT_ID,
+		scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+		callback: () => {},
+	})
 }
 
 /**
@@ -139,58 +143,48 @@ export function initTokenClient(): void {
  */
 function requestToken(opts: { interactive: boolean; loginHint?: string }): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
-		if (!tokenClientReady) {
+		if (!tokenClient) {
 			reject(new Error('Token client is not initialised. Call initTokenClient() first.'))
-			return
-		}
-		const google = window.google
-		if (!google) {
-			reject(new Error('Google Identity Services is no longer available. Reload the page and try again.'))
 			return
 		}
 
 		let settled = false
-		let client: TokenClient | null = null
+		const client = tokenClient
 		const timer = opts.interactive
 			? null
 			: setTimeout(() => {
 				if (settled) return
 				settled = true
-				if (client) {
-					client.callback = () => {}
-					client.error_callback = undefined
-				}
+				client.callback = () => {}
+				client.error_callback = undefined
+				if (tokenClient === client) tokenClient = null
 				reject(new Error('Google sign-in timed out.'))
 			}, TOKEN_REQUEST_TIMEOUT_MS)
 
-		client = google.accounts.oauth2.initTokenClient({
-			client_id: GOOGLE_CLIENT_ID,
-			scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
-			callback: (resp: TokenResponse) => {
-				if (settled) return
-				settled = true
-				if (timer !== null) clearTimeout(timer)
-				if (resp.error || !resp.access_token) {
-					reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
-					return
-				}
-				resolve(resp)
-			},
-			error_callback: (err) => {
-				if (settled) return
-				settled = true
-				if (timer !== null) clearTimeout(timer)
-				if (err?.type === 'popup_failed_to_open') {
-					reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
-					return
-				}
-				if (err?.type === 'popup_closed') {
-					reject(new Error('Google sign-in was canceled. Try again when you are ready.'))
-					return
-				}
-				reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
-			},
-		})
+		client.callback = (resp: TokenResponse) => {
+			if (settled) return
+			settled = true
+			if (timer !== null) clearTimeout(timer)
+			if (resp.error || !resp.access_token) {
+				reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
+				return
+			}
+			resolve(resp)
+		}
+		client.error_callback = (err) => {
+			if (settled) return
+			settled = true
+			if (timer !== null) clearTimeout(timer)
+			if (err?.type === 'popup_failed_to_open') {
+				reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
+				return
+			}
+			if (err?.type === 'popup_closed') {
+				reject(new Error('Google sign-in was canceled. Try again when you are ready.'))
+				return
+			}
+			reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
+		}
 
 		const overrides: TokenRequestOverrides = { prompt: opts.interactive ? '' : 'none' }
 		if (opts.loginHint) overrides.login_hint = opts.loginHint
