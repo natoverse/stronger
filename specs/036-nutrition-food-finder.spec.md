@@ -105,3 +105,8 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
 - OFF search results are deduplicated before display while preserving the API's relevance order.
 - Products are considered duplicates when their barcodes match after normalizing UPC/EAN leading-zero aliases, or when normalized names, brands, and per-serving nutrition all match.
 - Serving-label formatting is excluded from the product fingerprint because OFF records for the same product can describe the same serving differently.
+
+## Iteration: time-based meal defaults (2026-07)
+
+- Finder meal dropdowns default from the local time when the Nutrition page opens: Breakfast from 6:00–10:59, Lunch from 11:00–13:59, Snacks from 14:00–16:59, Dinner from 17:00–19:59, and Snacks at all other times.
+- The suggestion is only an initial default; each food's dropdown remains independently editable.
