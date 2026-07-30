@@ -47,25 +47,6 @@ describe('deduplicateFoodSearchResults', () => {
     expect(deduplicateFoodSearchResults([first, food('123456789012')])).toEqual([first]);
   });
 
-  describe('suggestedMealCategory', () => {
-    it.each([
-      [0, 'Snacks'],
-      [5, 'Snacks'],
-      [6, 'Breakfast'],
-      [10, 'Breakfast'],
-      [11, 'Lunch'],
-      [13, 'Lunch'],
-      [14, 'Snacks'],
-      [16, 'Snacks'],
-      [17, 'Dinner'],
-      [19, 'Dinner'],
-      [20, 'Snacks'],
-      [23, 'Snacks'],
-    ] as const)('suggests %s:00 as %s', (hour, expected) => {
-      expect(suggestedMealCategory(new Date(2026, 6, 30, hour))).toBe(expected);
-    });
-  });
-
   it('collapses equivalent records with cosmetic label and serving differences', () => {
     const first = food('1');
     const duplicate = food('2', {
@@ -84,6 +65,25 @@ describe('deduplicateFoodSearchResults', () => {
       food('4', { calories: 200 }),
     ];
     expect(deduplicateFoodSearchResults(foods)).toEqual(foods);
+  });
+});
+
+describe('suggestedMealCategory', () => {
+  it.each([
+    [0, 'Snacks'],
+    [5, 'Snacks'],
+    [6, 'Breakfast'],
+    [10, 'Breakfast'],
+    [11, 'Lunch'],
+    [13, 'Lunch'],
+    [14, 'Snacks'],
+    [16, 'Snacks'],
+    [17, 'Dinner'],
+    [19, 'Dinner'],
+    [20, 'Snacks'],
+    [23, 'Snacks'],
+  ] as const)('suggests %s:00 as %s', (hour, expected) => {
+    expect(suggestedMealCategory(new Date(2026, 6, 30, hour))).toBe(expected);
   });
 });
 
