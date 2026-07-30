@@ -12,7 +12,7 @@
  * shows a weekly goal line at 7 while an in-progress bucket scales to the days
  * so far — keeping the goal-vs-actual color coding fair.
  */
-import type { FoodItem, MealLogEntry } from './types.js';
+import type { FoodItem, MealCategory, MealLogEntry } from './types.js';
 import type { StravaAggregation, StravaTimeRange } from './strava.js';
 import { generateBucketSlots, getBucketKey, getRangeStart, getRangeEnd } from './strava.js';
 
@@ -56,6 +56,16 @@ export const NUTRITION_YELLOW = '#ffea00';
 export const NUTRITION_GREEN = '#00e676';
 export const NUTRITION_RED = '#ff1744';
 export const NUTRITION_BLUE = '#2979ff';
+
+/** Suggest the meal category for a new entry based on the user's local time. */
+export function suggestedMealCategory(now: Date = new Date()): MealCategory {
+  const hour = now.getHours();
+  if (hour >= 6 && hour < 11) return 'Breakfast';
+  if (hour >= 11 && hour < 14) return 'Lunch';
+  if (hour >= 14 && hour < 17) return 'Snacks';
+  if (hour >= 17 && hour < 20) return 'Dinner';
+  return 'Snacks';
+}
 
 function normalizeFoodLabel(value: string): string {
   return value

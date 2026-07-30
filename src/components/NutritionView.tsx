@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
 import type { FoodItem, GarminWellnessEntry, MealCategory, MealItem, MealLogEntry } from '../model/index.js';
-import { deduplicateFoodSearchResults } from '../model/nutrition.js';
+import { deduplicateFoodSearchResults, suggestedMealCategory } from '../model/nutrition.js';
 import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
 import { getTimeRangeOptions } from '../model/strava.js';
 import { NutritionCharts } from './NutritionCharts.js';
@@ -408,6 +408,7 @@ export function NutritionView({
   const [chartRange, setChartRange] = useState<StravaTimeRange>('month');
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
   const timeRanges = useMemo(() => getTimeRangeOptions(new Date()), []);
+  const defaultCategory = useMemo(() => suggestedMealCategory(), []);
 
   // Search state
   const [query, setQuery] = useState('');
@@ -510,7 +511,7 @@ export function NutritionView({
     return ratio <= 1.1 ? 'good' : 'over';
   }, [drinksPerDayGoal, totals.drinks]);
 
-  const categoryFor = (code: string): MealCategory => categories[code] ?? 'Snacks';
+  const categoryFor = (code: string): MealCategory => categories[code] ?? defaultCategory;
   const quantityValue = (code: string): string => quantities[code] ?? '1';
   const quantityFor = (code: string): number => {
     const value = Number(quantityValue(code));
