@@ -73,3 +73,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Garmin activity tab consolidation (2026-07-18):** after comparing the merged Garmin page in practice, the activity-specific UI was moved onto the separate `#/garmin-activities` tab so the searchable activity log and cardio / strength charts live together. The `#/garmin` route now focuses on wellness-only charts, while the toolbar icon for that page switched from Watch to Heart Pulse to better reflect the remaining content.
 
 - **Garmin activity time-window consistency (2026-07-18):** the searchable activity log on `#/garmin-activities` now receives the same range-filtered activity subset as the charts, so changing the Month / Year / calendar-year buttons narrows both the graphs and the list instead of leaving the list on full history.
+
+- **Activity log filter defaults (2026-07-31):** the activity-type filter now initially selects every available activity type except `Weight Training`. This keeps the log focused on non-strength activities while allowing users to explicitly include strength sessions when needed.
