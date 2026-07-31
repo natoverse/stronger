@@ -1,16 +1,20 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
 import type { StravaActivity } from '../model/strava.js';
-import { getActivityTypes, toDisplayUnit, formatMetricValue } from '../model/strava.js';
+import {
+  getActivityTypes,
+  isStrengthTraining,
+  toDisplayUnit,
+  formatMetricValue,
+} from '../model/strava.js';
 
 /* ------------------------------------------------------------------ */
 /*  Constants                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Activity type substrings that are selected by default. */
+/** All activity types except strength training are selected by default. */
 function isDefaultType(type: string): boolean {
-  const lower = type.toLowerCase();
-  return lower.includes('run') || lower === 'hiking' || lower === 'mountaineering';
+  return !isStrengthTraining(type);
 }
 
 /* ------------------------------------------------------------------ */
@@ -130,7 +134,7 @@ export function GarminActivitiesListView({ activities }: Props) {
   // Derive all known types from the full activity list
   const allTypes = useMemo(() => getActivityTypes(activities), [activities]);
 
-  // Initialize selected types: running variants, hiking, mountaineering
+  // Initialize selected types: everything except strength training
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(
     () => new Set(allTypes.filter(isDefaultType)),
   );
