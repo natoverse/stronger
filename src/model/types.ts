@@ -520,7 +520,7 @@ export interface GarminWellnessEntry {
 	enduranceScore: number | null;
 	/** Heat acclimation percentage (0–100). */
 	heatAcclimationPct: number | null;
-	/** Altitude acclimation percentage (0–100). */
+	/** Altitude to which the user is currently acclimated, in meters. */
 	altitudeAcclimationPct: number | null;
 	/** Daily altitude seen by Garmin's acclimation model, in meters. */
 	currentAltitude: number | null;

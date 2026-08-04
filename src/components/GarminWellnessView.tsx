@@ -322,6 +322,16 @@ const CHART_PADDING = { top: 16, right: 16, bottom: 32, left: 52 };
 const VIEW_BOX_W = 400;
 const PLOT_W = VIEW_BOX_W - CHART_PADDING.left - CHART_PADDING.right;
 const PLOT_H = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
+const METERS_TO_FEET = 3.28084;
+
+export function metersToFeet(meters: number | null): number | null {
+  return meters === null ? null : meters * METERS_TO_FEET;
+}
+
+export function formatAltitudeFeet(meters: number | null): string {
+  const feet = metersToFeet(meters);
+  return feet === null ? '—' : Math.round(feet).toLocaleString('en-US');
+}
 
 interface WellnessChartHeaderProps {
   label: string;
@@ -549,6 +559,145 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
               {formatValue(buckets[activeIndex].value)}{unit ? ` ${unit}` : ''}
             </span>
             <span className="chart-tooltip-date">{buckets[activeIndex].label}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface AltitudeChartProps {
+  altitudeBuckets: WellnessBucket[];
+  acclimationBuckets: WellnessBucket[];
+  summaryLabel: string;
+}
+
+function WellnessAltitudeChart({ altitudeBuckets, acclimationBuckets, summaryLabel }: AltitudeChartProps) {
+  const n = altitudeBuckets.length;
+  if (n === 0) return null;
+
+  const altitudeFeet = altitudeBuckets.map((bucket) => metersToFeet(bucket.value));
+  const acclimationFeet = acclimationBuckets.map((bucket) => metersToFeet(bucket.value));
+  const maxValue = Math.max(
+    ...altitudeFeet.map((value) => value ?? 0),
+    ...acclimationFeet.map((value) => value ?? 0),
+    0.001,
+  );
+  const barWidth = PLOT_W / n;
+  const barGap = Math.max(1, barWidth * 0.15);
+  const barInner = barWidth - barGap * 2;
+  const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
+  const yValue = (value: number) => CHART_PADDING.top + PLOT_H - (value / maxValue) * PLOT_H;
+  const yTicks = niceTicksFor(0, maxValue, 4);
+  const maxLabels = Math.min(n, 8);
+  const xLabelIndices = n <= maxLabels
+    ? Array.from({ length: n }, (_, i) => i)
+    : Array.from({ length: maxLabels }, (_, i) => Math.round((i / (maxLabels - 1)) * (n - 1)));
+  const lineSegments: string[] = [];
+  let currentSegment: string[] = [];
+  acclimationFeet.forEach((value, i) => {
+    if (value === null) {
+      if (currentSegment.length > 1) lineSegments.push(currentSegment.join(' '));
+      currentSegment = [];
+    } else {
+      currentSegment.push(`${xCenter(i)},${yValue(value)}`);
+    }
+  });
+  if (currentSegment.length > 1) lineSegments.push(currentSegment.join(' '));
+
+  const xPositions = altitudeBuckets.map((_, i) => xCenter(i));
+  const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
+  const activeAltitude = activeIndex === null ? null : altitudeBuckets[activeIndex]?.value ?? null;
+  const activeAcclimation = activeIndex === null ? null : acclimationBuckets[activeIndex]?.value ?? null;
+
+  return (
+    <div className="strava-chart-card">
+      <WellnessChartHeader
+        label="Altitude Acclimation"
+        summaryLabel={summaryLabel}
+        legendItems={[
+          { label: 'Current altitude', color: ACCENT },
+          { label: 'Altitude adaptation', color: BLUE },
+        ]}
+      />
+      <div className="strava-chart-container" {...containerHandlers}>
+        <svg
+          ref={svgRef}
+          className="strava-chart-svg"
+          viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
+          preserveAspectRatio="xMidYMid meet"
+        >
+          {yTicks.map((tick) => (
+            <line
+              key={`grid-${tick}`}
+              x1={CHART_PADDING.left} y1={yValue(tick)}
+              x2={VIEW_BOX_W - CHART_PADDING.right} y2={yValue(tick)}
+              className="strava-grid-line"
+            />
+          ))}
+          {yTicks.map((tick) => (
+            <text
+              key={`lbl-${tick}`}
+              x={CHART_PADDING.left - 4} y={yValue(tick)}
+              className="strava-axis-label"
+              textAnchor="end"
+              dominantBaseline="middle"
+            >
+              {Math.round(tick).toLocaleString('en-US')}
+            </text>
+          ))}
+          {xLabelIndices.map((i) => (
+            <text
+              key={`xlbl-${i}`}
+              x={xCenter(i)} y={CHART_HEIGHT - 4}
+              className="strava-axis-label"
+              textAnchor="middle"
+            >
+              {altitudeBuckets[i].label}
+            </text>
+          ))}
+          {altitudeFeet.map((value, i) => {
+            const barHeight = value === null ? 0 : Math.max((value / maxValue) * PLOT_H, 0);
+            return (
+              <rect
+                key={`bar-${i}`}
+                x={CHART_PADDING.left + barWidth * i + barGap}
+                y={CHART_PADDING.top + PLOT_H - barHeight}
+                width={Math.max(barInner, 1)}
+                height={barHeight}
+                fill={ACCENT}
+                opacity={i === activeIndex ? 1 : 0.65}
+                rx={2}
+              />
+            );
+          })}
+          {lineSegments.map((points, i) => (
+            <polyline
+              key={`line-${i}`}
+              points={points}
+              fill="none"
+              stroke={BLUE}
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {activeIndex !== null && (
+            <line
+              x1={xCenter(activeIndex)} y1={CHART_PADDING.top}
+              x2={xCenter(activeIndex)} y2={CHART_PADDING.top + PLOT_H}
+              className="chart-crosshair"
+            />
+          )}
+        </svg>
+        {activeIndex !== null && activeIndex < altitudeBuckets.length && (
+          <div
+            className="chart-tooltip"
+            style={{ left: `${(xCenter(activeIndex) / VIEW_BOX_W) * 100}%` }}
+          >
+            <span className="chart-tooltip-value">Altitude {formatAltitudeFeet(activeAltitude)} ft</span>
+            <span className="chart-tooltip-secondary">Adapted {formatAltitudeFeet(activeAcclimation)} ft</span>
+            <span className="chart-tooltip-date">{altitudeBuckets[activeIndex].label}</span>
           </div>
         )}
       </div>
@@ -1186,6 +1335,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
   const heatAcclimationData = useMemo(() => buildWellnessChartData(entries, 'heatAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
   const altitudeAcclimationData = useMemo(() => buildWellnessChartData(entries, 'altitudeAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
+  const currentAltitudeData = useMemo(() => buildWellnessChartData(entries, 'currentAltitude', range, aggregation, today), [entries, range, aggregation, today]);
   const loadFocusData = useMemo(
     () => (['aerobicLow', 'aerobicHigh', 'anaerobic'] as LoadFocusArea[]).map(
       (area) => buildLoadFocusChartData(entries, area, range, aggregation, today),
@@ -1336,12 +1486,13 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         summaryLabel={summaryStr(summaryValue(heatAcclimationData), 'heatAcclimationPct', WELLNESS_METRIC_UNITS.heatAcclimationPct)}
         formatValue={numFmt('heatAcclimationPct')}
       />
-      <WellnessBarChart
-        label={WELLNESS_METRIC_LABELS.altitudeAcclimationPct}
-        unit={WELLNESS_METRIC_UNITS.altitudeAcclimationPct}
-        buckets={altitudeAcclimationData.buckets}
-        summaryLabel={summaryStr(summaryValue(altitudeAcclimationData), 'altitudeAcclimationPct', WELLNESS_METRIC_UNITS.altitudeAcclimationPct)}
-        formatValue={numFmt('altitudeAcclimationPct')}
+      <WellnessAltitudeChart
+        altitudeBuckets={currentAltitudeData.buckets}
+        acclimationBuckets={altitudeAcclimationData.buckets}
+        summaryLabel={[
+          summaryValue(currentAltitudeData) === null ? '' : `Altitude ${formatAltitudeFeet(summaryValue(currentAltitudeData))} ft`,
+          summaryValue(altitudeAcclimationData) === null ? '' : `Adapted ${formatAltitudeFeet(summaryValue(altitudeAcclimationData))} ft`,
+        ].filter(Boolean).join(' · ')}
       />
 
       {/* Section: Recovery */}
