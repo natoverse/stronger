@@ -3,13 +3,13 @@ name: Garmin Wellness Sync
 on:
   schedule:
     # Every hour, on the hour. Kept deliberately simple (no time-zone / DST
-    # gating): the sync only looks back 24 hours, so running around the clock is
+    # gating): the sync only looks back 72 hours, so running around the clock is
     # cheap and guarantees near-continual updates.
     - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       backfill:
-        description: "Backfill all data since 2021-01-01 (default is the last 24 hours)"
+        description: "Backfill all data since 2021-01-01 (default is the last 72 hours)"
         required: false
         type: boolean
         default: false
@@ -42,7 +42,7 @@ jobs:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-        # Scheduled runs always overwrite the last-24-hours window so recent days
+        # Scheduled runs always overwrite the last-72-hours window so recent days
         # are refreshed (fixes partial mid-day rows and picks up edited days).
         run: python scripts/garmin-wellness-sync.py ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
 
