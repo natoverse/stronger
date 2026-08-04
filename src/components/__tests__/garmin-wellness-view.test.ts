@@ -3,17 +3,27 @@ import {
   TRAINING_STATUS_LEGEND_ITEMS,
   enduranceScoreLegendLabel,
   enduranceScoreColor,
+  formatAltitudeFeet,
   formatTrainingStatusLabel,
   hillScoreLegendLabel,
   hillScoreColor,
   hrvStatusLegendLabel,
   hrvStatusColor,
   readinessLegendLabel,
+  metersToFeet,
   trainingLoadRatioLegendLabel,
   trainingStatusColor,
   vo2MaxLegendLabel,
   vo2MaxColor,
 } from '../GarminWellnessView.js';
+
+describe('altitude formatting', () => {
+  it('converts Garmin altitude meters to rounded display feet', () => {
+    expect(metersToFeet(1625)).toBeCloseTo(5331.365);
+    expect(formatAltitudeFeet(1625)).toBe('5,331');
+    expect(formatAltitudeFeet(null)).toBe('—');
+  });
+});
 
 describe('hrvStatusColor', () => {
   it('maps balanced, low, and unbalanced HRV statuses to the requested colors', () => {

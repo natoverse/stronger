@@ -117,7 +117,7 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   hillScore: '',
   enduranceScore: '',
   heatAcclimationPct: '%',
-  altitudeAcclimationPct: '%',
+  altitudeAcclimationPct: 'm',
   currentAltitude: 'm',
   activeCalories: 'kcal',
   bmrCalories: 'kcal',
