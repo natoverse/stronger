@@ -13,6 +13,7 @@ import {
 	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
+	isSignInCanceledError,
 	extractSheetId,
 	saveSheetId,
 	loadSheetId,
@@ -250,7 +251,9 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				setPhase('sheet-input')
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Sign-in failed.')
+			setError(isSignInCanceledError(err)
+				? null
+				: err instanceof Error ? err.message : 'Sign-in failed.')
 			setPhase('sign-in')
 		} finally {
 			setSignInPending(false)

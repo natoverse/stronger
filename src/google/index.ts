@@ -12,6 +12,7 @@ export {
 	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
+	isSignInCanceledError,
 	describeSheetError,
 	withAuthRetry,
 } from './auth.ts'
