@@ -41,6 +41,12 @@ const TOKEN_REQUEST_TIMEOUT_MS = 20_000
 /** Allow time for account selection, passwords, 2FA, and consent. */
 const INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS = 5 * 60_000
 
+/** Briefly wait for Google's session state to settle after a popup race. */
+const POPUP_CLOSED_RECOVERY_DELAY_MS = 300
+
+/** Keep a genuine popup dismissal from leaving the button disabled for long. */
+const POPUP_CLOSED_RECOVERY_TIMEOUT_MS = 3_000
+
 /**
  * Refresh the token this many milliseconds before its real expiry so a
  * stored token is never used right at the edge of expiring.
@@ -131,6 +137,17 @@ interface ManagedTokenClient {
 
 let tokenClient: ManagedTokenClient | null = null
 
+class SignInCanceledError extends Error {
+	constructor() {
+		super('Google sign-in was canceled.')
+		this.name = 'SignInCanceledError'
+	}
+}
+
+export function isSignInCanceledError(err: unknown): boolean {
+	return err instanceof SignInCanceledError
+}
+
 function createTokenClient(): ManagedTokenClient {
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
@@ -173,7 +190,7 @@ export function initTokenClient(): void {
  * prompt allows GIS to show consent / account selection only when
  * required. Rejects on error or after a timeout.
  */
-function requestToken(opts: { interactive: boolean; loginHint?: string }): Promise<TokenResponse> {
+function requestToken(opts: { interactive: boolean; loginHint?: string; timeoutMs?: number }): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
 		if (!tokenClient) {
 			reject(new Error('Token client is not initialised. Call initTokenClient() first.'))
@@ -185,9 +202,9 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 		const managedClient = tokenClient
 		managedClient.inUse = true
 		const client = managedClient.client
-		const timeoutMs = opts.interactive
+		const timeoutMs = opts.timeoutMs ?? (opts.interactive
 			? INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS
-			: TOKEN_REQUEST_TIMEOUT_MS
+			: TOKEN_REQUEST_TIMEOUT_MS)
 		const timer = setTimeout(() => {
 				if (settled) return
 				settled = true
@@ -221,7 +238,7 @@ function requestToken(opts: { interactive: boolean; loginHint?: string }): Promi
 					return
 				}
 				if (err?.type === 'popup_closed') {
-					reject(new Error('Google sign-in was canceled. Try again when you are ready.'))
+					reject(new SignInCanceledError())
 					return
 				}
 				reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
@@ -290,7 +307,26 @@ export function signIn(): Promise<string> {
 		}
 		initTokenClient()
 		const loginHint = loadUserEmail() ?? undefined
-		const resp = await requestToken({ interactive: true, loginHint })
+		let resp: TokenResponse
+		try {
+			resp = await requestToken({ interactive: true, loginHint })
+		} catch (err) {
+			if (!isSignInCanceledError(err)) throw err
+
+			// GIS can report popup_closed just before its newly established
+			// session becomes available. Recover silently so a successful
+			// first click does not require another click.
+			await new Promise((resolve) => setTimeout(resolve, POPUP_CLOSED_RECOVERY_DELAY_MS))
+			try {
+				resp = await requestToken({
+					interactive: false,
+					loginHint,
+					timeoutMs: POPUP_CLOSED_RECOVERY_TIMEOUT_MS,
+				})
+			} catch {
+				throw err
+			}
+		}
 		const accessToken = applyTokenResponse(resp)
 		await fetchAndStoreEmail(accessToken)
 		return accessToken

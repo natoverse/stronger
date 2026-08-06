@@ -137,6 +137,70 @@ describe('Google authentication', () => {
 		await expect(attempt).rejects.toThrow('Allow popups for this site')
 	})
 
+	it('recovers silently when GIS reports that the popup closed', async () => {
+		vi.useFakeTimers()
+		const configs: TokenClientConfig[] = []
+		const clients: TokenClient[] = []
+		window.google = mockGoogle((config) => {
+			configs.push(config)
+			const client = mockTokenClient(config)
+			clients.push(client)
+			return client
+		})
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		configs[0].error_callback?.({ type: 'popup_closed' })
+		await vi.advanceTimersByTimeAsync(300)
+
+		expect(window.google.accounts.oauth2.initTokenClient).toHaveBeenCalledTimes(1)
+		expect(clients[0].requestAccessToken).toHaveBeenLastCalledWith({
+			prompt: 'none',
+		})
+		configs[0].callback({ access_token: 'recovered-token', expires_in: 3600 })
+
+		await expect(attempt).resolves.toBe('recovered-token')
+		expect(window.gapi?.client.setToken).toHaveBeenCalledTimes(1)
+		vi.useRealTimers()
+	})
+
+	it('preserves a suppressible cancellation error when silent recovery fails', async () => {
+		vi.useFakeTimers()
+		let config: TokenClientConfig | undefined
+		window.google = mockGoogle((nextConfig) => {
+			config = nextConfig
+			return mockTokenClient(nextConfig)
+		})
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		const result = expect(attempt).rejects.toSatisfy(auth.isSignInCanceledError)
+		config?.error_callback?.({ type: 'popup_closed' })
+		await vi.advanceTimersByTimeAsync(300)
+		config?.error_callback?.({ type: 'interaction_required' })
+
+		await result
+		vi.useRealTimers()
+	})
+
+	it('bounds popup-close recovery when GIS does not respond', async () => {
+		vi.useFakeTimers()
+		let config: TokenClientConfig | undefined
+		window.google = mockGoogle((nextConfig) => {
+			config = nextConfig
+			return mockTokenClient(nextConfig)
+		})
+		const auth = await loadAuth()
+
+		const attempt = auth.signIn()
+		const result = expect(attempt).rejects.toSatisfy(auth.isSignInCanceledError)
+		config?.error_callback?.({ type: 'popup_closed' })
+		await vi.advanceTimersByTimeAsync(3_300)
+
+		await result
+		vi.useRealTimers()
+	})
+
 	it('allows interactive sign-in to remain open while the user completes it', async () => {
 		vi.useFakeTimers()
 		let config: TokenClientConfig | undefined
