@@ -67,3 +67,7 @@ Three refinements after the initial Withings sync landed (#201):
   centered averages (7 daily, 5 weekly, or 3 monthly buckets). The charts render
   each range as one continuous translucent gray band with dashed upper and lower
   boundaries, matching Garmin Load Focus instead of drawing adjacent rectangles.
+- Goal-range refinement (2026-08): weight-derived bounds now always use the
+  corresponding ISO week's average body weight from the full dataset, keeping
+  bounds stable across time-range and aggregation selections. Lean mass uses a
+  78–89% body-weight range. Dynamic chart axes target six ticks instead of four.

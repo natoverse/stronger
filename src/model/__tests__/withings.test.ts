@@ -190,48 +190,48 @@ describe('buildMetricTrendData', () => {
     expect(data.latest).toBe(61);
   });
 
-  it('displays lean mass in pounds and derives daily optimal bounds from weight', () => {
+  it('displays lean mass in pounds and derives 78–89% optimal bounds from weekly weight', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, fatFreeMass: 52 }),
       makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, fatFreeMass: 50 }),
     ];
     const data = buildMetricTrendData(measurements, 'fatFreeMass', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(114.64, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(111.06, 2);
-    expect(data.points[2].optimalMax).toBeCloseTo(112.77, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(80 * KG_TO_LB * 0.78, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(80 * KG_TO_LB * 0.89, 2);
     expect(data.points[3].value).toBeCloseTo(110.23, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(111.06, 2);
-    expect(data.points[3].optimalMax).toBeCloseTo(112.77, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(75 * KG_TO_LB * 0.78, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(75 * KG_TO_LB * 0.89, 2);
     expect(data.latest).toBeCloseTo(110.23, 2);
   });
 
-  it('displays bone mass in pounds and derives daily optimal bounds from weight', () => {
+  it('displays bone mass in pounds and derives optimal bounds from weekly weight', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, boneMass: 3.2 }),
       makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, boneMass: 3 }),
     ];
     const data = buildMetricTrendData(measurements, 'boneMass', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(7.05, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(5.13, 2);
-    expect(data.points[2].optimalMax).toBeCloseTo(8.54, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(80 * KG_TO_LB * 0.03, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(80 * KG_TO_LB * 0.05, 2);
     expect(data.points[3].value).toBeCloseTo(6.61, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(5.13, 2);
-    expect(data.points[3].optimalMax).toBeCloseTo(8.54, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(75 * KG_TO_LB * 0.03, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(75 * KG_TO_LB * 0.05, 2);
     expect(data.latest).toBeCloseTo(6.61, 2);
   });
 
-  it('displays hydration in pounds and derives daily optimal bounds from weight', () => {
+  it('displays hydration in pounds and derives optimal bounds from weekly weight', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, hydration: 48 }),
       makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, hydration: 45 }),
     ];
     const data = buildMetricTrendData(measurements, 'hydration', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(105.82, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(85.43, 2);
-    expect(data.points[2].optimalMax).toBeCloseTo(111.06, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(80 * KG_TO_LB * 0.5, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(80 * KG_TO_LB * 0.65, 2);
     expect(data.points[3].value).toBeCloseTo(99.21, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(85.43, 2);
-    expect(data.points[3].optimalMax).toBeCloseTo(111.06, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(75 * KG_TO_LB * 0.5, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(75 * KG_TO_LB * 0.65, 2);
     expect(data.latest).toBeCloseTo(99.21, 2);
   });
 
@@ -251,20 +251,19 @@ describe('buildMetricTrendData', () => {
     expect(data.delta).toBe(-1);
   });
 
-  it('smooths daily weight-derived optimal ranges across a seven-day window', () => {
-    const weights = [80, 80, 80, 80, 110, 80, 80, 80, 80];
-    const measurements = weights.map((weight, index) =>
-      makeMeasurement({
-        date: `2026-06-${String(11 + index).padStart(2, '0')}`,
-        grpId: String(index),
-        weight,
-      }),
-    );
-    const data = buildMetricTrendData(measurements, 'hydration', 'month', null, TODAY, 'day');
+  it('uses the full week average for bounds regardless of the filtered window', () => {
+    const fullMeasurements = [
+      makeMeasurement({ date: '2026-06-15', grpId: 'a', weight: 80 }),
+      makeMeasurement({ date: '2026-06-16', grpId: 'b', weight: 100 }),
+      makeMeasurement({ date: '2026-06-17', grpId: 'c', weight: 80 }),
+    ];
+    const filtered = [fullMeasurements[2]];
+    const data = buildMetricTrendData(filtered, 'hydration', 'month', null, TODAY, 'day', fullMeasurements);
     const populated = data.points.filter((point) => point.optimalMin !== null);
+    const weeklyAverage = 260 / 3;
 
-    expect(populated[4].optimalMin).toBeCloseTo((590 / 7) * KG_TO_LB * 0.5, 2);
-    expect(populated[4].optimalMax).toBeCloseTo((590 / 7) * KG_TO_LB * 0.65, 2);
+    expect(populated[0].optimalMin).toBeCloseTo(weeklyAverage * KG_TO_LB * 0.5, 2);
+    expect(populated[0].optimalMax).toBeCloseTo(weeklyAverage * KG_TO_LB * 0.65, 2);
   });
 
   it('tracks min and max across the range', () => {
