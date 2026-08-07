@@ -165,6 +165,11 @@ export const METRIC_LOWER_IS_BETTER: Record<WithingsMetric, boolean> = {
   visceralFat: true,
 };
 
+/** Fixed chart domains for metrics whose score scale should not follow observed values. */
+export const METRIC_AXIS_RANGES: Partial<Record<WithingsMetric, { min: number; max: number }>> = {
+  visceralFat: { min: 1, max: 6 },
+};
+
 /* ------------------------------------------------------------------ */
 /*  Time range options (re-exported for a self-contained view import)  */
 /* ------------------------------------------------------------------ */
@@ -196,6 +201,10 @@ const OPTIMAL_PERCENT_RANGES: Partial<Record<WithingsMetric, { min: number; max:
   hydration: { min: 50, max: 65 },
 };
 
+const FIXED_OPTIMAL_RANGES: Partial<Record<WithingsMetric, { min: number; max: number }>> = {
+  visceralFat: { min: 1, max: 5 },
+};
+
 /** Get the numeric value of a metric on a measurement, or null if absent. */
 function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
   const v = m[metric];
@@ -203,6 +212,8 @@ function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | n
 }
 
 function optimalRange(m: WithingsMeasurement, metric: WithingsMetric): { min: number; max: number } | null {
+  const fixed = FIXED_OPTIMAL_RANGES[metric];
+  if (fixed) return fixed;
   const percentage = OPTIMAL_PERCENT_RANGES[metric];
   if (!percentage || !Number.isFinite(m.weight) || m.weight <= 0) return null;
   return {

@@ -9,6 +9,7 @@ import {
   METRIC_UNITS,
   METRIC_LABELS,
   METRIC_LOWER_IS_BETTER,
+  METRIC_AXIS_RANGES,
   WITHINGS_METRICS,
 } from '../withings.js';
 import type { WithingsMeasurement } from '../types.js';
@@ -66,6 +67,10 @@ describe('metric metadata', () => {
     expect(WITHINGS_METRICS).toContain('fatFreeMass');
     expect(WITHINGS_METRICS).toContain('heartRate');
     expect(WITHINGS_METRICS).toContain('visceralFat');
+  });
+
+  it('uses a fixed 1–6 axis for visceral fat', () => {
+    expect(METRIC_AXIS_RANGES.visceralFat).toEqual({ min: 1, max: 6 });
   });
 });
 
@@ -230,14 +235,18 @@ describe('buildMetricTrendData', () => {
     expect(data.latest).toBeCloseTo(99.21, 2);
   });
 
-  it('keeps visceral fat in score units', () => {
+  it('keeps visceral fat in score units with a 1–5 optimal range', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', visceralFat: 9 }),
       makeMeasurement({ date: '2026-04-01', grpId: 'b', visceralFat: 8 }),
     ];
     const data = buildMetricTrendData(measurements, 'visceralFat', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBe(9);
+    expect(data.points[2].optimalMin).toBe(1);
+    expect(data.points[2].optimalMax).toBe(5);
     expect(data.points[3].value).toBe(8);
+    expect(data.points[3].optimalMin).toBe(1);
+    expect(data.points[3].optimalMax).toBe(5);
     expect(data.latest).toBe(8);
     expect(data.delta).toBe(-1);
   });

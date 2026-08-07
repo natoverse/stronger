@@ -16,6 +16,7 @@ import {
   METRIC_LABELS,
   METRIC_UNITS,
   METRIC_LOWER_IS_BETTER,
+  METRIC_AXIS_RANGES,
 } from '../model/withings.js';
 import { Target } from 'lucide-react';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
@@ -41,6 +42,7 @@ interface Props {
 
 const CHART_HEIGHT = 220;
 const CHART_PADDING = { top: 16, right: 20, bottom: 32, left: 52 };
+const OPTIMAL_RANGE_FILL = 'rgba(255,255,255,0.25)';
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -169,18 +171,21 @@ function MetricTrendChart({
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
   const rangeValues = points.flatMap((p) => [p.optimalMin, p.optimalMax]).filter((v): v is number => v !== null);
   const withGoal = goal !== null ? [...values, ...rangeValues, goal] : [...values, ...rangeValues];
+  const fixedAxis = METRIC_AXIS_RANGES[data.metric];
   const dataMin = withGoal.length > 0 ? Math.min(...withGoal) : 0;
   const dataMax = withGoal.length > 0 ? Math.max(...withGoal) : 1;
   const pad = (dataMax - dataMin) * 0.1 || Math.max(dataMax * 0.02, 0.5);
-  const yMin = dataMin - pad;
-  const yMax = dataMax + pad;
+  const yMin = fixedAxis?.min ?? dataMin - pad;
+  const yMax = fixedAxis?.max ?? dataMax + pad;
 
   const xCenter = (i: number) =>
     CHART_PADDING.left + (n <= 1 ? plotW / 2 : (plotW * i) / (n - 1));
   const yVal = (v: number) =>
     CHART_PADDING.top + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
 
-  const ticks = niceTicksFor(yMin, yMax, 4);
+  const ticks = fixedAxis
+    ? Array.from({ length: fixedAxis.max - fixedAxis.min + 1 }, (_, i) => fixedAxis.min + i)
+    : niceTicksFor(yMin, yMax, 4);
 
   // X-axis labels — show a subset to avoid crowding
   const maxLabels = Math.min(n, 8);
@@ -283,7 +288,7 @@ function MetricTrendChart({
                 y={yVal(point.optimalMax)}
                 width={i === 0 || i === n - 1 ? width / 2 : width}
                 height={yVal(point.optimalMin) - yVal(point.optimalMax)}
-                fill="var(--color-completed)"
+                fill={OPTIMAL_RANGE_FILL}
                 opacity={0.3}
               />
             );
