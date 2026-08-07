@@ -47,6 +47,10 @@ export interface TrendPoint {
    * through to the next real point rather than showing a gap.
    */
   value: number | null;
+  /** Optimal lower bound in display units for this bucket, if applicable. */
+  optimalMin: number | null;
+  /** Optimal upper bound in display units for this bucket, if applicable. */
+  optimalMax: number | null;
 }
 
 /** A single metric's target (e.g. a goal weight). */
@@ -102,13 +106,16 @@ const KG_TO_LB = 2.2046226218;
 /**
  * Metrics stored in kilograms. These are converted to pounds for display —
  * the sheet stays canonical (kg, matching the Withings API), and the UI only
- * ever shows imperial units. Body fat (%), lean, bone, and hydration (% of
- * total weight), and heart rate (bpm) are not masses and pass through unchanged.
+ * ever shows imperial units. Body fat (%) and heart rate (bpm) are not masses
+ * and pass through unchanged.
  */
 const MASS_METRICS: ReadonlySet<WithingsMetric> = new Set([
   'weight',
   'fatMass',
   'muscleMass',
+  'boneMass',
+  'hydration',
+  'fatFreeMass',
 ]);
 
 /** Convert a raw stored value (kg for masses) into its display value (lb). */
@@ -126,9 +133,9 @@ export const METRIC_UNITS: Record<WithingsMetric, string> = {
   fatMass: 'lb',
   fatRatio: '%',
   muscleMass: 'lb',
-  boneMass: '%',
-  hydration: '%',
-  fatFreeMass: '%',
+  boneMass: 'lb',
+  hydration: 'lb',
+  fatFreeMass: 'lb',
   heartRate: 'bpm',
   visceralFat: 'score',
 };
@@ -183,14 +190,25 @@ export function filterMeasurements(
   return measurements.filter((m) => m.date >= startStr && m.date <= endStr);
 }
 
+const OPTIMAL_PERCENT_RANGES: Partial<Record<WithingsMetric, { min: number; max: number }>> = {
+  fatFreeMass: { min: 65, max: 66 },
+  boneMass: { min: 4, max: 5 },
+  hydration: { min: 50, max: 65 },
+};
+
 /** Get the numeric value of a metric on a measurement, or null if absent. */
 function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
-  if (metric === 'fatFreeMass' || metric === 'boneMass' || metric === 'hydration') {
-    const mass = m[metric];
-    return typeof mass === 'number' && m.weight > 0 ? (mass / m.weight) * 100 : null;
-  }
   const v = m[metric];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function optimalRange(m: WithingsMeasurement, metric: WithingsMetric): { min: number; max: number } | null {
+  const percentage = OPTIMAL_PERCENT_RANGES[metric];
+  if (!percentage || !Number.isFinite(m.weight) || m.weight <= 0) return null;
+  return {
+    min: toDisplayUnit('weight', m.weight * percentage.min / 100),
+    max: toDisplayUnit('weight', m.weight * percentage.max / 100),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -335,9 +353,15 @@ export function buildMetricTrendData(
   // Accumulate sum + count per bucket so we can average.
   const sums = new Map<string, number>();
   const counts = new Map<string, number>();
+  const optimalMins = new Map<string, number>();
+  const optimalMaxes = new Map<string, number>();
+  const optimalCounts = new Map<string, number>();
   for (const { key } of slots) {
     sums.set(key, 0);
     counts.set(key, 0);
+    optimalMins.set(key, 0);
+    optimalMaxes.set(key, 0);
+    optimalCounts.set(key, 0);
   }
 
   // Track latest measurement (by date) with a value, for the headline figure.
@@ -357,6 +381,12 @@ export function buildMetricTrendData(
     if (sums.has(key)) {
       sums.set(key, (sums.get(key) ?? 0) + v);
       counts.set(key, (counts.get(key) ?? 0) + 1);
+      const target = optimalRange(m, metric);
+      if (target) {
+        optimalMins.set(key, (optimalMins.get(key) ?? 0) + target.min);
+        optimalMaxes.set(key, (optimalMaxes.get(key) ?? 0) + target.max);
+        optimalCounts.set(key, (optimalCounts.get(key) ?? 0) + 1);
+      }
     }
 
     if (min === null || v < min) min = v;
@@ -373,9 +403,12 @@ export function buildMetricTrendData(
 
   const points: TrendPoint[] = slots.map(({ key, label }) => {
     const count = counts.get(key) ?? 0;
+    const optimalCount = optimalCounts.get(key) ?? 0;
     return {
       label,
       value: count > 0 ? (sums.get(key) ?? 0) / count : null,
+      optimalMin: optimalCount > 0 ? (optimalMins.get(key) ?? 0) / optimalCount : null,
+      optimalMax: optimalCount > 0 ? (optimalMaxes.get(key) ?? 0) / optimalCount : null,
     };
   });
 
@@ -439,7 +472,7 @@ export function filterTrendDips(
 
 /** Format a display-unit value for axis labels and headline figures. */
 export function formatMetricValue(v: number, metric: WithingsMetric): string {
-  if (metric === 'fatRatio' || metric === 'fatFreeMass' || metric === 'boneMass' || metric === 'hydration') return v.toFixed(1);
+  if (metric === 'fatRatio') return v.toFixed(1);
   if (metric === 'heartRate' || metric === 'visceralFat') return v.toFixed(0);
   // Mass metrics (lb): one decimal below 100, whole numbers above.
   if (v >= 100) return v.toFixed(0);

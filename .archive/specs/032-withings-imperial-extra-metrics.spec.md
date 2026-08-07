@@ -57,8 +57,4 @@ Three refinements after the initial Withings sync landed (#201):
 
 - Added **visceral fat** to the Withings pipeline and charts as a new trailing sheet column (`visceralFat`, extending the tab from A:J to A:K). The sync reads Withings meastype `170`, stores the raw unitless score in the sheet, and surfaces it in the Body Composition charts without lb conversion.
 
-- Lean mass is calculated as fat-free mass divided by total body weight and displayed as a percentage. Its 65–66% optimal range is shown with the same green background shading used by wellness charts.
-
-- Bone mass is calculated as bone mass divided by total body weight and displayed as a percentage. Its 4–5% optimal range is shown with the same green background shading. The Withings visceral-fat score remains a unitless score and uses its unmodified chart scale.
-
-- Hydration is calculated as hydration mass divided by total body weight and displayed as a percentage. Its 50–65% optimal range is shown with the same green background shading.
+- Lean mass, bone mass, and hydration display their measured values in pounds. Their 65–66%, 4–5%, and 50–65% optimal ranges are respectively converted to pounds from each measurement's weight, so the shaded band moves with daily weight changes. The Withings visceral-fat score remains a unitless score and uses its unmodified chart scale.

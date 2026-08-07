@@ -164,23 +164,16 @@ function MetricTrendChart({
   );
   const n = points.length;
 
-  const optimalRange =
-    data.metric === 'fatFreeMass'
-      ? { min: 65, max: 66 }
-      : data.metric === 'boneMass'
-        ? { min: 4, max: 5 }
-        : data.metric === 'hydration'
-          ? { min: 50, max: 65 }
-          : null;
   // Y-axis domain: pad the observed min/max (and goal) by ~5% so the trend
   // line doesn't hug the chart edges. Body composition varies in a narrow band.
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
-  const withGoal = goal !== null ? [...values, goal] : values;
+  const rangeValues = points.flatMap((p) => [p.optimalMin, p.optimalMax]).filter((v): v is number => v !== null);
+  const withGoal = goal !== null ? [...values, ...rangeValues, goal] : [...values, ...rangeValues];
   const dataMin = withGoal.length > 0 ? Math.min(...withGoal) : 0;
   const dataMax = withGoal.length > 0 ? Math.max(...withGoal) : 1;
   const pad = (dataMax - dataMin) * 0.1 || Math.max(dataMax * 0.02, 0.5);
-  const yMin = Math.min(dataMin - pad, optimalRange?.min ?? Infinity);
-  const yMax = Math.max(dataMax + pad, optimalRange?.max ?? -Infinity);
+  const yMin = dataMin - pad;
+  const yMax = dataMax + pad;
 
   const xCenter = (i: number) =>
     CHART_PADDING.left + (n <= 1 ? plotW / 2 : (plotW * i) / (n - 1));
@@ -279,16 +272,22 @@ function MetricTrendChart({
           viewBox={`0 0 ${viewBoxWidth} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          {optimalRange && (
-            <rect
-              x={CHART_PADDING.left}
-              y={yVal(optimalRange.max)}
-              width={plotW}
-              height={yVal(optimalRange.min) - yVal(optimalRange.max)}
-              fill="var(--color-completed)"
-              opacity={0.3}
-            />
-          )}
+          {points.map((point, i) => {
+            if (point.optimalMin === null || point.optimalMax === null) return null;
+            const x = CHART_PADDING.left + (n <= 1 ? 0 : (plotW * i) / (n - 1));
+            const width = n <= 1 ? plotW : plotW / (n - 1);
+            return (
+              <rect
+                key={`optimal-${i}`}
+                x={x - (i === 0 ? 0 : width / 2)}
+                y={yVal(point.optimalMax)}
+                width={i === 0 || i === n - 1 ? width / 2 : width}
+                height={yVal(point.optimalMin) - yVal(point.optimalMax)}
+                fill="var(--color-completed)"
+                opacity={0.3}
+              />
+            );
+          })}
 
           {/* Grid lines */}
           {ticks.map((tick) => (
