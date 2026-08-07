@@ -164,7 +164,7 @@ function MetricTrendChart({
   );
   const n = points.length;
 
-  const isVisceralFat = data.metric === 'visceralFat';
+  const optimalRange = data.metric === 'fatFreeMass' ? { min: 65, max: 66 } : null;
   // Y-axis domain: pad the observed min/max (and goal) by ~5% so the trend
   // line doesn't hug the chart edges. Body composition varies in a narrow band.
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
@@ -172,15 +172,15 @@ function MetricTrendChart({
   const dataMin = withGoal.length > 0 ? Math.min(...withGoal) : 0;
   const dataMax = withGoal.length > 0 ? Math.max(...withGoal) : 1;
   const pad = (dataMax - dataMin) * 0.1 || Math.max(dataMax * 0.02, 0.5);
-  const yMin = isVisceralFat ? 1 : dataMin - pad;
-  const yMax = isVisceralFat ? 6 : dataMax + pad;
+  const yMin = Math.min(dataMin - pad, optimalRange?.min ?? Infinity);
+  const yMax = Math.max(dataMax + pad, optimalRange?.max ?? -Infinity);
 
   const xCenter = (i: number) =>
     CHART_PADDING.left + (n <= 1 ? plotW / 2 : (plotW * i) / (n - 1));
   const yVal = (v: number) =>
     CHART_PADDING.top + plotH - ((v - yMin) / (yMax - yMin || 1)) * plotH;
 
-  const ticks = isVisceralFat ? [1, 2, 3, 4, 5, 6] : niceTicksFor(yMin, yMax, 4);
+  const ticks = niceTicksFor(yMin, yMax, 4);
 
   // X-axis labels — show a subset to avoid crowding
   const maxLabels = Math.min(n, 8);
@@ -272,12 +272,12 @@ function MetricTrendChart({
           viewBox={`0 0 ${viewBoxWidth} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          {isVisceralFat && (
+          {optimalRange && (
             <rect
               x={CHART_PADDING.left}
-              y={yVal(5)}
+              y={yVal(optimalRange.max)}
               width={plotW}
-              height={yVal(1) - yVal(5)}
+              height={yVal(optimalRange.min) - yVal(optimalRange.max)}
               fill="#00e676"
               opacity={0.3}
             />
