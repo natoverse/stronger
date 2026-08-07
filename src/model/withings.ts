@@ -197,7 +197,7 @@ export function filterMeasurements(
 
 const OPTIMAL_PERCENT_RANGES: Partial<Record<WithingsMetric, { min: number; max: number }>> = {
   fatFreeMass: { min: 65, max: 66 },
-  boneMass: { min: 4, max: 5 },
+  boneMass: { min: 3, max: 5 },
   hydration: { min: 50, max: 65 },
 };
 

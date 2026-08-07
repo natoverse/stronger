@@ -212,10 +212,10 @@ describe('buildMetricTrendData', () => {
     ];
     const data = buildMetricTrendData(measurements, 'boneMass', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(7.05, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(6.83, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(5.13, 2);
     expect(data.points[2].optimalMax).toBeCloseTo(8.54, 2);
     expect(data.points[3].value).toBeCloseTo(6.61, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(6.83, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(5.13, 2);
     expect(data.points[3].optimalMax).toBeCloseTo(8.54, 2);
     expect(data.latest).toBeCloseTo(6.61, 2);
   });
