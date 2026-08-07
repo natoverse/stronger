@@ -251,18 +251,20 @@ describe('buildMetricTrendData', () => {
     expect(data.delta).toBe(-1);
   });
 
-  it('smooths weight-derived optimal ranges across adjacent buckets', () => {
-    const measurements = [
-      makeMeasurement({ date: '2026-06-17', grpId: 'a', weight: 80 }),
-      makeMeasurement({ date: '2026-06-18', grpId: 'b', weight: 90 }),
-      makeMeasurement({ date: '2026-06-19', grpId: 'c', weight: 70 }),
-    ];
+  it('smooths daily weight-derived optimal ranges across a seven-day window', () => {
+    const weights = [80, 80, 80, 80, 110, 80, 80, 80, 80];
+    const measurements = weights.map((weight, index) =>
+      makeMeasurement({
+        date: `2026-06-${String(11 + index).padStart(2, '0')}`,
+        grpId: String(index),
+        weight,
+      }),
+    );
     const data = buildMetricTrendData(measurements, 'hydration', 'month', null, TODAY, 'day');
     const populated = data.points.filter((point) => point.optimalMin !== null);
 
-    expect(populated[0].optimalMin).toBeCloseTo(93.70, 2);
-    expect(populated[1].optimalMin).toBeCloseTo(88.18, 2);
-    expect(populated[2].optimalMin).toBeCloseTo(88.18, 2);
+    expect(populated[4].optimalMin).toBeCloseTo((590 / 7) * KG_TO_LB * 0.5, 2);
+    expect(populated[4].optimalMax).toBeCloseTo((590 / 7) * KG_TO_LB * 0.65, 2);
   });
 
   it('tracks min and max across the range', () => {
