@@ -205,6 +205,20 @@ const FIXED_OPTIMAL_RANGES: Partial<Record<WithingsMetric, { min: number; max: n
   visceralFat: { min: 1, max: 5 },
 };
 
+function smoothOptimalRanges(points: TrendPoint[]): TrendPoint[] {
+  return points.map((point, index) => {
+    if (point.optimalMin === null || point.optimalMax === null) return point;
+    const neighbors = points
+      .slice(Math.max(0, index - 1), index + 2)
+      .filter((candidate) => candidate.optimalMin !== null && candidate.optimalMax !== null);
+    return {
+      ...point,
+      optimalMin: neighbors.reduce((sum, candidate) => sum + candidate.optimalMin!, 0) / neighbors.length,
+      optimalMax: neighbors.reduce((sum, candidate) => sum + candidate.optimalMax!, 0) / neighbors.length,
+    };
+  });
+}
+
 /** Get the numeric value of a metric on a measurement, or null if absent. */
 function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
   const v = m[metric];
@@ -412,7 +426,7 @@ export function buildMetricTrendData(
     }
   }
 
-  const points: TrendPoint[] = slots.map(({ key, label }) => {
+  let points: TrendPoint[] = slots.map(({ key, label }) => {
     const count = counts.get(key) ?? 0;
     const optimalCount = optimalCounts.get(key) ?? 0;
     return {
@@ -422,6 +436,7 @@ export function buildMetricTrendData(
       optimalMax: optimalCount > 0 ? (optimalMaxes.get(key) ?? 0) / optimalCount : null,
     };
   });
+  if (OPTIMAL_PERCENT_RANGES[metric]) points = smoothOptimalRanges(points);
 
   const delta =
     latest !== null && earliest !== null && latestDate !== earliestDate
@@ -483,8 +498,8 @@ export function filterTrendDips(
 
 /** Format a display-unit value for axis labels and headline figures. */
 export function formatMetricValue(v: number, metric: WithingsMetric): string {
-  if (metric === 'fatRatio') return v.toFixed(1);
-  if (metric === 'heartRate' || metric === 'visceralFat') return v.toFixed(0);
+  if (metric === 'fatRatio' || metric === 'visceralFat') return v.toFixed(1);
+  if (metric === 'heartRate') return v.toFixed(0);
   // Mass metrics (lb): one decimal below 100, whole numbers above.
   if (v >= 100) return v.toFixed(0);
   return v.toFixed(1);

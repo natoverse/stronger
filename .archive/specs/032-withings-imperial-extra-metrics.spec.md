@@ -61,3 +61,5 @@ Three refinements after the initial Withings sync landed (#201):
 
 - Optimal ranges render as bounded translucent gray bands, matching the Garmin Load Focus charts rather than using the green series color.
 - The visceral-fat chart uses a fixed 1–6 y-axis with whole-number labels and shades 1–5 as the goal range.
+- Weight-derived optimal-range bands use a centered three-bucket moving average to reduce short-term visual noise while preserving missing buckets. Fixed ranges, including visceral fat, remain unchanged.
+- Visceral fat values display to one decimal place so subtle changes remain visible.

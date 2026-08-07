@@ -251,6 +251,20 @@ describe('buildMetricTrendData', () => {
     expect(data.delta).toBe(-1);
   });
 
+  it('smooths weight-derived optimal ranges across adjacent buckets', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-06-17', grpId: 'a', weight: 80 }),
+      makeMeasurement({ date: '2026-06-18', grpId: 'b', weight: 90 }),
+      makeMeasurement({ date: '2026-06-19', grpId: 'c', weight: 70 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'hydration', 'month', null, TODAY, 'day');
+    const populated = data.points.filter((point) => point.optimalMin !== null);
+
+    expect(populated[0].optimalMin).toBeCloseTo(93.70, 2);
+    expect(populated[1].optimalMin).toBeCloseTo(88.18, 2);
+    expect(populated[2].optimalMin).toBeCloseTo(88.18, 2);
+  });
+
   it('tracks min and max across the range', () => {
     const measurements = [
       makeMeasurement({ date: '2026-02-01', fatRatio: 18 }),
@@ -398,8 +412,8 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue(57.6, 'heartRate')).toBe('58');
   });
 
-  it('formats visceral fat as a whole number', () => {
-    expect(formatMetricValue(7.6, 'visceralFat')).toBe('8');
+  it('formats visceral fat to one decimal', () => {
+    expect(formatMetricValue(7.64, 'visceralFat')).toBe('7.6');
   });
 
   it('formats lean mass in pounds', () => {
