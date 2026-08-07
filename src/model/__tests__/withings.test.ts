@@ -197,11 +197,11 @@ describe('buildMetricTrendData', () => {
     ];
     const data = buildMetricTrendData(measurements, 'fatFreeMass', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(114.64, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(114.64, 2);
-    expect(data.points[2].optimalMax).toBeCloseTo(116.40, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(111.06, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(112.77, 2);
     expect(data.points[3].value).toBeCloseTo(110.23, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(107.48, 2);
-    expect(data.points[3].optimalMax).toBeCloseTo(109.13, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(111.06, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(112.77, 2);
     expect(data.latest).toBeCloseTo(110.23, 2);
   });
 
@@ -212,11 +212,11 @@ describe('buildMetricTrendData', () => {
     ];
     const data = buildMetricTrendData(measurements, 'boneMass', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(7.05, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(7.05, 2);
-    expect(data.points[2].optimalMax).toBeCloseTo(8.82, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(5.13, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(8.54, 2);
     expect(data.points[3].value).toBeCloseTo(6.61, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(6.61, 2);
-    expect(data.points[3].optimalMax).toBeCloseTo(8.27, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(5.13, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(8.54, 2);
     expect(data.latest).toBeCloseTo(6.61, 2);
   });
 
@@ -227,11 +227,11 @@ describe('buildMetricTrendData', () => {
     ];
     const data = buildMetricTrendData(measurements, 'hydration', '2026', null, TODAY, 'month');
     expect(data.points[2].value).toBeCloseTo(105.82, 2);
-    expect(data.points[2].optimalMin).toBeCloseTo(88.18, 2);
-    expect(data.points[2].optimalMax).toBeCloseTo(114.64, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(85.43, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(111.06, 2);
     expect(data.points[3].value).toBeCloseTo(99.21, 2);
-    expect(data.points[3].optimalMin).toBeCloseTo(82.67, 2);
-    expect(data.points[3].optimalMax).toBeCloseTo(107.48, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(85.43, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(111.06, 2);
     expect(data.latest).toBeCloseTo(99.21, 2);
   });
 
@@ -249,6 +249,20 @@ describe('buildMetricTrendData', () => {
     expect(data.points[3].optimalMax).toBe(5);
     expect(data.latest).toBe(8);
     expect(data.delta).toBe(-1);
+  });
+
+  it('smooths weight-derived optimal ranges across adjacent buckets', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-06-17', grpId: 'a', weight: 80 }),
+      makeMeasurement({ date: '2026-06-18', grpId: 'b', weight: 90 }),
+      makeMeasurement({ date: '2026-06-19', grpId: 'c', weight: 70 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'hydration', 'month', null, TODAY, 'day');
+    const populated = data.points.filter((point) => point.optimalMin !== null);
+
+    expect(populated[0].optimalMin).toBeCloseTo(93.70, 2);
+    expect(populated[1].optimalMin).toBeCloseTo(88.18, 2);
+    expect(populated[2].optimalMin).toBeCloseTo(88.18, 2);
   });
 
   it('tracks min and max across the range', () => {
@@ -398,8 +412,8 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue(57.6, 'heartRate')).toBe('58');
   });
 
-  it('formats visceral fat as a whole number', () => {
-    expect(formatMetricValue(7.6, 'visceralFat')).toBe('8');
+  it('formats visceral fat to one decimal', () => {
+    expect(formatMetricValue(7.64, 'visceralFat')).toBe('7.6');
   });
 
   it('formats lean mass in pounds', () => {
