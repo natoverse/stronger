@@ -164,7 +164,12 @@ function MetricTrendChart({
   );
   const n = points.length;
 
-  const optimalRange = data.metric === 'fatFreeMass' ? { min: 65, max: 66 } : null;
+  const optimalRange =
+    data.metric === 'fatFreeMass'
+      ? { min: 65, max: 66 }
+      : data.metric === 'boneMass'
+        ? { min: 4, max: 5 }
+        : null;
   // Y-axis domain: pad the observed min/max (and goal) by ~5% so the trend
   // line doesn't hug the chart edges. Body composition varies in a narrow band.
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);

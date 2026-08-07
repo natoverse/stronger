@@ -102,14 +102,13 @@ const KG_TO_LB = 2.2046226218;
 /**
  * Metrics stored in kilograms. These are converted to pounds for display —
  * the sheet stays canonical (kg, matching the Withings API), and the UI only
- * ever shows imperial units. Body fat (%), lean mass (% of total weight), and
- * heart rate (bpm) are not masses and pass through unchanged.
+ * ever shows imperial units. Body fat (%), lean and bone mass (% of total
+ * weight), and heart rate (bpm) are not masses and pass through unchanged.
  */
 const MASS_METRICS: ReadonlySet<WithingsMetric> = new Set([
   'weight',
   'fatMass',
   'muscleMass',
-  'boneMass',
   'hydration',
 ]);
 
@@ -128,7 +127,7 @@ export const METRIC_UNITS: Record<WithingsMetric, string> = {
   fatMass: 'lb',
   fatRatio: '%',
   muscleMass: 'lb',
-  boneMass: 'lb',
+  boneMass: '%',
   hydration: 'lb',
   fatFreeMass: '%',
   heartRate: 'bpm',
@@ -187,8 +186,9 @@ export function filterMeasurements(
 
 /** Get the numeric value of a metric on a measurement, or null if absent. */
 function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
-  if (metric === 'fatFreeMass') {
-    return m.fatFreeMass !== null && m.weight > 0 ? (m.fatFreeMass / m.weight) * 100 : null;
+  if (metric === 'fatFreeMass' || metric === 'boneMass') {
+    const mass = m[metric];
+    return mass !== null && m.weight > 0 ? (mass / m.weight) * 100 : null;
   }
   const v = m[metric];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -440,7 +440,7 @@ export function filterTrendDips(
 
 /** Format a display-unit value for axis labels and headline figures. */
 export function formatMetricValue(v: number, metric: WithingsMetric): string {
-  if (metric === 'fatRatio' || metric === 'fatFreeMass') return v.toFixed(1);
+  if (metric === 'fatRatio' || metric === 'fatFreeMass' || metric === 'boneMass') return v.toFixed(1);
   if (metric === 'heartRate' || metric === 'visceralFat') return v.toFixed(0);
   // Mass metrics (lb): one decimal below 100, whole numbers above.
   if (v >= 100) return v.toFixed(0);

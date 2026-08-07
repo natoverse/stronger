@@ -196,6 +196,17 @@ describe('buildMetricTrendData', () => {
     expect(data.latest).toBeCloseTo(66.67, 2);
   });
 
+  it('expresses bone mass as a percentage of total body weight', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, boneMass: 3.2 }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, boneMass: 3 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'boneMass', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBe(4);
+    expect(data.points[3].value).toBe(4);
+    expect(data.latest).toBe(4);
+  });
+
   it('keeps visceral fat in score units', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', visceralFat: 9 }),
@@ -361,6 +372,10 @@ describe('formatMetricValue', () => {
 
   it('formats lean mass as a percentage', () => {
     expect(formatMetricValue(65.42, 'fatFreeMass')).toBe('65.4');
+  });
+
+  it('formats bone mass as a percentage', () => {
+    expect(formatMetricValue(4.42, 'boneMass')).toBe('4.4');
   });
 
   it('formats mass under 100 with one decimal', () => {
