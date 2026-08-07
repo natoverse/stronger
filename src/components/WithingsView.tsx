@@ -206,6 +206,27 @@ function MetricTrendChart({
     .map((p, i) => (p.value === null ? null : { x: xCenter(i), y: yVal(p.value) }))
     .filter((c): c is { x: number; y: number } => c !== null);
   const linePath = buildSmoothPath(lineCoords);
+  const rangeCoords = points
+    .map((p, i) =>
+      p.optimalMin === null || p.optimalMax === null
+        ? null
+        : {
+            x: xCenter(i),
+            minY: yVal(Math.min(p.optimalMin, p.optimalMax)),
+            maxY: yVal(Math.max(p.optimalMin, p.optimalMax)),
+          },
+    )
+    .filter((c): c is { x: number; minY: number; maxY: number } => c !== null);
+  const rangeMinPath = buildLinearPath(rangeCoords.map(({ x, minY }) => ({ x, y: minY })));
+  const rangeMaxPath = buildLinearPath(rangeCoords.map(({ x, maxY }) => ({ x, y: maxY })));
+  const rangeBandPath = rangeCoords.length < 2
+    ? ''
+    : [
+        `M ${rangeCoords[0].x},${rangeCoords[0].maxY}`,
+        ...rangeCoords.slice(1).map(({ x, maxY }) => `L ${x},${maxY}`),
+        ...[...rangeCoords].reverse().map(({ x, minY }) => `L ${x},${minY}`),
+        'Z',
+      ].join(' ');
 
   const xPositions = useMemo(
     () => Array.from({ length: n }, (_, i) => xCenter(i)),
@@ -277,23 +298,6 @@ function MetricTrendChart({
           viewBox={`0 0 ${viewBoxWidth} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          {points.map((point, i) => {
-            if (point.optimalMin === null || point.optimalMax === null) return null;
-            const x = CHART_PADDING.left + (n <= 1 ? 0 : (plotW * i) / (n - 1));
-            const width = n <= 1 ? plotW : plotW / (n - 1);
-            return (
-              <rect
-                key={`optimal-${i}`}
-                x={x - (i === 0 ? 0 : width / 2)}
-                y={yVal(point.optimalMax)}
-                width={i === 0 || i === n - 1 ? width / 2 : width}
-                height={yVal(point.optimalMin) - yVal(point.optimalMax)}
-                fill={OPTIMAL_RANGE_FILL}
-                opacity={0.3}
-              />
-            );
-          })}
-
           {/* Grid lines */}
           {ticks.map((tick) => (
             <line
@@ -332,6 +336,11 @@ function MetricTrendChart({
               {points[i].label}
             </text>
           ))}
+
+          {/* Continuous optimal-range band with Garmin-style dashed bounds */}
+          {rangeBandPath && <path d={rangeBandPath} fill={OPTIMAL_RANGE_FILL} opacity={0.3} />}
+          {rangeMinPath && <path d={rangeMinPath} className="strava-goal-line" />}
+          {rangeMaxPath && <path d={rangeMaxPath} className="strava-goal-line" />}
 
           {/* Goal line */}
           {goal !== null && (
@@ -413,6 +422,12 @@ function niceTicksFor(min: number, max: number, count: number): number[] {
   const ticks: number[] = [];
   for (let v = niceMin; v <= niceMax + niceStep * 0.01; v += niceStep) {
     ticks.push(Math.round(v * 1e6) / 1e6);
+  }
+
+  function buildLinearPath(coords: { x: number; y: number }[]): string {
+    return coords
+      .map(({ x, y }, index) => `${index === 0 ? 'M' : 'L'} ${x},${y}`)
+      .join(' ');
   }
   return ticks;
 }

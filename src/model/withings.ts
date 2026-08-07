@@ -205,11 +205,23 @@ const FIXED_OPTIMAL_RANGES: Partial<Record<WithingsMetric, { min: number; max: n
   visceralFat: { min: 1, max: 5 },
 };
 
-function smoothOptimalRanges(points: TrendPoint[]): TrendPoint[] {
+const OPTIMAL_RANGE_SMOOTHING_WINDOW: Record<WithingsAggregation, number> = {
+  day: 7,
+  week: 4,
+  month: 3,
+};
+
+function smoothOptimalRanges(
+  points: TrendPoint[],
+  aggregation: WithingsAggregation,
+): TrendPoint[] {
+  const windowSize = OPTIMAL_RANGE_SMOOTHING_WINDOW[aggregation];
+  const before = Math.floor((windowSize - 1) / 2);
+  const after = windowSize - before - 1;
   return points.map((point, index) => {
     if (point.optimalMin === null || point.optimalMax === null) return point;
     const neighbors = points
-      .slice(Math.max(0, index - 1), index + 2)
+      .slice(Math.max(0, index - before), index + after + 1)
       .filter((candidate) => candidate.optimalMin !== null && candidate.optimalMax !== null);
     return {
       ...point,
@@ -436,7 +448,7 @@ export function buildMetricTrendData(
       optimalMax: optimalCount > 0 ? (optimalMaxes.get(key) ?? 0) / optimalCount : null,
     };
   });
-  if (OPTIMAL_PERCENT_RANGES[metric]) points = smoothOptimalRanges(points);
+  if (OPTIMAL_PERCENT_RANGES[metric]) points = smoothOptimalRanges(points, aggregation);
 
   const delta =
     latest !== null && earliest !== null && latestDate !== earliestDate
