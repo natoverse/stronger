@@ -424,12 +424,13 @@ function niceTicksFor(min: number, max: number, count: number): number[] {
     ticks.push(Math.round(v * 1e6) / 1e6);
   }
 
-  function buildLinearPath(coords: { x: number; y: number }[]): string {
-    return coords
-      .map(({ x, y }, index) => `${index === 0 ? 'M' : 'L'} ${x},${y}`)
-      .join(' ');
-  }
   return ticks;
+}
+
+function buildLinearPath(coords: { x: number; y: number }[]): string {
+  return coords
+    .map(({ x, y }, index) => `${index === 0 ? 'M' : 'L'} ${x},${y}`)
+    .join(' ');
 }
 
 /**
