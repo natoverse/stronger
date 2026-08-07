@@ -60,3 +60,5 @@ Three refinements after the initial Withings sync landed (#201):
 - Lean mass is calculated as fat-free mass divided by total body weight and displayed as a percentage. Its 65–66% optimal range is shown with the same green background shading used by wellness charts.
 
 - Bone mass is calculated as bone mass divided by total body weight and displayed as a percentage. Its 4–5% optimal range is shown with the same green background shading. The Withings visceral-fat score remains a unitless score and uses its unmodified chart scale.
+
+- Hydration is calculated as hydration mass divided by total body weight and displayed as a percentage. Its 50–65% optimal range is shown with the same green background shading.

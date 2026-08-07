@@ -169,7 +169,9 @@ function MetricTrendChart({
       ? { min: 65, max: 66 }
       : data.metric === 'boneMass'
         ? { min: 4, max: 5 }
-        : null;
+        : data.metric === 'hydration'
+          ? { min: 50, max: 65 }
+          : null;
   // Y-axis domain: pad the observed min/max (and goal) by ~5% so the trend
   // line doesn't hug the chart edges. Body composition varies in a narrow band.
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
@@ -283,7 +285,7 @@ function MetricTrendChart({
               y={yVal(optimalRange.max)}
               width={plotW}
               height={yVal(optimalRange.min) - yVal(optimalRange.max)}
-              fill="#00e676"
+              fill="var(--color-completed)"
               opacity={0.3}
             />
           )}

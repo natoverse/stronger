@@ -207,6 +207,17 @@ describe('buildMetricTrendData', () => {
     expect(data.latest).toBe(4);
   });
 
+  it('expresses hydration as a percentage of total body weight', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, hydration: 48 }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, hydration: 45 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'hydration', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBe(60);
+    expect(data.points[3].value).toBe(60);
+    expect(data.latest).toBe(60);
+  });
+
   it('keeps visceral fat in score units', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', visceralFat: 9 }),
@@ -376,6 +387,10 @@ describe('formatMetricValue', () => {
 
   it('formats bone mass as a percentage', () => {
     expect(formatMetricValue(4.42, 'boneMass')).toBe('4.4');
+  });
+
+  it('formats hydration as a percentage', () => {
+    expect(formatMetricValue(60.42, 'hydration')).toBe('60.4');
   });
 
   it('formats mass under 100 with one decimal', () => {
