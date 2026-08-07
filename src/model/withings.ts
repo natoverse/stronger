@@ -207,7 +207,7 @@ const FIXED_OPTIMAL_RANGES: Partial<Record<WithingsMetric, { min: number; max: n
 
 const OPTIMAL_RANGE_SMOOTHING_WINDOW: Record<WithingsAggregation, number> = {
   day: 7,
-  week: 4,
+  week: 5,
   month: 3,
 };
 

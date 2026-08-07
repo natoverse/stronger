@@ -64,6 +64,6 @@ Three refinements after the initial Withings sync landed (#201):
 - Weight-derived optimal-range bands use a centered three-bucket moving average to reduce short-term visual noise while preserving missing buckets. Fixed ranges, including visceral fat, remain unchanged.
 - Visceral fat values display to one decimal place so subtle changes remain visible.
 - Goal-range refinement (2026-08): weight-derived bounds now use aggregation-aware
-  centered averages (7 daily, 4 weekly, or 3 monthly buckets). The charts render
+  centered averages (7 daily, 5 weekly, or 3 monthly buckets). The charts render
   each range as one continuous translucent gray band with dashed upper and lower
   boundaries, matching Garmin Load Focus instead of drawing adjacent rectangles.

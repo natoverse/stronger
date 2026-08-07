@@ -212,19 +212,19 @@ function MetricTrendChart({
         ? null
         : {
             x: xCenter(i),
-            minY: yVal(Math.min(p.optimalMin, p.optimalMax)),
-            maxY: yVal(Math.max(p.optimalMin, p.optimalMax)),
+            topY: yVal(Math.max(p.optimalMin, p.optimalMax)),
+            bottomY: yVal(Math.min(p.optimalMin, p.optimalMax)),
           },
     )
-    .filter((c): c is { x: number; minY: number; maxY: number } => c !== null);
-  const rangeMinPath = buildLinearPath(rangeCoords.map(({ x, minY }) => ({ x, y: minY })));
-  const rangeMaxPath = buildLinearPath(rangeCoords.map(({ x, maxY }) => ({ x, y: maxY })));
+    .filter((c): c is { x: number; topY: number; bottomY: number } => c !== null);
+  const rangeMinPath = buildLinearPath(rangeCoords.map(({ x, bottomY }) => ({ x, y: bottomY })));
+  const rangeMaxPath = buildLinearPath(rangeCoords.map(({ x, topY }) => ({ x, y: topY })));
   const rangeBandPath = rangeCoords.length < 2
     ? ''
     : [
-        `M ${rangeCoords[0].x},${rangeCoords[0].maxY}`,
-        ...rangeCoords.slice(1).map(({ x, maxY }) => `L ${x},${maxY}`),
-        ...[...rangeCoords].reverse().map(({ x, minY }) => `L ${x},${minY}`),
+        `M ${rangeCoords[0].x},${rangeCoords[0].topY}`,
+        ...rangeCoords.slice(1).map(({ x, topY }) => `L ${x},${topY}`),
+        ...[...rangeCoords].reverse().map(({ x, bottomY }) => `L ${x},${bottomY}`),
         'Z',
       ].join(' ');
 
