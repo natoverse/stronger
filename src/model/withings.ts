@@ -196,7 +196,7 @@ export function filterMeasurements(
 }
 
 const OPTIMAL_PERCENT_RANGES: Partial<Record<WithingsMetric, { min: number; max: number }>> = {
-  fatFreeMass: { min: 65, max: 66 },
+  fatFreeMass: { min: 78, max: 89 },
   boneMass: { min: 3, max: 5 },
   hydration: { min: 50, max: 65 },
 };
@@ -205,47 +205,35 @@ const FIXED_OPTIMAL_RANGES: Partial<Record<WithingsMetric, { min: number; max: n
   visceralFat: { min: 1, max: 5 },
 };
 
-const OPTIMAL_RANGE_SMOOTHING_WINDOW: Record<WithingsAggregation, number> = {
-  day: 7,
-  week: 5,
-  month: 3,
-};
-
-function smoothOptimalRanges(
-  points: TrendPoint[],
-  aggregation: WithingsAggregation,
-): TrendPoint[] {
-  const windowSize = OPTIMAL_RANGE_SMOOTHING_WINDOW[aggregation];
-  const before = Math.floor((windowSize - 1) / 2);
-  const after = windowSize - before - 1;
-  return points.map((point, index) => {
-    if (point.optimalMin === null || point.optimalMax === null) return point;
-    const neighbors = points
-      .slice(Math.max(0, index - before), index + after + 1)
-      .filter((candidate) => candidate.optimalMin !== null && candidate.optimalMax !== null);
-    return {
-      ...point,
-      optimalMin: neighbors.reduce((sum, candidate) => sum + candidate.optimalMin!, 0) / neighbors.length,
-      optimalMax: neighbors.reduce((sum, candidate) => sum + candidate.optimalMax!, 0) / neighbors.length,
-    };
-  });
-}
-
 /** Get the numeric value of a metric on a measurement, or null if absent. */
 function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
   const v = m[metric];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-function optimalRange(m: WithingsMeasurement, metric: WithingsMetric): { min: number; max: number } | null {
+function optimalRange(weight: number, metric: WithingsMetric): { min: number; max: number } | null {
   const fixed = FIXED_OPTIMAL_RANGES[metric];
   if (fixed) return fixed;
   const percentage = OPTIMAL_PERCENT_RANGES[metric];
-  if (!percentage || !Number.isFinite(m.weight) || m.weight <= 0) return null;
+  if (!percentage || !Number.isFinite(weight) || weight <= 0) return null;
   return {
-    min: toDisplayUnit('weight', m.weight * percentage.min / 100),
-    max: toDisplayUnit('weight', m.weight * percentage.max / 100),
+    min: toDisplayUnit('weight', weight * percentage.min / 100),
+    max: toDisplayUnit('weight', weight * percentage.max / 100),
   };
+}
+
+function buildWeeklyAverageWeights(measurements: WithingsMeasurement[]): Map<string, number> {
+  const sums = new Map<string, number>();
+  const counts = new Map<string, number>();
+  for (const measurement of measurements) {
+    if (!Number.isFinite(measurement.weight) || measurement.weight <= 0) continue;
+    const key = getBucketKey(measurement.date, 'week');
+    sums.set(key, (sums.get(key) ?? 0) + measurement.weight);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return new Map(
+    [...sums].map(([key, sum]) => [key, sum / (counts.get(key) ?? 1)]),
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -368,6 +356,7 @@ function buildBucketSlots(
  * @param goal - Target value in display units, or null
  * @param today - Reference date for range calculations
  * @param aggregation - Bucket granularity (day/week/month)
+ * @param rangeMeasurements - Full measurement set used for stable weekly weight bounds
  */
 export function buildMetricTrendData(
   measurements: WithingsMeasurement[],
@@ -376,8 +365,10 @@ export function buildMetricTrendData(
   goal: number | null = null,
   today: Date = new Date(),
   aggregation: WithingsAggregation = 'week',
+  rangeMeasurements: WithingsMeasurement[] = measurements,
 ): MetricTrendData {
   const slots = buildBucketSlots(range, aggregation, today);
+  const weeklyAverageWeights = buildWeeklyAverageWeights(rangeMeasurements);
 
   // Sort a copy of the measurements chronologically so aggregation, latest /
   // earliest tracking, and any downstream rendering are deterministic
@@ -418,7 +409,8 @@ export function buildMetricTrendData(
     if (sums.has(key)) {
       sums.set(key, (sums.get(key) ?? 0) + v);
       counts.set(key, (counts.get(key) ?? 0) + 1);
-      const target = optimalRange(m, metric);
+      const weeklyWeight = weeklyAverageWeights.get(getBucketKey(m.date, 'week')) ?? m.weight;
+      const target = optimalRange(weeklyWeight, metric);
       if (target) {
         optimalMins.set(key, (optimalMins.get(key) ?? 0) + target.min);
         optimalMaxes.set(key, (optimalMaxes.get(key) ?? 0) + target.max);
@@ -438,7 +430,7 @@ export function buildMetricTrendData(
     }
   }
 
-  let points: TrendPoint[] = slots.map(({ key, label }) => {
+  const points: TrendPoint[] = slots.map(({ key, label }) => {
     const count = counts.get(key) ?? 0;
     const optimalCount = optimalCounts.get(key) ?? 0;
     return {
@@ -448,8 +440,6 @@ export function buildMetricTrendData(
       optimalMax: optimalCount > 0 ? (optimalMaxes.get(key) ?? 0) / optimalCount : null,
     };
   });
-  if (OPTIMAL_PERCENT_RANGES[metric]) points = smoothOptimalRanges(points, aggregation);
-
   const delta =
     latest !== null && earliest !== null && latestDate !== earliestDate
       ? latest - earliest

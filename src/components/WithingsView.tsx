@@ -88,9 +88,9 @@ export function WithingsView({
   const charts = useMemo(
     () =>
       availableMetrics.map((metric) =>
-        buildMetricTrendData(filtered, metric, range, goalMap.get(metric) ?? null, today, aggregation),
+        buildMetricTrendData(filtered, metric, range, goalMap.get(metric) ?? null, today, aggregation, measurements),
       ),
-    [availableMetrics, filtered, range, goalMap, today, aggregation],
+    [availableMetrics, filtered, range, goalMap, today, aggregation, measurements],
   );
 
   if (measurements.length === 0) {
@@ -185,7 +185,7 @@ function MetricTrendChart({
 
   const ticks = fixedAxis
     ? Array.from({ length: fixedAxis.max - fixedAxis.min + 1 }, (_, i) => fixedAxis.min + i)
-    : niceTicksFor(yMin, yMax, 4);
+    : niceTicksFor(yMin, yMax, 6);
 
   // X-axis labels — show a subset to avoid crowding
   const maxLabels = Math.min(n, 8);
