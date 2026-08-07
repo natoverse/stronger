@@ -56,3 +56,5 @@ Three refinements after the initial Withings sync landed (#201):
   - **Bezier overshoot clamping.** `buildSmoothPath` clamps each Catmull-Rom control point's vertical position to the band spanned by its two anchor points, preventing the trend line from bulging above/below every real data point when consecutive values change sharply.
 
 - Added **visceral fat** to the Withings pipeline and charts as a new trailing sheet column (`visceralFat`, extending the tab from A:J to A:K). The sync reads Withings meastype `170`, stores the raw unitless score in the sheet, and surfaces it in the Body Composition charts without lb conversion.
+
+- The visceral-fat chart uses a fixed whole-number 1–6 y-axis. Its 1–5 good range is shown with the same green background shading used by wellness charts.
