@@ -58,3 +58,6 @@ Three refinements after the initial Withings sync landed (#201):
 - Added **visceral fat** to the Withings pipeline and charts as a new trailing sheet column (`visceralFat`, extending the tab from A:J to A:K). The sync reads Withings meastype `170`, stores the raw unitless score in the sheet, and surfaces it in the Body Composition charts without lb conversion.
 
 - Lean mass, bone mass, and hydration display their measured values in pounds. Their 65–66%, 4–5%, and 50–65% optimal ranges are respectively converted to pounds from each measurement's weight, so the shaded band moves with daily weight changes. The Withings visceral-fat score remains a unitless score and uses its unmodified chart scale.
+
+- Optimal ranges render as bounded translucent gray bands, matching the Garmin Load Focus charts rather than using the green series color.
+- The visceral-fat chart uses a fixed 1–6 y-axis with whole-number labels and shades 1–5 as the goal range.
