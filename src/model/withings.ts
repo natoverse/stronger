@@ -47,6 +47,10 @@ export interface TrendPoint {
    * through to the next real point rather than showing a gap.
    */
   value: number | null;
+  /** Optimal lower bound in display units for this bucket, if applicable. */
+  optimalMin: number | null;
+  /** Optimal upper bound in display units for this bucket, if applicable. */
+  optimalMax: number | null;
 }
 
 /** A single metric's target (e.g. a goal weight). */
@@ -108,10 +112,10 @@ const KG_TO_LB = 2.2046226218;
 const MASS_METRICS: ReadonlySet<WithingsMetric> = new Set([
   'weight',
   'fatMass',
-  'fatFreeMass',
   'muscleMass',
   'boneMass',
   'hydration',
+  'fatFreeMass',
 ]);
 
 /** Convert a raw stored value (kg for masses) into its display value (lb). */
@@ -186,10 +190,25 @@ export function filterMeasurements(
   return measurements.filter((m) => m.date >= startStr && m.date <= endStr);
 }
 
+const OPTIMAL_PERCENT_RANGES: Partial<Record<WithingsMetric, { min: number; max: number }>> = {
+  fatFreeMass: { min: 65, max: 66 },
+  boneMass: { min: 4, max: 5 },
+  hydration: { min: 50, max: 65 },
+};
+
 /** Get the numeric value of a metric on a measurement, or null if absent. */
 function metricValue(m: WithingsMeasurement, metric: WithingsMetric): number | null {
   const v = m[metric];
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+function optimalRange(m: WithingsMeasurement, metric: WithingsMetric): { min: number; max: number } | null {
+  const percentage = OPTIMAL_PERCENT_RANGES[metric];
+  if (!percentage || !Number.isFinite(m.weight) || m.weight <= 0) return null;
+  return {
+    min: toDisplayUnit('weight', m.weight * percentage.min / 100),
+    max: toDisplayUnit('weight', m.weight * percentage.max / 100),
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -334,9 +353,15 @@ export function buildMetricTrendData(
   // Accumulate sum + count per bucket so we can average.
   const sums = new Map<string, number>();
   const counts = new Map<string, number>();
+  const optimalMins = new Map<string, number>();
+  const optimalMaxes = new Map<string, number>();
+  const optimalCounts = new Map<string, number>();
   for (const { key } of slots) {
     sums.set(key, 0);
     counts.set(key, 0);
+    optimalMins.set(key, 0);
+    optimalMaxes.set(key, 0);
+    optimalCounts.set(key, 0);
   }
 
   // Track latest measurement (by date) with a value, for the headline figure.
@@ -356,6 +381,12 @@ export function buildMetricTrendData(
     if (sums.has(key)) {
       sums.set(key, (sums.get(key) ?? 0) + v);
       counts.set(key, (counts.get(key) ?? 0) + 1);
+      const target = optimalRange(m, metric);
+      if (target) {
+        optimalMins.set(key, (optimalMins.get(key) ?? 0) + target.min);
+        optimalMaxes.set(key, (optimalMaxes.get(key) ?? 0) + target.max);
+        optimalCounts.set(key, (optimalCounts.get(key) ?? 0) + 1);
+      }
     }
 
     if (min === null || v < min) min = v;
@@ -372,9 +403,12 @@ export function buildMetricTrendData(
 
   const points: TrendPoint[] = slots.map(({ key, label }) => {
     const count = counts.get(key) ?? 0;
+    const optimalCount = optimalCounts.get(key) ?? 0;
     return {
       label,
       value: count > 0 ? (sums.get(key) ?? 0) / count : null,
+      optimalMin: optimalCount > 0 ? (optimalMins.get(key) ?? 0) / optimalCount : null,
+      optimalMax: optimalCount > 0 ? (optimalMaxes.get(key) ?? 0) / optimalCount : null,
     };
   });
 

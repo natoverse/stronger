@@ -185,6 +185,51 @@ describe('buildMetricTrendData', () => {
     expect(data.latest).toBe(61);
   });
 
+  it('displays lean mass in pounds and derives daily optimal bounds from weight', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, fatFreeMass: 52 }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, fatFreeMass: 50 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'fatFreeMass', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBeCloseTo(114.64, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(114.64, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(116.40, 2);
+    expect(data.points[3].value).toBeCloseTo(110.23, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(107.48, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(109.13, 2);
+    expect(data.latest).toBeCloseTo(110.23, 2);
+  });
+
+  it('displays bone mass in pounds and derives daily optimal bounds from weight', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, boneMass: 3.2 }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, boneMass: 3 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'boneMass', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBeCloseTo(7.05, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(7.05, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(8.82, 2);
+    expect(data.points[3].value).toBeCloseTo(6.61, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(6.61, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(8.27, 2);
+    expect(data.latest).toBeCloseTo(6.61, 2);
+  });
+
+  it('displays hydration in pounds and derives daily optimal bounds from weight', () => {
+    const measurements = [
+      makeMeasurement({ date: '2026-03-01', grpId: 'a', weight: 80, hydration: 48 }),
+      makeMeasurement({ date: '2026-04-01', grpId: 'b', weight: 75, hydration: 45 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'hydration', '2026', null, TODAY, 'month');
+    expect(data.points[2].value).toBeCloseTo(105.82, 2);
+    expect(data.points[2].optimalMin).toBeCloseTo(88.18, 2);
+    expect(data.points[2].optimalMax).toBeCloseTo(114.64, 2);
+    expect(data.points[3].value).toBeCloseTo(99.21, 2);
+    expect(data.points[3].optimalMin).toBeCloseTo(82.67, 2);
+    expect(data.points[3].optimalMax).toBeCloseTo(107.48, 2);
+    expect(data.latest).toBeCloseTo(99.21, 2);
+  });
+
   it('keeps visceral fat in score units', () => {
     const measurements = [
       makeMeasurement({ date: '2026-03-01', grpId: 'a', visceralFat: 9 }),
@@ -267,7 +312,7 @@ describe('buildMetricTrendData', () => {
 
 describe('filterTrendDips', () => {
   const pts = (vals: (number | null)[]) =>
-    vals.map((v, i) => ({ label: String(i), value: v }));
+    vals.map((v, i) => ({ label: String(i), value: v, optimalMin: null, optimalMax: null }));
 
   it('passes through a monotonically improving lower-is-better series unchanged', () => {
     const result = filterTrendDips(pts([180, 178, 175, 173]), true);
@@ -346,6 +391,18 @@ describe('formatMetricValue', () => {
 
   it('formats visceral fat as a whole number', () => {
     expect(formatMetricValue(7.6, 'visceralFat')).toBe('8');
+  });
+
+  it('formats lean mass in pounds', () => {
+    expect(formatMetricValue(141.42, 'fatFreeMass')).toBe('141');
+  });
+
+  it('formats bone mass in pounds', () => {
+    expect(formatMetricValue(4.42, 'boneMass')).toBe('4.4');
+  });
+
+  it('formats hydration in pounds', () => {
+    expect(formatMetricValue(105.42, 'hydration')).toBe('105');
   });
 
   it('formats mass under 100 with one decimal', () => {
