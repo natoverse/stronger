@@ -42,3 +42,7 @@ A "new exercise" button lets the user add a strength or cardio exercise. New str
 - The data model for exercises is `LiftConfig` in `src/model/types.ts`. Cardio exercises currently have no representation in the config zone — adding one will require deciding how they coexist in the same sheet tab (or a separate one). A simple approach: cardio exercises get a row with a recognizable gear type or a new flag, and zeroed-out weight fields.
 - The existing `WorkoutEditor` component is a good reference for the editing pattern (form fields, save/cancel flow).
 - Navigation: this could be a new route (`#/exercises`) with a tab or button in the nav area, or it could share the home screen with workouts via a tab switcher.
+
+## Post-merge iterations
+
+- Adding an exercise to an in-progress workout initializes its work set at the exercise's configured top-set weight, rather than its bar weight.
