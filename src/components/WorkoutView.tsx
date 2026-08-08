@@ -178,7 +178,7 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 				sets: [
 					{
 						setType: 'work',
-						weight: config.barWeight,
+						weight: config.topSetWeight,
 						minReps: 5,
 						maxReps: 5,
 						amrap: false,
@@ -192,7 +192,7 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 				...prev,
 				[
 					{
-						actualWeight: config.barWeight,
+						actualWeight: config.topSetWeight,
 						actualReps: 5,
 						completed: false,
 						actualSetType: 'work',
