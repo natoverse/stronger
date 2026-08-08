@@ -217,19 +217,10 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 			setError(null)
 			await attemptConnect()
 		} catch (err) {
-			// If the token expired / was revoked, first try a silent refresh
-			// (no popup, no user gesture) and retry once. Only fall back to the
-			// sign-in button when the silent refresh also fails.
 			if (isAuthError(err)) {
-				try {
-					await silentSignIn()
-					await attemptConnect()
-					return
-				} catch {
-					clearAuth()
-					setPhase('sign-in')
-					return
-				}
+				clearAuth()
+				setPhase('sign-in')
+				return
 			}
 			setError(describeSheetError(err))
 			setPhase('error')
