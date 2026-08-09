@@ -55,3 +55,4 @@ Warmup sets are excluded from all calculations. Only completed, non-warmup sets 
 
 - Strength chart metric/goal summaries were moved into each chart card header (next to the lift title) to match the Garmin/activities chart pattern.
 - The selected-lift strength card now renders the same shared header structure as big-4 cards so final chart cards keep consistent heights.
+- Est. 1RM charts now also express strength relative to body weight. When Withings body-weight data is loaded, each e1RM chart header appends the peak e1RM as a body-weight multiple (e.g. `1.53×BW`), and the per-point tooltip appends the ratio for that session. The ratio uses the Withings weight measurement closest in time to the session date, converted to pounds via `toDisplayUnit('weight', ...)` so both sides of the ratio share units. Helpers `bodyWeightForDate` and `bodyWeightRatio` live in `src/model/progress.ts`. Ratios are only shown for the `e1rm` metric (not volume or heaviest).

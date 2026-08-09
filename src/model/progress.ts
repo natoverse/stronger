@@ -126,6 +126,53 @@ export function getLiftsWithData(
 }
 
 /**
+ * A body-weight sample used to compute strength-to-bodyweight ratios.
+ * `weight` must be in the same unit as lift weights (pounds).
+ */
+export interface BodyWeightPoint {
+  date: string;
+  weight: number;
+}
+
+/**
+ * Find the body weight closest in time to `date` from a chronologically
+ * ordered array. Returns null if the array is empty. Used to express an
+ * estimated 1RM as a multiple of the athlete's body weight at that session.
+ */
+export function bodyWeightForDate(
+  bodyWeights: readonly BodyWeightPoint[],
+  date: string,
+): number | null {
+  if (bodyWeights.length === 0) return null;
+  const target = Date.parse(date);
+  let best = bodyWeights[0];
+  let bestDiff = Math.abs(Date.parse(best.date) - target);
+  for (let i = 1; i < bodyWeights.length; i++) {
+    const diff = Math.abs(Date.parse(bodyWeights[i].date) - target);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = bodyWeights[i];
+    }
+  }
+  return best.weight;
+}
+
+/**
+ * Ratio of an estimated 1RM (or any lift weight) to body weight, using the
+ * body-weight measurement closest in time to `date`. Returns null when no
+ * body-weight data is available or the nearest measurement is non-positive.
+ */
+export function bodyWeightRatio(
+  value: number,
+  date: string,
+  bodyWeights: readonly BodyWeightPoint[],
+): number | null {
+  const bw = bodyWeightForDate(bodyWeights, date);
+  if (bw === null || bw <= 0) return null;
+  return value / bw;
+}
+
+/**
  * Get the start cutoff date string for a given time range, or null for 'all'.
  */
 export function getCutoffDate(range: TimeRange): string | null {
