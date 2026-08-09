@@ -2198,6 +2198,7 @@ const GARMIN_COL = {
 	duration: 4,
 	distance: 6,
 	elevationGain: 7,
+	elevationLoss: 8,
 	avgHR: 9,
 	maxHR: 10,
 } as const
@@ -2245,12 +2246,15 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	const duration = Number((row[GARMIN_COL.duration] ?? '').trim())
 	const distance = Number((row[GARMIN_COL.distance] ?? '').trim())
 	const elevationGain = Number((row[GARMIN_COL.elevationGain] ?? '').trim())
+	const rawElevationLoss = (row[GARMIN_COL.elevationLoss] ?? '').trim()
+	const elevationLoss = rawElevationLoss ? Number(rawElevationLoss) : undefined
 	const avgHR = Number((row[GARMIN_COL.avgHR] ?? '').trim())
 	const maxHR = Number((row[GARMIN_COL.maxHR] ?? '').trim())
 
 	if (!Number.isFinite(duration) || duration < 0) return null
 	if (!Number.isFinite(distance) || distance < 0) return null
 	if (!Number.isFinite(elevationGain) || elevationGain < 0) return null
+	if (elevationLoss !== undefined && (!Number.isFinite(elevationLoss) || elevationLoss < 0)) return null
 	if (!Number.isFinite(avgHR) || avgHR < 0) return null
 	if (!Number.isFinite(maxHR) || maxHR < 0) return null
 
@@ -2262,6 +2266,7 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 		duration,
 		distance,
 		elevationGain,
+		elevationLoss,
 		// Per-activity calories are not tracked in the Garmin activity tab; daily
 		// active/BMR calories are synced instead via the Garmin Wellness tab.
 		calories: 0,

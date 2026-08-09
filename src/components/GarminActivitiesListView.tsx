@@ -211,6 +211,7 @@ export function GarminActivitiesListView({ activities }: Props) {
           {displayed.map((a, i) => {
             const distStr = formatDistance(a.distance);
             const elevStr = formatElevation(a.elevationGain);
+            const elevLossStr = formatElevation(a.elevationLoss ?? 0);
             return (
               <div key={`${a.date}-${i}`} className="activity-card">
                 <div className="activity-card-header">
@@ -222,6 +223,7 @@ export function GarminActivitiesListView({ activities }: Props) {
                   <span className="activity-card-stat">{formatDuration(a.duration)}</span>
                   {distStr && <span className="activity-card-stat">{distStr}</span>}
                   {elevStr && <span className="activity-card-stat">↑ {elevStr}</span>}
+                  {elevLossStr && <span className="activity-card-stat">↓ {elevLossStr}</span>}
                 </div>
               </div>
             );

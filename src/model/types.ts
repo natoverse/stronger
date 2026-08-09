@@ -337,6 +337,8 @@ export interface StravaActivity {
 	distance: number;
 	/** Total elevation gain in meters. */
 	elevationGain: number;
+	/** Total elevation loss in meters (Garmin activities only). */
+	elevationLoss?: number;
 	/** Calories burned. */
 	calories: number;
 	/** Average heart rate in bpm (0 if not recorded). */

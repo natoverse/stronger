@@ -75,3 +75,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Garmin activity time-window consistency (2026-07-18):** the searchable activity log on `#/garmin-activities` now receives the same range-filtered activity subset as the charts, so changing the Month / Year / calendar-year buttons narrows both the graphs and the list instead of leaving the list on full history.
 
 - **Activity log filter defaults (2026-07-31):** the activity-type filter now initially selects every available activity type except `Weight Training`. This keeps the log focused on non-strength activities while allowing users to explicitly include strength sessions when needed.
+
+- **Activity card elevation loss (2026-08-09):** Garmin activity parsing now retains the existing `elevationLoss` sheet value, and activity cards display it immediately after elevation gain when the loss is greater than zero.

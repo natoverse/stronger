@@ -24,6 +24,8 @@ export interface StravaActivity {
   distance: number;
   /** Elevation gain in meters */
   elevationGain: number;
+  /** Elevation loss in meters (Garmin activities only) */
+  elevationLoss?: number;
   /** Calories burned (optional; populated by Garmin/Strava sheet parsers). */
   calories?: number;
   /** Active calories burned (optional; Garmin only). */

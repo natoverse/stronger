@@ -48,6 +48,7 @@ describe('parseGarminRow', () => {
 			duration: 1800,
 			distance: 5000,
 			elevationGain: 50,
+			elevationLoss: 45,
 			calories: 0,
 			avgHR: 145,
 			maxHR: 170,
@@ -79,10 +80,17 @@ describe('parseGarminRow', () => {
 	})
 
 	it('accepts zero values', () => {
-		const result = parseGarminRow(garminRow({ 6: '0', 7: '0', 9: '0', 10: '0' }))
+		const result = parseGarminRow(garminRow({ 6: '0', 7: '0', 8: '0', 9: '0', 10: '0' }))
 		expect(result).not.toBeNull()
 		expect(result!.distance).toBe(0)
+		expect(result!.elevationLoss).toBe(0)
 		expect(result!.avgHR).toBe(0)
+	})
+
+	it('treats a missing elevation loss as unavailable', () => {
+		const result = parseGarminRow(garminRow({ 8: '' }))
+		expect(result).not.toBeNull()
+		expect(result!.elevationLoss).toBeUndefined()
 	})
 
 	it('returns null for null input', () => {
