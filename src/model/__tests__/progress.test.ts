@@ -7,6 +7,8 @@ import {
   buildProgressData,
   getCutoffDate,
   filterDips,
+  bodyWeightForDate,
+  bodyWeightRatio,
 } from '../progress.js';
 import type { ParsedLogRow } from '../../google/sheets.js';
 
@@ -374,5 +376,47 @@ describe('filterDips', () => {
     const result = filterDips(data);
     // 198 is 22% below 255, should be truncated
     expect(result.map((p) => p.value)).toEqual([230, 240, 255]);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  bodyWeightForDate / bodyWeightRatio                                */
+/* ------------------------------------------------------------------ */
+
+describe('bodyWeightForDate', () => {
+  const bw = [
+    { date: '2025-01-01', weight: 180 },
+    { date: '2025-02-01', weight: 178 },
+    { date: '2025-03-01', weight: 176 },
+  ];
+
+  it('returns null for empty input', () => {
+    expect(bodyWeightForDate([], '2025-01-15')).toBeNull();
+  });
+
+  it('picks the closest measurement by date', () => {
+    expect(bodyWeightForDate(bw, '2025-01-05')).toBe(180);
+    expect(bodyWeightForDate(bw, '2025-01-28')).toBe(178);
+    expect(bodyWeightForDate(bw, '2025-06-01')).toBe(176);
+  });
+
+  it('picks the closest even when target predates all samples', () => {
+    expect(bodyWeightForDate(bw, '2024-06-01')).toBe(180);
+  });
+});
+
+describe('bodyWeightRatio', () => {
+  const bw = [{ date: '2025-01-01', weight: 200 }];
+
+  it('divides value by nearest body weight', () => {
+    expect(bodyWeightRatio(300, '2025-01-02', bw)).toBeCloseTo(1.5);
+  });
+
+  it('returns null when no body-weight data', () => {
+    expect(bodyWeightRatio(300, '2025-01-02', [])).toBeNull();
+  });
+
+  it('returns null when nearest body weight is non-positive', () => {
+    expect(bodyWeightRatio(300, '2025-01-02', [{ date: '2025-01-01', weight: 0 }])).toBeNull();
   });
 });

@@ -6,7 +6,9 @@ import {
   getLiftsWithData,
   buildProgressData,
   filterDips,
+  bodyWeightRatio,
 } from '../model/progress.js';
+import type { BodyWeightPoint } from '../model/progress.js';
 import type { StravaTimeRange } from '../model/strava.js';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
 import { Target } from 'lucide-react';
@@ -18,6 +20,8 @@ interface Props {
   dipThresholdPercent?: number;
   skipDips?: boolean;
   range: StravaTimeRange;
+  /** Body-weight samples (lb) used to show est. 1RM as a multiple of body weight. */
+  bodyWeights?: BodyWeightPoint[];
 }
 
 const METRIC_LABELS: Record<ProgressMetric, string> = {
@@ -69,6 +73,7 @@ export function ProgressView({
   dipThresholdPercent = 10,
   skipDips = true,
   range,
+  bodyWeights,
 }: Props) {
   const dipThreshold = dipThresholdPercent / 100;
   const lifts = useMemo(() => getLiftsWithData(logRows), [logRows]);
@@ -125,6 +130,7 @@ export function ProgressView({
                   dipThreshold={dipThreshold}
                   goalWeight={liftGoals?.find((g) => g.liftId === liftId)?.weight}
                   onGoalChange={onLiftGoalChange}
+                  bodyWeights={bodyWeights}
                 />
               ))}
             </div>
@@ -155,6 +161,7 @@ export function ProgressView({
                 range={range}
                 skipDips={skipDips}
                 dipThreshold={dipThreshold}
+                bodyWeights={bodyWeights}
               />
             </>
           )}
@@ -178,6 +185,7 @@ function Big4Chart({
   dipThreshold,
   goalWeight,
   onGoalChange,
+  bodyWeights,
 }: {
   liftId: string;
   label: string;
@@ -188,6 +196,7 @@ function Big4Chart({
   dipThreshold: number;
   goalWeight?: number;
   onGoalChange?: (liftId: string, weight: number | null) => void;
+  bodyWeights?: BodyWeightPoint[];
 }) {
   const [editing, setEditing] = useState(false);
   const [goalInput, setGoalInput] = useState('');
@@ -204,8 +213,14 @@ function Big4Chart({
 
   // Only show goal on heaviest and e1rm charts
   const showGoal = goalWeight !== undefined && metric !== 'volume';
-  const headerSummary = data.length > 0
-    ? formatProgressSummary(metric, Math.max(...data.map((d) => d.value)), showGoal ? goalWeight : undefined)
+  const maxPoint = data.length > 0
+    ? data.reduce((best, d) => (d.value > best.value ? d : best))
+    : null;
+  const ratio = maxPoint && metric === 'e1rm' && bodyWeights
+    ? bodyWeightRatio(maxPoint.value, maxPoint.date, bodyWeights)
+    : null;
+  const headerSummary = maxPoint
+    ? formatProgressSummary(metric, maxPoint.value, showGoal ? goalWeight : undefined, ratio)
     : null;
 
   return (
@@ -252,7 +267,7 @@ function Big4Chart({
       {data.length === 0 ? (
         <p className="progress-empty">No data yet.</p>
       ) : (
-        <ProgressChart data={data} metric={metric} stableYMin={stableYMin} goalWeight={showGoal ? goalWeight : undefined} />
+        <ProgressChart data={data} metric={metric} stableYMin={stableYMin} goalWeight={showGoal ? goalWeight : undefined} bodyWeights={bodyWeights} />
       )}
     </div>
   );
@@ -270,6 +285,7 @@ function SelectedLiftChart({
   range,
   skipDips,
   dipThreshold,
+  bodyWeights,
 }: {
   liftId: string;
   label: string;
@@ -278,6 +294,7 @@ function SelectedLiftChart({
   range: StravaTimeRange;
   skipDips: boolean;
   dipThreshold: number;
+  bodyWeights?: BodyWeightPoint[];
 }) {
   const data = useMemo(() => {
     if (!liftId) return [];
@@ -293,7 +310,11 @@ function SelectedLiftChart({
   if (data.length === 0) {
     return <p className="progress-empty">No data for this selection.</p>;
   }
-  const headerSummary = formatProgressSummary(metric, Math.max(...data.map((d) => d.value)));
+  const maxPoint = data.reduce((best, d) => (d.value > best.value ? d : best));
+  const ratio = metric === 'e1rm' && bodyWeights
+    ? bodyWeightRatio(maxPoint.value, maxPoint.date, bodyWeights)
+    : null;
+  const headerSummary = formatProgressSummary(metric, maxPoint.value, undefined, ratio);
   return (
     <div className="strava-chart-card">
       <div className="strava-chart-header">
@@ -302,7 +323,7 @@ function SelectedLiftChart({
           <span className="strava-chart-total">{headerSummary}</span>
         </h3>
       </div>
-      <ProgressChart data={data} metric={metric} stableYMin={stableYMin} />
+      <ProgressChart data={data} metric={metric} stableYMin={stableYMin} bodyWeights={bodyWeights} />
     </div>
   );
 }
@@ -316,11 +337,13 @@ function ProgressChart({
   metric,
   stableYMin,
   goalWeight,
+  bodyWeights,
 }: {
   data: ProgressDataPoint[];
   metric: ProgressMetric;
   stableYMin?: number;
   goalWeight?: number;
+  bodyWeights?: BodyWeightPoint[];
 }) {
   // We use a viewBox so the chart is responsive
   const viewBoxWidth = 400;
@@ -371,6 +394,9 @@ function ProgressChart({
   );
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, viewBoxWidth);
   const active = activeIndex !== null ? data[activeIndex] : null;
+  const activeRatio = active && metric === 'e1rm' && bodyWeights
+    ? bodyWeightRatio(active.value, active.date, bodyWeights)
+    : null;
 
   return (
     <div className="strava-chart-container" {...containerHandlers}>
@@ -469,7 +495,10 @@ function ProgressChart({
             left: `${(xScale(activeIndex) / viewBoxWidth) * 100}%`,
           }}
         >
-          <span className="chart-tooltip-value">{active.label || formatValue(active.value)}</span>
+          <span className="chart-tooltip-value">
+            {active.label || formatValue(active.value)}
+            {activeRatio !== null && ` · ${formatRatio(activeRatio)}`}
+          </span>
           <span className="chart-tooltip-date">{formatDate(active.date)}</span>
         </div>
       )}
@@ -495,9 +524,15 @@ function formatValue(v: number): string {
   return v.toFixed(1);
 }
 
-function formatProgressSummary(metric: ProgressMetric, maxValue: number, goalWeight?: number): string {
+function formatProgressSummary(metric: ProgressMetric, maxValue: number, goalWeight?: number, ratio?: number | null): string {
   const prefix = metric === 'volume' ? 'vol · ' : '';
-  return `${prefix}${formatValue(maxValue)}${goalWeight !== undefined ? ` / ${formatValue(goalWeight)}` : ''}`;
+  const ratioSuffix = ratio !== undefined && ratio !== null ? ` · ${formatRatio(ratio)}` : '';
+  return `${prefix}${formatValue(maxValue)}${goalWeight !== undefined ? ` / ${formatValue(goalWeight)}` : ''}${ratioSuffix}`;
+}
+
+/** Format a strength-to-bodyweight ratio, e.g. 1.53 → "1.53×BW". */
+function formatRatio(ratio: number): string {
+  return `${ratio.toFixed(2)}×BW`;
 }
 
 /**

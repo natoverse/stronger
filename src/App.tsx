@@ -29,6 +29,7 @@ import type { StravaActivity, StravaGoal, StravaMetric, StravaTimeRange, StravaA
 import { filterActivitiesByRange, getTimeRangeOptions } from './model/strava.js';
 import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
+import { toDisplayUnit } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
 import { NutritionView } from './components/NutritionView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
@@ -1435,6 +1436,10 @@ function App() {
           dipThresholdPercent={appSettings.progressDipThresholdPercent}
           skipDips={appSettings.skipProgressDips}
           range={chartRange}
+          bodyWeights={withingsMeasurements.map((m) => ({
+            date: m.date,
+            weight: toDisplayUnit('weight', m.weight),
+          }))}
         />
         {withingsMeasurements.length > 0 && (
           <div className="strava-view">
