@@ -87,6 +87,12 @@ describe('parseGarminRow', () => {
 		expect(result!.avgHR).toBe(0)
 	})
 
+	it('treats a missing elevation loss as unavailable', () => {
+		const result = parseGarminRow(garminRow({ 8: '' }))
+		expect(result).not.toBeNull()
+		expect(result!.elevationLoss).toBeUndefined()
+	})
+
 	it('returns null for null input', () => {
 		expect(parseGarminRow(null as unknown as string[])).toBeNull()
 	})
