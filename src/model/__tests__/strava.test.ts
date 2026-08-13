@@ -468,8 +468,8 @@ describe('buildMetricChartData', () => {
     const today = new Date(2025, 5, 18); // June 18
     const activities = [
       makeActivity({ date: '2025-06-02', distance: 5000 }),
-      makeActivity({ date: '2025-06-10', distance: 3000 }),
-      makeActivity({ date: '2025-06-10', distance: 1000 }),
+      makeActivity({ date: '2025-06-17', distance: 3000 }),
+      makeActivity({ date: '2025-06-18', distance: 1000 }),
     ];
     const data = buildMetricChartData(activities, 'distance', 'month', null, today, 'week');
     expect(data.latestValue).toBeCloseTo(toDisplayUnit('distance', 1000), 1);

@@ -461,7 +461,10 @@ export function buildMetricChartData(
     }
   }
   const cumulative = fullCumulative.slice(0, activeBucketCount);
+  const rangeStartISO = toISODate(getRangeStart(range, today));
+  const rangeEndISO = toISODate(getRangeEnd(range, today));
   const latestActivity = activities.reduce<StravaActivity | null>((latest, activity) => {
+    if (activity.date < rangeStartISO || activity.date > rangeEndISO) return latest;
     const raw = activity[metric];
     if (typeof raw !== 'number' || raw <= 0) return latest;
     return latest === null || activity.date >= latest.date ? activity : latest;
