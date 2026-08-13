@@ -166,11 +166,13 @@ describe('buildNutritionChartData', () => {
     expect(past?.goal).toBe(2000);
   });
 
-  it('latestValue shows today bucket value even when 0 (e.g. no drinks today)', () => {
-    // Yesterday had drinks; today has none.
-    const entries = [entry('2026-06-14', { standardDrinks: 2, category: 'Drinks' })];
-    const data = buildNutritionChartData(entries, 'drinks', 'month', 1, today, 'day');
-    // latestValue should be today's value (0), not yesterday's (2).
-    expect(data.latestValue).toBe(0);
+  it('uses the most recently recorded entry value for latestValue', () => {
+    const entries = [
+      entry('2026-06-14', { calories: 100 }),
+      entry('2026-06-15', { calories: 300 }),
+      entry('2026-06-15', { calories: 75, quantity: 2 }),
+    ];
+    const data = buildNutritionChartData(entries, 'calories', 'month', 0, today, 'week');
+    expect(data.latestValue).toBe(150);
   });
 });

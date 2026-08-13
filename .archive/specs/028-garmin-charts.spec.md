@@ -137,5 +137,6 @@ Conversions are display-only — storage remains in metric (matching Strava API 
 ## Iteration: aggregate chart summaries
 
 - Activity chart headers show the aggregate for the selected range first. In weekly
-  and monthly aggregation, they append the latest non-empty bucket as `Last …`;
+  and monthly aggregation, they append the most recently recorded individual activity
+  as `Last …`;
   daily aggregation keeps its single current value.
