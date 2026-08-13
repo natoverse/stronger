@@ -33,7 +33,7 @@ export interface NutritionChartData {
   total: number;
   /** The configured per-day goal (0 = disabled). */
   goalPerDay: number;
-  /** Value of the most recent non-empty bucket, or null. */
+  /** Value of the most recently recorded entry, or null. */
   latestValue: number | null;
 }
 
@@ -212,13 +212,11 @@ export function buildNutritionChartData(
     return { label, value, goal, colorKey: nutritionColorKey(value, goal, metric) };
   });
 
-  // Show the value for the bucket that contains today (even if 0), rather than
-  // the last bucket that happened to have a non-zero value.
-  const todayKey = getBucketKey(todayISO, aggregation);
-  const todayBucket = slots.findIndex(({ key }) => key === todayKey);
-  const latestValue = todayBucket >= 0
-    ? buckets[todayBucket].value
-    : ([...buckets].reverse().find((b) => b.value > 0)?.value ?? null);
+  const latestEntry = entries.reduce<MealLogEntry | null>((latest, entry) => {
+    if (entry.date < startISO || entry.date > endISO) return latest;
+    return latest === null || entry.date >= latest.date ? entry : latest;
+  }, null);
+  const latestValue = latestEntry === null ? null : entryValue(latestEntry, metric);
 
   return { metric, buckets, total, goalPerDay, latestValue };
 }

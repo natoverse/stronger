@@ -464,14 +464,15 @@ describe('buildMetricChartData', () => {
     expect(data.latestValue).toBeCloseTo(toDisplayUnit('distance', 10000), 1);
   });
 
-  it('uses the most recent active bucket value for latestValue', () => {
+  it('uses the most recently recorded activity value for latestValue', () => {
     const today = new Date(2025, 5, 18); // June 18
     const activities = [
       makeActivity({ date: '2025-06-02', distance: 5000 }),
       makeActivity({ date: '2025-06-10', distance: 3000 }),
+      makeActivity({ date: '2025-06-10', distance: 1000 }),
     ];
-    const data = buildMetricChartData(activities, 'distance', 'month', null, today, 'day');
-    expect(data.latestValue).toBeCloseTo(toDisplayUnit('distance', 3000), 1);
+    const data = buildMetricChartData(activities, 'distance', 'month', null, today, 'week');
+    expect(data.latestValue).toBeCloseTo(toDisplayUnit('distance', 1000), 1);
   });
 });
 

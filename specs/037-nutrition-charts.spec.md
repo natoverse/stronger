@@ -84,5 +84,5 @@ Added a fiber goal that mirrors protein end-to-end:
 ## Iteration: aggregate chart summaries
 
 - Nutrition chart headers always show the total across the active date range first.
-  They then append the most recent bucket as `Last …`, allowing weekly and monthly
-  views to distinguish the period total from the latest period.
+  They then append the most recently recorded individual entry as `Last …`, allowing
+  weekly and monthly views to distinguish the period total from the latest entry.

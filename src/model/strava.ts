@@ -81,7 +81,7 @@ export interface MetricChartData {
   unit: string;
   /** Total across all buckets */
   total: number;
-  /** Most recent non-empty bucket value within the active range. */
+  /** Value of the most recently recorded activity within the active range. */
   latestValue: number | null;
 }
 
@@ -461,9 +461,14 @@ export function buildMetricChartData(
     }
   }
   const cumulative = fullCumulative.slice(0, activeBucketCount);
-  const latestValue = [...buckets.slice(0, activeBucketCount)]
-    .reverse()
-    .find((bucket) => bucket.value > 0)?.value ?? null;
+  const latestActivity = activities.reduce<StravaActivity | null>((latest, activity) => {
+    const raw = activity[metric];
+    if (typeof raw !== 'number' || raw <= 0) return latest;
+    return latest === null || activity.date >= latest.date ? activity : latest;
+  }, null);
+  const latestValue = latestActivity === null
+    ? null
+    : toDisplayUnit(metric, latestActivity[metric] as number);
 
   const proratedGoal = goal !== null ? prorateGoal(goal, range, today) : null;
 
