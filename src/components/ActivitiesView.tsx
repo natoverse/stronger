@@ -200,6 +200,7 @@ function MetricChart({
   const topValue = aggregation === 'day' && data.latestValue !== null
     ? data.latestValue
     : data.total;
+  const latestValue = aggregation === 'day' ? null : data.latestValue;
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -267,6 +268,9 @@ function MetricChart({
           {METRIC_LABELS[data.metric]}
           <span className="strava-chart-total">
             {formatMetricValue(topValue, data.metric)} {METRIC_UNITS[data.metric]}
+            {latestValue !== null && (
+              <> · Last {formatMetricValue(latestValue, data.metric)} {METRIC_UNITS[data.metric]}</>
+            )}
           </span>
         </h3>
         {onGoalChange && (

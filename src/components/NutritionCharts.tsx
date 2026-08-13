@@ -109,13 +109,18 @@ export function NutritionCharts({ entries, wellnessEntries, range, aggregation, 
           key={data.metric}
           data={data}
           garminCalorieLine={data.metric === 'calories' ? garminCalorieLine : null}
+          aggregation={aggregation}
         />
       ))}
     </>
   );
 }
 
-function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData; garminCalorieLine?: (number | null)[] | null }) {
+function NutritionChart({ data, garminCalorieLine, aggregation }: {
+  data: NutritionChartData;
+  garminCalorieLine?: (number | null)[] | null;
+  aggregation: StravaAggregation;
+}) {
   const viewBoxWidth = 400;
   const plotW = viewBoxWidth - CHART_PADDING.left - CHART_PADDING.right;
   const plotH = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
@@ -175,7 +180,10 @@ function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData;
   );
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, viewBoxWidth);
 
-  const headerValue = data.latestValue ?? data.total;
+  const headerValue = aggregation === 'day' && data.latestValue !== null
+    ? data.latestValue
+    : data.total;
+  const latestValue = aggregation === 'day' ? null : data.latestValue;
 
   return (
     <div className="strava-chart-card">
@@ -184,6 +192,9 @@ function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData;
           {NUTRITION_METRIC_LABELS[metric]}
           <span className="strava-chart-total">
             {formatNutritionValue(headerValue, metric)} {NUTRITION_METRIC_UNITS[metric]}
+            {latestValue !== null && (
+              <> · Last {formatNutritionValue(latestValue, metric)} {NUTRITION_METRIC_UNITS[metric]}</>
+            )}
           </span>
         </h3>
       </div>

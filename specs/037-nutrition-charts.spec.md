@@ -80,3 +80,9 @@ Added a fiber goal that mirrors protein end-to-end:
   metric was added to `NutritionMetric` (label `Fiber`, unit `g`, `entryValue`
   reads `entry.fiber`). Like protein, fiber over goal is a positive outcome
   (blue `bonus`); under goal is a yellow `under` warning.
+
+## Iteration: aggregate chart summaries
+
+- Nutrition chart headers always show the total across the active date range first.
+  They then append the most recent bucket as `Last …`, allowing weekly and monthly
+  views to distinguish the period total from the latest period.
