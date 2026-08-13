@@ -170,9 +170,9 @@ describe('buildNutritionChartData', () => {
     const entries = [
       entry('2026-06-14', { calories: 100 }),
       entry('2026-06-15', { calories: 300 }),
-      entry('2026-06-15', { calories: 50, quantity: 2 }),
+      entry('2026-06-15', { calories: 75, quantity: 2 }),
     ];
     const data = buildNutritionChartData(entries, 'calories', 'month', 0, today, 'week');
-    expect(data.latestValue).toBe(100);
+    expect(data.latestValue).toBe(150);
   });
 });
