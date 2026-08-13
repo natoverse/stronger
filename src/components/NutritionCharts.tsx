@@ -175,7 +175,7 @@ function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData;
   );
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, viewBoxWidth);
 
-  const headerValue = data.latestValue ?? data.total;
+  const headerValue = data.total;
 
   return (
     <div className="strava-chart-card">
@@ -184,6 +184,9 @@ function NutritionChart({ data, garminCalorieLine }: { data: NutritionChartData;
           {NUTRITION_METRIC_LABELS[metric]}
           <span className="strava-chart-total">
             {formatNutritionValue(headerValue, metric)} {NUTRITION_METRIC_UNITS[metric]}
+            {data.latestValue !== null && (
+              <> · Last {formatNutritionValue(data.latestValue, metric)} {NUTRITION_METRIC_UNITS[metric]}</>
+            )}
           </span>
         </h3>
       </div>

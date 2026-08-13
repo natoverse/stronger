@@ -133,3 +133,9 @@ Conversions are display-only — storage remains in metric (matching Strava API 
 - **Model/view split**: Chart logic is in `src/model/garmin.ts` (pure functions, 31 unit tests). Component is in `src/components/GarminView.tsx`. This mirrors the existing `progress.ts` / `ProgressView.tsx` pattern.
 - **SVG approach**: Hand-rolled SVG with viewBox for responsiveness, matching the existing progress charts style. niceTicksFor helper is duplicated (same algorithm as ProgressView) — could be extracted later.
 - **Filter UX**: Collapsible chip-based filter for activity types. "All" toggle for convenience. Filter only appears when more than one activity type exists.
+
+## Iteration: aggregate chart summaries
+
+- Activity chart headers show the aggregate for the selected range first. In weekly
+  and monthly aggregation, they append the latest non-empty bucket as `Last …`;
+  daily aggregation keeps its single current value.
