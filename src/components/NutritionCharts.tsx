@@ -180,10 +180,8 @@ function NutritionChart({ data, garminCalorieLine, aggregation }: {
   );
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, viewBoxWidth);
 
-  const headerValue = aggregation === 'day' && data.latestValue !== null
-    ? data.latestValue
-    : data.total;
-  const latestValue = aggregation === 'day' ? null : data.latestValue;
+  const headerValue = data.total;
+  const latestValue = data.latestValue;
 
   return (
     <div className="strava-chart-card">

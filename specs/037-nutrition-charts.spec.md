@@ -86,3 +86,9 @@ Added a fiber goal that mirrors protein end-to-end:
 - Nutrition chart headers always show the total across the active date range first.
   They then append the most recently recorded individual entry as `Last …`, allowing
   weekly and monthly views to distinguish the period total from the latest entry.
+
+## Iteration: chart header totals
+
+- Fixed daily chart headers to show the total across the active range, rather than
+  the final individual meal entry. Headers now consistently show the range total
+  followed by `Last …` when a logged entry exists.
