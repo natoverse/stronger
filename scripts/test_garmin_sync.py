@@ -10,6 +10,7 @@ the app (src/google/config.ts).
 
 import importlib.util
 import os
+from datetime import date
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
@@ -119,6 +120,10 @@ def test_non_numeric_metric_defaults_to_zero():
 def test_column_letter_matches_span():
     # 17 columns -> Q
     assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "Q"
+
+
+def test_activity_fetch_end_date_includes_following_day():
+    assert garmin_sync.activity_fetch_end_date(date(2026, 8, 13)) == "2026-08-14"
 
 
 def test_partition_rows_splits_updates_and_appends():

@@ -77,3 +77,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Activity log filter defaults (2026-07-31):** the activity-type filter now initially selects every available activity type except `Weight Training`. This keeps the log focused on non-strength activities while allowing users to explicitly include strength sessions when needed.
 
 - **Activity card elevation loss (2026-08-09):** Garmin activity parsing now retains the existing `elevationLoss` sheet value, and activity cards display it immediately after elevation gain when the loss is greater than zero.
+
+- **Activity date-range boundary (2026-08-13):** Backfill activity queries now set their end date to the following calendar day. This makes the end bound safely inclusive of the current day when Garmin interprets its date-only range in UTC, avoiding omissions for activities near the UTC rollover.
