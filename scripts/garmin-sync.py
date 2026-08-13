@@ -36,7 +36,7 @@ import json
 import os
 import sys
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -103,6 +103,15 @@ def fetch_recent_activities(client, limit=ACTIVITY_LIMIT):
     return activities or []
 
 
+def activity_fetch_end_date(today=None):
+    """Return the exclusive date bound for activity-range requests.
+
+    Include the following calendar day so activities near a UTC boundary are not
+    excluded when Garmin interprets a date-only end bound at midnight.
+    """
+    return ((today or date.today()) + timedelta(days=1)).isoformat()
+
+
 def fetch_activities_since(client, start_date):
     """Fetch every activity on/after ``start_date`` (inclusive).
 
@@ -111,8 +120,8 @@ def fetch_activities_since(client, start_date):
     history, so the only limit on how far back this reaches is the date you
     pass. ``get_activities_by_date`` pages through the range internally.
     """
-    today = date.today().isoformat()
-    activities = client.get_activities_by_date(start_date, today)
+    end_date = activity_fetch_end_date()
+    activities = client.get_activities_by_date(start_date, end_date)
     return activities or []
 
 
