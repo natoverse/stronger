@@ -736,8 +736,11 @@ export function formatWellnessValue(value: number | null, metric: WellnessNumeri
     const m = Math.round((value - h) * 60);
     return m === 0 ? `${h}h` : `${h}h ${m}m`;
   }
-  if (metric === 'vo2Max' || metric === 'hillScore' || metric === 'enduranceScore') {
+  if (metric === 'vo2Max') {
     return value.toFixed(1);
+  }
+  if (metric === 'hillScore' || metric === 'enduranceScore') {
+    return String(Math.round(value));
   }
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(1);

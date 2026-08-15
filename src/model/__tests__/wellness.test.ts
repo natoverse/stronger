@@ -6,6 +6,7 @@ import {
   buildLoadFocusChartData,
   buildHrvRangeChartData,
   formatWellnessRatio,
+  formatWellnessValue,
 } from '../wellness.js';
 
 function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellnessEntry {
@@ -124,6 +125,17 @@ describe('formatWellnessRatio', () => {
     expect(formatWellnessRatio(0.8)).toBe('0.8');
     expect(formatWellnessRatio(1.25)).toBe('1.25');
     expect(formatWellnessRatio(1)).toBe('1');
+  });
+});
+
+describe('formatWellnessValue', () => {
+  it('formats hill and endurance scores as whole numbers', () => {
+    expect(formatWellnessValue(68.9, 'hillScore')).toBe('69');
+    expect(formatWellnessValue(8399.4, 'enduranceScore')).toBe('8399');
+  });
+
+  it('keeps VO2 max at one decimal place', () => {
+    expect(formatWellnessValue(52, 'vo2Max')).toBe('52.0');
   });
 });
 

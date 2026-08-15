@@ -533,7 +533,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
                   key={`dot-${i}`}
                   cx={xCenter(i)}
                   cy={yBar(val)}
-                  r={i === activeIndex ? (n > 20 ? 9 : 12) : (n > 20 ? 4.5 : 7.5)}
+                  r={i === activeIndex ? (n > 20 ? 8.1 : 10.8) : (n > 20 ? 4.05 : 6.75)}
                   fill={fill}
                   opacity={i === activeIndex ? 1 : 0.75}
                 />
@@ -991,7 +991,7 @@ function WellnessLoadFocusChart({
                 key={`dot-${i}`}
                 cx={xCenter(i)}
                 cy={yBar(b.value)}
-                r={i === activeIndex ? (n > 20 ? 9 : 12) : (n > 20 ? 4.5 : 7.5)}
+                r={i === activeIndex ? (n > 20 ? 8.1 : 10.8) : (n > 20 ? 4.05 : 6.75)}
                 fill={colorFn(b.value, b.min, b.max, b.colorKey)}
                 opacity={i === activeIndex ? 1 : 0.85}
               />
@@ -1513,6 +1513,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={heatAcclimationData.buckets}
         summaryLabel={summaryStr(summaryValue(heatAcclimationData), 'heatAcclimationPct', WELLNESS_METRIC_UNITS.heatAcclimationPct)}
         formatValue={numFmt('heatAcclimationPct')}
+        renderAsDots
       />
       <WellnessAltitudeChart
         altitudeBuckets={currentAltitudeData.buckets}
@@ -1536,6 +1537,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={STRESS_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? stressColor(v) : GRAY}
         formatValue={numFmt('avgStress')}
+        renderAsDots
       />
       <WellnessLoadFocusChart
         label="HRV Status"
