@@ -532,7 +532,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
                   key={`dot-${i}`}
                   cx={xCenter(i)}
                   cy={yBar(val)}
-                  r={i === activeIndex ? (n > 20 ? 3 : 4) : (n > 20 ? 1.5 : 2.5)}
+                  r={i === activeIndex ? (n > 20 ? 9 : 12) : (n > 20 ? 4.5 : 7.5)}
                   fill={fill}
                   opacity={i === activeIndex ? 1 : 0.75}
                 />
@@ -980,7 +980,7 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
                 key={`dot-${i}`}
                 cx={xCenter(i)}
                 cy={yBar(b.value)}
-                r={i === activeIndex ? (n > 20 ? 3 : 4) : (n > 20 ? 1.5 : 2.5)}
+                r={i === activeIndex ? (n > 20 ? 9 : 12) : (n > 20 ? 4.5 : 7.5)}
                 fill={loadFocusColor(b.value, b.min, b.max)}
                 opacity={i === activeIndex ? 1 : 0.85}
               />
