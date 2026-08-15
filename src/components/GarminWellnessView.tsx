@@ -129,15 +129,24 @@ interface TrainingStatusLegendItem {
 }
 
 export const TRAINING_STATUS_LEGEND_ITEMS: TrainingStatusLegendItem[] = [
-  { status: 'PRODUCTIVE', label: 'Productive', color: GREEN },
   { status: 'PEAKING', label: 'Peaking', color: PURPLE },
+  { status: 'PRODUCTIVE', label: 'Productive', color: GREEN },
   { status: 'MAINTAINING', label: 'Maintaining', color: YELLOW },
   { status: 'RECOVERY', label: 'Recovery', color: BLUE },
   { status: 'UNPRODUCTIVE', label: 'Unproductive', color: ORANGE },
   { status: 'STRAINED', label: 'Strained', color: ACCENT },
   { status: 'OVERREACHING', label: 'Overreaching', color: RED },
   { status: 'DETRAINING', label: 'Detraining', color: GRAY },
+  { status: 'NO_STATUS', label: 'No status', color: GRAY },
 ];
+
+export function trainingStatusScore(status: string): number | null {
+  const normalized = status.toUpperCase() === 'RECOVERY_ACTIVE'
+    ? 'RECOVERY'
+    : status.toUpperCase();
+  const index = TRAINING_STATUS_LEGEND_ITEMS.findIndex((item) => item.status === normalized);
+  return index === -1 ? null : TRAINING_STATUS_LEGEND_ITEMS.length - index;
+}
 
 export function formatTrainingStatusLabel(status: string): string {
   if (!status) return '—';
@@ -1027,20 +1036,20 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
 }
 
 /* ------------------------------------------------------------------ */
-/*  WellnessStatusBarChart — categorical full-height color bars       */
+/*  WellnessStatusBarChart — categorical status dots                  */
 /* ------------------------------------------------------------------ */
 
 function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }) {
   const n = buckets.length;
   if (n === 0) return null;
 
-  const barWidth = PLOT_W / n;
-  const barGap = Math.max(1, barWidth * 0.15);
-  const barInner = barWidth - barGap * 2;
-  const STATUS_BAR_H = PLOT_H * 0.7;
-  const barTop = CHART_PADDING.top + (PLOT_H - STATUS_BAR_H) / 2;
-
-  const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
+  const slotWidth = PLOT_W / n;
+  const xCenter = (i: number) => CHART_PADDING.left + slotWidth * i + slotWidth / 2;
+  const yScore = (score: number) => (
+    CHART_PADDING.top
+    + PLOT_H
+    - ((score - 1) / (TRAINING_STATUS_LEGEND_ITEMS.length - 1)) * PLOT_H
+  );
 
   const xPositions = buckets.map((_, i) => xCenter(i));
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, VIEW_BOX_W);
@@ -1077,7 +1086,28 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
           viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          {/* X-axis labels */}
+        {TRAINING_STATUS_LEGEND_ITEMS.map((item) => {
+          const score = trainingStatusScore(item.status)!;
+          return (
+            <g key={`status-axis-${item.status}`}>
+              <line
+                x1={CHART_PADDING.left} y1={yScore(score)}
+                x2={VIEW_BOX_W - CHART_PADDING.right} y2={yScore(score)}
+                className="strava-grid-line"
+              />
+              <text
+                x={CHART_PADDING.left - 4} y={yScore(score)}
+                className="strava-axis-label"
+                textAnchor="end"
+                dominantBaseline="middle"
+              >
+                {score}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* X-axis labels */}
           {xLabelIndices.map((i) => (
             <text
               key={`xlbl-${i}`}
@@ -1089,19 +1119,18 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
             </text>
           ))}
 
-          {/* Bars — only render when status is known */}
+          {/* Dots — only render recognized statuses */}
           {buckets.map((b, i) => {
-            if (b.status === '') return null;
+            const score = trainingStatusScore(b.status);
+            if (score === null) return null;
             return (
-              <rect
-                key={`bar-${i}`}
-                x={CHART_PADDING.left + barWidth * i + barGap}
-                y={barTop}
-                width={Math.max(barInner, 1)}
-                height={STATUS_BAR_H}
+              <circle
+                key={`dot-${i}`}
+                cx={xCenter(i)}
+                cy={yScore(score)}
+                r={i === activeIndex ? (n > 20 ? 8.1 : 10.8) : (n > 20 ? 4.05 : 6.75)}
                 fill={trainingStatusColor(b.status)}
                 opacity={i === activeIndex ? 1 : 0.75}
-                rx={2}
               />
             );
           })}
