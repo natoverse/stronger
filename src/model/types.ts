@@ -558,6 +558,12 @@ export interface GarminWellnessEntry {
 	loadFocusAnaerobicMin: number | null;
 	/** Optimal-range maximum for anaerobic load. */
 	loadFocusAnaerobicMax: number | null;
+
+	// HRV baseline
+	/** Lower bound of Garmin's personal balanced HRV range, in ms. */
+	hrvBaselineMin: number | null;
+	/** Upper bound of Garmin's personal balanced HRV range, in ms. */
+	hrvBaselineMax: number | null;
 }
 
 // ---------------------------------------------------------------------------

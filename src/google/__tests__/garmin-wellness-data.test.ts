@@ -19,6 +19,7 @@ describe('parseGarminWellnessRow', () => {
       '320.4', '200', '400',   // load focus low aerobic (value, min, max)
       '180.6', '150', '300',   // load focus high aerobic
       '40.2', '50', '120',     // load focus anaerobic
+      '43', '58',               // HRV baseline
     ];
     const entry = parseGarminWellnessRow(row);
     expect(entry).not.toBeNull();
@@ -56,6 +57,8 @@ describe('parseGarminWellnessRow', () => {
     expect(entry!.loadFocusAnaerobic).toBe(40.2);
     expect(entry!.loadFocusAnaerobicMin).toBe(50);
     expect(entry!.loadFocusAnaerobicMax).toBe(120);
+    expect(entry!.hrvBaselineMin).toBe(43);
+    expect(entry!.hrvBaselineMax).toBe(58);
   });
 
   it('returns null for empty date', () => {
@@ -71,6 +74,8 @@ describe('parseGarminWellnessRow', () => {
     expect(entry!.sleepDurationSec).toBeNull();
     expect(entry!.trainingStatus).toBe('');
     expect(entry!.steps).toBeNull();
+    expect(entry!.hrvBaselineMin).toBeNull();
+    expect(entry!.hrvBaselineMax).toBeNull();
   });
 
   it('parses empty string numeric fields as null', () => {

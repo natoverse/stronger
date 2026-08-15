@@ -53,7 +53,9 @@ export type WellnessNumericMetric =
   | 'loadFocusAerobicHighMax'
   | 'loadFocusAnaerobic'
   | 'loadFocusAnaerobicMin'
-  | 'loadFocusAnaerobicMax';
+  | 'loadFocusAnaerobicMax'
+  | 'hrvBaselineMin'
+  | 'hrvBaselineMax';
 
 /** Metrics that are SUMmed when aggregating (vs averaged). */
 const SUM_METRICS = new Set<WellnessNumericMetric>([
@@ -97,6 +99,8 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
   loadFocusAnaerobic: 'Anaerobic',
   loadFocusAnaerobicMin: 'Anaerobic (min)',
   loadFocusAnaerobicMax: 'Anaerobic (max)',
+  hrvBaselineMin: 'HRV Baseline (min)',
+  hrvBaselineMax: 'HRV Baseline (max)',
 };
 
 export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
@@ -131,6 +135,8 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   loadFocusAnaerobic: '',
   loadFocusAnaerobicMin: '',
   loadFocusAnaerobicMax: '',
+  hrvBaselineMin: 'ms',
+  hrvBaselineMax: 'ms',
 };
 
 // ---------------------------------------------------------------------------
@@ -608,26 +614,85 @@ const LOAD_FOCUS_METRICS: Record<
   },
 };
 
-export interface LoadFocusBucket {
+export interface WellnessRangeBucket {
   label: string;
-  /** Load value for the bucket (bar height). */
+  /** Metric value for the bucket. */
   value: number | null;
-  /** Optimal-range minimum for the bucket (band bottom). */
+  /** Optional categorical key used to color the metric value. */
+  colorKey?: string;
+  /** Range minimum for the bucket (band bottom). */
   min: number | null;
-  /** Optimal-range maximum for the bucket (band top). */
+  /** Range maximum for the bucket (band top). */
   max: number | null;
 }
 
-export interface LoadFocusChartData {
-  area: LoadFocusArea;
-  buckets: LoadFocusBucket[];
-  /** Average load across non-empty buckets (or latest in day mode via latestValue). */
+export interface WellnessRangeChartData {
+  buckets: WellnessRangeBucket[];
+  /** Average metric value across non-empty buckets. */
   summary: number | null;
-  /** Most recent non-null load value. */
+  /** Most recent non-null metric value. */
   latestValue: number | null;
-  /** Most recent non-null optimal range (min/max), for the header/legend. */
+  /** Most recent non-null range (min/max), for the header/legend. */
   latestMin: number | null;
   latestMax: number | null;
+}
+
+export type LoadFocusBucket = WellnessRangeBucket;
+
+export interface LoadFocusChartData extends WellnessRangeChartData {
+  area: LoadFocusArea;
+}
+
+function buildMetricRangeChartData(
+  entries: GarminWellnessEntry[],
+  valueMetric: WellnessNumericMetric,
+  minMetric: WellnessNumericMetric,
+  maxMetric: WellnessNumericMetric,
+  range: string,
+  aggregation: StravaAggregation,
+  today: Date,
+  colorMetric?: 'hrvStatus',
+): WellnessRangeChartData {
+  const valueData = buildWellnessChartData(entries, valueMetric, range, aggregation, today, colorMetric);
+  const minData = buildWellnessChartData(entries, minMetric, range, aggregation, today);
+  const maxData = buildWellnessChartData(entries, maxMetric, range, aggregation, today);
+
+  const buckets: WellnessRangeBucket[] = valueData.buckets.map((valueBucket, index) => ({
+    label: valueBucket.label,
+    value: valueBucket.value,
+    min: minData.buckets[index]?.value ?? null,
+    max: maxData.buckets[index]?.value ?? null,
+    colorKey: valueBucket.colorKey,
+  }));
+  const latest = [...buckets].reverse().find((bucket) =>
+    bucket.value !== null || bucket.min !== null || bucket.max !== null
+  ) ?? null;
+
+  return {
+    buckets,
+    summary: valueData.summary,
+    latestValue: valueData.latestValue,
+    latestMin: latest?.min ?? null,
+    latestMax: latest?.max ?? null,
+  };
+}
+
+export function buildHrvRangeChartData(
+  entries: GarminWellnessEntry[],
+  range: string,
+  aggregation: StravaAggregation,
+  today: Date = new Date(),
+): WellnessRangeChartData {
+  return buildMetricRangeChartData(
+    entries,
+    'hrvWeeklyAvg',
+    'hrvBaselineMin',
+    'hrvBaselineMax',
+    range,
+    aggregation,
+    today,
+    'hrvStatus',
+  );
 }
 
 /**
@@ -643,27 +708,19 @@ export function buildLoadFocusChartData(
   today: Date = new Date(),
 ): LoadFocusChartData {
   const metrics = LOAD_FOCUS_METRICS[area];
-  const valueData = buildWellnessChartData(entries, metrics.value, range, aggregation, today);
-  const minData = buildWellnessChartData(entries, metrics.min, range, aggregation, today);
-  const maxData = buildWellnessChartData(entries, metrics.max, range, aggregation, today);
-
-  const buckets: LoadFocusBucket[] = valueData.buckets.map((valueBucket, index) => ({
-    label: valueBucket.label,
-    value: valueBucket.value,
-    min: minData.buckets[index]?.value ?? null,
-    max: maxData.buckets[index]?.value ?? null,
-  }));
-
-  const reversed = [...buckets].reverse();
-  const latest = reversed.find((b) => b.value !== null || b.min !== null || b.max !== null) ?? null;
+  const data = buildMetricRangeChartData(
+    entries,
+    metrics.value,
+    metrics.min,
+    metrics.max,
+    range,
+    aggregation,
+    today,
+  );
 
   return {
     area,
-    buckets,
-    summary: valueData.summary,
-    latestValue: valueData.latestValue,
-    latestMin: latest?.min ?? null,
-    latestMax: latest?.max ?? null,
+    ...data,
   };
 }
 

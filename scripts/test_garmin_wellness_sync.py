@@ -27,6 +27,72 @@ def test_normalize_training_status_handles_numeric_codes():
     assert garmin_wellness_sync.normalize_training_status("8") == "STRAINED"
 
 
+def test_fetch_hrv_includes_balanced_baseline_range():
+    class FakeClient:
+        def get_hrv_data(self, _cdate):
+            return {
+                "hrvSummary": {
+                    "weeklyAvg": 48,
+                    "status": "BALANCED",
+                    "baseline": {
+                        "lowUpper": 42,
+                        "balancedLow": 43,
+                        "balancedUpper": 58,
+                    },
+                },
+                "hrv": [],
+            }
+
+    assert garmin_wellness_sync._fetch_hrv(FakeClient(), "2026-08-15") == {
+        "hrvWeeklyAvg": "48",
+        "hrvStatus": "BALANCED",
+        "hrvBaselineMin": "43",
+        "hrvBaselineMax": "58",
+    }
+
+
+def test_fetch_hrv_leaves_missing_baseline_range_blank():
+    class FakeClient:
+        def get_hrv_data(self, _cdate):
+            return {"hrvSummary": {"weeklyAvg": 48, "status": "LOW"}}
+
+    row = garmin_wellness_sync._fetch_hrv(FakeClient(), "2026-08-15")
+    assert row["hrvBaselineMin"] == ""
+    assert row["hrvBaselineMax"] == ""
+
+
+def test_ensure_tab_updates_header_for_existing_sheet():
+    class Response:
+        ok = True
+        status_code = 200
+        text = ""
+
+        def __init__(self, data=None):
+            self._data = data or {}
+
+        def json(self):
+            return self._data
+
+    class FakeSession:
+        def __init__(self):
+            self.header_write = None
+
+        def get(self, _url, headers):
+            assert "Authorization" in headers
+            return Response({"sheets": [{"properties": {"title": garmin_wellness_sync.TAB_NAME}}]})
+
+        def put(self, url, headers, json):
+            self.header_write = (url, headers, json)
+            return Response()
+
+    session = FakeSession()
+    garmin_wellness_sync.ensure_tab(session, "sheet-id", "token")
+
+    url, _, payload = session.header_write
+    assert "A1%3AAN1" in url
+    assert payload == {"values": [garmin_wellness_sync.HEADER]}
+
+
 def test_fetch_training_status_prefers_human_readable_fields():
     class FakeClient:
         def get_training_status(self, _cdate):

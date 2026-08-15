@@ -2859,7 +2859,7 @@ export function appSettingsToMap(
 
 /**
  * Column header row written to the "Stronger - Garmin Wellness" tab.
- * 38 columns (A–AL). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
+ * 40 columns (A–AN). Must stay in sync with scripts/garmin-wellness-sync.py HEADER.
  */
 export const GARMIN_WELLNESS_HEADER: string[] = [
 	'date',
@@ -2878,10 +2878,11 @@ export const GARMIN_WELLNESS_HEADER: string[] = [
 	'loadFocusAerobicLow', 'loadFocusAerobicLowMin', 'loadFocusAerobicLowMax',
 	'loadFocusAerobicHigh', 'loadFocusAerobicHighMin', 'loadFocusAerobicHighMax',
 	'loadFocusAnaerobic', 'loadFocusAnaerobicMin', 'loadFocusAnaerobicMax',
+	'hrvBaselineMin', 'hrvBaselineMax',
 ]
 
-/** A1 range for reading Garmin wellness data (row 2 onward, 38 columns = A:AL). */
-const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:AL`
+/** A1 range for reading Garmin wellness data (row 2 onward, 40 columns = A:AN). */
+const GARMIN_WELLNESS_READ_RANGE = `'${GARMIN_WELLNESS_TAB_NAME}'!A2:AN`
 
 /** Column index map for the Garmin wellness row (0-based). */
 const WC = {
@@ -2901,6 +2902,7 @@ const WC = {
 	loadFocusAerobicLow: 29, loadFocusAerobicLowMin: 30, loadFocusAerobicLowMax: 31,
 	loadFocusAerobicHigh: 32, loadFocusAerobicHighMin: 33, loadFocusAerobicHighMax: 34,
 	loadFocusAnaerobic: 35, loadFocusAnaerobicMin: 36, loadFocusAnaerobicMax: 37,
+	hrvBaselineMin: 38, hrvBaselineMax: 39,
 } as const
 
 function parseNum(raw: string | undefined): number | null {
@@ -2992,6 +2994,8 @@ export function parseGarminWellnessRow(row: string[]): GarminWellnessEntry | nul
 		loadFocusAnaerobic:      parseNum(row[WC.loadFocusAnaerobic]),
 		loadFocusAnaerobicMin:   parseNum(row[WC.loadFocusAnaerobicMin]),
 		loadFocusAnaerobicMax:   parseNum(row[WC.loadFocusAnaerobicMax]),
+		hrvBaselineMin:          parseNum(row[WC.hrvBaselineMin]),
+		hrvBaselineMax:          parseNum(row[WC.hrvBaselineMax]),
 	}
 }
 

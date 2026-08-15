@@ -42,7 +42,7 @@ from urllib.parse import quote
 SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
 TAB_NAME = "Stronger - Garmin Wellness"
 
-# 29 columns — keep in sync with src/google/sheets.ts GARMIN_WELLNESS_HEADER
+# 40 columns — keep in sync with src/google/sheets.ts GARMIN_WELLNESS_HEADER
 HEADER = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
@@ -62,9 +62,10 @@ HEADER = [
     "loadFocusAerobicLow", "loadFocusAerobicLowMin", "loadFocusAerobicLowMax",
     "loadFocusAerobicHigh", "loadFocusAerobicHighMin", "loadFocusAerobicHighMax",
     "loadFocusAnaerobic", "loadFocusAnaerobicMin", "loadFocusAnaerobicMax",
+    "hrvBaselineMin", "hrvBaselineMax",
 ]
-COLUMN_COUNT = len(HEADER)   # 38 → A:AL
-assert COLUMN_COUNT == 38, "Header count mismatch"
+COLUMN_COUNT = len(HEADER)   # 40 → A:AN
+assert COLUMN_COUNT == 40, "Header count mismatch"
 
 # Default window: the last 72 hours. Wellness data is stored per calendar day,
 # so a 72-hour lookback spans four calendar days (today plus the prior three)
@@ -249,9 +250,12 @@ def _fetch_hrv(client, cdate: str) -> dict:
         summary = data.get("hrvSummary") or {}
         if not summary:
             return {}
+        baseline = summary.get("baseline") or {}
         return {
             "hrvWeeklyAvg":  _num(summary.get("weeklyAvg"), 0),
             "hrvStatus":     str(summary.get("status") or ""),
+            "hrvBaselineMin": _num(baseline.get("balancedLow"), 0),
+            "hrvBaselineMax": _num(baseline.get("balancedUpper"), 0),
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] hrv: {exc}", file=sys.stderr)
@@ -646,19 +650,17 @@ def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
         token,
     )
     titles = {s.get("properties", {}).get("title") for s in meta.get("sheets", [])}
-    if TAB_NAME in titles:
-        return
+    created = TAB_NAME not in titles
+    if created:
+        create_res = session.post(
+            f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
+            headers={"Authorization": "Bearer " + token},
+            json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
+        )
+        if not create_res.ok:
+            raise RuntimeError(f"Tab creation failed ({create_res.status_code}): {create_res.text}")
 
-    # Create the tab
-    create_res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
-        headers={"Authorization": "Bearer " + token},
-        json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
-    )
-    if not create_res.ok:
-        raise RuntimeError(f"Tab creation failed ({create_res.status_code}): {create_res.text}")
-
-    # Write header row
+    # Keep existing tabs' headers in sync when columns are appended.
     col = _column_letter(COLUMN_COUNT)
     header_range = quote(f"'{TAB_NAME}'!A1:{col}1")
     header_res = session.put(
@@ -668,7 +670,8 @@ def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
     )
     if not header_res.ok:
         raise RuntimeError(f"Header write failed ({header_res.status_code}): {header_res.text}")
-    print(f'Created "{TAB_NAME}" tab with header row.')
+    if created:
+        print(f'Created "{TAB_NAME}" tab with header row.')
 
 
 def read_existing_dates(session, spreadsheet_id: str, token: str) -> set[str]:
