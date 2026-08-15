@@ -366,11 +366,12 @@ export function buildStatusChartData(
  * Build combined intensity-minutes chart data (moderate + vigorous summed).
  *
  * When `weeklyGoal > 0`:
- * - In `'day'` aggregation: each bar's colorKey is set by comparing the
- *   7-day rolling sum ending on that date to the weekly goal.
+ * - In `'day'` aggregation: each bar's colorKey compares that day's total to
+ *   the weekly goal divided by seven.
  * - In `'week'` aggregation: the bar's colorKey compares the week's total to
  *   the weekly goal.
- * - In `'month'` aggregation: compares the month's total to the weekly goal × 4.
+ * - In `'month'` aggregation: compares the month's total to the daily goal
+ *   multiplied by the number of days represented by that bucket.
  *
  * colorKey values: `'below'` | `'met'` | `'exceeded'` | `''`
  */
@@ -385,9 +386,7 @@ export function buildIntensityMinCombinedChartData(
   const start = getRangeStart(range, today);
   const end = getRangeEnd(range, today);
 
-  // Build a daily totals map: date → (moderate + vigorous) sum
-  // Include all entries (not just those in range) so the rolling window works
-  // for the first days of the range.
+  // Build a daily totals map: date → (moderate + vigorous) sum.
   const dailyTotals = new Map<string, number>();
   for (const entry of entries) {
     const mod = entry.intensityMinModerate ?? 0;
@@ -412,19 +411,10 @@ export function buildIntensityMinCombinedChartData(
 
       let colorKey = '';
       if (weeklyGoal > 0) {
-        // Rolling 7-day sum ending on this date
-        const endDate = new Date(key + 'T00:00:00');
-        const startRoll = new Date(endDate);
-        startRoll.setDate(startRoll.getDate() - 6);
-        const startRollStr = startRoll.toISOString().slice(0, 10);
-
-        let rollingSum = 0;
-        for (const [d, v] of dailyTotals) {
-          if (d >= startRollStr && d <= key) rollingSum += v;
-        }
-
-        colorKey = rollingSum >= weeklyGoal * 1.25 ? 'exceeded'
-          : rollingSum >= weeklyGoal ? 'met'
+        const dailyGoal = weeklyGoal / 7;
+        const comparisonValue = value ?? 0;
+        colorKey = comparisonValue >= dailyGoal * 1.25 ? 'exceeded'
+          : comparisonValue >= dailyGoal ? 'met'
           : 'below';
       }
 
@@ -451,7 +441,15 @@ export function buildIntensityMinCombinedChartData(
     valueMap.get(key)!.push(total);
   }
 
-  const scaledGoal = aggregation === 'month' ? weeklyGoal * 4 : weeklyGoal;
+  const daysPerBucket = new Map<string, number>();
+  if (aggregation === 'month') {
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const key = String(cursor.getMonth());
+      daysPerBucket.set(key, (daysPerBucket.get(key) ?? 0) + 1);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+  }
 
   let totalSum = 0;
   let totalCount = 0;
@@ -467,6 +465,9 @@ export function buildIntensityMinCombinedChartData(
 
     let colorKey = '';
     if (weeklyGoal > 0 && value !== null) {
+      const scaledGoal = aggregation === 'month'
+        ? (weeklyGoal / 7) * (daysPerBucket.get(key) ?? 0)
+        : weeklyGoal;
       colorKey = value >= scaledGoal * 1.25 ? 'exceeded'
         : value >= scaledGoal ? 'met'
         : 'below';
