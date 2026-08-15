@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseHash, routeToHash } from '../useHashRouter.js';
+import { getSettingsRouteRedirect, parseHash, routeToHash } from '../useHashRouter.js';
 import type { Route } from '../useHashRouter.js';
 
 /* ------------------------------------------------------------------ */
@@ -211,6 +211,10 @@ describe('routeToHash', () => {
       { view: 'exercises' },
       { view: 'progress' },
       { view: 'settings' },
+      { view: 'garmin' },
+      { view: 'garmin-activities' },
+      { view: 'wellness' },
+      { view: 'withings' },
       { view: 'nutrition' },
       { view: 'exerciseEditor' },
       { view: 'exerciseEditor', exerciseId: 'bench' },
@@ -219,5 +223,31 @@ describe('routeToHash', () => {
       const hash = '#' + routeToHash(route);
       expect(parseHash(hash)).toEqual(route);
     }
+  });
+});
+
+describe('getSettingsRouteRedirect', () => {
+  it('preserves settings-dependent routes while settings load', () => {
+    const visibility = { showGarminTab: false, showNutritionTab: false };
+
+    expect(getSettingsRouteRedirect({ view: 'garmin' }, false, visibility)).toBeNull();
+    expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, false, visibility)).toBeNull();
+    expect(getSettingsRouteRedirect({ view: 'nutrition' }, false, visibility)).toBeNull();
+  });
+
+  it('allows enabled routes after settings load', () => {
+    const visibility = { showGarminTab: true, showNutritionTab: true };
+
+    expect(getSettingsRouteRedirect({ view: 'garmin' }, true, visibility)).toBeNull();
+    expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, true, visibility)).toBeNull();
+    expect(getSettingsRouteRedirect({ view: 'nutrition' }, true, visibility)).toBeNull();
+  });
+
+  it('redirects disabled routes after settings load', () => {
+    const visibility = { showGarminTab: false, showNutritionTab: false };
+
+    expect(getSettingsRouteRedirect({ view: 'garmin' }, true, visibility)).toEqual({ view: 'list' });
+    expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, true, visibility)).toEqual({ view: 'list' });
+    expect(getSettingsRouteRedirect({ view: 'nutrition' }, true, visibility)).toEqual({ view: 'list' });
   });
 });

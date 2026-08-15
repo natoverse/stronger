@@ -35,3 +35,7 @@ This spec adds a lightweight client-side router so the URL reflects the current 
 - Since the app is hosted on GitHub Pages (static files), hash-based routing (`/#/workout/squat-a`) is the simplest path — no need for a custom 404.html redirect trick. But either approach is fine.
 - Auth must complete before the workout can be resolved from the URL. The router should defer workout resolution until after `sheetConnected` is true.
 - Workout IDs already exist and are stable (e.g. `squat-a`, `bench-b`), so they're suitable for use in URLs as-is.
+
+## Post-merge decisions
+
+- **Settings-dependent routes on refresh (2026-08-15):** Route visibility checks now wait for persisted app settings to load. This prevents enabled Garmin, Garmin Activities, and Nutrition pages from being redirected home during refresh while the app still holds default visibility settings.

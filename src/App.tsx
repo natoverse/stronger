@@ -22,7 +22,7 @@ import { ActivitiesView } from './components/ActivitiesView.js';
 import { SettingsView } from './components/SettingsView.js';
 import { SetupPage } from './components/SetupPage.js';
 import { GoogleAuth } from './components/GoogleAuth.js';
-import { useHashRouter } from './hooks/useHashRouter.js';
+import { getSettingsRouteRedirect, useHashRouter } from './hooks/useHashRouter.js';
 import { loadDraft, saveDraft, clearDraft } from './hooks/useWorkoutDraft.js';
 import { clearSentinel as clearTimerSentinel } from './hooks/useRestTimer.js';
 import type { StravaActivity, StravaGoal, StravaMetric, StravaTimeRange, StravaAggregation } from './model/strava.js';
@@ -73,6 +73,7 @@ function AppContent() {
     endTime: string;
   } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const settingsRef = useRef(new Map<string, string>());
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
@@ -101,6 +102,7 @@ function AppContent() {
       workoutScheduleLoadedRef.current = false;
       logLoadedRef.current = false;
       settingsLoadedRef.current = false;
+      setSettingsLoaded(false);
       garminLoadedRef.current = false;
       wellnessLoadedRef.current = false;
       withingsLoadedRef.current = false;
@@ -175,6 +177,7 @@ function AppContent() {
     workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
     settingsLoadedRef.current = false;
+    setSettingsLoaded(false);
     garminLoadedRef.current = false;
     wellnessLoadedRef.current = false;
     withingsLoadedRef.current = false;
@@ -378,6 +381,8 @@ function AppContent() {
       });
     } catch {
       // Silently ignore — settings data is optional
+    } finally {
+      setSettingsLoaded(true);
     }
   }, []);
 
@@ -1155,23 +1160,15 @@ function AppContent() {
   }, [appSettings.roundWarmupPlateMath, configs, definitions]);
 
   useEffect(() => {
-    if (route.view === 'wellness') {
-      replaceTo(appSettings.showGarminTab ? { view: 'garmin' } : { view: 'list' });
-      return;
-    }
-    if (route.view === 'garmin' && !appSettings.showGarminTab) {
-      replaceTo({ view: 'list' });
-      return;
-    }
-    if (route.view === 'garmin-activities' && !appSettings.showGarminTab) {
-      replaceTo({ view: 'list' });
-      return;
-    }
-    if (route.view === 'nutrition' && !appSettings.showNutritionTab) {
-      replaceTo({ view: 'list' });
-      return;
-    }
-  }, [route.view, appSettings.showGarminTab, appSettings.showNutritionTab, replaceTo]);
+    const redirect = getSettingsRouteRedirect(route, settingsLoaded, appSettings);
+    if (redirect) replaceTo(redirect);
+  }, [
+    route.view,
+    settingsLoaded,
+    appSettings.showGarminTab,
+    appSettings.showNutritionTab,
+    replaceTo,
+  ]);
 
   // Lazy-load Garmin activities when the combined activities/wellness view or activity log is first visited.
   useEffect(() => {
