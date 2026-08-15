@@ -107,6 +107,10 @@ describe('wellness legend labels', () => {
       expect(sleepGoalColor(8, 7)).toBe('#00e676');
       expect(sleepGoalColor(9, 7)).toBe('#2196f3');
     });
+
+    it('uses the daily goal for an averaged weekly bucket', () => {
+      expect(sleepGoalColor((7 + 9) / 2, 7)).toBe('#00e676');
+    });
   });
 
   it('derives VO2, hill, and endurance labels from numeric values', () => {
