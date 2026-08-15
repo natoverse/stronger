@@ -1162,7 +1162,13 @@ function App() {
   useEffect(() => {
     const redirect = getSettingsRouteRedirect(route, settingsLoaded, appSettings);
     if (redirect) replaceTo(redirect);
-  }, [route, settingsLoaded, appSettings, replaceTo]);
+  }, [
+    route.view,
+    settingsLoaded,
+    appSettings.showGarminTab,
+    appSettings.showNutritionTab,
+    replaceTo,
+  ]);
 
   // Lazy-load Garmin activities when the combined activities/wellness view or activity log is first visited.
   useEffect(() => {
