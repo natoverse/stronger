@@ -779,12 +779,16 @@ body {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.35rem;
-	margin-top: 2rem;
 	font-size: 0.8rem;
-	color: var(--color-muted);
+	color: var(--color-text-muted);
 	text-decoration: none;
 	opacity: 0.6;
 	transition: opacity 0.2s;
+}
+
+.app-footer {
+	padding: 2rem 0;
+	text-align: center;
 }
 
 .github-link:hover {
