@@ -302,8 +302,9 @@ export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
   { label: 'Below goal', color: YELLOW },
 ];
 
-export function sleepGoalColor(seconds: number, goalHours: number, aggregation: WellnessAggregation): string {
-  return goalColor(seconds, goalHours * 3600, aggregation, ACCENT);
+/** Sleep buckets are averages in hours, so every aggregation uses the daily goal unchanged. */
+export function sleepGoalColor(hours: number, goalHours: number): string {
+  return goalColor(hours, goalHours, 'day', ACCENT);
 }
 
 // Load focus: color the daily load bar by where it sits vs. the optimal range.
@@ -1622,7 +1623,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         summaryLabel={summaryStr(summaryValue(sleepDurData), 'sleepDurationSec', WELLNESS_METRIC_UNITS.sleepDurationSec)}
         formatValue={numFmt('sleepDurationSec')}
         legendItems={sleepHoursGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
-        colorFn={(v) => v !== null ? sleepGoalColor(v, sleepHoursGoal, aggregation) : GRAY}
+        colorFn={(v) => v !== null ? sleepGoalColor(v, sleepHoursGoal) : GRAY}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.sleepScore}
