@@ -29,24 +29,23 @@ interface Props {
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function formatDuration(seconds: number): string {
+export function formatDuration(seconds: number): string {
   if (seconds <= 0) return '—';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
+  return `${h}:${String(m).padStart(2, '0')}`;
 }
 
-function formatDistance(meters: number): string {
+export function formatDistance(meters: number): string {
   if (meters <= 0) return '';
   const miles = toDisplayUnit('distance', meters);
-  return `${formatMetricValue(miles, 'distance')} mi`;
+  return `${formatMetricValue(miles, 'distance')}mi`;
 }
 
-function formatElevation(meters: number): string {
+export function formatElevation(meters: number): string {
   if (meters <= 0) return '';
   const feet = toDisplayUnit('elevationGain', meters);
-  return `${formatMetricValue(feet, 'elevationGain')} ft`;
+  return `${formatMetricValue(feet, 'elevationGain')}‘`;
 }
 
 function formatDate(iso: string): string {

@@ -81,3 +81,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Activity date-range boundary (2026-08-13):** Backfill activity queries now set their end date to the following calendar day. This makes the end bound safely inclusive of the current day when Garmin interprets its date-only range in UTC, avoiding omissions for activities near the UTC rollover.
 
 - **Hourly activity sync (2026-08-15):** Changed the scheduled Garmin activity sync from daily at 06:00 UTC to hourly on the hour, matching the Garmin wellness sync cadence so newly uploaded activities reach the sheet sooner. Manual dispatch and overwrite behavior are unchanged.
+
+- **Concise activity card metrics (2026-08-15):** Activity-card durations now use `hh:mm`, distances attach `mi` directly to the value, and elevation gain/loss use `‘` instead of `ft`. These shorter labels reduce wrapping and keep cards compact.
