@@ -72,7 +72,7 @@ describe('training status legend', () => {
   it('orders the categorical scale from Peaking at 9 to No status at 1', () => {
     expect(TRAINING_STATUS_LEGEND_ITEMS).toHaveLength(9);
     expect(TRAINING_STATUS_LEGEND_ITEMS[0].label).toBe('Peaking');
-    expect(TRAINING_STATUS_LEGEND_ITEMS.at(-1)?.label).toBe('No status');
+    expect(TRAINING_STATUS_LEGEND_ITEMS[TRAINING_STATUS_LEGEND_ITEMS.length - 1].label).toBe('No status');
     expect(trainingStatusScore('PEAKING')).toBe(9);
     expect(trainingStatusScore('NO_STATUS')).toBe(1);
     expect(trainingStatusScore('RECOVERY_ACTIVE')).toBe(trainingStatusScore('RECOVERY'));
