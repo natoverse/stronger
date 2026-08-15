@@ -524,7 +524,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
           {/* Values */}
           {buckets.map((b, i) => {
             if (b.value === null) return null;
-            const val = b.value ?? 0;
+            const val = b.value;
             const fill = colorFn ? colorFn(b.value, b.colorKey) : ACCENT;
             if (renderAsDots) {
               return (
