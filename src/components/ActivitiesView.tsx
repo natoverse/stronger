@@ -286,23 +286,6 @@ function MetricChart({
             }}
             title="Set annual goal"
           >
-            {goalBarCap !== null && (
-              <defs>
-                <pattern
-                  id={overflowPatternId}
-                  width="6"
-                  height="6"
-                  patternUnits="userSpaceOnUse"
-                >
-                  <rect width="6" height="6" className="strava-overflow-pattern-bg" />
-                  <path
-                    d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
-                    className="strava-overflow-pattern-line"
-                  />
-                </pattern>
-              </defs>
-            )}
-
             <Target size={16} />
           </button>
         )}
@@ -332,6 +315,23 @@ function MetricChart({
           viewBox={`0 0 ${viewBoxWidth} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
+          {goalBarCap !== null && (
+            <defs>
+              <pattern
+                id={overflowPatternId}
+                width="6"
+                height="6"
+                patternUnits="userSpaceOnUse"
+              >
+                <rect width="6" height="6" className="strava-overflow-pattern-bg" />
+                <path
+                  d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
+                  className="strava-overflow-pattern-line"
+                />
+              </pattern>
+            </defs>
+          )}
+
           {/* Grid lines (left axis) */}
           {leftTicks.map((tick) => (
             <line
