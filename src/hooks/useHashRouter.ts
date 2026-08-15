@@ -73,6 +73,27 @@ export function routeToHash(route: Route): string {
   return '/';
 }
 
+export function getSettingsRouteRedirect(
+  route: Route,
+  settingsLoaded: boolean,
+  visibility: { showGarminTab: boolean; showNutritionTab: boolean },
+): Route | null {
+  if (!settingsLoaded) return null;
+  if (route.view === 'wellness') {
+    return visibility.showGarminTab ? { view: 'garmin' } : { view: 'list' };
+  }
+  if (
+    (route.view === 'garmin' || route.view === 'garmin-activities')
+    && !visibility.showGarminTab
+  ) {
+    return { view: 'list' };
+  }
+  if (route.view === 'nutrition' && !visibility.showNutritionTab) {
+    return { view: 'list' };
+  }
+  return null;
+}
+
 /**
  * Lightweight hash-based router hook.
  *
