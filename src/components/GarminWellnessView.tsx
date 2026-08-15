@@ -1,5 +1,5 @@
 /**
- * GarminWellnessView — scrollable page of bar charts for daily Garmin wellness
+ * GarminWellnessView — scrollable page of charts for daily Garmin wellness
  * metrics (HRV, sleep, training status/readiness/load, body battery, steps,
  * floors, intensity minutes, VO2 max, hill/endurance scores, RHR).
  *
@@ -443,9 +443,10 @@ interface BarChartProps {
   /** Per-bar color function. Falls back to ACCENT. */
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
+  renderAsDots?: boolean;
 }
 
-function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue }: BarChartProps) {
+function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue, renderAsDots = false }: BarChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -520,11 +521,24 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
             </text>
           ))}
 
-          {/* Bars */}
+          {/* Values */}
           {buckets.map((b, i) => {
+            if (b.value === null) return null;
             const val = b.value ?? 0;
-            const barH = Math.max((val / maxBar) * PLOT_H, 0);
             const fill = colorFn ? colorFn(b.value, b.colorKey) : ACCENT;
+            if (renderAsDots) {
+              return (
+                <circle
+                  key={`dot-${i}`}
+                  cx={xCenter(i)}
+                  cy={yBar(val)}
+                  r={i === activeIndex ? (n > 20 ? 3 : 4) : (n > 20 ? 1.5 : 2.5)}
+                  fill={fill}
+                  opacity={i === activeIndex ? 1 : 0.75}
+                />
+              );
+            }
+            const barH = Math.max((val / maxBar) * PLOT_H, 0);
             return (
               <rect
                 key={`bar-${i}`}
@@ -849,7 +863,7 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
 }
 
 /* ------------------------------------------------------------------ */
-/*  WellnessLoadFocusChart — daily load bars with optimal-range band   */
+/*  WellnessLoadFocusChart — daily load dots with optimal-range band   */
 /* ------------------------------------------------------------------ */
 
 interface LoadFocusChartProps {
@@ -864,7 +878,7 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
   const n = buckets.length;
   if (n === 0) return null;
 
-  // Y domain spans 0 → max of every value/min/max so bars and band both fit.
+  // Y domain spans 0 → max of every value/min/max so dots and band both fit.
   const domainValues = buckets.flatMap((b) => [b.value, b.min, b.max]).filter((v): v is number => v !== null);
   const maxBar = domainValues.length > 0 ? Math.max(...domainValues, 0.001) : 0.001;
 
@@ -960,20 +974,17 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
             );
           })}
 
-          {/* Daily load bars */}
+          {/* Daily load dots */}
           {buckets.map((b, i) => {
             if (b.value === null) return null;
-            const h = Math.max((b.value / maxBar) * PLOT_H, 1);
             return (
-              <rect
-                key={`bar-${i}`}
-                x={CHART_PADDING.left + barWidth * i + barGap}
-                y={CHART_PADDING.top + PLOT_H - h}
-                width={Math.max(barInner, 1)}
-                height={h}
+              <circle
+                key={`dot-${i}`}
+                cx={xCenter(i)}
+                cy={yBar(b.value)}
+                r={i === activeIndex ? (n > 20 ? 3 : 4) : (n > 20 ? 1.5 : 2.5)}
                 fill={loadFocusColor(b.value, b.min, b.max)}
                 opacity={i === activeIndex ? 1 : 0.85}
-                rx={2}
               />
             );
           })}
@@ -1410,6 +1421,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={TRAINING_READINESS_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? readinessColor(v) : GRAY}
         formatValue={numFmt('readinessScore')}
+        renderAsDots
       />
       <WellnessStatusBarChart buckets={statusData.buckets} />
       <WellnessBarChart
@@ -1425,6 +1437,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={LOAD_RATIO_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
         formatValue={formatWellnessRatio}
+        renderAsDots
       />
       {loadFocusData.map((data) => {
         const load = aggregation === 'day' ? data.latestValue : data.summary;
@@ -1454,6 +1467,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={VO2_MAX_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? vo2MaxColor(v) : GRAY}
         formatValue={numFmt('vo2Max')}
+        renderAsDots
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.hillScore}
@@ -1466,6 +1480,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={HILL_SCORE_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? hillScoreColor(v) : GRAY}
         formatValue={numFmt('hillScore')}
+        renderAsDots
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.enduranceScore}
@@ -1478,6 +1493,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={ENDURANCE_SCORE_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? enduranceScoreColor(v) : GRAY}
         formatValue={numFmt('enduranceScore')}
+        renderAsDots
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.heatAcclimationPct}
@@ -1520,6 +1536,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={HRV_STATUS_LEGEND_ITEMS}
         colorFn={(_, key) => key ? hrvStatusColor(key) : ACCENT}
         formatValue={numFmt('hrvWeeklyAvg')}
+        renderAsDots
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.restingHR}
@@ -1527,6 +1544,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={rhrData.buckets}
         summaryLabel={summaryStr(summaryValue(rhrData), 'restingHR', WELLNESS_METRIC_UNITS.restingHR)}
         formatValue={numFmt('restingHR')}
+        renderAsDots
       />
       <WellnessRangeBarChart
         label="Body Battery Range"
@@ -1564,6 +1582,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={SLEEP_SCORE_LEGEND_ITEMS}
         formatValue={numFmt('sleepScore')}
         colorFn={(v) => v !== null ? sleepScoreColor(v) : GRAY}
+        renderAsDots
       />
 
       {/* Section: Activity */}

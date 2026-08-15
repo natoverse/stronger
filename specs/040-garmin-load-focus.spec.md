@@ -54,3 +54,7 @@ mostRecentTrainingLoadBalance
 - **Iteration (2026-07).** Switched the optimal-range background band in the
   load-focus charts from green to transparent gray so the shaded range is easier
   to distinguish from in-range (green) bars.
+- **Iteration (2026-08).** Replaced load-value bars with filled dots for Low
+  Aerobic, High Aerobic, and Anaerobic Load. The dynamic optimal-range shading,
+  min/max reference lines, axes, dimensions, colors, and tooltips remain
+  unchanged.
