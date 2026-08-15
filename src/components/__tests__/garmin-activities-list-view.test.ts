@@ -13,7 +13,7 @@ describe('Garmin activity card formatting', () => {
   });
 
   it('formats distance without a space before miles', () => {
-    expect(formatDistance(1609.344)).toBe('1mi');
+    expect(formatDistance(1609.344)).toBe('1.00mi');
     expect(formatDistance(0)).toBe('');
   });
 
