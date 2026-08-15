@@ -336,7 +336,7 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
         </div>
 
         <div className="settings-subsection-title">Garmin Goals</div>
-        <p className="settings-toggle-description">Auto-synced from Garmin. Set to 0 to disable goal coloring.</p>
+        <p className="settings-toggle-description">Set to 0 to disable goal coloring. Steps, floors, and intensity minutes are auto-synced from Garmin.</p>
 
         <div className="settings-percent-row">
           <span className="settings-toggle-label">
@@ -357,6 +357,28 @@ export function SettingsView({ spreadsheetId, onImportComplete, appendLogRows, o
               }}
             />
             <span className="settings-percent-unit">steps</span>
+          </div>
+        </div>
+
+        <div className="settings-percent-row">
+          <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Daily Sleep</span>
+            <span className="settings-toggle-description">Colors the sleep duration chart yellow/green/blue</span>
+          </span>
+          <div className="settings-percent-input-group">
+            <input
+              type="number"
+              className="settings-percent-input"
+              min={0}
+              max={24}
+              step={0.5}
+              value={appSettings.garminDailySleepHoursGoal}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                if (isFinite(v) && v >= 0 && v <= 24) onAppNumericSettingChange('garminDailySleepHoursGoal', v);
+              }}
+            />
+            <span className="settings-percent-unit">hours</span>
           </div>
         </div>
 

@@ -1510,6 +1510,7 @@ function App() {
             aggregation={chartAggregation}
             stepsGoal={appSettings.garminDailyStepsGoal}
             floorsGoal={appSettings.garminDailyFloorsGoal}
+            sleepHoursGoal={appSettings.garminDailySleepHoursGoal}
             weeklyIntensityMinGoal={appSettings.garminWeeklyIntensityMinGoal}
             dailyCalorieGoal={appSettings.dailyCalorieGoal}
             embedded

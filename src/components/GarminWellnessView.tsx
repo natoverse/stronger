@@ -302,6 +302,10 @@ export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
   { label: 'Below goal', color: YELLOW },
 ];
 
+export function sleepGoalColor(seconds: number, goalHours: number, aggregation: WellnessAggregation): string {
+  return goalColor(seconds, goalHours * 3600, aggregation, ACCENT);
+}
+
 // Load focus: color the daily load bar by where it sits vs. the optimal range.
 const LOAD_FOCUS_BELOW = YELLOW;
 const LOAD_FOCUS_IN = GREEN;
@@ -1366,13 +1370,15 @@ interface Props {
   stepsGoal?: number;
   /** Daily floors goal (0 = no goal). Auto-synced from Garmin. */
   floorsGoal?: number;
+  /** Daily sleep goal in hours (0 = no goal). */
+  sleepHoursGoal?: number;
   /** Weekly intensity minutes goal (0 = no goal). Auto-synced from Garmin. */
   weeklyIntensityMinGoal?: number;
   /** Daily calorie goal (0 = no goal line). From app settings. */
   dailyCalorieGoal?: number;
 }
 
-export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, weeklyIntensityMinGoal = 0, dailyCalorieGoal = 0 }: Props) {
+export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, sleepHoursGoal = 0, weeklyIntensityMinGoal = 0, dailyCalorieGoal = 0 }: Props) {
   const today = useMemo(() => new Date(), []);
 
   // Build chart data
@@ -1615,6 +1621,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={sleepDurData.buckets}
         summaryLabel={summaryStr(summaryValue(sleepDurData), 'sleepDurationSec', WELLNESS_METRIC_UNITS.sleepDurationSec)}
         formatValue={numFmt('sleepDurationSec')}
+        legendItems={sleepHoursGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
+        colorFn={(v) => v !== null ? sleepGoalColor(v, sleepHoursGoal, aggregation) : GRAY}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.sleepScore}

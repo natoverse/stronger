@@ -424,6 +424,8 @@ export interface AppSettings {
 	garminDailyStepsGoal: number;
 	/** Daily floors goal used to color the Garmin floors chart (0 disables goal coloring). Auto-synced from Garmin. */
 	garminDailyFloorsGoal: number;
+	/** Daily sleep target in hours used to color the Garmin sleep-duration chart (0 disables goal coloring). */
+	garminDailySleepHoursGoal: number;
 	/** Weekly intensity minutes goal used to color the Garmin intensity chart (0 disables goal coloring). Auto-synced from Garmin. */
 	garminWeeklyIntensityMinGoal: number;
 }
@@ -446,6 +448,7 @@ export type AppNumericSettingKey =
 	| 'drinksPerDayGoal'
 	| 'garminDailyStepsGoal'
 	| 'garminDailyFloorsGoal'
+	| 'garminDailySleepHoursGoal'
 	| 'garminWeeklyIntensityMinGoal';
 
 // ---------------------------------------------------------------------------

@@ -10,6 +10,7 @@ import {
   hrvStatusLegendLabel,
   hrvStatusColor,
   readinessLegendLabel,
+  sleepGoalColor,
   metersToFeet,
   trainingLoadRatioLegendLabel,
   trainingStatusColor,
@@ -98,6 +99,14 @@ describe('wellness legend labels', () => {
     expect(trainingLoadRatioLegendLabel(0.7)).toBe('Low');
     expect(trainingLoadRatioLegendLabel(1.1)).toBe('Optimal');
     expect(trainingLoadRatioLegendLabel(1.5)).toBe('High');
+  });
+
+  describe('sleep goal colors', () => {
+    it('compares sleep seconds against the configured hours goal', () => {
+      expect(sleepGoalColor(7 * 3600, 8, 'day')).toBe('#ffea00');
+      expect(sleepGoalColor(8 * 3600, 8, 'day')).toBe('#00e676');
+      expect(sleepGoalColor(10 * 3600, 8, 'day')).toBe('#2196f3');
+    });
   });
 
   it('derives VO2, hill, and endurance labels from numeric values', () => {

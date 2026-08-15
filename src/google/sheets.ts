@@ -2775,6 +2775,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	drinksPerDayGoal: 0,
 	garminDailyStepsGoal: 0,
 	garminDailyFloorsGoal: 0,
+	garminDailySleepHoursGoal: 0,
 	garminWeeklyIntensityMinGoal: 0,
 }
 
@@ -2802,6 +2803,7 @@ const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min
 	'app.drinksPerDayGoal': { field: 'drinksPerDayGoal', min: 0, max: 100 },
 	'app.garminDailyStepsGoal': { field: 'garminDailyStepsGoal', min: 0, max: 100000 },
 	'app.garminDailyFloorsGoal': { field: 'garminDailyFloorsGoal', min: 0, max: 500 },
+	'app.garminDailySleepHoursGoal': { field: 'garminDailySleepHoursGoal', min: 0, max: 24 },
 	'app.garminWeeklyIntensityMinGoal': { field: 'garminWeeklyIntensityMinGoal', min: 0, max: 10000 },
 }
 
