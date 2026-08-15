@@ -205,7 +205,8 @@ function MetricChart({
   if (n === 0) return null;
 
   // Left axis: bar values
-  const maxBar = Math.max(...buckets.map((b) => b.value), 0.001);
+  const goalBarCap = activityGoalBarCap(proratedGoal, n);
+  const maxBar = goalBarCap ?? Math.max(...buckets.map((b) => b.value), 0.001);
 
   // Right axis: cumulative values (and goal if present)
   const maxCum = Math.max(
@@ -224,7 +225,9 @@ function MetricChart({
   const yCum = (v: number) => CHART_PADDING.top + plotH - (v / maxCum) * plotH;
 
   // Y-axis ticks
-  const leftTicks = niceTicksFor(0, maxBar, 4);
+  const leftTicks = goalBarCap === null
+    ? niceTicksFor(0, maxBar, 4)
+    : cappedTicksFor(maxBar, 4);
   const rightTicks = niceTicksFor(0, maxCum, 4);
 
   // X-axis labels — show a subset to avoid crowding
@@ -260,6 +263,7 @@ function MetricChart({
     [n, plotW],
   );
   const { activeIndex, svgRef, containerHandlers } = useChartTooltip(xPositions, viewBoxWidth);
+  const overflowPatternId = `activity-overflow-${data.metric}`;
 
   return (
     <div className="strava-chart-card">
@@ -282,6 +286,23 @@ function MetricChart({
             }}
             title="Set annual goal"
           >
+            {goalBarCap !== null && (
+              <defs>
+                <pattern
+                  id={overflowPatternId}
+                  width="6"
+                  height="6"
+                  patternUnits="userSpaceOnUse"
+                >
+                  <rect width="6" height="6" className="strava-overflow-pattern-bg" />
+                  <path
+                    d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
+                    className="strava-overflow-pattern-line"
+                  />
+                </pattern>
+              </defs>
+            )}
+
             <Target size={16} />
           </button>
         )}
@@ -365,17 +386,22 @@ function MetricChart({
           ))}
 
           {/* Bars */}
-          {buckets.map((b, i) => (
-            <rect
-              key={`bar-${i}`}
-              x={CHART_PADDING.left + barWidth * i + barGap}
-              y={yBar(b.value)}
-              width={Math.max(barInner, 1)}
-              height={Math.max(plotH - (plotH - (b.value / maxBar) * plotH), 0)}
-              className={`strava-bar${i === activeIndex ? ' active' : ''}`}
-              rx={2}
-            />
-          ))}
+          {buckets.map((b, i) => {
+            const plottedValue = Math.min(b.value, maxBar);
+            const exceedsGoalCap = goalBarCap !== null && b.value > goalBarCap;
+            return (
+              <rect
+                key={`bar-${i}`}
+                x={CHART_PADDING.left + barWidth * i + barGap}
+                y={yBar(plottedValue)}
+                width={Math.max(barInner, 1)}
+                height={(plottedValue / maxBar) * plotH}
+                className={`strava-bar${i === activeIndex ? ' active' : ''}`}
+                style={exceedsGoalCap ? { fill: `url(#${overflowPatternId})` } : undefined}
+                rx={2}
+              />
+            );
+          })}
 
           {/* Goal trajectory line */}
           {goalTrajectoryPoints && (
@@ -464,4 +490,14 @@ function niceTicksFor(min: number, max: number, count: number): number[] {
     ticks.push(Math.round(v * 1e6) / 1e6);
   }
   return ticks;
+}
+
+export function cappedTicksFor(max: number, count: number): number[] {
+  const ticks = niceTicksFor(0, max, count).filter((tick) => tick < max);
+  return [...ticks, max];
+}
+
+export function activityGoalBarCap(proratedGoal: number | null, bucketCount: number): number | null {
+  if (proratedGoal === null || bucketCount <= 0) return null;
+  return Math.max((proratedGoal / bucketCount) * 3, 0.001);
 }

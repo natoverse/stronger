@@ -3747,6 +3747,17 @@ body {
 	opacity: 0.8;
 }
 
+.strava-overflow-pattern-bg {
+	fill: var(--color-primary);
+	opacity: 0.35;
+}
+
+.strava-overflow-pattern-line {
+	fill: none;
+	stroke: var(--color-primary);
+	stroke-width: 1.25;
+}
+
 .strava-bar-resting {
 	fill: #6b7280;
 	opacity: 0.85;
