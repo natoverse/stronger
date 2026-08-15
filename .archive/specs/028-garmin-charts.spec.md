@@ -140,3 +140,12 @@ Conversions are display-only — storage remains in metric (matching Strava API 
   and monthly aggregation, they append the most recently recorded individual activity
   as `Last …`;
   daily aggregation keeps its single current value.
+
+## Iteration: goal-relative bar scaling
+
+- When an annual goal applies to the selected range, the bar axis is fixed at three
+  times the evenly allocated per-bucket goal so unusually large days or periods do not
+  compress the normal bars.
+- Bars above that limit stop at the top of the plot and use a crosshatch fill to show
+  that their actual value continues beyond the visible axis. Tooltips retain the full
+  uncapped value.
