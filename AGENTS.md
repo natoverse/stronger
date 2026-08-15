@@ -119,7 +119,7 @@ Default data loaded from JSON files in `lib/` and used as seed data when a user 
 
 ### Garmin sync (`scripts/garmin-sync.py`)
 
-A Python script run by the `garmin-sync.yml` GitHub Actions workflow on a daily cron (also runnable on any machine with `python`). It authenticates to Garmin Connect using `python-garminconnect` (the maintained client GarminDB now uses) resuming from a saved token bundle (`GARMIN_TOKENS` secret, minted once via a headless local login), fetches recent activities, then appends new rows to a dedicated "Stronger - Garmin" sheet tab via a Google service account. Garmin exposes richer metrics than Strava did (moving duration, elevation loss, speeds, steps, training effect, VO2 max), so the tab uses a Garmin-native schema rather than reusing the Strava columns. The legacy "Stronger - Strava" tab is deprecated gradually; the app now exposes a dedicated Garmin activities view (`#/garmin`, a toolbar tab next to Activities) that reads this tab so the two sources can be compared. See [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) and `specs/031-garmin-direct-sync.spec.md` for details. Deps in `scripts/requirements.txt`; offline mapping tests in `scripts/test_garmin_sync.py`.
+A Python script run by the `garmin-sync.yml` GitHub Actions workflow on an hourly cron (also runnable on any machine with `python`). It authenticates to Garmin Connect using `python-garminconnect` (the maintained client GarminDB now uses) resuming from a saved token bundle (`GARMIN_TOKENS` secret, minted once via a headless local login), fetches recent activities, then appends new rows to a dedicated "Stronger - Garmin" sheet tab via a Google service account. Garmin exposes richer metrics than Strava did (moving duration, elevation loss, speeds, steps, training effect, VO2 max), so the tab uses a Garmin-native schema rather than reusing the Strava columns. The legacy "Stronger - Strava" tab is deprecated gradually; the app now exposes a dedicated Garmin activities view (`#/garmin`, a toolbar tab next to Activities) that reads this tab so the two sources can be compared. See [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) and `specs/031-garmin-direct-sync.spec.md` for details. Deps in `scripts/requirements.txt`; offline mapping tests in `scripts/test_garmin_sync.py`.
 
 ### Sheet backup (`scripts/sheet-backup.py`)
 
@@ -128,7 +128,7 @@ A Python script run by the `sheet-backup.yml` GitHub Actions workflow on a daily
 ### GitHub Actions (`.github/workflows/`)
 
 - `deploy.yml` — builds and deploys to GitHub Pages on push to main
-- `garmin-sync.yml` — daily Garmin Connect → Google Sheets sync
+- `garmin-sync.yml` — hourly Garmin Connect → Google Sheets sync
 - `withings-sync.yml` — daily Withings → Google Sheets body-composition sync
 - `sheet-backup.yml` — daily copy of the source spreadsheet to a backup spreadsheet
 - `auto-spec-issues.yml` — creates GitHub issues from new spec files
