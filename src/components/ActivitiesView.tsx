@@ -498,6 +498,6 @@ export function cappedTicksFor(max: number, count: number): number[] {
 }
 
 export function activityGoalBarCap(proratedGoal: number | null, bucketCount: number): number | null {
-  if (proratedGoal === null || bucketCount <= 0) return null;
+  if (proratedGoal === null || proratedGoal <= 0 || bucketCount <= 0) return null;
   return Math.max((proratedGoal / bucketCount) * 3, 0.001);
 }

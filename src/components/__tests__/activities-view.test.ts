@@ -9,6 +9,7 @@ describe('activity goal chart scale', () => {
 
   it('does not cap charts without an applicable goal', () => {
     expect(activityGoalBarCap(null, 30)).toBeNull();
+    expect(activityGoalBarCap(0, 30)).toBeNull();
   });
 
   it('caps ticks at the exact goal-relative maximum', () => {
