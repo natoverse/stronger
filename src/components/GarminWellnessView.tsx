@@ -8,7 +8,7 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { GarminWellnessEntry } from '../model/types.js';
-import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData, StackedCaloriesBucket, LoadFocusBucket, LoadFocusArea } from '../model/wellness.js';
+import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData, StackedCaloriesBucket, WellnessRangeBucket, LoadFocusArea } from '../model/wellness.js';
 import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
@@ -16,6 +16,7 @@ import {
   buildIntensityMinCombinedChartData,
   buildStackedCaloriesChartData,
   buildLoadFocusChartData,
+  buildHrvRangeChartData,
   LOAD_FOCUS_AREA_LABELS,
   formatWellnessRatio,
   formatWellnessValue,
@@ -868,13 +869,23 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
 
 interface LoadFocusChartProps {
   label: string;
-  buckets: LoadFocusBucket[];
+  buckets: WellnessRangeBucket[];
   summaryLabel: string;
   legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
+  rangeLabel?: string;
+  colorFn?: (value: number | null, min: number | null, max: number | null, colorKey?: string) => string;
 }
 
-function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, formatValue }: LoadFocusChartProps) {
+function WellnessLoadFocusChart({
+  label,
+  buckets,
+  summaryLabel,
+  legendItems,
+  formatValue,
+  rangeLabel = 'optimal',
+  colorFn = loadFocusColor,
+}: LoadFocusChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
@@ -906,7 +917,7 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
     ? '—'
     : formatValue(activeBucket.value);
   const activeTooltipRange = activeBucket && (activeBucket.min !== null || activeBucket.max !== null)
-    ? `optimal ${formatValue(activeBucket.min)}–${formatValue(activeBucket.max)}`
+    ? `${rangeLabel} ${formatValue(activeBucket.min)}–${formatValue(activeBucket.max)}`
     : '';
 
   return (
@@ -981,7 +992,7 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
                 cx={xCenter(i)}
                 cy={yBar(b.value)}
                 r={i === activeIndex ? (n > 20 ? 9 : 12) : (n > 20 ? 4.5 : 7.5)}
-                fill={loadFocusColor(b.value, b.min, b.max)}
+                fill={colorFn(b.value, b.min, b.max, b.colorKey)}
                 opacity={i === activeIndex ? 1 : 0.85}
               />
             );
@@ -1352,7 +1363,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     [entries, range, aggregation, today],
   );
 
-  const hrvData         = useMemo(() => buildWellnessChartData(entries, 'hrvWeeklyAvg',         range, aggregation, today, 'hrvStatus'), [entries, range, aggregation, today]);
+  const hrvData         = useMemo(() => buildHrvRangeChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
   const stressData      = useMemo(() => buildWellnessChartData(entries, 'avgStress',            range, aggregation, today), [entries, range, aggregation, today]);
   const rhrData         = useMemo(() => buildWellnessChartData(entries, 'restingHR',            range, aggregation, today), [entries, range, aggregation, today]);
   const bbHighData      = useMemo(() => buildWellnessChartData(entries, 'bodyBatteryHigh',      range, aggregation, today), [entries, range, aggregation, today]);
@@ -1392,7 +1403,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     if (value === null) return '';
     return `${formatWellnessValue(value, metric)}${unit ? ` ${unit}` : ''}`;
   }
-  const summaryValue = (data: WellnessChartData): number | null =>
+  const summaryValue = (data: Pick<WellnessChartData, 'summary' | 'latestValue'>): number | null =>
     aggregation === 'day' ? data.latestValue : data.summary;
   const latestBodyBatteryRange = [...bbRangeBuckets].reverse().find((bucket) => bucket.min !== null || bucket.max !== null);
   const latestHrvStatus = [...hrvData.buckets].reverse().find((bucket) => bucket.value !== null && bucket.colorKey)?.colorKey ?? '';
@@ -1523,18 +1534,17 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         colorFn={(v) => v !== null ? stressColor(v) : GRAY}
         formatValue={numFmt('avgStress')}
       />
-      <WellnessBarChart
+      <WellnessLoadFocusChart
         label="HRV Status"
-        unit={WELLNESS_METRIC_UNITS.hrvWeeklyAvg}
         buckets={hrvData.buckets}
         summaryLabel={withLegendLabel(
           summaryStr(summaryValue(hrvData), 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg),
           aggregation === 'day' ? hrvStatusLegendLabel(latestHrvStatus) : null,
         )}
         legendItems={HRV_STATUS_LEGEND_ITEMS}
-        colorFn={(_, key) => key ? hrvStatusColor(key) : ACCENT}
         formatValue={numFmt('hrvWeeklyAvg')}
-        renderAsDots
+        rangeLabel="baseline"
+        colorFn={(_, __, ___, key) => key ? hrvStatusColor(key) : ACCENT}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.restingHR}
