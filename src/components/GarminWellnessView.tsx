@@ -440,7 +440,7 @@ interface BarChartProps {
   buckets: WellnessBucket[];
   summaryLabel: string;
   legendItems?: LegendItem[];
-  /** Per-bar color function. Falls back to ACCENT. */
+  /** Per-value color function. Falls back to ACCENT. */
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
   renderAsDots?: boolean;
@@ -883,8 +883,6 @@ function WellnessLoadFocusChart({ label, buckets, summaryLabel, legendItems, for
   const maxBar = domainValues.length > 0 ? Math.max(...domainValues, 0.001) : 0.001;
 
   const barWidth = PLOT_W / n;
-  const barGap = Math.max(1, barWidth * 0.15);
-  const barInner = barWidth - barGap * 2;
 
   const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
   const yBar = (v: number) => CHART_PADDING.top + PLOT_H - (v / maxBar) * PLOT_H;
