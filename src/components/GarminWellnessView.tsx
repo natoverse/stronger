@@ -302,6 +302,7 @@ export const GOAL_COLOR_LEGEND_ITEMS: LegendItem[] = [
   { label: 'Below goal', color: YELLOW },
 ];
 
+/** Sleep buckets are averages in hours, so every aggregation uses the daily goal unchanged. */
 export function sleepGoalColor(hours: number, goalHours: number): string {
   return goalColor(hours, goalHours, 'day', ACCENT);
 }
