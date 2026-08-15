@@ -102,10 +102,10 @@ describe('wellness legend labels', () => {
   });
 
   describe('sleep goal colors', () => {
-    it('compares sleep seconds against the configured hours goal', () => {
-      expect(sleepGoalColor(7 * 3600, 8, 'day')).toBe('#ffea00');
-      expect(sleepGoalColor(8 * 3600, 8, 'day')).toBe('#00e676');
-      expect(sleepGoalColor(10 * 3600, 8, 'day')).toBe('#2196f3');
+    it('compares chart values in hours against the configured daily hours goal', () => {
+      expect(sleepGoalColor(6, 7)).toBe('#ffea00');
+      expect(sleepGoalColor(8, 7)).toBe('#00e676');
+      expect(sleepGoalColor(9, 7)).toBe('#2196f3');
     });
   });
 
