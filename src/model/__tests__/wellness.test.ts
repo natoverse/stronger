@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { GarminWellnessEntry } from '../types.js';
 import {
   buildWellnessChartData,
+  buildIntensityMinCombinedChartData,
   buildTrainingLoadRatioChartData,
   buildLoadFocusChartData,
   buildHrvRangeChartData,
@@ -79,6 +80,61 @@ describe('buildWellnessChartData', () => {
     expect(june17).toMatchObject({ value: 49, colorKey: 'UNBALANCED' });
     expect(data.summary).toBe(49);
     expect(data.latestValue).toBe(49);
+  });
+
+  describe('buildIntensityMinCombinedChartData', () => {
+    it('uses one seventh of the weekly goal for daily colors', () => {
+      const chart = buildIntensityMinCombinedChartData(
+        [
+          makeEntry({ date: '2025-06-15', intensityMinModerate: 19 }),
+          makeEntry({ date: '2025-06-16', intensityMinModerate: 20 }),
+          makeEntry({ date: '2025-06-17', intensityMinModerate: 25 }),
+        ],
+        'month',
+        'day',
+        140,
+        new Date(2025, 5, 20),
+      );
+
+      expect(chart.buckets.find((bucket) => bucket.label === '6/15')?.colorKey).toBe('below');
+      expect(chart.buckets.find((bucket) => bucket.label === '6/16')?.colorKey).toBe('met');
+      expect(chart.buckets.find((bucket) => bucket.label === '6/17')?.colorKey).toBe('exceeded');
+    });
+
+    it('uses the weekly goal directly for weekly colors', () => {
+      const chart = buildIntensityMinCombinedChartData(
+        [
+          makeEntry({ date: '2025-06-02', intensityMinModerate: 139 }),
+          makeEntry({ date: '2025-06-09', intensityMinModerate: 140 }),
+          makeEntry({ date: '2025-06-16', intensityMinModerate: 175 }),
+        ],
+        'month',
+        'week',
+        140,
+        new Date(2025, 5, 20),
+      );
+
+      const populated = chart.buckets.filter((bucket) => bucket.value !== null);
+      expect(populated.map((bucket) => bucket.colorKey)).toEqual(['below', 'met', 'exceeded']);
+    });
+
+    it('scales monthly colors by the daily goal and represented calendar days', () => {
+      const chart = buildIntensityMinCombinedChartData(
+        [
+          makeEntry({ date: '2025-01-15', intensityMinModerate: 620 }),
+          makeEntry({ date: '2025-02-15', intensityMinModerate: 700 }),
+          makeEntry({ date: '2025-03-15', intensityMinModerate: 619 }),
+        ],
+        '2025',
+        'month',
+        140,
+        new Date(2025, 5, 20),
+      );
+
+      expect(chart.buckets.find((bucket) => bucket.label === 'Jan')?.colorKey).toBe('met');
+      expect(chart.buckets.find((bucket) => bucket.label === 'Feb')?.colorKey).toBe('exceeded');
+      expect(chart.buckets.find((bucket) => bucket.label === 'Mar')?.colorKey).toBe('below');
+    });
   });
 });
 
