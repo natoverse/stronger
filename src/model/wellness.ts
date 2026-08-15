@@ -651,7 +651,7 @@ function buildMetricRangeChartData(
   range: string,
   aggregation: StravaAggregation,
   today: Date,
-  colorMetric?: keyof GarminWellnessEntry,
+  colorMetric?: 'hrvStatus',
 ): WellnessRangeChartData {
   const valueData = buildWellnessChartData(entries, valueMetric, range, aggregation, today, colorMetric);
   const minData = buildWellnessChartData(entries, minMetric, range, aggregation, today);

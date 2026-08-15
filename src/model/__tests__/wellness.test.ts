@@ -4,6 +4,7 @@ import {
   buildWellnessChartData,
   buildTrainingLoadRatioChartData,
   buildLoadFocusChartData,
+  buildHrvRangeChartData,
   formatWellnessRatio,
 } from '../wellness.js';
 
@@ -47,6 +48,8 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     loadFocusAnaerobic: null,
     loadFocusAnaerobicMin: null,
     loadFocusAnaerobicMax: null,
+    hrvBaselineMin: null,
+    hrvBaselineMax: null,
     ...overrides,
   };
 }
@@ -152,6 +155,63 @@ describe('buildLoadFocusChartData', () => {
     expect(chart.latestValue).toBe(450);
     expect(chart.latestMin).toBe(210);
     expect(chart.latestMax).toBe(420);
+  });
+
+  describe('buildHrvRangeChartData', () => {
+    it('zips HRV values and statuses with the personal baseline range', () => {
+      const chart = buildHrvRangeChartData(
+        [
+          makeEntry({
+            date: '2025-06-18',
+            hrvWeeklyAvg: 46,
+            hrvStatus: 'LOW',
+            hrvBaselineMin: 48,
+            hrvBaselineMax: 62,
+          }),
+          makeEntry({
+            date: '2025-06-19',
+            hrvWeeklyAvg: 53,
+            hrvStatus: 'BALANCED',
+            hrvBaselineMin: 49,
+            hrvBaselineMax: 63,
+          }),
+        ],
+        'month',
+        'day',
+        new Date('2025-06-20T00:00:00'),
+      );
+
+      expect(chart.buckets.find((bucket) => bucket.label === '6/18')).toMatchObject({
+        value: 46,
+        min: 48,
+        max: 62,
+        colorKey: 'LOW',
+      });
+      expect(chart.buckets.find((bucket) => bucket.label === '6/19')).toMatchObject({
+        value: 53,
+        min: 49,
+        max: 63,
+        colorKey: 'BALANCED',
+      });
+      expect(chart.latestMin).toBe(49);
+      expect(chart.latestMax).toBe(63);
+    });
+
+    it('averages both baseline bounds within aggregate buckets', () => {
+      const chart = buildHrvRangeChartData(
+        [
+          makeEntry({ date: '2025-06-16', hrvBaselineMin: 44, hrvBaselineMax: 58 }),
+          makeEntry({ date: '2025-06-18', hrvBaselineMin: 46, hrvBaselineMax: 60 }),
+        ],
+        'month',
+        'week',
+        new Date('2025-06-20T00:00:00'),
+      );
+      const populated = chart.buckets.find((bucket) => bucket.min !== null);
+
+      expect(populated?.min).toBe(45);
+      expect(populated?.max).toBe(59);
+    });
   });
 
   it('averages load values within a week/month bucket', () => {

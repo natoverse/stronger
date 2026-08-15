@@ -650,19 +650,17 @@ def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
         token,
     )
     titles = {s.get("properties", {}).get("title") for s in meta.get("sheets", [])}
-    if TAB_NAME in titles:
-        return
+    created = TAB_NAME not in titles
+    if created:
+        create_res = session.post(
+            f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
+            headers={"Authorization": "Bearer " + token},
+            json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
+        )
+        if not create_res.ok:
+            raise RuntimeError(f"Tab creation failed ({create_res.status_code}): {create_res.text}")
 
-    # Create the tab
-    create_res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
-        headers={"Authorization": "Bearer " + token},
-        json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
-    )
-    if not create_res.ok:
-        raise RuntimeError(f"Tab creation failed ({create_res.status_code}): {create_res.text}")
-
-    # Write header row
+    # Keep existing tabs' headers in sync when columns are appended.
     col = _column_letter(COLUMN_COUNT)
     header_range = quote(f"'{TAB_NAME}'!A1:{col}1")
     header_res = session.put(
@@ -672,7 +670,8 @@ def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
     )
     if not header_res.ok:
         raise RuntimeError(f"Header write failed ({header_res.status_code}): {header_res.text}")
-    print(f'Created "{TAB_NAME}" tab with header row.')
+    if created:
+        print(f'Created "{TAB_NAME}" tab with header row.')
 
 
 def read_existing_dates(session, spreadsheet_id: str, token: str) -> set[str]:

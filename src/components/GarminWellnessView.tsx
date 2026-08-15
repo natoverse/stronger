@@ -720,7 +720,7 @@ function WellnessAltitudeChart({ altitudeBuckets, acclimationBuckets, summaryLab
   );
 }
 
-interface WellnessRangeBucket {
+interface WellnessMinMaxBucket {
   label: string;
   min: number | null;
   max: number | null;
@@ -729,7 +729,7 @@ interface WellnessRangeBucket {
 interface RangeBarChartProps {
   label: string;
   unit: string;
-  buckets: WellnessRangeBucket[];
+  buckets: WellnessMinMaxBucket[];
   summaryLabel: string;
   legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
@@ -1407,6 +1407,9 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     aggregation === 'day' ? data.latestValue : data.summary;
   const latestBodyBatteryRange = [...bbRangeBuckets].reverse().find((bucket) => bucket.min !== null || bucket.max !== null);
   const latestHrvStatus = [...hrvData.buckets].reverse().find((bucket) => bucket.value !== null && bucket.colorKey)?.colorKey ?? '';
+  const latestHrvBaseline = hrvData.latestMin !== null || hrvData.latestMax !== null
+    ? `baseline ${formatWellnessValue(hrvData.latestMin, 'hrvWeeklyAvg')}–${formatWellnessValue(hrvData.latestMax, 'hrvWeeklyAvg')}`
+    : '';
   const withLegendLabel = (summary: string, legend: string | null): string =>
     summary && legend ? `${summary} · ${legend}` : summary;
 
@@ -1539,7 +1542,10 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         buckets={hrvData.buckets}
         summaryLabel={withLegendLabel(
           summaryStr(summaryValue(hrvData), 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg),
-          aggregation === 'day' ? hrvStatusLegendLabel(latestHrvStatus) : null,
+          [
+            aggregation === 'day' ? hrvStatusLegendLabel(latestHrvStatus) : '',
+            latestHrvBaseline,
+          ].filter(Boolean).join(' · ') || null,
         )}
         legendItems={HRV_STATUS_LEGEND_ITEMS}
         formatValue={numFmt('hrvWeeklyAvg')}
