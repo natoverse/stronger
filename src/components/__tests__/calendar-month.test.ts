@@ -50,10 +50,15 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-dot-strength');
 		expect(markup).toContain('calendar-month-dot-cardio');
 		expect(markup).toContain('calendar-month-dot-rest');
-		expect(markup).toContain('calendar-month-flag-home');
-		expect(markup).toContain('calendar-month-flag-travel');
+		expect(markup).toContain('calendar-month-flag-home calendar-month-flag-active');
+		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
+		expect(markup).toContain('calendar-month-flag-elsewhere');
+		expect(markup).toContain('Elsewhere: inactive');
 		expect(markup).toContain('All workouts');
-		expect(markup).toContain('aria-pressed="true"');
+		expect(markup.match(/aria-pressed="true"/g)).toHaveLength(2);
+		expect(markup).toContain('Monthly');
+		expect(markup).toContain('calendar-fixed-section');
+		expect(markup).toContain('calendar-days-scroll');
 		expect(markup).toContain('Show next month');
 		expect(markup).not.toContain(`Remove ${monthLabel}`);
 	});
