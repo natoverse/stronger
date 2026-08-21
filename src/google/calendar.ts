@@ -548,9 +548,35 @@ export async function syncScheduleWithCalendar(
 		if (calEvent && calEvent.id) {
 			accountedEventIds.add(calEvent.id)
 
+			// A custom label always wins over the workout/activity name as the title.
+			const name = resolveWorkoutName(entry.workoutId)
+			const desiredTitle = entry.label?.trim() || name || calEvent.summary
+
 			// Check if the date moved in Google Calendar
 			const calDate = getEventDate(calEvent)
-			if (calDate && calDate !== entry.date) {
+			const dateMoved = !!calDate && calDate !== entry.date
+			const titleStale = !!desiredTitle && calEvent.summary !== desiredTitle
+
+			if (titleStale) {
+				const eventDate = calDate ?? entry.date
+				try {
+					await gapi.client.calendar.events.update({
+						calendarId,
+						eventId: calEvent.id,
+						resource: {
+							summary: desiredTitle,
+							description: calEvent.description,
+							start: { date: eventDate },
+							end: { date: eventDate },
+						},
+					})
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : String(err)
+					result.errors.push(`Update title for event ${calEvent.id}: ${msg}`)
+				}
+			}
+
+			if (dateMoved) {
 				// Date was moved in Google Calendar → update the sheet entry
 				updatedSyncable.push({
 					...entry,
@@ -565,6 +591,7 @@ export async function syncScheduleWithCalendar(
 					calendarEventId: calEvent.id,
 				})
 			}
+			if (titleStale) result.updated++
 		} else if (entry.calendarEventId) {
 			// Had a calendarEventId but event no longer exists → deleted from Google
 			result.pulledDeletions++
@@ -579,9 +606,10 @@ export async function syncScheduleWithCalendar(
 				continue
 			}
 
+			const title = entry.label?.trim() || name
 			const description = buildEventDescription(entry.workoutId, name, sid)
 			const event: CalendarEventResource = {
-				summary: name,
+				summary: title,
 				description,
 				start: { date: entry.date },
 				end: { date: entry.date },
