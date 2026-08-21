@@ -261,13 +261,13 @@ function WorkoutTypeFilter({ types, selected, onChange }: WorkoutTypeFilterProps
 }
 
 const SET_TYPES: SetType[] = ['warmup', 'work', 'backoff', 'joker'];
-const MONTH_FLAG_LABELS: [keyof DayFlags, string][] = [
-	['home', 'Home'],
-	['elsewhere', 'Elsewhere'],
-	['travel', 'Travel'],
-	['visitors', 'Visitors'],
-	['alcohol', 'Alcohol'],
-	['blocked', 'Blocked'],
+const DAY_FLAG_OPTIONS: [keyof DayFlags, string, typeof House][] = [
+	['home', 'Home', House],
+	['elsewhere', 'Elsewhere', Palmtree],
+	['travel', 'Travel', Plane],
+	['visitors', 'Visitors', Users],
+	['alcohol', 'Alcohol', Martini],
+	['blocked', 'Blocked', Ban],
 ];
 
 /** Detail/edit view for a single past workout session. */
@@ -429,6 +429,7 @@ export function CalendarView({
 	const [labelDraft, setLabelDraft] = useState('');
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
+	const [showMonthly, setShowMonthly] = useState(true);
 	const [showMonthFlags, setShowMonthFlags] = useState(true);
 	const historyTopRef = useRef<HTMLDivElement>(null);
 	const todayRef = useRef<HTMLDivElement>(null);
@@ -676,55 +677,62 @@ export function CalendarView({
 
 	return (
 		<div className="calendar-view">
-			<div className="calendar-toolbar">
-				<button
-					className={`calendar-toolbar-btn${showPush ? ' calendar-toolbar-btn-active' : ''}`}
-					onClick={handleTogglePush}
-				>
-					<CalendarCog size={16} /> Plan
-				</button>
-				<button
-					className={`calendar-toolbar-btn${showSync ? ' calendar-toolbar-btn-active' : ''}`}
-					onClick={handleToggleSync}
-				>
-					<RefreshCw size={16} /> Sync
-				</button>
-				<button
-					className={`calendar-toolbar-btn${historyMode ? ' calendar-toolbar-btn-active' : ''}`}
-					onClick={handleToggleHistory}
-				>
-					<History size={16} />
-					{historyMode ? 'Hide History' : 'History'}
-				</button>
-				<button
-					className={`calendar-toolbar-btn${showClear ? ' calendar-toolbar-btn-active' : ''}`}
-					onClick={handleToggleClear}
-				>
-					<Trash2 size={16} /> Clear
-				</button>
-			</div>
-			{showPush && (
-				<CalendarPush
-					workouts={workouts}
-					cardioActivities={cardioActivities}
-					onClose={() => setShowPush(false)}
-					onUpdateSchedule={onBulkSchedule}
-				/>
-			)}
-			{showSync && (
-				<CalendarSync
-					onSync={onSyncCalendar}
-					onClose={() => setShowSync(false)}
-				/>
-			)}
-			{showClear && (
-				<CalendarClear
-					onClear={onClearSchedule}
-					onClose={() => setShowClear(false)}
-				/>
-			)}
+			<div className="calendar-fixed-section">
+				<div className="calendar-toolbar">
+					<button
+						className={`calendar-toolbar-btn${showPush ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={handleTogglePush}
+					>
+						<CalendarCog size={16} /> Plan
+					</button>
+					<button
+						className={`calendar-toolbar-btn${showSync ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={handleToggleSync}
+					>
+						<RefreshCw size={16} /> Sync
+					</button>
+					<button
+						className={`calendar-toolbar-btn${historyMode ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={handleToggleHistory}
+					>
+						<History size={16} /> History
+					</button>
+					<button
+						className={`calendar-toolbar-btn${showClear ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={handleToggleClear}
+					>
+						<Trash2 size={16} /> Clear
+					</button>
+					<button
+						className={`calendar-toolbar-btn${showMonthly ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={() => setShowMonthly((show) => !show)}
+						aria-pressed={showMonthly}
+					>
+						Monthly
+					</button>
+				</div>
+				{showPush && (
+					<CalendarPush
+						workouts={workouts}
+						cardioActivities={cardioActivities}
+						onClose={() => setShowPush(false)}
+						onUpdateSchedule={onBulkSchedule}
+					/>
+				)}
+				{showSync && (
+					<CalendarSync
+						onSync={onSyncCalendar}
+						onClose={() => setShowSync(false)}
+					/>
+				)}
+				{showClear && (
+					<CalendarClear
+						onClear={onClearSchedule}
+						onClose={() => setShowClear(false)}
+					/>
+				)}
 
-			<section className="calendar-month-section" aria-label="Monthly schedule">
+				{showMonthly && <section className="calendar-month-section" aria-label="Monthly schedule">
 				<div className="calendar-month-controls">
 					<span className="calendar-month-controls-label">Monthly schedule</span>
 					<div className="calendar-month-filter-controls">
@@ -769,9 +777,6 @@ export function CalendarView({
 									const scheduled = date
 										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
 										: [];
-									const activeFlags = date && showMonthFlags
-										? MONTH_FLAG_LABELS.filter(([key]) => flagsMap.get(date)?.[key])
-										: [];
 									return date ? (
 										<button
 											type="button"
@@ -797,16 +802,19 @@ export function CalendarView({
 													/>
 												))}
 											</div>
-											{activeFlags.length > 0 && (
+											{showMonthFlags && (
 												<div className="calendar-month-flags" aria-label="Day flags">
-													{activeFlags.map(([key, label]) => (
+													{DAY_FLAG_OPTIONS.map(([key, label]) => {
+														const active = flagsMap.get(date)?.[key] ?? false;
+														return (
 														<span
-															className={`calendar-month-flag calendar-month-flag-${key}`}
+															className={`calendar-month-flag calendar-month-flag-${key}${active ? ' calendar-month-flag-active' : ''}`}
 															key={key}
-															title={label}
-															aria-label={label}
+															title={`${label}: ${active ? 'active' : 'inactive'}`}
+															aria-label={`${label}: ${active ? 'active' : 'inactive'}`}
 														/>
-													))}
+														);
+													})}
 												</div>
 											)}
 										</button>
@@ -824,18 +832,20 @@ export function CalendarView({
 						Show next month
 					</button>
 				</div>
-			</section>
+				</section>}
+			</div>
 
-			{/* Load more button at top of history */}
-			{historyMode && pastDays.length > 0 && (
-				<div className="calendar-load-more" ref={historyTopRef}>
-					<button className="calendar-load-more-btn" onClick={handleLoadMore}>
-						Load earlier days
-					</button>
-				</div>
-			)}
+			<div className="calendar-days-scroll">
+				{/* Load more button at top of history */}
+				{historyMode && pastDays.length > 0 && (
+					<div className="calendar-load-more" ref={historyTopRef}>
+						<button className="calendar-load-more-btn" onClick={handleLoadMore}>
+							Load earlier days
+						</button>
+					</div>
+				)}
 
-			<div className="calendar-days">
+				<div className="calendar-days">
 				{allDays.map((dayInfo) => {
 					const { weekday, display } = formatDate(dayInfo.date);
 					const today = isToday(dayInfo.date);
@@ -869,14 +879,7 @@ export function CalendarView({
 									<span className={`calendar-display-date${today ? ' calendar-display-date-today' : ''}`}>{display}</span>
 								</div>
 								<div className="calendar-day-actions">
-									{([
-										['home', House],
-										['elsewhere', Palmtree],
-										['travel', Plane],
-										['visitors', Users],
-										['alcohol', Martini],
-										['blocked', Ban],
-									] as [keyof DayFlags, typeof House][]).map(([key, Icon]) => {
+									{DAY_FLAG_OPTIONS.map(([key, , Icon]) => {
 										const currentFlags: DayFlags = dayInfo.flags ?? { home: false, elsewhere: false, travel: false, visitors: false, alcohol: false, blocked: false };
 										const active = currentFlags[key];
 										return (
@@ -1174,13 +1177,14 @@ export function CalendarView({
 						</div>
 					);
 				})}
-			</div>
+				</div>
 
-			{/* Load more future days */}
-			<div className="calendar-load-more">
-				<button className="calendar-load-more-btn" onClick={handleLoadMoreFuture}>
-					Load more days
-				</button>
+				{/* Load more future days */}
+				<div className="calendar-load-more">
+					<button className="calendar-load-more-btn" onClick={handleLoadMoreFuture}>
+						Load more days
+					</button>
+				</div>
 			</div>
 		</div>
 	);

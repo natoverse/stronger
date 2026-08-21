@@ -26,3 +26,10 @@
 - Future months are tracked independently so removing one does not renumber or remove the other visible months. “Show next month” always appends the month after the furthest one currently shown.
 - Day selection works by click or keyboard activation. Dates outside the initially rendered detail range are added to the detailed list before their card is scrolled into view.
 - Flag squares reuse the established flag colors: home green, elsewhere orange, travel pink, visitors purple, alcohol blue, and blocked red.
+
+## Iteration: fixed controls and aligned flags
+
+- Every month day reserves six flag squares in the same order as the detailed day cards. Inactive flags are grey so active colors never shift position.
+- A compact “Monthly” toolbar control toggles the monthly calendar without changing its filters or visible-month state.
+- The toolbar, open management panel, and optional month calendar remain fixed while the detailed day cards scroll independently below them.
+- Selecting a month day scrolls its card within the independent detailed-day region, leaving the month calendar visible.
