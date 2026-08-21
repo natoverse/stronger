@@ -159,6 +159,11 @@ export function buildDayInfos(
 	}));
 }
 
+/** Ensure a selected calendar date is available in the chronological detailed-day list. */
+export function includeCalendarDate(dates: string[], date: string): string[] {
+	return dates.includes(date) ? dates : [...dates, date].sort();
+}
+
 export interface MonthGrid {
 	year: number;
 	month: number;
@@ -416,10 +421,11 @@ export function CalendarView({
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
-	const [selectedMonthDay, setSelectedMonthDay] = useState<string | null>(null);
+	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
 	const [showMonthFlags, setShowMonthFlags] = useState(true);
 	const historyTopRef = useRef<HTMLDivElement>(null);
 	const todayRef = useRef<HTMLDivElement>(null);
+	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
 	const [futureDayCount, setFutureDayCount] = useState(30);
 	const futureDays = useMemo(() => generateFutureDays(futureDayCount), [futureDayCount]);
@@ -547,11 +553,22 @@ export function CalendarView({
 
 	// Build day infos for both past and future
 	const allDays = useMemo(() => {
-		const combined = historyMode
+		let combined = historyMode
 			? [...pastDays.slice().reverse(), ...futureDays]
-			: futureDays;
+			: [...futureDays];
+		if (monthDayScrollTarget) {
+			combined = includeCalendarDate(combined, monthDayScrollTarget.date);
+		}
 		return buildDayInfos(combined, scheduleMap, logByDate, flagsMap);
-	}, [historyMode, pastDays, futureDays, scheduleMap, logByDate, flagsMap]);
+	}, [historyMode, pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap]);
+
+	useEffect(() => {
+		if (!monthDayScrollTarget) return;
+		const timeout = setTimeout(() => {
+			dayCardRefs.current.get(monthDayScrollTarget.date)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}, 0);
+		return () => clearTimeout(timeout);
+	}, [monthDayScrollTarget]);
 
 	const handleOpenSession = useCallback((session: LogSession) => {
 		setActiveSession(session);
@@ -700,7 +717,6 @@ export function CalendarView({
 										className="calendar-month-close"
 										onClick={() => {
 											setVisibleMonthOffsets((offsets) => offsets.filter((offset) => offset !== month.offset));
-											setSelectedMonthDay(null);
 										}}
 										aria-label={`Remove ${month.label}`}
 									>
@@ -724,9 +740,8 @@ export function CalendarView({
 											type="button"
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
-											onClick={() => setSelectedMonthDay((selected) => selected === date ? null : date)}
+											onClick={() => setMonthDayScrollTarget({ date })}
 											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
-											aria-expanded={selectedMonthDay === date}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											<div className="calendar-month-dots">
@@ -755,17 +770,6 @@ export function CalendarView({
 															aria-label={label}
 														/>
 													))}
-												</div>
-											)}
-											{selectedMonthDay === date && (
-												<div className="calendar-month-day-details">
-													{scheduled.length > 0
-														? scheduled.map((workoutId, workoutIndex) => (
-															<span key={`${workoutId}-${workoutIndex}`}>
-																{workoutNames.get(workoutId) ?? workoutId}
-															</span>
-														))
-														: <span>No workouts</span>}
 												</div>
 											)}
 										</button>
@@ -814,7 +818,12 @@ export function CalendarView({
 					return (
 						<div
 							key={dayInfo.date}
-							ref={today ? todayRef : undefined}
+							ref={(element) => {
+								if (element) dayCardRefs.current.set(dayInfo.date, element);
+								else dayCardRefs.current.delete(dayInfo.date);
+								if (today) todayRef.current = element;
+							}}
+							data-calendar-date={dayInfo.date}
 							className={`calendar-day${today ? ' calendar-day-today' : ''}${weekend ? ' calendar-day-weekend' : ''}`}
 						>
 							<div className="calendar-day-header">
