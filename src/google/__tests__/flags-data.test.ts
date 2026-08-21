@@ -154,7 +154,7 @@ describe('parseWorkoutScheduleRow', () => {
 describe('workoutScheduleEntryToRow', () => {
 	it('converts a basic entry to a row', () => {
 		expect(workoutScheduleEntryToRow({ date: '2025-01-15', workoutId: 'A' })).toEqual([
-			'2025-01-15', 'A', '', '',
+			'2025-01-15', 'A', '', '', '',
 		])
 	})
 
@@ -163,7 +163,7 @@ describe('workoutScheduleEntryToRow', () => {
 			date: '2025-01-15',
 			workoutId: 'A',
 			calendarEventId: 'evt-123',
-		})).toEqual(['2025-01-15', 'A', 'evt-123', ''])
+		})).toEqual(['2025-01-15', 'A', 'evt-123', '', ''])
 	})
 
 	it('converts entry with strongerId', () => {
@@ -171,7 +171,7 @@ describe('workoutScheduleEntryToRow', () => {
 			date: '2025-01-15',
 			workoutId: 'A',
 			strongerId: 's-abc-123',
-		})).toEqual(['2025-01-15', 'A', '', 's-abc-123'])
+		})).toEqual(['2025-01-15', 'A', '', 's-abc-123', ''])
 	})
 
 	it('converts entry with both calendar fields', () => {
@@ -180,7 +180,15 @@ describe('workoutScheduleEntryToRow', () => {
 			workoutId: 'A',
 			calendarEventId: 'evt-1',
 			strongerId: 's-xyz',
-		})).toEqual(['2025-01-15', 'A', 'evt-1', 's-xyz'])
+		})).toEqual(['2025-01-15', 'A', 'evt-1', 's-xyz', ''])
+	})
+
+	it('converts entry with a custom label', () => {
+		expect(workoutScheduleEntryToRow({
+			date: '2025-01-15',
+			workoutId: 'cardio:hike',
+			label: "Angel's Rest Trail",
+		})).toEqual(['2025-01-15', 'cardio:hike', '', '', "Angel's Rest Trail"])
 	})
 
 	it('round-trips through parseWorkoutScheduleRow', () => {
@@ -189,10 +197,37 @@ describe('workoutScheduleEntryToRow', () => {
 			{ date: '2025-03-01', workoutId: 'B', calendarEventId: 'evt-1' },
 			{ date: '2025-12-25', workoutId: 'C', strongerId: 's-test' },
 			{ date: '2025-06-15', workoutId: 'D', calendarEventId: 'evt-2', strongerId: 's-abc' },
+			{ date: '2025-07-04', workoutId: 'cardio:hike', label: 'Angel\'s Rest Trail' },
+			{ date: '2025-07-05', workoutId: 'E', calendarEventId: 'evt-3', strongerId: 's-def', label: 'Rocky Trail' },
 		]
 		for (const entry of entries) {
 			const row = workoutScheduleEntryToRow(entry)
 			expect(parseWorkoutScheduleRow(row)).toEqual(entry)
 		}
+	})
+})
+
+describe('parseWorkoutScheduleRow – label column', () => {
+	it('parses a custom label', () => {
+		expect(parseWorkoutScheduleRow(['2025-01-15', 'cardio:hike', '', '', "Angel's Rest Trail"])).toEqual({
+			date: '2025-01-15',
+			workoutId: 'cardio:hike',
+			label: "Angel's Rest Trail",
+		})
+	})
+
+	it('trims whitespace from label', () => {
+		expect(parseWorkoutScheduleRow(['2025-01-15', 'A', '', '', '  Trail Day  '])).toEqual({
+			date: '2025-01-15',
+			workoutId: 'A',
+			label: 'Trail Day',
+		})
+	})
+
+	it('omits label when blank', () => {
+		expect(parseWorkoutScheduleRow(['2025-01-15', 'A', '', '', ''])).toEqual({
+			date: '2025-01-15',
+			workoutId: 'A',
+		})
 	})
 })
