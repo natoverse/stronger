@@ -159,6 +159,11 @@ export function buildDayInfos(
 	}));
 }
 
+/** Ensure a selected calendar date is available in the chronological detailed-day list. */
+export function includeCalendarDate(dates: string[], date: string): string[] {
+	return dates.includes(date) ? dates : [...dates, date].sort();
+}
+
 export interface MonthGrid {
 	year: number;
 	month: number;
@@ -252,6 +257,14 @@ function WorkoutTypeFilter({ types, selected, onChange }: WorkoutTypeFilterProps
 }
 
 const SET_TYPES: SetType[] = ['warmup', 'work', 'backoff', 'joker'];
+const MONTH_FLAG_LABELS: [keyof DayFlags, string][] = [
+	['home', 'Home'],
+	['elsewhere', 'Elsewhere'],
+	['travel', 'Travel'],
+	['visitors', 'Visitors'],
+	['alcohol', 'Alcohol'],
+	['blocked', 'Blocked'],
+];
 
 /** Detail/edit view for a single past workout session. */
 export function SessionDetail({
@@ -407,9 +420,12 @@ export function CalendarView({
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
-	const [visibleMonthCount, setVisibleMonthCount] = useState(1);
+	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
+	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
+	const [showMonthFlags, setShowMonthFlags] = useState(true);
 	const historyTopRef = useRef<HTMLDivElement>(null);
 	const todayRef = useRef<HTMLDivElement>(null);
+	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
 	const [futureDayCount, setFutureDayCount] = useState(30);
 	const futureDays = useMemo(() => generateFutureDays(futureDayCount), [futureDayCount]);
@@ -477,8 +493,8 @@ export function CalendarView({
 
 	const months = useMemo(() => {
 		const now = new Date();
-		return Array.from({ length: visibleMonthCount }, (_, index) => buildMonthGrid(now, index));
-	}, [visibleMonthCount]);
+		return visibleMonthOffsets.map((offset) => ({ ...buildMonthGrid(now, offset), offset }));
+	}, [visibleMonthOffsets]);
 
 	// Set of cardio schedule IDs for icon differentiation
 	const cardioIds = useMemo(
@@ -537,11 +553,22 @@ export function CalendarView({
 
 	// Build day infos for both past and future
 	const allDays = useMemo(() => {
-		const combined = historyMode
+		let combined = historyMode
 			? [...pastDays.slice().reverse(), ...futureDays]
-			: futureDays;
+			: [...futureDays];
+		if (monthDayScrollTarget) {
+			combined = includeCalendarDate(combined, monthDayScrollTarget.date);
+		}
 		return buildDayInfos(combined, scheduleMap, logByDate, flagsMap);
-	}, [historyMode, pastDays, futureDays, scheduleMap, logByDate, flagsMap]);
+	}, [historyMode, pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap]);
+
+	useEffect(() => {
+		if (!monthDayScrollTarget) return;
+		const timeout = setTimeout(() => {
+			dayCardRefs.current.get(monthDayScrollTarget.date)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		}, 0);
+		return () => clearTimeout(timeout);
+	}, [monthDayScrollTarget]);
 
 	const handleOpenSession = useCallback((session: LogSession) => {
 		setActiveSession(session);
@@ -663,18 +690,40 @@ export function CalendarView({
 			<section className="calendar-month-section" aria-label="Monthly schedule">
 				<div className="calendar-month-controls">
 					<span className="calendar-month-controls-label">Monthly schedule</span>
-					{scheduledTypes.length > 0 && (
-						<WorkoutTypeFilter
-							types={scheduledTypes}
-							selected={selectedWorkoutTypes}
-							onChange={setSelectedWorkoutTypes}
-						/>
-					)}
+					<div className="calendar-month-filter-controls">
+						{scheduledTypes.length > 0 && (
+							<WorkoutTypeFilter
+								types={scheduledTypes}
+								selected={selectedWorkoutTypes}
+								onChange={setSelectedWorkoutTypes}
+							/>
+						)}
+						<button
+							className={`calendar-month-flags-toggle${showMonthFlags ? ' calendar-month-flags-toggle-active' : ''}`}
+							onClick={() => setShowMonthFlags((show) => !show)}
+							aria-pressed={showMonthFlags}
+						>
+							Flags
+						</button>
+					</div>
 				</div>
 				<div className="calendar-months">
 					{months.map((month) => (
 						<div className="calendar-month" key={`${month.year}-${month.month}`}>
-							<h3 className="calendar-month-title">{month.label}</h3>
+							<div className="calendar-month-header">
+								<h3 className="calendar-month-title">{month.label}</h3>
+								{month.offset > 0 && (
+									<button
+										className="calendar-month-close"
+										onClick={() => {
+											setVisibleMonthOffsets((offsets) => offsets.filter((offset) => offset !== month.offset));
+										}}
+										aria-label={`Remove ${month.label}`}
+									>
+										<X size={15} />
+									</button>
+								)}
+							</div>
 							<div className="calendar-month-grid">
 								{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
 									<span className="calendar-month-weekday" key={day}>{day}</span>
@@ -683,24 +732,47 @@ export function CalendarView({
 									const scheduled = date
 										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
 										: [];
+									const activeFlags = date && showMonthFlags
+										? MONTH_FLAG_LABELS.filter(([key]) => flagsMap.get(date)?.[key])
+										: [];
 									return date ? (
-										<div
+										<button
+											type="button"
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
-											aria-label={date}
+											onClick={() => setMonthDayScrollTarget({ date })}
+											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											<div className="calendar-month-dots">
 												{scheduled.map((workoutId, dotIndex) => (
 													<span
-														className="calendar-month-dot"
+														className={`calendar-month-dot calendar-month-dot-${
+															workoutId === REST_ID
+																? 'rest'
+																: workoutId.startsWith('cardio:')
+																	? 'cardio'
+																	: 'strength'
+														}`}
 														key={`${workoutId}-${dotIndex}`}
 														title={workoutNames.get(workoutId) ?? workoutId}
 														aria-label={workoutNames.get(workoutId) ?? workoutId}
 													/>
 												))}
 											</div>
-										</div>
+											{activeFlags.length > 0 && (
+												<div className="calendar-month-flags" aria-label="Day flags">
+													{activeFlags.map(([key, label]) => (
+														<span
+															className={`calendar-month-flag calendar-month-flag-${key}`}
+															key={key}
+															title={label}
+															aria-label={label}
+														/>
+													))}
+												</div>
+											)}
+										</button>
 									) : <div className="calendar-month-day calendar-month-day-empty" key={`empty-${index}`} />;
 								})}
 							</div>
@@ -708,7 +780,10 @@ export function CalendarView({
 					))}
 				</div>
 				<div className="calendar-load-more">
-					<button className="calendar-load-more-btn" onClick={() => setVisibleMonthCount((count) => count + 1)}>
+					<button
+						className="calendar-load-more-btn"
+						onClick={() => setVisibleMonthOffsets((offsets) => [...offsets, Math.max(...offsets) + 1])}
+					>
 						Show next month
 					</button>
 				</div>
@@ -743,7 +818,12 @@ export function CalendarView({
 					return (
 						<div
 							key={dayInfo.date}
-							ref={today ? todayRef : undefined}
+							ref={(element) => {
+								if (element) dayCardRefs.current.set(dayInfo.date, element);
+								else dayCardRefs.current.delete(dayInfo.date);
+								if (today) todayRef.current = element;
+							}}
+							data-calendar-date={dayInfo.date}
 							className={`calendar-day${today ? ' calendar-day-today' : ''}${weekend ? ' calendar-day-weekend' : ''}`}
 						>
 							<div className="calendar-day-header">
