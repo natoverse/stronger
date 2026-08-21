@@ -732,7 +732,8 @@ export function CalendarView({
 					/>
 				)}
 
-				{showMonthly && <section className="calendar-month-section" aria-label="Monthly schedule">
+				{showMonthly && (
+					<section className="calendar-month-section" aria-label="Monthly schedule">
 				<div className="calendar-month-controls">
 					<span className="calendar-month-controls-label">Monthly schedule</span>
 					<div className="calendar-month-filter-controls">
@@ -832,7 +833,8 @@ export function CalendarView({
 						Show next month
 					</button>
 				</div>
-				</section>}
+					</section>
+				)}
 			</div>
 
 			<div className="calendar-days-scroll">
