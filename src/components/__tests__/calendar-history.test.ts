@@ -186,4 +186,20 @@ describe('buildDayInfos', () => {
 		expect(result[0].scheduled).toEqual([]);
 		expect(result[0].sessions.length).toBe(1);
 	});
+
+	it('attaches custom labels for the matching date + workoutId', () => {
+		const dates = ['2026-04-01', '2026-04-02'];
+		const scheduleMap = new Map<string, string[]>([
+			['2026-04-01', ['cardio:hike']],
+			['2026-04-02', ['workout-b']],
+		]);
+		const logByDate = new Map<string, LogSession[]>();
+		const labelsMap = new Map<string, Record<string, string>>([
+			['2026-04-01', { 'cardio:hike': "Angel's Rest Trail" }],
+		]);
+
+		const result = buildDayInfos(dates, scheduleMap, logByDate, undefined, labelsMap);
+		expect(result[0].labels).toEqual({ 'cardio:hike': "Angel's Rest Trail" });
+		expect(result[1].labels).toBeUndefined();
+	});
 });

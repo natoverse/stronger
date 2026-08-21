@@ -1479,6 +1479,59 @@ body {
 	color: var(--color-danger);
 }
 
+/* Custom workout label editing */
+.calendar-label-edit-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: none;
+	border: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	padding: 0.25rem;
+	min-width: 28px;
+	min-height: 28px;
+	border-radius: 4px;
+}
+
+.calendar-label-edit-btn:active {
+	color: var(--color-primary);
+}
+
+.calendar-workout-item-editing {
+	gap: 0.375rem;
+}
+
+.calendar-label-input {
+	flex: 1;
+	min-width: 0;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	color: var(--color-text);
+	font-size: 0.875rem;
+	padding: 0.3125rem 0.5rem;
+}
+
+.calendar-label-input:focus {
+	outline: none;
+	border-color: var(--color-primary);
+}
+
+.calendar-label-save-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: none;
+	border: none;
+	color: var(--color-primary);
+	cursor: pointer;
+	padding: 0.25rem;
+	min-width: 28px;
+	min-height: 28px;
+	border-radius: 4px;
+}
+
 /* Delete session button (X on logged sessions) */
 .calendar-delete-btn {
 	display: flex;

@@ -1166,15 +1166,15 @@ const SCHEDULE_HEADER: string[] = ['date', 'home', 'elsewhere', 'travel', 'visit
 /* ------------------------------------------------------------------ */
 
 /** A1 range for the workout schedule header (row 1). */
-const WORKOUT_SCHEDULE_HEADER_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A1:D1`
+const WORKOUT_SCHEDULE_HEADER_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A1:E1`
 
 /** A1 range for reading all workout schedule data (row 2 onward). */
-const WORKOUT_SCHEDULE_READ_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A2:D10000`
+const WORKOUT_SCHEDULE_READ_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A2:E10000`
 
 /** A1 range covering the full workout schedule tab for clearing. */
-const WORKOUT_SCHEDULE_FULL_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A1:D10000`
+const WORKOUT_SCHEDULE_FULL_RANGE = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A1:E10000`
 
-const WORKOUT_SCHEDULE_HEADER: string[] = ['date', 'workoutId', 'calendarEventId', 'strongerId']
+const WORKOUT_SCHEDULE_HEADER: string[] = ['date', 'workoutId', 'calendarEventId', 'strongerId', 'label']
 
 /* ------------------------------------------------------------------ */
 /*  Schedule (flags) tab – serialization                                */
@@ -1239,6 +1239,7 @@ export function parseWorkoutScheduleRow(row: string[]): WorkoutScheduleEntry | n
 
 	const calendarEventId = (row[2] ?? '').trim() || undefined
 	const strongerId = (row[3] ?? '').trim() || undefined
+	const label = (row[4] ?? '').trim() || undefined
 
 	// Must have either a workoutId, a calendarEventId, or a strongerId
 	if (!workoutId && !calendarEventId && !strongerId) return null
@@ -1248,6 +1249,7 @@ export function parseWorkoutScheduleRow(row: string[]): WorkoutScheduleEntry | n
 		workoutId,
 		...(calendarEventId ? { calendarEventId } : {}),
 		...(strongerId ? { strongerId } : {}),
+		...(label ? { label } : {}),
 	}
 }
 
@@ -1258,6 +1260,7 @@ export function workoutScheduleEntryToRow(entry: WorkoutScheduleEntry): string[]
 		entry.workoutId,
 		entry.calendarEventId ?? '',
 		entry.strongerId ?? '',
+		entry.label ?? '',
 	]
 }
 
@@ -1523,7 +1526,7 @@ export async function writeWorkoutSchedule(
 	const tailStartRow = rows.length + 1
 	const MAX_ROW = 10000
 	if (tailStartRow <= MAX_ROW) {
-		const tailRange = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A${tailStartRow}:D${MAX_ROW}`
+		const tailRange = `'${WORKOUT_SCHEDULE_TAB_NAME}'!A${tailStartRow}:E${MAX_ROW}`
 		await gapi.client.sheets.spreadsheets.values.clear({
 			spreadsheetId,
 			range: tailRange,

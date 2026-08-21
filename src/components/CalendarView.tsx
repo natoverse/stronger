@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -16,6 +16,7 @@ interface CalendarViewProps {
 	logRows: ParsedLogRow[];
 	onAssign: (date: string, workoutId: string) => void;
 	onRemove: (date: string, workoutId: string) => void;
+	onUpdateLabel: (date: string, workoutId: string, label: string) => void;
 	onOpenWorkout: (workoutId: string) => void;
 	onUpdateLogRows: (
 		sessionDate: string,
@@ -143,6 +144,7 @@ export interface DayInfo {
 	scheduled: string[]; // workoutIds from schedule
 	sessions: LogSession[]; // completed workout sessions from log
 	flags?: DayFlags; // day-level flags
+	labels?: Record<string, string>; // workoutId -> custom label, for this date
 }
 
 export function buildDayInfos(
@@ -150,12 +152,14 @@ export function buildDayInfos(
 	scheduleMap: Map<string, string[]>,
 	logByDate: Map<string, LogSession[]>,
 	flagsMap?: Map<string, DayFlags>,
+	labelsMap?: Map<string, Record<string, string>>,
 ): DayInfo[] {
 	return dates.map((date) => ({
 		date,
 		scheduled: scheduleMap.get(date) ?? [],
 		sessions: logByDate.get(date) ?? [],
 		flags: flagsMap?.get(date),
+		labels: labelsMap?.get(date),
 	}));
 }
 
@@ -404,6 +408,7 @@ export function CalendarView({
 	logRows,
 	onAssign,
 	onRemove,
+	onUpdateLabel,
 	onOpenWorkout,
 	onUpdateLogRows,
 	onDeleteSession,
@@ -420,6 +425,8 @@ export function CalendarView({
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
+	const [labelDraft, setLabelDraft] = useState('');
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
 	const [showMonthFlags, setShowMonthFlags] = useState(true);
@@ -437,6 +444,18 @@ export function CalendarView({
 			if (!entry.workoutId) continue;
 			const existing = map.get(entry.date) ?? [];
 			existing.push(entry.workoutId);
+			map.set(entry.date, existing);
+		}
+		return map;
+	}, [workoutSchedule]);
+
+	// Build a map of date → (workoutId → custom label) for fast lookup
+	const labelsMap = useMemo(() => {
+		const map = new Map<string, Record<string, string>>();
+		for (const entry of workoutSchedule) {
+			if (!entry.workoutId || !entry.label) continue;
+			const existing = map.get(entry.date) ?? {};
+			existing[entry.workoutId] = entry.label;
 			map.set(entry.date, existing);
 		}
 		return map;
@@ -505,6 +524,24 @@ export function CalendarView({
 	// Build log sessions grouped by date, using workout names for display
 	const logByDate = useMemo(() => groupLogByDate(logRows, workoutNames), [logRows, workoutNames]);
 
+	const handleStartEditLabel = useCallback((date: string, workoutId: string, currentLabel: string) => {
+		setEditingLabel({ date, workoutId });
+		setLabelDraft(currentLabel);
+	}, []);
+
+	const handleSaveLabel = useCallback(() => {
+		if (editingLabel) {
+			onUpdateLabel(editingLabel.date, editingLabel.workoutId, labelDraft);
+		}
+		setEditingLabel(null);
+		setLabelDraft('');
+	}, [editingLabel, labelDraft, onUpdateLabel]);
+
+	const handleCancelEditLabel = useCallback(() => {
+		setEditingLabel(null);
+		setLabelDraft('');
+	}, []);
+
 	const handleAssign = useCallback(
 		(workoutId: string) => {
 			if (addingForDate) {
@@ -559,8 +596,8 @@ export function CalendarView({
 		if (monthDayScrollTarget) {
 			combined = includeCalendarDate(combined, monthDayScrollTarget.date);
 		}
-		return buildDayInfos(combined, scheduleMap, logByDate, flagsMap);
-	}, [historyMode, pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap]);
+		return buildDayInfos(combined, scheduleMap, logByDate, flagsMap, labelsMap);
+	}, [historyMode, pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap, labelsMap]);
 
 	useEffect(() => {
 		if (!monthDayScrollTarget) return;
@@ -876,6 +913,46 @@ export function CalendarView({
 										const deleteKey = session ? sessionKeyStr(session) : null;
 										const isConfirming = deleteKey !== null && confirmDeleteKey === deleteKey;
 										const Icon = isRest ? Moon : isCardio ? HeartPulse : Dumbbell;
+										const workoutName = workoutNames.get(wid) ?? wid;
+										const customLabel = dayInfo.labels?.[wid];
+										const displayName = customLabel || workoutName;
+										const isEditingThisLabel = !isRest
+											&& editingLabel?.date === dayInfo.date
+											&& editingLabel.workoutId === wid;
+
+										if (isEditingThisLabel) {
+											return (
+												<div key={`sched-${wid}-${idx}`} className="calendar-workout-item calendar-workout-item-editing">
+													<Icon size={14} />
+													<input
+														type="text"
+														className="calendar-label-input"
+														value={labelDraft}
+														placeholder={workoutName}
+														autoFocus
+														onChange={(e) => setLabelDraft(e.target.value)}
+														onKeyDown={(e) => {
+															if (e.key === 'Enter') handleSaveLabel();
+															if (e.key === 'Escape') handleCancelEditLabel();
+														}}
+													/>
+													<button
+														className="calendar-label-save-btn"
+														onClick={handleSaveLabel}
+														aria-label={`Save label for ${workoutName}`}
+													>
+														<Check size={14} />
+													</button>
+													<button
+														className="calendar-remove-btn"
+														onClick={handleCancelEditLabel}
+														aria-label="Cancel editing label"
+													>
+														<X size={14} />
+													</button>
+												</div>
+											);
+										}
 
 										if (isRest) {
 											return (
@@ -883,14 +960,14 @@ export function CalendarView({
 													<span className="calendar-workout-link calendar-workout-link-rest">
 														<Icon size={14} />
 														<span className="calendar-workout-name">
-															{workoutNames.get(wid) ?? wid}
+															{displayName}
 														</span>
 													</span>
 													{!isPast && (
 														<button
 															className="calendar-remove-btn"
 															onClick={() => onRemove(dayInfo.date, wid)}
-															aria-label={`Remove ${workoutNames.get(wid) ?? wid}`}
+															aria-label={`Remove ${workoutName}`}
 														>
 															<X size={14} />
 														</button>
@@ -905,14 +982,21 @@ export function CalendarView({
 													<span className="calendar-workout-link calendar-workout-link-cardio">
 														<Icon size={14} />
 														<span className="calendar-workout-name">
-															{workoutNames.get(wid) ?? wid}
+															{displayName}
 														</span>
 													</span>
+													<button
+														className="calendar-label-edit-btn"
+														onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '')}
+														aria-label={`Edit label for ${workoutName}`}
+													>
+														<Pencil size={14} />
+													</button>
 													{!isPast && (
 														<button
 															className="calendar-remove-btn"
 															onClick={() => onRemove(dayInfo.date, wid)}
-															aria-label={`Remove ${workoutNames.get(wid) ?? wid}`}
+															aria-label={`Remove ${workoutName}`}
 														>
 															<X size={14} />
 														</button>
@@ -931,7 +1015,7 @@ export function CalendarView({
 													>
 														<Icon size={14} />
 														<span className="calendar-workout-name">
-															{workoutNames.get(wid) ?? wid}
+															{displayName}
 														</span>
 														<ChevronRight size={14} />
 													</button>
@@ -939,7 +1023,7 @@ export function CalendarView({
 													<span className="calendar-workout-link">
 														<Icon size={14} />
 														<span className="calendar-workout-name">
-															{workoutNames.get(wid) ?? wid}
+															{displayName}
 														</span>
 													</span>
 												) : (
@@ -949,16 +1033,23 @@ export function CalendarView({
 													>
 														<Icon size={14} />
 														<span className="calendar-workout-name">
-															{workoutNames.get(wid) ?? wid}
+															{displayName}
 														</span>
 														<ChevronRight size={14} />
 													</button>
 												)}
+												<button
+													className="calendar-label-edit-btn"
+													onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '')}
+													aria-label={`Edit label for ${workoutName}`}
+												>
+													<Pencil size={14} />
+												</button>
 												{hasLog && session && !isConfirming && (
 													<button
 														className="calendar-delete-btn"
 														onClick={() => setConfirmDeleteKey(deleteKey)}
-														aria-label={`Delete session ${workoutNames.get(wid) ?? wid}`}
+														aria-label={`Delete session ${workoutName}`}
 													>
 														<X size={14} />
 													</button>
@@ -975,7 +1066,7 @@ export function CalendarView({
 													<button
 														className="calendar-remove-btn"
 														onClick={() => onRemove(dayInfo.date, wid)}
-														aria-label={`Remove ${workoutNames.get(wid) ?? wid}`}
+														aria-label={`Remove ${workoutName}`}
 													>
 														<X size={14} />
 													</button>

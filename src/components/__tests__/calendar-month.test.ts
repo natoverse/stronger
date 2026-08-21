@@ -22,6 +22,7 @@ describe('CalendarView month schedule', () => {
 			logRows: [],
 			onAssign: () => undefined,
 			onRemove: () => undefined,
+			onUpdateLabel: () => undefined,
 			onOpenWorkout: () => undefined,
 			onUpdateLogRows: () => undefined,
 			onDeleteSession: () => undefined,

@@ -224,6 +224,12 @@ export interface WorkoutScheduleEntry {
 	 * match sheet rows ↔ calendar events regardless of direction.
 	 */
 	strongerId?: string;
+	/**
+	 * Optional custom label for this scheduled entry, e.g. "Angel's Rest Trail"
+	 * for a hike. Overrides the workout/cardio name for display purposes only;
+	 * `workoutId` still determines which workout/activity is opened or logged.
+	 */
+	label?: string;
 }
 
 /**

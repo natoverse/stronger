@@ -521,6 +521,26 @@ function AppContent() {
     [workoutSchedule, spreadsheetId],
   );
 
+  const handleUpdateLabel = useCallback(
+    (date: string, workoutId: string, label: string) => {
+      const trimmed = label.trim();
+      let updated = false;
+      const nextSchedule = workoutSchedule.map((e) => {
+        if (!updated && e.date === date && e.workoutId === workoutId) {
+          updated = true;
+          return { ...e, ...(trimmed ? { label: trimmed } : { label: undefined }) };
+        }
+        return e;
+      });
+      if (!updated) return;
+      setWorkoutSchedule(nextSchedule);
+      if (spreadsheetId) {
+        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, nextSchedule));
+      }
+    },
+    [workoutSchedule, spreadsheetId],
+  );
+
   const handleUpdateFlags = useCallback(
     (date: string, flags: DayFlags) => {
       const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.alcohol || flags.blocked;
@@ -1372,6 +1392,7 @@ function AppContent() {
           logRows={logRows}
           onAssign={handleScheduleAssign}
           onRemove={handleScheduleRemove}
+          onUpdateLabel={handleUpdateLabel}
           onOpenWorkout={handleCalendarOpenWorkout}
           onUpdateLogRows={handleUpdateLogRows}
           onDeleteSession={handleDeleteSession}

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { generateEventDates, buildDeepLink, getEventDate, generateStrongerId, embedStrongerId, extractStrongerId, STRONGER_ID_PREFIX, STRONGER_ID_SUFFIX } from '../calendar.ts'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { generateEventDates, buildDeepLink, getEventDate, generateStrongerId, embedStrongerId, extractStrongerId, syncScheduleWithCalendar, STRONGER_ID_PREFIX, STRONGER_ID_SUFFIX } from '../calendar.ts'
+import type { WorkoutScheduleEntry } from '../../model/types.ts'
 
 describe('generateEventDates', () => {
 	it('generates one date per week for Monday (dayIndex 0)', () => {
@@ -125,5 +126,118 @@ describe('extractStrongerId', () => {
 	it('handles descriptions with multiple lines before the tag', () => {
 		const desc = `Line 1\nLine 2\n${STRONGER_ID_PREFIX}s-multi${STRONGER_ID_SUFFIX}`
 		expect(extractStrongerId(desc)).toBe('s-multi')
+	})
+})
+
+
+describe('syncScheduleWithCalendar - custom labels', () => {
+	const resolveWorkoutName = (workoutId: string) => (workoutId === 'cardio:hike' ? 'Cardio' : null)
+
+	afterEach(() => {
+		delete (globalThis as { window?: unknown }).window
+	})
+
+	function mockGapi(events: {
+		insert?: ReturnType<typeof vi.fn>
+		list?: ReturnType<typeof vi.fn>
+		update?: ReturnType<typeof vi.fn>
+		delete?: ReturnType<typeof vi.fn>
+	}) {
+		;(globalThis as { window?: unknown }).window = {
+			gapi: {
+				client: {
+					calendar: {
+						events: {
+							insert: events.insert ?? vi.fn(),
+							list: events.list ?? vi.fn().mockResolvedValue({ result: { items: [] } }),
+							update: events.update ?? vi.fn(),
+							delete: events.delete ?? vi.fn(),
+						},
+					},
+				},
+			},
+		}
+	}
+
+	it('uses the custom label as the title when creating a new event', async () => {
+		const insert = vi.fn().mockResolvedValue({ result: { id: 'evt-1' } })
+		mockGapi({ insert })
+
+		const schedule: WorkoutScheduleEntry[] = [
+			{ date: '2026-05-01', workoutId: 'cardio:hike', label: "Angel's Rest Trail" },
+		]
+
+		const { result } = await syncScheduleWithCalendar('primary', schedule, resolveWorkoutName)
+
+		expect(insert).toHaveBeenCalledTimes(1)
+		expect(insert.mock.calls[0][0].resource.summary).toBe("Angel's Rest Trail")
+		expect(result.created).toBe(1)
+	})
+
+	it('updates the calendar event title when a label is edited after sync', async () => {
+		const update = vi.fn().mockResolvedValue({})
+		const list = vi.fn().mockResolvedValue({
+			result: {
+				items: [
+					{
+						id: 'evt-1',
+						summary: 'Cardio',
+						description: `Cardio\n${STRONGER_ID_PREFIX}s-1${STRONGER_ID_SUFFIX}`,
+						start: { date: '2026-05-01' },
+						end: { date: '2026-05-01' },
+					},
+				],
+			},
+		})
+		mockGapi({ update, list })
+
+		const schedule: WorkoutScheduleEntry[] = [
+			{
+				date: '2026-05-01',
+				workoutId: 'cardio:hike',
+				label: "Angel's Rest Trail",
+				calendarEventId: 'evt-1',
+				strongerId: 's-1',
+			},
+		]
+
+		const { result } = await syncScheduleWithCalendar('primary', schedule, resolveWorkoutName)
+
+		expect(update).toHaveBeenCalledTimes(1)
+		expect(update.mock.calls[0][0].resource.summary).toBe("Angel's Rest Trail")
+		expect(result.updated).toBe(1)
+	})
+
+	it('does not update the event title when the label is unchanged', async () => {
+		const update = vi.fn().mockResolvedValue({})
+		const list = vi.fn().mockResolvedValue({
+			result: {
+				items: [
+					{
+						id: 'evt-1',
+						summary: "Angel's Rest Trail",
+						description: `Angel's Rest Trail\n${STRONGER_ID_PREFIX}s-1${STRONGER_ID_SUFFIX}`,
+						start: { date: '2026-05-01' },
+						end: { date: '2026-05-01' },
+					},
+				],
+			},
+		})
+		mockGapi({ update, list })
+
+		const schedule: WorkoutScheduleEntry[] = [
+			{
+				date: '2026-05-01',
+				workoutId: 'cardio:hike',
+				label: "Angel's Rest Trail",
+				calendarEventId: 'evt-1',
+				strongerId: 's-1',
+			},
+		]
+
+		const { result } = await syncScheduleWithCalendar('primary', schedule, resolveWorkoutName)
+
+		expect(update).not.toHaveBeenCalled()
+		expect(result.updated).toBe(0)
 	})
 })
