@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -157,6 +157,98 @@ export function buildDayInfos(
 		sessions: logByDate.get(date) ?? [],
 		flags: flagsMap?.get(date),
 	}));
+}
+
+export interface MonthGrid {
+	year: number;
+	month: number;
+	label: string;
+	dates: (string | null)[];
+}
+
+/** Build a Sunday-first calendar grid for a month offset from the provided date. */
+export function buildMonthGrid(from: Date, offset: number): MonthGrid {
+	const first = new Date(from.getFullYear(), from.getMonth() + offset, 1);
+	const year = first.getFullYear();
+	const month = first.getMonth();
+	const daysInMonth = new Date(year, month + 1, 0).getDate();
+	const dates: (string | null)[] = Array(first.getDay()).fill(null);
+
+	for (let day = 1; day <= daysInMonth; day++) {
+		dates.push(`${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
+	}
+	while (dates.length % 7 !== 0) dates.push(null);
+
+	return {
+		year,
+		month,
+		label: first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+		dates,
+	};
+}
+
+interface WorkoutTypeFilterProps {
+	types: { id: string; name: string }[];
+	selected: Set<string>;
+	onChange: (selected: Set<string>) => void;
+}
+
+function WorkoutTypeFilter({ types, selected, onChange }: WorkoutTypeFilterProps) {
+	const [open, setOpen] = useState(false);
+	const ref = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		const handleClick = (event: MouseEvent) => {
+			if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+		};
+		document.addEventListener('mousedown', handleClick);
+		return () => document.removeEventListener('mousedown', handleClick);
+	}, [open]);
+
+	const allSelected = selected.size === types.length;
+	const label = selected.size === 0
+		? 'No workouts'
+		: allSelected
+			? 'All workouts'
+			: `${selected.size} workout${selected.size === 1 ? '' : 's'}`;
+
+	return (
+		<div className="activity-type-filter" ref={ref}>
+			<button
+				className="activity-type-filter-btn"
+				onClick={() => setOpen((value) => !value)}
+				aria-haspopup="listbox"
+				aria-expanded={open}
+			>
+				<span>{label}</span>
+				<ChevronDown size={14} />
+			</button>
+			{open && (
+				<div className="activity-type-filter-menu" role="listbox">
+					<div className="activity-type-filter-actions">
+						<button onClick={() => onChange(new Set(types.map((type) => type.id)))} disabled={allSelected}>All</button>
+						<button onClick={() => onChange(new Set())} disabled={selected.size === 0}>None</button>
+					</div>
+					{types.map((type) => (
+						<label key={type.id} className="activity-type-filter-option">
+							<input
+								type="checkbox"
+								checked={selected.has(type.id)}
+								onChange={() => {
+									const next = new Set(selected);
+									if (next.has(type.id)) next.delete(type.id);
+									else next.add(type.id);
+									onChange(next);
+								}}
+							/>
+							<span>{type.name}</span>
+						</label>
+					))}
+				</div>
+			)}
+		</div>
+	);
 }
 
 const SET_TYPES: SetType[] = ['warmup', 'work', 'backoff', 'joker'];
@@ -315,6 +407,7 @@ export function CalendarView({
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+	const [visibleMonthCount, setVisibleMonthCount] = useState(1);
 	const historyTopRef = useRef<HTMLDivElement>(null);
 	const todayRef = useRef<HTMLDivElement>(null);
 
@@ -354,6 +447,38 @@ export function CalendarView({
 		map.set(REST_ID, 'Rest');
 		return map;
 	}, [workouts, cardioActivities]);
+
+	const scheduledTypes = useMemo(() => {
+		const seen = new Set<string>();
+		const types: { id: string; name: string }[] = [];
+		for (const entry of workoutSchedule) {
+			if (!entry.workoutId || seen.has(entry.workoutId)) continue;
+			seen.add(entry.workoutId);
+			types.push({ id: entry.workoutId, name: workoutNames.get(entry.workoutId) ?? entry.workoutId });
+		}
+		return types.sort((a, b) => a.name.localeCompare(b.name));
+	}, [workoutSchedule, workoutNames]);
+	const [selectedWorkoutTypes, setSelectedWorkoutTypes] = useState<Set<string>>(
+		() => new Set(scheduledTypes.map((type) => type.id)),
+	);
+	const previousScheduledTypes = useRef(new Set(scheduledTypes.map((type) => type.id)));
+
+	useEffect(() => {
+		const current = new Set(scheduledTypes.map((type) => type.id));
+		setSelectedWorkoutTypes((selected) => {
+			const previous = previousScheduledTypes.current;
+			const hadAllSelected = previous.size === selected.size && [...previous].every((id) => selected.has(id));
+			return hadAllSelected
+				? current
+				: new Set([...selected].filter((id) => current.has(id)));
+		});
+		previousScheduledTypes.current = current;
+	}, [scheduledTypes]);
+
+	const months = useMemo(() => {
+		const now = new Date();
+		return Array.from({ length: visibleMonthCount }, (_, index) => buildMonthGrid(now, index));
+	}, [visibleMonthCount]);
 
 	// Set of cardio schedule IDs for icon differentiation
 	const cardioIds = useMemo(
@@ -534,6 +659,60 @@ export function CalendarView({
 					onClose={() => setShowClear(false)}
 				/>
 			)}
+
+			<section className="calendar-month-section" aria-label="Monthly schedule">
+				<div className="calendar-month-controls">
+					<span className="calendar-month-controls-label">Monthly schedule</span>
+					{scheduledTypes.length > 0 && (
+						<WorkoutTypeFilter
+							types={scheduledTypes}
+							selected={selectedWorkoutTypes}
+							onChange={setSelectedWorkoutTypes}
+						/>
+					)}
+				</div>
+				<div className="calendar-months">
+					{months.map((month) => (
+						<div className="calendar-month" key={`${month.year}-${month.month}`}>
+							<h3 className="calendar-month-title">{month.label}</h3>
+							<div className="calendar-month-grid">
+								{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+									<span className="calendar-month-weekday" key={day}>{day}</span>
+								))}
+								{month.dates.map((date, index) => {
+									const scheduled = date
+										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
+										: [];
+									return date ? (
+										<div
+											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
+											key={date}
+											aria-label={date}
+										>
+											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
+											<div className="calendar-month-dots">
+												{scheduled.map((workoutId, dotIndex) => (
+													<span
+														className="calendar-month-dot"
+														key={`${workoutId}-${dotIndex}`}
+														title={workoutNames.get(workoutId) ?? workoutId}
+														aria-label={workoutNames.get(workoutId) ?? workoutId}
+													/>
+												))}
+											</div>
+										</div>
+									) : <div className="calendar-month-day calendar-month-day-empty" key={`empty-${index}`} />;
+								})}
+							</div>
+						</div>
+					))}
+				</div>
+				<div className="calendar-load-more">
+					<button className="calendar-load-more-btn" onClick={() => setVisibleMonthCount((count) => count + 1)}>
+						Show next month
+					</button>
+				</div>
+			</section>
 
 			{/* Load more button at top of history */}
 			{historyMode && pastDays.length > 0 && (
@@ -835,4 +1014,3 @@ export function CalendarView({
 		</div>
 	);
 }
-
