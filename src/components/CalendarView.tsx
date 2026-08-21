@@ -521,6 +521,11 @@ export function CalendarView({
 		setLabelDraft('');
 	}, [editingLabel, labelDraft, onUpdateLabel]);
 
+	const handleCancelEditLabel = useCallback(() => {
+		setEditingLabel(null);
+		setLabelDraft('');
+	}, []);
+
 	const handleAssign = useCallback(
 		(workoutId: string) => {
 			if (addingForDate) {
@@ -848,7 +853,7 @@ export function CalendarView({
 														onChange={(e) => setLabelDraft(e.target.value)}
 														onKeyDown={(e) => {
 															if (e.key === 'Enter') handleSaveLabel();
-															if (e.key === 'Escape') setEditingLabel(null);
+															if (e.key === 'Escape') handleCancelEditLabel();
 														}}
 													/>
 													<button
@@ -860,7 +865,7 @@ export function CalendarView({
 													</button>
 													<button
 														className="calendar-remove-btn"
-														onClick={() => setEditingLabel(null)}
+														onClick={handleCancelEditLabel}
 														aria-label="Cancel editing label"
 													>
 														<X size={14} />
