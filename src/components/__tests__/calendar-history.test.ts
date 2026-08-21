@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid } from '../CalendarView.js';
+import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid, includeCalendarDate } from '../CalendarView.js';
 import type { LogSession } from '../CalendarView.js';
 import type { ParsedLogRow } from '../../google/index.js';
 
@@ -7,6 +7,21 @@ describe('generatePastDays', () => {
 	it('generates the correct number of past days', () => {
 		const result = generatePastDays('2026-04-04', 3);
 		expect(result).toEqual(['2026-04-03', '2026-04-02', '2026-04-01']);
+	});
+
+	describe('includeCalendarDate', () => {
+		it('adds an out-of-range selected date in chronological order', () => {
+			expect(includeCalendarDate(['2026-08-21', '2026-08-22'], '2026-08-01')).toEqual([
+				'2026-08-01',
+				'2026-08-21',
+				'2026-08-22',
+			]);
+		});
+
+		it('does not duplicate a date already in the detailed list', () => {
+			const dates = ['2026-08-21', '2026-08-22'];
+			expect(includeCalendarDate(dates, '2026-08-22')).toBe(dates);
+		});
 	});
 });
 
