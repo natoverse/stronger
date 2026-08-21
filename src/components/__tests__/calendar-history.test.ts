@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePastDays, groupLogByDate, buildDayInfos } from '../CalendarView.js';
+import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid } from '../CalendarView.js';
 import type { LogSession } from '../CalendarView.js';
 import type { ParsedLogRow } from '../../google/index.js';
 
@@ -8,7 +8,36 @@ describe('generatePastDays', () => {
 		const result = generatePastDays('2026-04-04', 3);
 		expect(result).toEqual(['2026-04-03', '2026-04-02', '2026-04-01']);
 	});
+});
 
+describe('buildMonthGrid', () => {
+	it('builds a Sunday-first grid for the current month', () => {
+		const result = buildMonthGrid(new Date(2026, 7, 21), 0);
+
+		expect(result.label).toBe('August 2026');
+		expect(result.dates.slice(0, 6)).toEqual([
+			null,
+			null,
+			null,
+			null,
+			null,
+			null,
+		]);
+		expect(result.dates[6]).toBe('2026-08-01');
+		expect(result.dates).toContain('2026-08-31');
+		expect(result.dates.length % 7).toBe(0);
+	});
+
+	it('rolls forward across a year boundary', () => {
+		const result = buildMonthGrid(new Date(2026, 11, 15), 1);
+
+		expect(result.label).toBe('January 2027');
+		expect(result.dates).toContain('2027-01-01');
+		expect(result.dates).toContain('2027-01-31');
+	});
+});
+
+describe('generatePastDays boundaries', () => {
 	it('handles month boundaries', () => {
 		const result = generatePastDays('2026-03-02', 3);
 		expect(result).toEqual(['2026-03-01', '2026-02-28', '2026-02-27']);
