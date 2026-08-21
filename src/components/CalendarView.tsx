@@ -252,6 +252,14 @@ function WorkoutTypeFilter({ types, selected, onChange }: WorkoutTypeFilterProps
 }
 
 const SET_TYPES: SetType[] = ['warmup', 'work', 'backoff', 'joker'];
+const MONTH_FLAG_LABELS: [keyof DayFlags, string][] = [
+	['home', 'Home'],
+	['elsewhere', 'Elsewhere'],
+	['travel', 'Travel'],
+	['visitors', 'Visitors'],
+	['alcohol', 'Alcohol'],
+	['blocked', 'Blocked'],
+];
 
 /** Detail/edit view for a single past workout session. */
 export function SessionDetail({
@@ -407,7 +415,9 @@ export function CalendarView({
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
-	const [visibleMonthCount, setVisibleMonthCount] = useState(1);
+	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
+	const [selectedMonthDay, setSelectedMonthDay] = useState<string | null>(null);
+	const [showMonthFlags, setShowMonthFlags] = useState(true);
 	const historyTopRef = useRef<HTMLDivElement>(null);
 	const todayRef = useRef<HTMLDivElement>(null);
 
@@ -477,8 +487,8 @@ export function CalendarView({
 
 	const months = useMemo(() => {
 		const now = new Date();
-		return Array.from({ length: visibleMonthCount }, (_, index) => buildMonthGrid(now, index));
-	}, [visibleMonthCount]);
+		return visibleMonthOffsets.map((offset) => ({ ...buildMonthGrid(now, offset), offset }));
+	}, [visibleMonthOffsets]);
 
 	// Set of cardio schedule IDs for icon differentiation
 	const cardioIds = useMemo(
@@ -663,18 +673,41 @@ export function CalendarView({
 			<section className="calendar-month-section" aria-label="Monthly schedule">
 				<div className="calendar-month-controls">
 					<span className="calendar-month-controls-label">Monthly schedule</span>
-					{scheduledTypes.length > 0 && (
-						<WorkoutTypeFilter
-							types={scheduledTypes}
-							selected={selectedWorkoutTypes}
-							onChange={setSelectedWorkoutTypes}
-						/>
-					)}
+					<div className="calendar-month-filter-controls">
+						{scheduledTypes.length > 0 && (
+							<WorkoutTypeFilter
+								types={scheduledTypes}
+								selected={selectedWorkoutTypes}
+								onChange={setSelectedWorkoutTypes}
+							/>
+						)}
+						<button
+							className={`calendar-month-flags-toggle${showMonthFlags ? ' calendar-month-flags-toggle-active' : ''}`}
+							onClick={() => setShowMonthFlags((show) => !show)}
+							aria-pressed={showMonthFlags}
+						>
+							Flags
+						</button>
+					</div>
 				</div>
 				<div className="calendar-months">
 					{months.map((month) => (
 						<div className="calendar-month" key={`${month.year}-${month.month}`}>
-							<h3 className="calendar-month-title">{month.label}</h3>
+							<div className="calendar-month-header">
+								<h3 className="calendar-month-title">{month.label}</h3>
+								{month.offset > 0 && (
+									<button
+										className="calendar-month-close"
+										onClick={() => {
+											setVisibleMonthOffsets((offsets) => offsets.filter((offset) => offset !== month.offset));
+											setSelectedMonthDay(null);
+										}}
+										aria-label={`Remove ${month.label}`}
+									>
+										<X size={15} />
+									</button>
+								)}
+							</div>
 							<div className="calendar-month-grid">
 								{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
 									<span className="calendar-month-weekday" key={day}>{day}</span>
@@ -683,24 +716,59 @@ export function CalendarView({
 									const scheduled = date
 										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
 										: [];
+									const activeFlags = date && showMonthFlags
+										? MONTH_FLAG_LABELS.filter(([key]) => flagsMap.get(date)?.[key])
+										: [];
 									return date ? (
-										<div
+										<button
+											type="button"
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
-											aria-label={date}
+											onClick={() => setSelectedMonthDay((selected) => selected === date ? null : date)}
+											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
+											aria-expanded={selectedMonthDay === date}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											<div className="calendar-month-dots">
 												{scheduled.map((workoutId, dotIndex) => (
 													<span
-														className="calendar-month-dot"
+														className={`calendar-month-dot calendar-month-dot-${
+															workoutId === REST_ID
+																? 'rest'
+																: workoutId.startsWith('cardio:')
+																	? 'cardio'
+																	: 'strength'
+														}`}
 														key={`${workoutId}-${dotIndex}`}
 														title={workoutNames.get(workoutId) ?? workoutId}
 														aria-label={workoutNames.get(workoutId) ?? workoutId}
 													/>
 												))}
 											</div>
-										</div>
+											{activeFlags.length > 0 && (
+												<div className="calendar-month-flags" aria-label="Day flags">
+													{activeFlags.map(([key, label]) => (
+														<span
+															className={`calendar-month-flag calendar-month-flag-${key}`}
+															key={key}
+															title={label}
+															aria-label={label}
+														/>
+													))}
+												</div>
+											)}
+											{selectedMonthDay === date && (
+												<div className="calendar-month-day-details">
+													{scheduled.length > 0
+														? scheduled.map((workoutId, workoutIndex) => (
+															<span key={`${workoutId}-${workoutIndex}`}>
+																{workoutNames.get(workoutId) ?? workoutId}
+															</span>
+														))
+														: <span>No workouts</span>}
+												</div>
+											)}
+										</button>
 									) : <div className="calendar-month-day calendar-month-day-empty" key={`empty-${index}`} />;
 								})}
 							</div>
@@ -708,7 +776,10 @@ export function CalendarView({
 					))}
 				</div>
 				<div className="calendar-load-more">
-					<button className="calendar-load-more-btn" onClick={() => setVisibleMonthCount((count) => count + 1)}>
+					<button
+						className="calendar-load-more-btn"
+						onClick={() => setVisibleMonthOffsets((offsets) => [...offsets, Math.max(...offsets) + 1])}
+					>
 						Show next month
 					</button>
 				</div>

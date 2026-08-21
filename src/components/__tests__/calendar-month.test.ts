@@ -4,17 +4,21 @@ import { describe, expect, it } from 'vitest';
 import { CalendarView } from '../CalendarView.js';
 
 describe('CalendarView month schedule', () => {
-	it('renders the current month and one dot per scheduled workout', () => {
+	it('renders color-coded workouts and active day flags in the current month', () => {
 		const now = new Date();
 		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 		const markup = renderToStaticMarkup(createElement(CalendarView, {
-			workouts: [],
-			cardioActivities: [],
+			workouts: [{ id: 'workout-a', name: 'Strength A', exercises: [], favorite: false }],
+			cardioActivities: [{ id: 'run', name: 'Run' }],
 			workoutSchedule: [
 				{ date: today, workoutId: 'workout-a' },
-				{ date: today, workoutId: 'workout-b' },
+				{ date: today, workoutId: 'cardio:run' },
+				{ date: today, workoutId: 'rest' },
 			],
-			dayFlags: [],
+			dayFlags: [{
+				date: today,
+				flags: { home: true, elsewhere: false, travel: true, visitors: false, alcohol: false, blocked: false },
+			}],
 			logRows: [],
 			onAssign: () => undefined,
 			onRemove: () => undefined,
@@ -42,7 +46,14 @@ describe('CalendarView month schedule', () => {
 
 		const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 		expect(markup).toContain(monthLabel);
-		expect(markup.match(/class="calendar-month-dot"/g)).toHaveLength(2);
+		expect(markup).toContain('calendar-month-dot-strength');
+		expect(markup).toContain('calendar-month-dot-cardio');
+		expect(markup).toContain('calendar-month-dot-rest');
+		expect(markup).toContain('calendar-month-flag-home');
+		expect(markup).toContain('calendar-month-flag-travel');
 		expect(markup).toContain('All workouts');
+		expect(markup).toContain('aria-pressed="true"');
+		expect(markup).toContain('Show next month');
+		expect(markup).not.toContain(`Remove ${monthLabel}`);
 	});
 });
