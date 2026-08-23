@@ -1541,7 +1541,6 @@ function AppContent() {
   if (route.view === 'garmin-activities') {
     const today = new Date();
     const timeRanges = getTimeRangeOptions(today);
-    const visibleGarminActivities = filterActivitiesByRange(garminActivities, garminRange, today);
     return (
       <>
         <GoogleAuth
@@ -1593,7 +1592,7 @@ function AppContent() {
             emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
             embedded
           />
-          <GarminActivitiesListView activities={visibleGarminActivities} />
+          <GarminActivitiesListView activities={garminActivities} />
         </div>
       </>
     );
