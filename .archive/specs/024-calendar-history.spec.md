@@ -49,3 +49,9 @@ Tapping a completed workout on a past day opens a read/edit view of that session
 - **Scrolling UX**: The history mode should feel like a natural extension of the existing day list. One approach: the current 28-day forward list stays as-is; tapping History prepends past days above it and scrolls the viewport up. Loading chunks of 14–28 days at a time keeps API calls reasonable.
 - **Row updates vs. rewrite**: For editing, prefer updating individual cells in the log tab rather than rewriting the entire log. The log can grow large; targeted updates are safer and faster.
 - **Depends on**: spec 016 (calendar view), existing log read infrastructure (`readLogZone`, `parseLogRow`).
+
+## Iteration: load previous days
+
+- History is no longer a mode toggled from the fixed calendar toolbar.
+- A persistent “Load previous days” control appears at the top of the detailed schedule card list, mirroring “Show more days” at the bottom.
+- Each activation prepends the preceding seven days while preserving the existing schedule and log history behavior.

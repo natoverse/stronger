@@ -33,3 +33,10 @@
 - A compact “Monthly” toolbar control toggles the monthly calendar without changing its filters or visible-month state.
 - The toolbar, open management panel, and optional month calendar remain fixed while the detailed day cards scroll independently below them.
 - Selecting a month day scrolls its card within the independent detailed-day region, leaving the month calendar visible.
+
+## Iteration: persistent app navigation and consistent calendar controls
+
+- The main app tab bar remains fixed at the top while page content scrolls.
+- Time range and aggregation controls remain fixed directly below the tab bar on pages that provide them.
+- Calendar management controls continue to expand and collapse their associated content, including the monthly view.
+- Historical schedule days are loaded from a control at the top of the detailed card list rather than from the fixed calendar toolbar.

@@ -3,6 +3,8 @@
    ========================================================================= */
 
 :root {
+	--app-header-height: 3.8125rem;
+	--app-header-offset: calc(var(--app-header-height) + 0.5rem);
 	--color-bg: #000;
 	--color-surface: #0a0a0a;
 	--color-surface-hover: #141414;
@@ -864,11 +866,16 @@ body {
 .auth-connected {
 	display: flex;
 	align-items: center;
+	height: var(--app-header-height);
 	gap: 0.75rem;
 	padding: 0.75rem 0;
 	font-size: 0.875rem;
 	border-bottom: 1px solid var(--color-border);
 	margin-bottom: 0.5rem;
+	position: sticky;
+	top: 0;
+	z-index: 30;
+	background: var(--color-bg);
 }
 
 .toolbar-nav {
@@ -1140,7 +1147,7 @@ body {
 .calendar-view {
 	display: flex;
 	flex-direction: column;
-	height: calc(100dvh - 4.25rem);
+	height: calc(100dvh - var(--app-header-offset));
 	min-height: 0;
 	overflow: hidden;
 }
@@ -3596,8 +3603,8 @@ body {
 /* Time range selector */
 .chart-controls-sticky {
 	position: sticky;
-	top: 0;
-	z-index: 10;
+	top: var(--app-header-offset);
+	z-index: 20;
 	background: var(--color-bg);
 	padding: 12px 0 0;
 }
