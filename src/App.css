@@ -3,6 +3,7 @@
    ========================================================================= */
 
 :root {
+	--app-header-height: 4.3125rem;
 	--color-bg: #000;
 	--color-surface: #0a0a0a;
 	--color-surface-hover: #141414;
@@ -869,6 +870,10 @@ body {
 	font-size: 0.875rem;
 	border-bottom: 1px solid var(--color-border);
 	margin-bottom: 0.5rem;
+	position: sticky;
+	top: 0;
+	z-index: 30;
+	background: var(--color-bg);
 }
 
 .toolbar-nav {
@@ -1140,7 +1145,7 @@ body {
 .calendar-view {
 	display: flex;
 	flex-direction: column;
-	height: calc(100dvh - 4.25rem);
+	height: calc(100dvh - var(--app-header-height));
 	min-height: 0;
 	overflow: hidden;
 }
@@ -3596,8 +3601,8 @@ body {
 /* Time range selector */
 .chart-controls-sticky {
 	position: sticky;
-	top: 0;
-	z-index: 10;
+	top: var(--app-header-height);
+	z-index: 20;
 	background: var(--color-bg);
 	padding: 12px 0 0;
 }

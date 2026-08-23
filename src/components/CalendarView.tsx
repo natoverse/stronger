@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, History, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -421,7 +421,6 @@ export function CalendarView({
 	const [showPush, setShowPush] = useState(false);
 	const [showSync, setShowSync] = useState(false);
 	const [showClear, setShowClear] = useState(false);
-	const [historyMode, setHistoryMode] = useState(false);
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
@@ -431,8 +430,6 @@ export function CalendarView({
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
 	const [showMonthly, setShowMonthly] = useState(true);
 	const [showMonthFlags, setShowMonthFlags] = useState(true);
-	const historyTopRef = useRef<HTMLDivElement>(null);
-	const todayRef = useRef<HTMLDivElement>(null);
 	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
 	const [futureDayCount, setFutureDayCount] = useState(30);
@@ -553,23 +550,9 @@ export function CalendarView({
 		[addingForDate, onAssign],
 	);
 
-	// Toggle history mode — load initial batch of past days
-	const handleToggleHistory = useCallback(() => {
-		if (historyMode) {
-			setHistoryMode(false);
-			setPastDays([]);
-		} else {
-			const today = todayStr();
-			// Load 7 days of history initially
-			setPastDays(generatePastDays(today, 7));
-			setHistoryMode(true);
-		}
-	}, [historyMode]);
-
-	// Load more past days
-	const handleLoadMore = useCallback(() => {
-		if (pastDays.length === 0) return;
-		const oldest = pastDays[pastDays.length - 1];
+	// Load the preceding week above the currently visible schedule cards.
+	const handleLoadPreviousDays = useCallback(() => {
+		const oldest = pastDays[pastDays.length - 1] ?? todayStr();
 		const moreDays = generatePastDays(oldest, 7);
 		setPastDays((prev) => [...prev, ...moreDays]);
 	}, [pastDays]);
@@ -579,26 +562,14 @@ export function CalendarView({
 		setFutureDayCount((prev) => prev + 30);
 	}, []);
 
-	// Scroll to today when history mode is activated
-	useEffect(() => {
-		if (historyMode && todayRef.current) {
-			// Small delay to let DOM render
-			setTimeout(() => {
-				todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			}, 100);
-		}
-	}, [historyMode]);
-
 	// Build day infos for both past and future
 	const allDays = useMemo(() => {
-		let combined = historyMode
-			? [...pastDays.slice().reverse(), ...futureDays]
-			: [...futureDays];
+		let combined = [...pastDays.slice().reverse(), ...futureDays];
 		if (monthDayScrollTarget) {
 			combined = includeCalendarDate(combined, monthDayScrollTarget.date);
 		}
 		return buildDayInfos(combined, scheduleMap, logByDate, flagsMap, labelsMap);
-	}, [historyMode, pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap, labelsMap]);
+	}, [pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap, labelsMap]);
 
 	useEffect(() => {
 		if (!monthDayScrollTarget) return;
@@ -690,12 +661,6 @@ export function CalendarView({
 						onClick={handleToggleSync}
 					>
 						<RefreshCw size={16} /> Sync
-					</button>
-					<button
-						className={`calendar-toolbar-btn${historyMode ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={handleToggleHistory}
-					>
-						<History size={16} /> History
 					</button>
 					<button
 						className={`calendar-toolbar-btn${showClear ? ' calendar-toolbar-btn-active' : ''}`}
@@ -838,14 +803,11 @@ export function CalendarView({
 			</div>
 
 			<div className="calendar-days-scroll">
-				{/* Load more button at top of history */}
-				{historyMode && pastDays.length > 0 && (
-					<div className="calendar-load-more" ref={historyTopRef}>
-						<button className="calendar-load-more-btn" onClick={handleLoadMore}>
-							Load earlier days
-						</button>
-					</div>
-				)}
+				<div className="calendar-load-more">
+					<button className="calendar-load-more-btn" onClick={handleLoadPreviousDays}>
+						Load previous days
+					</button>
+				</div>
 
 				<div className="calendar-days">
 				{allDays.map((dayInfo) => {
@@ -870,7 +832,6 @@ export function CalendarView({
 							ref={(element) => {
 								if (element) dayCardRefs.current.set(dayInfo.date, element);
 								else dayCardRefs.current.delete(dayInfo.date);
-								if (today) todayRef.current = element;
 							}}
 							data-calendar-date={dayInfo.date}
 							className={`calendar-day${today ? ' calendar-day-today' : ''}${weekend ? ' calendar-day-weekend' : ''}`}

@@ -59,6 +59,8 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('Monthly');
 		expect(markup).toContain('calendar-fixed-section');
 		expect(markup).toContain('calendar-days-scroll');
+		expect(markup).toContain('Load previous days');
+		expect(markup).not.toContain('>History<');
 		expect(markup).toContain('Show next month');
 		expect(markup).not.toContain(`Remove ${monthLabel}`);
 	});
