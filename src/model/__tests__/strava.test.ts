@@ -497,7 +497,7 @@ describe('getOlderYearOptions', () => {
   it('returns years after the latest three through 2015', () => {
     const options = getOlderYearOptions(new Date(2025, 5, 15));
     expect(options[0]).toEqual({ value: '2022', label: '2022' });
-    expect(options.at(-1)).toEqual({ value: '2015', label: '2015' });
+    expect(options[options.length - 1]).toEqual({ value: '2015', label: '2015' });
     expect(options).toHaveLength(8);
   });
 });
