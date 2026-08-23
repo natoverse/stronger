@@ -11,6 +11,7 @@ import {
   buildMetricChartData,
   formatMetricValue,
   getTimeRangeOptions,
+  getOlderYearOptions,
   isStrengthTraining,
   splitActivities,
   STRENGTH_ACTIVITY_TYPE,
@@ -481,14 +482,23 @@ describe('buildMetricChartData', () => {
 /* ------------------------------------------------------------------ */
 
 describe('getTimeRangeOptions', () => {
-  it('returns Month, Year, current year and 3 prior years (6 total)', () => {
+  it('returns Month, Year, and the latest three calendar years', () => {
     const today = new Date(2025, 5, 15);
     const options = getTimeRangeOptions(today);
-    expect(options).toHaveLength(6);
+    expect(options).toHaveLength(5);
     expect(options[0]).toEqual({ value: 'month', label: 'Month' });
     expect(options[1]).toEqual({ value: 'year', label: 'Year' });
     expect(options[2]).toEqual({ value: '2025', label: '2025' });
-    expect(options[5]).toEqual({ value: '2022', label: '2022' });
+    expect(options[4]).toEqual({ value: '2023', label: '2023' });
+  });
+});
+
+describe('getOlderYearOptions', () => {
+  it('returns years after the latest three through 2015', () => {
+    const options = getOlderYearOptions(new Date(2025, 5, 15));
+    expect(options[0]).toEqual({ value: '2022', label: '2022' });
+    expect(options.at(-1)).toEqual({ value: '2015', label: '2015' });
+    expect(options).toHaveLength(8);
   });
 });
 

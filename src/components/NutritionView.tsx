@@ -3,7 +3,7 @@ import { Minus, Plus, Search, Star, Trash2 } from 'lucide-react';
 import type { FoodItem, GarminWellnessEntry, MealCategory, MealItem, MealLogEntry } from '../model/index.js';
 import { deduplicateFoodSearchResults, suggestedMealCategory } from '../model/nutrition.js';
 import type { StravaAggregation, StravaTimeRange } from '../model/strava.js';
-import { getTimeRangeOptions } from '../model/strava.js';
+import { DateRangeSelector } from './DateRangeSelector.js';
 import { NutritionCharts } from './NutritionCharts.js';
 
 const CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks'];
@@ -407,7 +407,6 @@ export function NutritionView({
   const [drinks, setDrinks] = useState<Record<string, string>>({});
   const [chartRange, setChartRange] = useState<StravaTimeRange>('month');
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
-  const timeRanges = useMemo(() => getTimeRangeOptions(new Date()), []);
   const defaultCategory = useMemo(() => suggestedMealCategory(), []);
 
   // Search state
@@ -796,17 +795,7 @@ export function NutritionView({
         <div className="nutrition-charts-header">
           <h3>Trends</h3>
           <div className="chart-controls-sticky nutrition-chart-controls">
-            <div className="strava-range-group">
-              {timeRanges.map((r) => (
-                <button
-                  key={r.value}
-                  className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
-                  onClick={() => setChartRange(r.value)}
-                >
-                  {r.label}
-                </button>
-              ))}
-            </div>
+            <DateRangeSelector value={chartRange} onChange={setChartRange} />
             <div className="strava-agg-group">
               {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
                 <button
