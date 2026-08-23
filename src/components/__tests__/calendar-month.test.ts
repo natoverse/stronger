@@ -5,6 +5,7 @@ import { CalendarView, toggleCalendarPanel } from '../CalendarView.js';
 
 describe('CalendarView month schedule', () => {
 	it('treats every toolbar panel as a mutually exclusive toggle', () => {
+		expect(toggleCalendarPanel(null, 'plan')).toBe('plan');
 		expect(toggleCalendarPanel('monthly', 'plan')).toBe('plan');
 		expect(toggleCalendarPanel('plan', 'monthly')).toBe('monthly');
 		expect(toggleCalendarPanel('monthly', 'monthly')).toBeNull();
