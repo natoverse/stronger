@@ -1,9 +1,15 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CalendarView } from '../CalendarView.js';
+import { CalendarView, toggleCalendarPanel } from '../CalendarView.js';
 
 describe('CalendarView month schedule', () => {
+	it('treats every toolbar panel as a mutually exclusive toggle', () => {
+		expect(toggleCalendarPanel('monthly', 'plan')).toBe('plan');
+		expect(toggleCalendarPanel('plan', 'monthly')).toBe('monthly');
+		expect(toggleCalendarPanel('monthly', 'monthly')).toBeNull();
+	});
+
 	it('renders color-coded workouts and active day flags in the current month', () => {
 		const now = new Date();
 		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

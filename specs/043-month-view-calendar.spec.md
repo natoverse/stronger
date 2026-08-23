@@ -40,3 +40,7 @@
 - Time range and aggregation controls remain fixed directly below the tab bar on pages that provide them.
 - Calendar management controls continue to expand and collapse their associated content, including the monthly view.
 - Historical schedule days are loaded from a control at the top of the detailed card list rather than from the fixed calendar toolbar.
+
+## Iteration: consistent toolbar tabs
+
+- Monthly behaves like Plan, Sync, and Clear: selecting any toolbar tab closes the active tab and opens the selected one, while selecting the active tab closes it.
