@@ -12,7 +12,7 @@ function deriveBackoff(topSetWeight: number, roundingFactor: number): number {
 }
 
 /** The four barbell lift IDs shown on the setup page. */
-const BARBELL_LIFT_IDS = ['squat', 'bench', 'press', 'deadlift'];
+const BARBELL_LIFT_IDS = ['squat', 'bench-press', 'overhead-press', 'deadlift'];
 
 describe('setup page logic', () => {
 	describe('deriveBackoff', () => {
@@ -68,8 +68,8 @@ describe('setup page logic', () => {
 		it('builds configs with user-edited barbell weights and default accessories', () => {
 			const userWeights: Record<string, number> = {
 				squat: 250,
-				bench: 185,
-				press: 120,
+				'bench-press': 185,
+				'overhead-press': 120,
 				deadlift: 315,
 			};
 
@@ -85,11 +85,11 @@ describe('setup page logic', () => {
 			expect(squat.topSetWeight).toBe(250);
 			expect(squat.backoffWeight).toBe(deriveBackoff(250, 5)); // 212.5 → 215
 
-			const bench = configs.find((c) => c.id === 'bench')!;
+			const bench = configs.find((c) => c.id === 'bench-press')!;
 			expect(bench.topSetWeight).toBe(185);
 			expect(bench.backoffWeight).toBe(deriveBackoff(185, 5)); // 157.25 → 155
 
-			const press = configs.find((c) => c.id === 'press')!;
+			const press = configs.find((c) => c.id === 'overhead-press')!;
 			expect(press.topSetWeight).toBe(120);
 			expect(press.backoffWeight).toBe(deriveBackoff(120, 2.5)); // 102
 
@@ -103,7 +103,7 @@ describe('setup page logic', () => {
 			expect(skullCrusher.backoffWeight).toBe(50);
 		});
 
-		it('preserves all 9 default lift configs in output', () => {
+		it('preserves all default lift configs in output', () => {
 			const configs = libraryDefaults.map((c) => {
 				if (!BARBELL_LIFT_IDS.includes(c.id)) return c;
 				return { ...c, topSetWeight: c.topSetWeight, backoffWeight: deriveBackoff(c.topSetWeight, c.roundingFactor) };

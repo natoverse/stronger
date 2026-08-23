@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { sampleWorkouts } from '../sample-workouts.js';
+import {
+	defaultLiftConfigs,
+	sampleWorkouts,
+	workoutDefinitions,
+} from '../sample-workouts.js';
 
 describe('sampleWorkouts', () => {
 	it('provides exactly 8 workouts', () => {
@@ -61,12 +65,27 @@ describe('sampleWorkouts', () => {
 	it('workout rss-int-b-bench has bench press as the primary lift', () => {
 		const a = sampleWorkouts.find((w) => w.id === 'rss-int-b-bench')!;
 		expect(a.exercises[0].name).toContain('Bench Press');
-		expect(a.exercises[0].liftId).toBe('bench');
+		expect(a.exercises[0].liftId).toBe('bench-press');
 	});
 
 	it('workout rss-int-b-squat has squat as the primary lift', () => {
 		const b = sampleWorkouts.find((w) => w.id === 'rss-int-b-squat')!;
 		expect(b.exercises[0].name).toContain('Squat');
 		expect(b.exercises[0].liftId).toBe('squat');
+	});
+
+	it('references only exercise IDs defined by the default configs', () => {
+		const exerciseIds = new Set(defaultLiftConfigs.map((config) => config.id));
+
+		for (const workout of workoutDefinitions) {
+			for (const exercise of workout.templates) {
+				expect(exerciseIds.has(exercise.liftId), exercise.liftId).toBe(true);
+				for (const set of exercise.sets) {
+					if (set.weightBasis.kind === 'crossReference') {
+						expect(exerciseIds.has(set.weightBasis.liftId), set.weightBasis.liftId).toBe(true);
+					}
+				}
+			}
+		}
 	});
 });
