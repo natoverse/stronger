@@ -156,3 +156,9 @@ Conversions are display-only — storage remains in metric (matching Strava API 
   calendar years.
 - A More dropdown replaces the fourth calendar-year button and offers every older
   year through 2015.
+
+## Iteration: selected-range header totals
+
+- Distance, elevation, and duration chart headers always lead with the total for
+  the selected Month, rolling Year, or calendar year, regardless of the chart's
+  daily, weekly, or monthly bar aggregation.
