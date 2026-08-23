@@ -126,6 +126,10 @@ def test_activity_fetch_end_date_includes_following_day():
     assert garmin_sync.activity_fetch_end_date(date(2026, 8, 13)) == "2026-08-14"
 
 
+def test_backfill_starts_at_2015():
+    assert garmin_sync.BACKFILL_START_DATE == "2015-01-01"
+
+
 def test_partition_rows_splits_updates_and_appends():
     existing = {"100": 2, "200": 3}
     rows = [

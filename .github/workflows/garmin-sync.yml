@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       backfill:
-        description: 'Backfill full history since 2021-01-01 (one-time import) instead of the rolling recent-activity fetch'
+        description: 'Backfill full history since 2015-01-01 (one-time import) instead of the rolling recent-activity fetch'
         type: boolean
         default: false
       overwrite:

@@ -85,3 +85,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Concise activity card metrics (2026-08-15):** Activity-card durations now use `hh:mm`, distances attach `mi` directly to the value, and elevation gain/loss use `‘` instead of `ft`. These shorter labels reduce wrapping and keep cards compact.
 
 - **Activity log search scope (2026-08-23):** The Garmin activity log now receives the full activity history rather than the chart's selected time window. The range controls still scope the charts, while search and activity-type filtering can find any synced activity.
+
+- **Full-history start date (2026-08-23):** The Garmin activity sync's `--backfill` option now fetches activities from 2015-01-01 instead of 2021-01-01, matching the earliest year available in the activity view.
