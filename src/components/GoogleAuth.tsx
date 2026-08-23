@@ -40,7 +40,7 @@ import {
 	describeSheetError,
 } from '../google/index.ts'
 import { defaultCardioActivities } from '../data/sample-workouts.ts'
-import { Dumbbell, Calendar, LogOut, Library, TrendingUp, Settings, HeartPulse, Pizza, SportShoe } from 'lucide-react'
+import { Dumbbell, Calendar, Github, Library, TrendingUp, Settings, HeartPulse, Pizza, SportShoe } from 'lucide-react'
 
 type Phase =
 	| 'loading' // loading Google scripts
@@ -469,9 +469,16 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 					</button>
 				)}
 			</div>
-			<button className="btn-toolbar" onClick={handleSignOut} title="Sign out">
-				<LogOut size={20} />
-			</button>
+			<a
+				className="btn-toolbar"
+				href="https://github.com/natoverse/stronger"
+				target="_blank"
+				rel="noopener noreferrer"
+				aria-label="Stronger on GitHub"
+				title="Stronger on GitHub"
+			>
+				<Github size={20} />
+			</a>
 		</div>
 	)
 }

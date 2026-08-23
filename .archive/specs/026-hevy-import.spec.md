@@ -120,3 +120,7 @@ Hevy's CSV export contains one row per set with these columns:
 - Large imports (thousands of rows) should work fine since `appendLogRows()` handles batch appends. Consider showing a loading indicator during the sheet write.
 - The Settings view route should be `#/settings`, added to the hash router's route union type in `src/hooks/useHashRouter.ts`.
 - For the nav bar icon, a gear/cog icon (`Settings` from lucide-react) is the natural choice.
+
+## Post-merge iterations
+
+- The Hevy CSV import was removed from Settings, along with its parser and tests.
