@@ -19,7 +19,7 @@ Environment variables (all required):
 
 Flags:
   --backfill   One-time import of full history since ``BACKFILL_START_DATE``
-               (2021-01-01) instead of the rolling recent-activity fetch. Dedup
+               (2015-01-01) instead of the rolling recent-activity fetch. Dedup
                by activity ID keeps it idempotent. Implies ``--overwrite``.
   --overwrite  Upsert mode: rewrite existing rows (matched by activityId) in
                place instead of skipping them, so edits to older activities and
@@ -68,10 +68,9 @@ HEADER = [
 COLUMN_COUNT = len(HEADER)  # 17 -> columns A:Q
 ACTIVITY_LIMIT = 30
 
-# One-time backfill window (used only with the --backfill flag): 2021-01-01.
-# Matches the earliest year selectable in the in-app year picker (and the
-# Withings sync's backfill start).
-BACKFILL_START_DATE = "2021-01-01"
+# One-time backfill window (used only with the --backfill flag): 2015-01-01.
+# Matches the earliest year selectable in the in-app year picker.
+BACKFILL_START_DATE = "2015-01-01"
 
 
 # ---------------------------------------------------------------------------
@@ -116,7 +115,7 @@ def fetch_activities_since(client, start_date):
     """Fetch every activity on/after ``start_date`` (inclusive).
 
     ``start_date`` is a ``YYYY-MM-DD`` string. Used for one-time backfills
-    (e.g. pulling history back to 2021). Garmin Connect keeps your full
+    (e.g. pulling history back to 2015). Garmin Connect keeps your full
     history, so the only limit on how far back this reaches is the date you
     pass. ``get_activities_by_date`` pages through the range internally.
     """
