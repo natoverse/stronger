@@ -23,3 +23,7 @@ The existing GitHub repository link moves from the workout selection screen into
 
 - Additional footer navigation
 - Repository metadata or version display
+
+## Post-merge iterations
+
+- The shared footer was removed. A logo-only GitHub link now occupies the right side of the connected header.

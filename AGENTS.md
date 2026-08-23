@@ -74,7 +74,7 @@ Hash-based SPA router. Routes:
 - `#/exercises` — exercise library
 - `#/exercise/<id>` or `#/exercise/new` — exercise editor
 - `#/progress` — progress charts
-- `#/settings` — settings (Hevy import, disconnect)
+- `#/settings` — settings and sign out
 
 When adding a new view, add its route type to the `Route` union, update `parseHash`, and update `routeToHash`.
 
@@ -89,7 +89,7 @@ When adding a new view, add its route type to the `Route` union, update `parseHa
 - `ProgressionReview` — post-workout weight increase proposals
 - `ExerciseLibrary` — browse and manage exercises
 - `ExerciseEditor` — create/edit individual exercise configs
-- `SettingsView` — Hevy CSV import, disconnect sheet
+- `SettingsView` — workout preferences and sign out
 - `GoogleAuth` — OAuth sign-in, sheet connection, nav bar
 - `SetupPage` — first-time setup wizard
 - `MotivationalQuote` — random quotes display
