@@ -1282,6 +1282,8 @@ body {
 
 .calendar-month-day {
 	position: relative;
+	display: flex;
+	flex-direction: column;
 	min-height: 2.75rem;
 	margin: 0;
 	padding: 0.25rem;
@@ -1341,7 +1343,7 @@ body {
 	display: flex;
 	justify-content: center;
 	gap: 0.15rem;
-	margin-top: 0.25rem;
+	margin-top: auto;
 }
 
 .calendar-month-flag {
