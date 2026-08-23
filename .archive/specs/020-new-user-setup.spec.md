@@ -43,3 +43,7 @@ On confirmation, the app writes the final lift configs to the sheet and proceeds
 - Backoff weight derivation (≈85%) matches the relationship in the current defaults. The exact ratio and rounding logic should use the same calculation the rest of the app uses.
 - Pre-filling with defaults means a user who happens to match them can just tap confirm and go — zero typing required.
 - This aligns with the manifesto's "phone-first UI" principle: the setup screen should be fast and minimal, not a long form.
+
+## Iteration log
+
+- The setup page and seed workouts use the canonical exercise IDs from `lib/exercises.json`, including `bench-press`, `overhead-press`, and `skull-crusher`. Seed-data tests enforce that workout and cross-reference IDs resolve to configured exercises.

@@ -19,7 +19,7 @@ Stronger is a barbell training tracker built as a single-page React app. It uses
 
 - **Spec-driven development.** Every feature starts with a spec in `specs/`. Completed specs live in `.archive/specs/`. Always read the relevant spec before implementing.
 - **Push to main.** The user does not use PRs for most work — commit and push directly.
-- **Tests matter.** Run `npx vitest run` before pushing. The 4 storage tests fail due to missing `document` in the test environment — that is pre-existing and expected.
+- **Tests matter.** Run `npx vitest run` before pushing. The test suite is expected to pass cleanly.
 - **Update specs after iteration.** If you make decisions beyond what the spec says, append a summary to the spec (even if archived).
 
 ## Architecture

@@ -22,7 +22,7 @@ describe('buildWorkoutsFromConfigs', () => {
 	it('computes different weights when config values change', () => {
 		const original = buildWorkoutsFromConfigs(defaultLiftConfigs);
 		const modified = defaultLiftConfigs.map((c) =>
-			c.id === 'bench' ? { ...c, topSetWeight: 225 } : c,
+			c.id === 'bench-press' ? { ...c, topSetWeight: 225 } : c,
 		);
 		const updated = buildWorkoutsFromConfigs(modified);
 
@@ -53,9 +53,9 @@ describe('buildWorkoutsFromConfigs', () => {
 		expect(workouts).toHaveLength(0);
 	});
 
-	it('gracefully handles partial configs (only bench + squat)', () => {
+	it('gracefully handles partial configs (only bench press + squat)', () => {
 		const partial = defaultLiftConfigs.filter(
-			(c) => c.id === 'bench' || c.id === 'squat',
+			(c) => c.id === 'bench-press' || c.id === 'squat',
 		);
 		const workouts = buildWorkoutsFromConfigs(partial);
 
@@ -63,7 +63,7 @@ describe('buildWorkoutsFromConfigs', () => {
 		expect(workouts.length).toBeGreaterThan(0);
 		for (const w of workouts) {
 			for (const ex of w.exercises) {
-				expect(['bench', 'squat']).toContain(ex.liftId);
+				expect(['bench-press', 'squat']).toContain(ex.liftId);
 				expect(ex.sets.length).toBeGreaterThan(0);
 			}
 		}
@@ -71,12 +71,12 @@ describe('buildWorkoutsFromConfigs', () => {
 
 	it('skips exercises whose liftId has no config', () => {
 		// Only provide bench config — exercises referencing squat, press, etc. should be skipped
-		const benchOnly = defaultLiftConfigs.filter((c) => c.id === 'bench');
+		const benchOnly = defaultLiftConfigs.filter((c) => c.id === 'bench-press');
 		const workouts = buildWorkoutsFromConfigs(benchOnly);
 
 		for (const w of workouts) {
 			for (const ex of w.exercises) {
-				expect(ex.liftId).toBe('bench');
+				expect(ex.liftId).toBe('bench-press');
 			}
 		}
 	});
