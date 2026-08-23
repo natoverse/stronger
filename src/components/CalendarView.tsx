@@ -552,10 +552,11 @@ export function CalendarView({
 
 	// Load the preceding week above the currently visible schedule cards.
 	const handleLoadPreviousDays = useCallback(() => {
-		const oldest = pastDays[pastDays.length - 1] ?? todayStr();
-		const moreDays = generatePastDays(oldest, 7);
-		setPastDays((prev) => [...prev, ...moreDays]);
-	}, [pastDays]);
+		setPastDays((prev) => {
+			const oldest = prev[prev.length - 1] ?? todayStr();
+			return [...prev, ...generatePastDays(oldest, 7)];
+		});
+	}, []);
 
 	// Load more future days
 	const handleLoadMoreFuture = useCallback(() => {
