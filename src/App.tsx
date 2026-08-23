@@ -27,7 +27,7 @@ import { getSettingsRouteRedirect, useHashRouter } from './hooks/useHashRouter.j
 import { loadDraft, saveDraft, clearDraft } from './hooks/useWorkoutDraft.js';
 import { clearSentinel as clearTimerSentinel } from './hooks/useRestTimer.js';
 import type { StravaActivity, StravaGoal, StravaMetric, StravaTimeRange, StravaAggregation } from './model/strava.js';
-import { filterActivitiesByRange, getTimeRangeOptions } from './model/strava.js';
+import { filterActivitiesByRange } from './model/strava.js';
 import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { toDisplayUnit } from './model/withings.js';
@@ -35,6 +35,7 @@ import { WithingsView } from './components/WithingsView.js';
 import { NutritionView } from './components/NutritionView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
 import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
+import { DateRangeSelector } from './components/DateRangeSelector.js';
 import './App.css';
 
 function AppContent() {
@@ -1405,7 +1406,6 @@ function AppContent() {
   }
 
   if (route.view === 'progress') {
-    const timeRanges = getTimeRangeOptions(new Date());
     return (
       <>
         <GoogleAuth
@@ -1423,17 +1423,7 @@ function AppContent() {
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
-          <div className="strava-range-group">
-            {timeRanges.map((r) => (
-              <button
-                key={r.value}
-                className={`strava-range-btn${chartRange === r.value ? ' active' : ''}`}
-                onClick={() => setChartRange(r.value)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <DateRangeSelector value={chartRange} onChange={setChartRange} />
           <div className="strava-agg-group">
             {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
               <button
@@ -1479,7 +1469,6 @@ function AppContent() {
 
 
   if (route.view === 'garmin') {
-    const timeRanges = getTimeRangeOptions(new Date());
     return (
       <>
         <GoogleAuth
@@ -1497,17 +1486,7 @@ function AppContent() {
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
-          <div className="strava-range-group">
-            {timeRanges.map((r) => (
-              <button
-                key={r.value}
-                className={`strava-range-btn${garminRange === r.value ? ' active' : ''}`}
-                onClick={() => setGarminRange(r.value)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <DateRangeSelector value={garminRange} onChange={setGarminRange} />
           <div className="strava-agg-group">
             {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
               <button
@@ -1538,8 +1517,6 @@ function AppContent() {
   }
 
   if (route.view === 'garmin-activities') {
-    const today = new Date();
-    const timeRanges = getTimeRangeOptions(today);
     return (
       <>
         <GoogleAuth
@@ -1557,17 +1534,7 @@ function AppContent() {
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
-          <div className="strava-range-group">
-            {timeRanges.map((r) => (
-              <button
-                key={r.value}
-                className={`strava-range-btn${garminRange === r.value ? ' active' : ''}`}
-                onClick={() => setGarminRange(r.value)}
-              >
-                {r.label}
-              </button>
-            ))}
-          </div>
+          <DateRangeSelector value={garminRange} onChange={setGarminRange} />
           <div className="strava-agg-group">
             {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
               <button

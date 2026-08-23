@@ -149,3 +149,10 @@ Conversions are display-only — storage remains in metric (matching Strava API 
 - Bars above that limit stop at the top of the plot and use a crosshatch fill to show
   that their actual value continues beyond the visible axis. Tooltips retain the full
   uncapped value.
+
+## Iteration: compact date selector
+
+- Date range controls show buttons for Month, rolling Year, and the latest three
+  calendar years.
+- A More dropdown replaces the fourth calendar-year button and offers every older
+  year through 2015.

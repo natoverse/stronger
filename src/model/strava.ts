@@ -240,18 +240,27 @@ function toISODate(d: Date): string {
 
 const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/** Build the list of time range options: Month (30 days), Year (365 days), current year, and 3 prior years. */
+/** Build the button options: Month, rolling year, and the latest three calendar years. */
 export function getTimeRangeOptions(today: Date = new Date()): { value: StravaTimeRange; label: string }[] {
   const currentYear = today.getFullYear();
   return [
     { value: 'month', label: 'Month' },
     { value: 'year', label: 'Year' },
-    { value: String(currentYear), label: String(currentYear) },
     ...Array.from({ length: 3 }, (_, i) => ({
-      value: String(currentYear - 1 - i),
-      label: String(currentYear - 1 - i),
+      value: String(currentYear - i),
+      label: String(currentYear - i),
     })),
   ];
+}
+
+/** Build older calendar-year options, beginning after the visible years and ending at 2015. */
+export function getOlderYearOptions(today: Date = new Date()): { value: StravaTimeRange; label: string }[] {
+  const newestOlderYear = today.getFullYear() - 3;
+  if (newestOlderYear < 2015) return [];
+  return Array.from({ length: newestOlderYear - 2015 + 1 }, (_, i) => ({
+    value: String(newestOlderYear - i),
+    label: String(newestOlderYear - i),
+  }));
 }
 
 /** Get ISO week number for a date. */

@@ -3627,6 +3627,12 @@ body {
 	font-weight: 600;
 }
 
+.strava-range-more {
+	min-width: 0;
+	appearance: auto;
+	text-align: center;
+}
+
 /* Aggregation selector */
 .strava-agg-group {
 	display: flex;
