@@ -197,9 +197,7 @@ function MetricChart({
   const plotH = CHART_HEIGHT - CHART_PADDING.top - CHART_PADDING.bottom;
 
   const { buckets, cumulative, proratedGoal, goalTrajectory } = data;
-  const topValue = aggregation === 'day' && data.latestValue !== null
-    ? data.latestValue
-    : data.total;
+  const topValue = activityChartHeaderValue(data);
   const latestValue = aggregation === 'day' ? null : data.latestValue;
   const n = buckets.length;
   if (n === 0) return null;
@@ -500,4 +498,8 @@ export function cappedTicksFor(max: number, count: number): number[] {
 export function activityGoalBarCap(proratedGoal: number | null, bucketCount: number): number | null {
   if (proratedGoal === null || proratedGoal <= 0 || bucketCount <= 0) return null;
   return Math.max((proratedGoal / bucketCount) * 3, 0.001);
+}
+
+export function activityChartHeaderValue(data: MetricChartData): number {
+  return data.total;
 }

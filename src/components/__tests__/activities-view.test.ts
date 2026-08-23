@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest';
-import { activityGoalBarCap, cappedTicksFor } from '../ActivitiesView.js';
+import {
+  activityChartHeaderValue,
+  activityGoalBarCap,
+  cappedTicksFor,
+} from '../ActivitiesView.js';
+import type { MetricChartData } from '../../model/strava.js';
+
+describe('activity chart header', () => {
+  it('shows the selected range total instead of the latest sub-aggregate', () => {
+    const data: MetricChartData = {
+      metric: 'distance',
+      buckets: [
+        { label: 'Aug 1', value: 3 },
+        { label: 'Aug 2', value: 5 },
+      ],
+      cumulative: [3, 8],
+      proratedGoal: null,
+      goalTrajectory: [],
+      unit: 'miles',
+      total: 8,
+      latestValue: 5,
+    };
+
+    expect(activityChartHeaderValue(data)).toBe(8);
+  });
+});
 
 describe('activity goal chart scale', () => {
   it('caps bars at three times the evenly allocated bucket goal', () => {
