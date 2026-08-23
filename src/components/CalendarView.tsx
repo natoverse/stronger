@@ -35,6 +35,12 @@ interface CalendarViewProps {
 	onClearSchedule: (options: ClearOptions) => Promise<ClearResult>;
 }
 
+export type CalendarPanel = 'plan' | 'sync' | 'clear' | 'monthly';
+
+export function toggleCalendarPanel(current: CalendarPanel | null, selected: CalendarPanel): CalendarPanel | null {
+	return current === selected ? null : selected;
+}
+
 /** Format a YYYY-MM-DD string for display. */
 export function formatDate(dateStr: string): { weekday: string; display: string } {
 	const [y, m, d] = dateStr.split('-').map(Number);
@@ -418,9 +424,7 @@ export function CalendarView({
 	onClearSchedule,
 }: CalendarViewProps) {
 	const [addingForDate, setAddingForDate] = useState<string | null>(null);
-	const [showPush, setShowPush] = useState(false);
-	const [showSync, setShowSync] = useState(false);
-	const [showClear, setShowClear] = useState(false);
+	const [activePanel, setActivePanel] = useState<CalendarPanel | null>('monthly');
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
@@ -428,7 +432,6 @@ export function CalendarView({
 	const [labelDraft, setLabelDraft] = useState('');
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
-	const [showMonthly, setShowMonthly] = useState(true);
 	const [showMonthFlags, setShowMonthFlags] = useState(true);
 	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
@@ -629,76 +632,58 @@ export function CalendarView({
 		);
 	}
 
-	const handleTogglePush = () => {
-		const opening = !showPush;
-		setShowPush(opening);
-		if (opening) { setShowSync(false); setShowClear(false); }
-	};
-
-	const handleToggleSync = () => {
-		const opening = !showSync;
-		setShowSync(opening);
-		if (opening) { setShowPush(false); setShowClear(false); }
-	};
-
-	const handleToggleClear = () => {
-		const opening = !showClear;
-		setShowClear(opening);
-		if (opening) { setShowPush(false); setShowSync(false); }
-	};
-
 	return (
 		<div className="calendar-view">
 			<div className="calendar-fixed-section">
 				<div className="calendar-toolbar">
 					<button
-						className={`calendar-toolbar-btn${showPush ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={handleTogglePush}
+						className={`calendar-toolbar-btn${activePanel === 'plan' ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'plan'))}
 					>
 						<CalendarCog size={16} /> Plan
 					</button>
 					<button
-						className={`calendar-toolbar-btn${showSync ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={handleToggleSync}
+						className={`calendar-toolbar-btn${activePanel === 'sync' ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'sync'))}
 					>
 						<RefreshCw size={16} /> Sync
 					</button>
 					<button
-						className={`calendar-toolbar-btn${showClear ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={handleToggleClear}
+						className={`calendar-toolbar-btn${activePanel === 'clear' ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'clear'))}
 					>
 						<Trash2 size={16} /> Clear
 					</button>
 					<button
-						className={`calendar-toolbar-btn${showMonthly ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={() => setShowMonthly((show) => !show)}
-						aria-pressed={showMonthly}
+						className={`calendar-toolbar-btn${activePanel === 'monthly' ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'monthly'))}
+						aria-pressed={activePanel === 'monthly'}
 					>
 						Monthly
 					</button>
 				</div>
-				{showPush && (
+				{activePanel === 'plan' && (
 					<CalendarPush
 						workouts={workouts}
 						cardioActivities={cardioActivities}
-						onClose={() => setShowPush(false)}
+						onClose={() => setActivePanel(null)}
 						onUpdateSchedule={onBulkSchedule}
 					/>
 				)}
-				{showSync && (
+				{activePanel === 'sync' && (
 					<CalendarSync
 						onSync={onSyncCalendar}
-						onClose={() => setShowSync(false)}
+						onClose={() => setActivePanel(null)}
 					/>
 				)}
-				{showClear && (
+				{activePanel === 'clear' && (
 					<CalendarClear
 						onClear={onClearSchedule}
-						onClose={() => setShowClear(false)}
+						onClose={() => setActivePanel(null)}
 					/>
 				)}
 
-				{showMonthly && (
+				{activePanel === 'monthly' && (
 					<section className="calendar-month-section" aria-label="Monthly schedule">
 				<div className="calendar-month-controls">
 					<span className="calendar-month-controls-label">Monthly schedule</span>
