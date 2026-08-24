@@ -21,6 +21,7 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
@@ -31,9 +32,23 @@ GAIA_BASE_URL = "https://www.gaiagps.com"
 MOVING_SPEED_THRESHOLD = 0.25
 GAIA_WRITE_ATTEMPTS = 3
 GAIA_RETRY_DELAY_SECONDS = 30.0
+RATE_LIMIT_HEADERS = (
+    "Retry-After",
+    "RateLimit-Limit",
+    "RateLimit-Remaining",
+    "RateLimit-Reset",
+    "RateLimit-Policy",
+    "X-RateLimit-Limit",
+    "X-RateLimit-Remaining",
+    "X-RateLimit-Reset",
+)
 
 
-class GaiaWriteRejected(RuntimeError):
+class GaiaRateLimited(RuntimeError):
+    """Raised after Gaia repeatedly rate limits a request."""
+
+
+class GaiaWriteRejected(GaiaRateLimited):
     """Raised after Gaia repeatedly rejects a write request."""
 
 
@@ -303,36 +318,82 @@ class GaiaClient:
         self.retry_delay = retry_delay
         self.sleep = sleep
 
+    @staticmethod
+    def _response_details(response):
+        headers = [
+            f"{name}={response.headers[name]}"
+            for name in RATE_LIMIT_HEADERS
+            if response.headers.get(name) is not None
+        ]
+        detail = f"status {response.status_code}"
+        if headers:
+            detail += f"; headers: {', '.join(headers)}"
+        return detail
+
+    @staticmethod
+    def _retry_after_seconds(response):
+        retry_after = response.headers.get("Retry-After")
+        try:
+            return max(float(retry_after), 0)
+        except (TypeError, ValueError):
+            pass
+        try:
+            retry_at = parsedate_to_datetime(retry_after)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=timezone.utc)
+            server_date = response.headers.get("Date")
+            reference = (
+                parsedate_to_datetime(server_date)
+                if server_date
+                else datetime.now(timezone.utc)
+            )
+            if reference.tzinfo is None:
+                reference = reference.replace(tzinfo=timezone.utc)
+            return max((retry_at - reference).total_seconds(), 0)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
     def _request(self, method, path, **kwargs):
-        attempts = self.write_attempts if method in {"POST", "PUT", "DELETE"} else 1
+        is_write = method in {"POST", "PUT", "DELETE"}
+        attempts = self.write_attempts
         for attempt in range(1, attempts + 1):
             response = self.session.request(
                 method, f"{GAIA_BASE_URL}{path}", **kwargs
             )
-            write_rejected = (
-                method in {"POST", "PUT", "DELETE"}
-                and response.status_code in (403, 429)
-            )
-            if write_rejected and attempt < attempts:
-                retry_after = response.headers.get("Retry-After")
-                try:
-                    delay = float(retry_after)
-                except (TypeError, ValueError):
+            rate_limited = response.status_code == 429
+            write_rejected = is_write and response.status_code == 403
+            if (rate_limited or write_rejected) and attempt < attempts:
+                delay = self._retry_after_seconds(response)
+                if delay is None:
                     delay = self.retry_delay * (2 ** (attempt - 1))
+                print(
+                    f"Gaia throttled {method} {path} "
+                    f"({self._response_details(response)}); "
+                    f"retrying in {delay:g} seconds",
+                    file=sys.stderr,
+                )
                 self.sleep(max(delay, 0))
                 continue
             if write_rejected:
                 raise GaiaWriteRejected(
                     f"Gaia rejected {method} {path} after {attempts} attempts; "
+                    f"{self._response_details(response)}; "
                     "the runner may be temporarily rate limited"
                 )
+            if rate_limited:
+                raise GaiaRateLimited(
+                    f"Gaia rate limited {method} {path} after {attempts} attempts; "
+                    f"{self._response_details(response)}"
+                )
             if response.status_code in (401, 403) or "login" in response.url:
-                raise RuntimeError("Gaia session expired or was rejected")
-            if response.status_code == 429:
-                raise RuntimeError("Gaia rate limit reached")
+                raise RuntimeError(
+                    "Gaia session expired or was rejected "
+                    f"({self._response_details(response)})"
+                )
             if not response.ok:
                 raise RuntimeError(
-                    f"Gaia request failed ({response.status_code}) at {path}"
+                    f"Gaia request failed at {path} "
+                    f"({self._response_details(response)})"
                 )
             return response
 
@@ -530,7 +591,7 @@ def run(
                 allow_duplicates=allow_duplicates,
             )
             summary.append((activity_id, result))
-        except GaiaWriteRejected as error:
+        except GaiaRateLimited as error:
             failures += 1
             summary.append((activity_id, f"failed: {error}"))
             break
