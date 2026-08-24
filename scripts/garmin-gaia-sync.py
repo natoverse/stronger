@@ -182,10 +182,10 @@ class GaiaClient:
 
     def put_folder(self, folder):
         time.sleep(self.request_delay)
-        response = self._request(
+        self._request(
             "PUT", f"/api/objects/folder/{folder['id']}/", json=folder
         )
-        return response.json() if response.content else True
+        return True
 
     def delete_folder(self, folder_id):
         time.sleep(self.request_delay)
