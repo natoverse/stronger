@@ -164,15 +164,26 @@ class GaiaClient:
         return response.json()
 
     def upload_file(self, path):
+        from curl_cffi import CurlMime
+
         time.sleep(self.request_delay)
-        with path.open("rb") as gpx_file:
+        multipart = CurlMime()
+        multipart.addpart(
+            name="files",
+            content_type="application/gpx+xml",
+            filename=path.name,
+            local_path=path,
+        )
+        try:
             response = self._request(
                 "POST",
                 "/upload/",
-                files={"files": gpx_file},
+                multipart=multipart,
                 data={"name": path.name},
                 allow_redirects=True,
             )
+        finally:
+            multipart.close()
         if b"File uploaded to queue" in response.content:
             raise RuntimeError("Gaia queued the upload; folder assignment is unknown")
         folder_id = response.url.rstrip("/").split("/")[-1]

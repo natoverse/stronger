@@ -33,18 +33,20 @@ class FakeCookies:
 
 
 class FakeSession:
-    def __init__(self, status_code=200):
+    def __init__(self, status_code=200, response_url=None):
         self.headers = {}
         self.cookies = FakeCookies()
         self.requests = []
         self.status_code = status_code
+        self.response_url = response_url
 
     def request(self, method, url, **kwargs):
         self.requests.append((method, url, kwargs))
         return types.SimpleNamespace(
             status_code=self.status_code,
-            url=url,
+            url=self.response_url or url,
             ok=self.status_code < 400,
+            content=b"",
         )
 
 
@@ -93,6 +95,48 @@ def test_auth_verification_rejects_unauthorized_session():
             raise AssertionError("Expected invalid Gaia session to fail")
         except RuntimeError as error:
             assert str(error) == "Gaia session expired or was rejected"
+
+
+def test_upload_uses_curl_multipart_form():
+    created = []
+
+    class FakeCurlMime:
+        def __init__(self):
+            self.parts = []
+            self.closed = False
+            created.append(self)
+
+        def addpart(self, **kwargs):
+            self.parts.append(kwargs)
+
+        def close(self):
+            self.closed = True
+
+    fake_curl_cffi = types.SimpleNamespace(CurlMime=FakeCurlMime)
+    session = FakeSession(
+        response_url="https://www.gaiagps.com/datasummary/folder/temp/"
+    )
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "track.gpx"
+        path.write_bytes(VALID_GPX)
+        with mock.patch.dict(sys.modules, {"curl_cffi": fake_curl_cffi}):
+            assert client.upload_file(path) == "temp"
+
+    assert created[0].parts == [
+        {
+            "name": "files",
+            "content_type": "application/gpx+xml",
+            "filename": "track.gpx",
+            "local_path": path,
+        }
+    ]
+    assert created[0].closed
+    assert session.requests[0][2] == {
+        "multipart": created[0],
+        "data": {"name": "track.gpx"},
+        "allow_redirects": True,
+    }
 
 
 def test_filters_exact_activity_types():
