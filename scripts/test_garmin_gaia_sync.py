@@ -223,6 +223,20 @@ def test_upload_candidate_discovery_falls_back_to_map_assets():
     ]
 
 
+def test_upload_candidate_discovery_reads_module_preloads():
+    class CandidateSession(FakeSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            response.content = b'const endpoint="/api/import/current/";'
+            return response
+
+    session = CandidateSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    html = b'<link rel="modulepreload" href="/assets/import.js">'
+    assert client._upload_candidates(html) == ["/api/import/current/"]
+    assert session.requests[0][1] == "https://www.gaiagps.com/assets/import.js"
+
+
 def test_upload_fails_without_csrf_token():
     client = sync.GaiaClient(
         "secret",

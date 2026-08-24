@@ -37,7 +37,7 @@ class _UploadFormParser(HTMLParser):
         super().__init__()
         self.current = None
         self.forms = []
-        self.scripts = []
+        self.assets = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -48,7 +48,14 @@ class _UploadFormParser(HTMLParser):
                 "hidden": {},
             }
         elif tag == "script" and values.get("src"):
-            self.scripts.append(values["src"])
+            self.assets.append(values["src"])
+        elif tag == "link" and values.get("href"):
+            relation = values.get("rel") or ""
+            if (
+                values["href"].partition("?")[0].endswith(".js")
+                or "modulepreload" in relation
+            ):
+                self.assets.append(values["href"])
         elif tag == "input" and self.current is not None:
             input_type = (values.get("type") or "text").lower()
             name = values.get("name")
@@ -266,7 +273,7 @@ class GaiaClient:
         pages = [html]
         initial_parser = _UploadFormParser()
         initial_parser.feed(html.decode("utf-8", errors="replace"))
-        if not initial_parser.scripts:
+        if not initial_parser.assets:
             pages.append(self._request("GET", "/map/").content)
 
         candidates = set()
@@ -274,7 +281,16 @@ class GaiaClient:
         for page in pages:
             parser = _UploadFormParser()
             parser.feed(page.decode("utf-8", errors="replace"))
-            sources.extend(parser.scripts)
+            sources.extend(parser.assets)
+            sources.extend(
+                match.decode("utf-8", errors="replace")
+                for match in re.findall(
+                    rb"""(?:src|href)=["']([^"']+\.js(?:\?[^"']*)?)["']""",
+                    page,
+                    flags=re.IGNORECASE,
+                )
+            )
+            candidates.update(self._import_paths(page))
         for source in dict.fromkeys(sources[:20]):
             script_url = urljoin(f"{GAIA_BASE_URL}/upload/", source)
             if not script_url.startswith(f"{GAIA_BASE_URL}/"):
@@ -282,15 +298,24 @@ class GaiaClient:
             response = self._request(
                 "GET", script_url.removeprefix(GAIA_BASE_URL)
             )
-            for match in re.findall(
-                rb"""["']([^"'\\\s]{0,80}(?:upload|import)[^"'\\\s]{0,80})["']""",
-                response.content,
-                flags=re.IGNORECASE,
-            ):
-                candidate = match.decode("utf-8", errors="replace")
-                if "/" in candidate:
-                    candidates.add(candidate)
+            candidates.update(self._import_paths(response.content))
         return sorted(candidates)[:20]
+
+    @staticmethod
+    def _import_paths(content):
+        paths = set()
+        for match in re.findall(
+            rb"""["']([^"'\\\s]{0,80}(?:upload|import)[^"'\\\s]{0,80})["']""",
+            content,
+            flags=re.IGNORECASE,
+        ):
+            candidate = match.decode("utf-8", errors="replace")
+            if (
+                "/" in candidate
+                and not candidate.partition("?")[0].endswith(".js")
+            ):
+                paths.add(candidate)
+        return paths
 
     def put_folder(self, folder):
         time.sleep(self.request_delay)
