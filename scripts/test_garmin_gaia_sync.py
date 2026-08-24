@@ -3,10 +3,13 @@
 
 import importlib.util
 import os
+import sys
 import tempfile
+import types
 import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
@@ -19,6 +22,62 @@ VALID_GPX = b"""<?xml version="1.0"?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1">
   <trk><name>Old name</name><trkseg><trkpt lat="47.1" lon="-122.2"/></trkseg></trk>
 </gpx>"""
+
+
+class FakeCookies:
+    def __init__(self):
+        self.values = []
+
+    def set(self, name, value, **kwargs):
+        self.values.append((name, value, kwargs))
+
+
+class FakeSession:
+    def __init__(self):
+        self.headers = {}
+        self.cookies = FakeCookies()
+        self.requests = []
+
+    def request(self, method, url, **kwargs):
+        self.requests.append((method, url, kwargs))
+        return types.SimpleNamespace(
+            status_code=200,
+            url=url,
+            ok=True,
+        )
+
+
+def test_gaia_client_uses_browser_impersonation_and_exact_cookie_host():
+    created = []
+
+    def session_factory(**kwargs):
+        created.append(kwargs)
+        return FakeSession()
+
+    fake_curl_cffi = types.SimpleNamespace(
+        requests=types.SimpleNamespace(Session=session_factory)
+    )
+    with mock.patch.dict(sys.modules, {"curl_cffi": fake_curl_cffi}):
+        client = sync.GaiaClient("secret", request_delay=0)
+
+    assert created == [{"impersonate": "chrome"}]
+    assert client.session.cookies.values == [
+        ("sessionid", "secret", {"domain": "www.gaiagps.com"})
+    ]
+    assert "User-Agent" not in client.session.headers
+
+
+def test_auth_verification_uses_protected_api_endpoint():
+    session = FakeSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    client.verify_auth()
+    assert session.requests == [
+        (
+            "GET",
+            "https://www.gaiagps.com/api/objects/folder/",
+            {"params": {"count": "1", "page": "1"}},
+        )
+    ]
 
 
 def test_filters_exact_activity_types():

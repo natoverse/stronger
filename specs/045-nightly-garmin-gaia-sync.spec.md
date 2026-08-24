@@ -60,3 +60,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   and partial-failure recovery checks that marker across all Gaia tracks before
   uploading, then verifies folder membership before deleting Gaia's temporary
   import folder.
+- After GitHub-hosted requests received 403 responses with a freshly renewed
+  session, Gaia requests were moved to the existing `curl_cffi` dependency's
+  Chrome impersonation. Authentication is now checked against the protected
+  folder API rather than the public profile page, and the session cookie is
+  scoped to the exact `www.gaiagps.com` host used by the client.

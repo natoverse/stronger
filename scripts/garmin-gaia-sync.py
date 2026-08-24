@@ -120,16 +120,19 @@ class GaiaClient:
     """Minimal client for Gaia's unsupported private upload behavior."""
 
     def __init__(self, session_id, request_delay=2.0, session=None):
-        import requests
+        if session is None:
+            from curl_cffi import requests
 
-        self.session = session or requests.Session()
+            session = requests.Session(impersonate="chrome")
+        self.session = session
         self.session.headers.update(
             {
                 "Accept": "application/json, text/plain, */*",
-                "User-Agent": "Stronger Garmin-Gaia sync",
             }
         )
-        self.session.cookies.set("sessionid", session_id, domain="gaiagps.com")
+        self.session.cookies.set(
+            "sessionid", session_id, domain="www.gaiagps.com"
+        )
         self.request_delay = request_delay
 
     def _request(self, method, path, **kwargs):
@@ -145,7 +148,11 @@ class GaiaClient:
         return response
 
     def verify_auth(self):
-        self._request("GET", "/profile/")
+        self._request(
+            "GET",
+            "/api/objects/folder/",
+            params={"count": "1", "page": "1"},
+        )
 
     def list_objects(self, object_type):
         response = self._request(

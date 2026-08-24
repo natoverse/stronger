@@ -6,6 +6,8 @@ flow, so this automation uses unsupported private Gaia web behavior.
 
 > **Important:** Automated upload uses unsupported private Gaia web behavior.
 > Gaia can change this behavior or expire the browser session without notice.
+> The sync uses browser-impersonated requests because Gaia rejects ordinary
+> Python HTTP clients from GitHub-hosted runners.
 
 ## Configuration
 
@@ -41,7 +43,7 @@ backfills can be rerun safely.
 
 | Failure | Action |
 |---------|--------|
-| Gaia session expired or rejected | Copy a fresh browser `sessionid` into the `GAIA_SESSION_ID` secret. |
+| Gaia session expired or rejected | Copy a fresh browser `sessionid` into the `GAIA_SESSION_ID` secret. The sync validates it against Gaia's protected folder API before contacting Garmin. |
 | Missing or ambiguous folder | Correct `GAIA_FOLDER_ID`; the sync does not upload before validating it. |
 | Gaia rate limit or rejected upload | Wait and rerun. Successful earlier tracks remain in Gaia. |
 | Marker or folder verification failed | Correct the Gaia destination state, then rerun; the activity marker prevents another upload after a partial import. |
