@@ -54,9 +54,11 @@ backfills can be rerun safely.
 |---------|--------|
 | Gaia session expired or rejected | Copy a fresh browser `sessionid` into the `GAIA_SESSION_ID` secret. The sync validates it against Gaia's protected folder API before contacting Garmin. |
 | Missing or ambiguous folder | Correct `GAIA_FOLDER_ID`; the sync does not upload before validating it. |
-| Gaia write rejected or rate limited | The sync retries writes with 30- and 60-second backoffs, then stops the run to avoid extending an IP-based throttle. Wait and rerun. Successful earlier tracks remain in Gaia. |
+| Gaia write rejected or rate limited | The sync retries rate-limited reads and writes. It honors numeric and HTTP-date `Retry-After` values; otherwise it waits 30 and 60 seconds. Failures report the status and safe rate-limit headers, then stop the run to avoid extending an IP-based throttle. Wait and rerun. Successful earlier tracks remain in Gaia. |
 | Marker or folder verification failed | Correct the Gaia destination state, then rerun; the activity marker prevents another upload after a partial import. |
 | Garmin GPX is malformed or empty | Retry later; the per-activity summary exits non-zero without uploading that file. |
 
 `GAIA_REQUEST_DELAY_SECONDS` controls pacing between Gaia writes and defaults to
-two seconds.
+two seconds. If backfills frequently receive 403 or 429 responses, try increasing
+the delay to 5 or 10 seconds. Compare the reported `Retry-After`,
+`RateLimit-Remaining`, and reset headers between runs before changing the default.

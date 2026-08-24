@@ -106,7 +106,9 @@ def test_auth_verification_rejects_unauthorized_session():
             client.verify_auth()
             raise AssertionError("Expected invalid Gaia session to fail")
         except RuntimeError as error:
-            assert str(error) == "Gaia session expired or was rejected"
+            assert str(error) == (
+                f"Gaia session expired or was rejected (status {status_code})"
+            )
 
 
 def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
@@ -194,6 +196,60 @@ def test_write_rejection_honors_retry_after():
     except sync.GaiaWriteRejected:
         pass
     assert delays == [7]
+
+
+def test_rate_limit_honors_retry_after_http_date_for_reads():
+    session = FakeSession(
+        status_code=429,
+        headers={
+            "Date": "Mon, 24 Aug 2026 19:26:00 GMT",
+            "Retry-After": "Mon, 24 Aug 2026 19:27:15 GMT",
+        },
+    )
+    delays = []
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=session,
+        write_attempts=2,
+        sleep=delays.append,
+    )
+    try:
+        client._request("GET", "/api/objects/track/")
+        raise AssertionError("Expected rate-limited Gaia read to fail")
+    except sync.GaiaRateLimited as error:
+        assert "Retry-After=Mon, 24 Aug 2026 19:27:15 GMT" in str(error)
+    assert delays == [75]
+    assert len(session.requests) == 2
+
+
+def test_failure_reports_relevant_rate_limit_headers_only():
+    session = FakeSession(
+        status_code=429,
+        headers={
+            "Retry-After": "7",
+            "RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": "1787599662",
+            "Set-Cookie": "secret",
+        },
+    )
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=session,
+        write_attempts=1,
+    )
+    try:
+        client._request("GET", "/api/objects/track/")
+        raise AssertionError("Expected rate-limited Gaia read to fail")
+    except sync.GaiaRateLimited as error:
+        message = str(error)
+        assert "status 429" in message
+        assert "Retry-After=7" in message
+        assert "RateLimit-Remaining=0" in message
+        assert "X-RateLimit-Reset=1787599662" in message
+        assert "Set-Cookie" not in message
+        assert "secret" not in message
 
 
 def test_filters_exact_activity_types():
