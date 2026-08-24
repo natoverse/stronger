@@ -32,5 +32,5 @@ jobs:
         env:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           GAIA_SESSION_ID: ${{ secrets.GAIA_SESSION_ID }}
-          GAIA_FOLDER_ID: ${{ vars.GAIA_FOLDER_ID }}
+          GAIA_FOLDER_ID: ${{ secrets.GAIA_FOLDER_ID }}
         run: python scripts/garmin-gaia-sync.py ${{ inputs.backfill && '--backfill' || '' }}
