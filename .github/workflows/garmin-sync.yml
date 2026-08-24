@@ -14,7 +14,6 @@ on:
         description: 'Overwrite (upsert) existing rows for the fetched window instead of only appending new ones'
         type: boolean
         default: true
-
 permissions:
   contents: read
 

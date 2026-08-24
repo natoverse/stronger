@@ -1,0 +1,36 @@
+name: Garmin to Gaia Sync
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: 'Sync all eligible Garmin tracks since 2015-01-01'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Sync Garmin tracks to Gaia
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GAIA_SESSION_ID: ${{ secrets.GAIA_SESSION_ID }}
+          GAIA_FOLDER_ID: ${{ vars.GAIA_FOLDER_ID }}
+        run: python scripts/garmin-gaia-sync.py ${{ inputs.backfill && '--backfill' || '' }}
