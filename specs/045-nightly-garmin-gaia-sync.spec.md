@@ -21,13 +21,13 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - [ ] `GARMIN_TOKENS` is reused, while Gaia session credentials and the folder identifier are stored as masked Actions secrets; neither appears in logs or artifacts.
 - [ ] Authentication expiry, rate limiting, malformed/empty GPX, rejected upload, and folder-assignment failure produce a non-zero result and an actionable per-activity summary; successful tracks are not rolled back.
 - [ ] Tests cover type filtering, coordinate validation, identity/idempotency, sequencing, configuration validation, and mocked Garmin/Gaia failure responses without contacting either service.
-- [ ] Normal runs query a 72-hour rolling window, and a manual boolean option queries all Garmin history from 2015-01-01.
+- [ ] Normal runs query a 30-day rolling window, and a manual boolean option queries all Garmin history from 2015-01-01.
 
 ## Scope
 
 ### In scope
 - A personal-account, opt-in nightly sync for new hiking and mountaineering tracks in a standalone workflow.
-- Configurable Gaia destination folder, conservative request pacing, a 72-hour default lookback, a 2015 full-history backfill, and resumable/idempotent retries.
+- Configurable Gaia destination folder, conservative request pacing, a 30-day default lookback, a 2015 full-history backfill, and resumable/idempotent retries.
 - Setup and recovery documentation, including manual Gaia session-cookie renewal and the unsupported-API warning.
 
 ### Out of scope
@@ -49,7 +49,7 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - The standalone workflow runs nightly at 03:00 UTC and can be enabled, disabled,
   manually run, or rescheduled through GitHub Actions without custom gate
   variables.
-- Scheduled and normal manual runs upload the last 72 hours directly. The
+- Scheduled and normal manual runs upload the last 30 days directly. The
   manual `backfill` input queries all activities from 2015-01-01.
 - The sync uses the existing `requests` dependency rather than adding
   the unmaintained, non-PyPI `gaiagpsclient`. It requires an immutable
@@ -80,3 +80,6 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   false. When enabled for repeated testing, the sync uploads a new track even
   when the Garmin activity marker already exists; scheduled and ordinary manual
   runs retain the original idempotent behavior.
+- Default sync window and track colors (2026-08-24): Normal runs now query today
+  plus the prior 29 calendar days. Each new Gaia track receives an independently
+  generated random six-digit hexadecimal color instead of a fixed color.

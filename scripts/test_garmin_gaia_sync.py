@@ -111,7 +111,8 @@ def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
     client.session.cookies.set(
         "csrftoken", "csrf-secret", domain="www.gaiagps.com"
     )
-    client.create_track(VALID_GPX, "Ridge", "folder", "123")
+    with mock.patch.object(sync.random, "randrange", return_value=0x12AB34):
+        client.create_track(VALID_GPX, "Ridge", "folder", "123")
 
     assert session.requests[0][:2] == (
         "GET",
@@ -134,6 +135,7 @@ def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
     ]
     assert payload[0]["name"] == "Ridge"
     assert payload[0]["source"] == "[Garmin activity:123]"
+    assert payload[0]["hex_color"] == "#12AB34"
     assert payload[0]["parent_folder_id"] == "folder"
     assert payload[0]["stats"]["point_count"] == 2
     assert payload[0]["create_date"] == "2026-08-23T00:00:00.000Z"
@@ -315,9 +317,20 @@ def test_missing_or_ambiguous_folder_fails_before_upload():
         assert gaia.uploads == 0
 
 
-def test_default_window_covers_last_72_hours():
+def test_each_track_gets_a_random_color():
+    with mock.patch.object(
+        sync.random, "randrange", side_effect=(0x000001, 0xABCDEF)
+    ):
+        first = sync.gaia_track_payload(VALID_GPX, "First", "folder", "123")
+        second = sync.gaia_track_payload(VALID_GPX, "Second", "folder", "456")
+
+    assert first["hex_color"] == "#000001"
+    assert second["hex_color"] == "#ABCDEF"
+
+
+def test_default_window_covers_last_30_days():
     assert sync.activity_date_range(today=date(2026, 8, 24)) == (
-        "2026-08-21",
+        "2026-07-26",
         "2026-08-25",
     )
 
@@ -334,7 +347,7 @@ class FakeGarmin:
         GPX = "gpx"
 
     def get_activities_by_date(self, start_date, end_date):
-        assert (start_date, end_date) == ("2026-08-21", "2026-08-25")
+        assert (start_date, end_date) == ("2026-07-26", "2026-08-25")
         return [
             {
                 "activityId": 123,
