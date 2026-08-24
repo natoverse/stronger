@@ -32,15 +32,15 @@ GAIA_BASE_URL = "https://www.gaiagps.com"
 MOVING_SPEED_THRESHOLD = 0.25
 GAIA_WRITE_ATTEMPTS = 3
 GAIA_RETRY_DELAY_SECONDS = 30.0
-RATE_LIMIT_HEADERS = (
-    "Retry-After",
-    "RateLimit-Limit",
-    "RateLimit-Remaining",
-    "RateLimit-Reset",
-    "RateLimit-Policy",
-    "X-RateLimit-Limit",
-    "X-RateLimit-Remaining",
-    "X-RateLimit-Reset",
+SENSITIVE_RESPONSE_HEADERS = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "proxy-authorization",
+        "set-cookie",
+        "x-api-key",
+        "x-csrftoken",
+    }
 )
 
 
@@ -321,9 +321,10 @@ class GaiaClient:
     @staticmethod
     def _response_details(response):
         headers = [
-            f"{name}={response.headers[name]}"
-            for name in RATE_LIMIT_HEADERS
-            if response.headers.get(name) is not None
+            f"{name}={'<redacted>' if name.lower() in SENSITIVE_RESPONSE_HEADERS else value}"
+            for name, value in sorted(
+                response.headers.items(), key=lambda item: item[0].lower()
+            )
         ]
         detail = f"status {response.status_code}"
         if headers:

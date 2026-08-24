@@ -91,6 +91,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - Gaia rate-limit diagnostics (2026-08-24): Throttled reads and writes retry
   twice, honor numeric or HTTP-date `Retry-After` values when present, and
   otherwise retain the 30- and 60-second exponential backoff. Retry and terminal
-  messages include the status and an allowlist of safe rate-limit headers. The
+  messages include the status and all response headers, with sensitive header
+  values such as `Set-Cookie` redacted. This makes absent `Retry-After` headers
+  distinguishable from diagnostics that omitted them. The
   two-second inter-write delay remains configurable; persistent backfill
   throttling should be evaluated at five- and ten-second spacing.

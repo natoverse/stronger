@@ -223,12 +223,15 @@ def test_rate_limit_honors_retry_after_http_date_for_reads():
     assert len(session.requests) == 2
 
 
-def test_failure_reports_relevant_rate_limit_headers_only():
+def test_failure_reports_all_response_headers_and_redacts_sensitive_values():
     session = FakeSession(
         status_code=429,
         headers={
+            "CF-Ray": "diagnostic-id",
+            "Content-Type": "text/html",
             "Retry-After": "7",
             "RateLimit-Remaining": "0",
+            "X-Api-Key": "api-secret",
             "X-RateLimit-Reset": "1787599662",
             "Set-Cookie": "secret",
         },
@@ -248,7 +251,10 @@ def test_failure_reports_relevant_rate_limit_headers_only():
         assert "Retry-After=7" in message
         assert "RateLimit-Remaining=0" in message
         assert "X-RateLimit-Reset=1787599662" in message
-        assert "Set-Cookie" not in message
+        assert "CF-Ray=diagnostic-id" in message
+        assert "Content-Type=text/html" in message
+        assert "Set-Cookie=<redacted>" in message
+        assert "X-Api-Key=<redacted>" in message
         assert "secret" not in message
 
 
