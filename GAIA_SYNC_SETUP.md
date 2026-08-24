@@ -1,7 +1,7 @@
 # Garmin to Gaia Sync Setup
 
-Stronger can sync recent Garmin hiking and mountaineering tracks to Gaia after
-the Garmin activity sync succeeds. Gaia does not publish a write API or OAuth
+Stronger can sync recent Garmin hiking and mountaineering tracks to Gaia in a
+standalone GitHub Actions workflow. Gaia does not publish a write API or OAuth
 flow, so this automation uses unsupported private Gaia web behavior.
 
 > **Important:** Automated upload uses unsupported private Gaia web behavior.
@@ -14,10 +14,12 @@ flow, so this automation uses unsupported private Gaia web behavior.
 2. Sign in to Gaia in your browser, inspect the `gaiagps.com` cookies, and copy
    the `sessionid` value into the Actions secret `GAIA_SESSION_ID`. Never store
    it as a variable, file, log, or artifact.
-3. Set the Actions variable `GAIA_SYNC_ENABLED` to `true`.
-4. Optionally set `GAIA_SYNC_UTC_HOUR` to the desired UTC hour (`3` by default).
-5. Run **Garmin Sync** manually with **gaia_sync** checked, or wait for the
-   configured UTC hour.
+3. Open **Actions → Garmin to Gaia Sync**, enable the workflow, and run it
+   manually to verify the configuration.
+
+The workflow runs nightly at 03:00 UTC. To change the schedule, edit the cron
+expression in `.github/workflows/garmin-gaia-sync.yml`. Disable or enable
+scheduled runs from the workflow's Actions page.
 
 The configured folder must already exist and match exactly one folder ID. The
 sync never creates or guesses a destination folder. It checks the Garmin ID
@@ -30,10 +32,10 @@ without a valid track-point latitude and longitude are skipped.
 
 ## Backfilling older tracks
 
-After verifying normal manual runs, manually run **Garmin Sync** with
-**gaia_backfill** checked. This option implies a Gaia sync and queries every
-Garmin activity since **2015-01-01**. Existing activity markers prevent
-duplicate Gaia imports, so interrupted backfills can be rerun safely.
+After verifying normal manual runs, manually run **Garmin to Gaia Sync** with
+**backfill** checked. This queries every Garmin activity since **2015-01-01**.
+Existing activity markers prevent duplicate Gaia imports, so interrupted
+backfills can be rerun safely.
 
 ## Recovery
 

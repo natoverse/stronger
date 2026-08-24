@@ -4,7 +4,7 @@
 
 ## What
 
-After the Garmin activity sync succeeds, a nightly, opt-in sync finds new activities whose Garmin `activityType.typeKey` is `hiking` or `mountaineering`. It downloads each activity's GPX export, verifies that it contains track points with valid latitude and longitude attributes, and imports valid tracks into a configured Gaia folder. Other activity types and activities without coordinates are skipped and reported.
+A standalone nightly sync finds new activities whose Garmin `activityType.typeKey` is `hiking` or `mountaineering`. It downloads each activity's GPX export, verifies that it contains track points with valid latitude and longitude attributes, and imports valid tracks into a configured Gaia folder. Other activity types and activities without coordinates are skipped and reported.
 
 Garmin coordinates are feasible: Garmin's Activity API documents FIT/GPX/TCX activity files, and the already-used unofficial `python-garminconnect` client exposes `download_activity(activity_id, Garmin.ActivityDownloadFormat.GPX)`, returning the raw bytes from Garmin Connect's `/download-service/export/gpx/activity/{activity_id}` endpoint. For an outdoor activity recorded with GPS, that export carries the recorded coordinates as GPX track points; the sync still validates every export because an eligible activity may have been recorded without GPS. GPX is the safest interchange format because Gaia officially accepts it. The sync reuses `GARMIN_TOKENS`; its Gaia folder and credential are separate configuration.
 
@@ -12,7 +12,7 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 
 ## Acceptance Criteria
 
-- [ ] A manually enabled nightly job starts only after that cycle's Garmin activity sync succeeds; a failed or skipped upstream sync prevents Gaia writes.
+- [ ] A standalone workflow supports nightly scheduling, manual verification runs, and enable/disable controls through GitHub Actions.
 - [ ] Only exact, verified Garmin type keys for hiking and mountaineering are eligible; fixtures prove eligible and ineligible filtering.
 - [ ] Each eligible activity is downloaded as GPX and is uploaded only when XML validation finds at least one valid `trkpt` latitude/longitude pair.
 - [ ] Imported tracks land in the configured existing Gaia folder, and a missing or ambiguous folder fails safely without creating or choosing another folder.
@@ -26,7 +26,7 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 ## Scope
 
 ### In scope
-- A personal-account, opt-in nightly sync for new hiking and mountaineering tracks, sequenced after the existing Garmin activity sync.
+- A personal-account, opt-in nightly sync for new hiking and mountaineering tracks in a standalone workflow.
 - Configurable Gaia destination folder, conservative request pacing, a 72-hour default lookback, a 2015 full-history backfill, and resumable/idempotent retries.
 - Setup and recovery documentation, including manual Gaia session-cookie renewal and the unsupported-API warning.
 
@@ -37,8 +37,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 
 ## Notes
 
-- Existing context: `.github/workflows/garmin-sync.yml` currently runs hourly and `scripts/garmin-sync.py` fetches 30 recent activities with `GARMIN_TOKENS`, deduplicating Sheet rows by `activityId`. The new nightly stage must not infer completion merely from wall-clock ordering.
-- **Sequencing decision:** add the Gaia stage as a dependent job in the existing hourly workflow (`needs: sync`), gated to one configured UTC hour on scheduled runs while remaining manually dispatchable. A separate nightly cron would only approximate ordering and could race the Garmin job.
+- Existing context: `.github/workflows/garmin-sync.yml` runs hourly, but the Gaia sync reads activities directly from Garmin and does not depend on the Google Sheets write.
+- **Workflow separation decision:** use a standalone `garmin-gaia-sync.yml` workflow with its own nightly cron and manual dispatch. GitHub's workflow controls replace custom enable and UTC-hour variables.
 - Garmin's official Activity API confirms activity file delivery in FIT, GPX, and TCX, but access requires an approved business integration: https://developer.garmin.com/gc-developer-program/activity-api/
 - The installed client family exposes `download_activity(..., ActivityDownloadFormat.GPX)` against Garmin Connect's GPX export endpoint and returns raw bytes: https://github.com/cyberjunky/python-garminconnect/blob/981d150caeda7d632224a75f3895c08df27a2a34/garminconnect/__init__.py#L2825-L2862
 - Gaia officially supports manual GPX, KML/KMZ, GeoJSON, and FIT imports: https://help.gaiagps.com/hc/en-us/articles/360052763513-Import-GPX-KML-KMZ-GeoJSON-or-FIT-Files-on-gaiagps-com
@@ -46,12 +46,11 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 
 ## Implementation decisions
 
-- The nightly job is opt-in through `GAIA_SYNC_ENABLED` and runs as a dependent
-  job in the existing Garmin workflow at `GAIA_SYNC_UTC_HOUR` (03:00 UTC by
-  default). Manual dispatch uses `gaia_sync`; `gaia_backfill` also implies a run.
-- Configured scheduled runs and manual `gaia_sync` runs upload the last 72 hours
-  directly. The `gaia_backfill` input implies a Gaia run and queries all
-  activities from 2015-01-01.
+- The standalone workflow runs nightly at 03:00 UTC and can be enabled, disabled,
+  manually run, or rescheduled through GitHub Actions without custom gate
+  variables.
+- Scheduled and normal manual runs upload the last 72 hours directly. The
+  manual `backfill` input queries all activities from 2015-01-01.
 - The sync uses the existing `requests` dependency rather than adding
   the unmaintained, non-PyPI `gaiagpsclient`. It requires an immutable
   `GAIA_FOLDER_ID`, validates that ID before upload, and never creates a folder.
