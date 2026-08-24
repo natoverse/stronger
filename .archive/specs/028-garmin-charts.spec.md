@@ -170,3 +170,10 @@ Conversions are display-only — storage remains in metric (matching Strava API 
   clearing the query restores the selected-range list.
 - Inactive date-range controls use the opaque app background so scrolling content
   does not show through them.
+
+## Iteration: sticky chart control spacing
+
+- The gap between the sticky app header and chart controls is reduced from 0.5rem to
+  0.25rem.
+- The header extends its opaque app background across that gap so scrolling content
+  cannot show behind it.
