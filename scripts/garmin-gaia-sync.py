@@ -357,7 +357,14 @@ def _one_by_id(objects, object_id, object_name):
     return matches[0]
 
 
-def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
+def sync_gpx_to_gaia(
+    client,
+    gpx_bytes,
+    title,
+    folder_id,
+    activity_id,
+    allow_duplicates=False,
+):
     """Upload or recover one activity and assign all its tracks to a folder."""
     folders = client.list_objects("folder")
     destination = _one_by_id(folders, folder_id, "folder")
@@ -373,6 +380,27 @@ def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
     ]
     matching_ids = [str(track["id"]) for track in matching_tracks]
     destination_ids = [str(track_id) for track_id in destination.get("tracks", [])]
+
+    if allow_duplicates:
+        existing_ids = set(matching_ids)
+        client.create_track(gpx_bytes, title, folder_id, activity_id)
+        tracks = client.list_objects("track")
+        new_matching_ids = [
+            str(track["id"])
+            for track in tracks
+            if str(track["id"]) not in existing_ids
+            and any(
+                marker in str(track.get(field) or "")
+                for field in ("source", "title", "name")
+            )
+        ]
+        if not new_matching_ids:
+            raise RuntimeError("Gaia import produced no new tracks")
+        refreshed = _one_by_id(client.list_objects("folder"), folder_id, "folder")
+        refreshed_ids = [str(track_id) for track_id in refreshed.get("tracks", [])]
+        if any(track_id not in refreshed_ids for track_id in new_matching_ids):
+            raise RuntimeError("Gaia did not retain destination folder assignment")
+        return "uploaded"
 
     if matching_ids and all(track_id in destination_ids for track_id in matching_ids):
         return "duplicate"
@@ -421,7 +449,15 @@ def activity_date_range(backfill=False, today=None):
     return start_date, (today + timedelta(days=1)).isoformat()
 
 
-def run(garmin, output_dir, gaia, folder_id, backfill=False, today=None):
+def run(
+    garmin,
+    output_dir,
+    gaia,
+    folder_id,
+    backfill=False,
+    today=None,
+    allow_duplicates=False,
+):
     """Process activities in the selected window and return a summary."""
     output_dir.mkdir(parents=True, exist_ok=True)
     start_date, end_date = activity_date_range(backfill, today)
@@ -448,7 +484,12 @@ def run(garmin, output_dir, gaia, folder_id, backfill=False, today=None):
             path = output_dir / f"garmin-{activity_id}.gpx"
             path.write_bytes(prepared)
             result = sync_gpx_to_gaia(
-                gaia, prepared, activity_title(activity), folder_id, activity_id
+                gaia,
+                prepared,
+                activity_title(activity),
+                folder_id,
+                activity_id,
+                allow_duplicates=allow_duplicates,
             )
             summary.append((activity_id, result))
         except Exception as error:  # noqa: BLE001 - report each activity and continue
@@ -461,6 +502,7 @@ def run(garmin, output_dir, gaia, folder_id, backfill=False, today=None):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--backfill", action="store_true")
+    parser.add_argument("--allow-duplicates", action="store_true")
     parser.add_argument("--output-dir", default="gaia-gpx")
     args = parser.parse_args(argv)
 
@@ -490,6 +532,7 @@ def main(argv=None):
         gaia=gaia,
         folder_id=folder_id,
         backfill=args.backfill,
+        allow_duplicates=args.allow_duplicates,
     )
     print("Garmin-to-Gaia summary:")
     if not summary:

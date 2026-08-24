@@ -37,6 +37,10 @@ Normal runs query the last 72 hours (today plus the prior three calendar days).
 Only exact Garmin type keys `hiking` and `mountaineering` are eligible. GPX files
 without a valid track-point latitude and longitude are skipped.
 
+Manual runs can enable **allow_duplicates** to upload eligible tracks even when
+their Garmin activity markers already exist in Gaia. It defaults to false so
+scheduled and ordinary manual runs remain idempotent.
+
 ## Backfilling older tracks
 
 After verifying normal manual runs, manually run **Garmin to Gaia Sync** with

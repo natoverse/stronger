@@ -76,3 +76,7 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   durable Garmin activity ID marker is stored in Gaia's `source` metadata;
   duplicate detection also recognizes older imports whose marker remains in
   the title.
+- Manual workflow runs expose an `allow_duplicates` boolean, defaulting to
+  false. When enabled for repeated testing, the sync uploads a new track even
+  when the Garmin activity marker already exists; scheduled and ordinary manual
+  runs retain the original idempotent behavior.
