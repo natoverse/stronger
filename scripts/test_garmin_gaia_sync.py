@@ -231,6 +231,7 @@ def test_failure_reports_all_response_headers_and_redacts_sensitive_values():
             "Content-Type": "text/html",
             "Retry-After": "7",
             "RateLimit-Remaining": "0",
+            "X-Api-Key": "api-secret",
             "X-RateLimit-Reset": "1787599662",
             "Set-Cookie": "secret",
         },
@@ -253,6 +254,7 @@ def test_failure_reports_all_response_headers_and_redacts_sensitive_values():
         assert "CF-Ray=diagnostic-id" in message
         assert "Content-Type=text/html" in message
         assert "Set-Cookie=<redacted>" in message
+        assert "X-Api-Key=<redacted>" in message
         assert "secret" not in message
 
 

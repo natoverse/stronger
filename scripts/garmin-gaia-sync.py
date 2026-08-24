@@ -32,7 +32,16 @@ GAIA_BASE_URL = "https://www.gaiagps.com"
 MOVING_SPEED_THRESHOLD = 0.25
 GAIA_WRITE_ATTEMPTS = 3
 GAIA_RETRY_DELAY_SECONDS = 30.0
-SENSITIVE_RESPONSE_HEADERS = frozenset({"set-cookie"})
+SENSITIVE_RESPONSE_HEADERS = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "proxy-authorization",
+        "set-cookie",
+        "x-api-key",
+        "x-csrftoken",
+    }
+)
 
 
 class GaiaRateLimited(RuntimeError):
