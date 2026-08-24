@@ -33,7 +33,7 @@ Legacy tracks with the marker in their name remain recognized.
 The sync converts each Garmin GPX export to the same JSON track representation
 used by Gaia's web map and creates it directly in the configured folder.
 
-Normal runs query the last 72 hours (today plus the prior three calendar days).
+Normal runs query the last 30 days (today plus the prior 29 calendar days).
 Only exact Garmin type keys `hiking` and `mountaineering` are eligible. GPX files
 without a valid track-point latitude and longitude are skipped.
 

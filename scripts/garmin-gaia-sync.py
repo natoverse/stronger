@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import random
 import sys
 import tempfile
 import time
@@ -23,11 +24,10 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
-ROLLING_DAYS = 4
+ROLLING_DAYS = 30
 BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
-GAIA_DEFAULT_TRACK_COLOR = "#FFEF00"
 MOVING_SPEED_THRESHOLD = 0.25
 
 
@@ -265,7 +265,7 @@ def gaia_track_payload(gpx_bytes, title, folder_id, activity_id):
         "source": activity_marker(activity_id),
         "stats": stats,
         "imported": True,
-        "hex_color": GAIA_DEFAULT_TRACK_COLOR,
+        "hex_color": f"#{random.randrange(0x1000000):06X}",
         "create_date": _iso_utc(points[0]["time"]),
         "parent_folder_id": folder_id,
         "activity": None,
