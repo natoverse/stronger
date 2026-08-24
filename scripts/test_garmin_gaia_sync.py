@@ -111,8 +111,7 @@ def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
     client.session.cookies.set(
         "csrftoken", "csrf-secret", domain="www.gaiagps.com"
     )
-    with tempfile.TemporaryDirectory() as directory:
-        client.create_track(VALID_GPX, "[Garmin activity:123] - Ridge", "folder")
+    client.create_track(VALID_GPX, "[Garmin activity:123] - Ridge", "folder")
 
     assert session.requests[0][:2] == (
         "GET",
