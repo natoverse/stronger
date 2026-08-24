@@ -15,18 +15,39 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin, urlsplit
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
 ROLLING_DAYS = 4
 BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
+
+
+class _AssetParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.sources = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "script" and values.get("src"):
+            self.sources.append(values["src"])
+        elif tag == "link" and values.get("href"):
+            relation = values.get("rel") or ""
+            if (
+                values["href"].partition("?")[0].endswith(".js")
+                or "modulepreload" in relation
+            ):
+                self.sources.append(values["href"])
 
 
 def encode_upload(path, csrf_token):
@@ -182,7 +203,7 @@ class GaiaClient:
 
     def upload_file(self, path):
         time.sleep(self.request_delay)
-        self._request("GET", "/upload/")
+        upload_page = self._request("GET", "/upload/")
         csrf_token = self.session.cookies.get("csrftoken")
         if not csrf_token:
             raise RuntimeError("Gaia upload page did not provide a CSRF token")
@@ -203,8 +224,34 @@ class GaiaClient:
             raise RuntimeError("Gaia queued the upload; folder assignment is unknown")
         folder_prefix = f"{GAIA_BASE_URL}/datasummary/folder/"
         if not response.url.startswith(folder_prefix):
-            raise RuntimeError("Gaia rejected the GPX upload")
+            candidates = self._current_import_paths(upload_page.content)
+            detail = ", ".join(candidates) if candidates else "none"
+            raise RuntimeError(
+                f"Gaia rejected the GPX upload; import paths found: {detail}"
+            )
         return response.url.removeprefix(folder_prefix).strip("/")
+
+    def _current_import_paths(self, html):
+        parser = _AssetParser()
+        parser.feed(html.decode("utf-8", errors="replace"))
+        candidates = set()
+        for source in parser.sources[:30]:
+            script_url = urljoin(f"{GAIA_BASE_URL}/map/", source)
+            hostname = urlsplit(script_url).hostname or ""
+            if hostname != "gaiagps.com" and not hostname.endswith(".gaiagps.com"):
+                continue
+            response = self.session.request("GET", script_url)
+            if not response.ok:
+                continue
+            candidates.update(
+                match.decode("utf-8", errors="replace")
+                for match in re.findall(
+                    rb"""["'](/[^"'\\\s]{0,100}(?:upload|import)[^"'\\\s]{0,100})["']""",
+                    response.content,
+                    flags=re.IGNORECASE,
+                )
+            )
+        return sorted(candidates)[:20]
 
     def put_folder(self, folder):
         time.sleep(self.request_delay)

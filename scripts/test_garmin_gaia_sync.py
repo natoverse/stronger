@@ -134,6 +134,26 @@ def test_upload_uses_requests_encoded_multipart_body():
     assert upload_request["headers"]["X-CSRFToken"] == "csrf-secret"
 
 
+def test_current_import_paths_read_gaia_hosted_assets_only():
+    class AssetSession(FakeSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if url == "https://static.gaiagps.com/assets/map.js":
+                response.content = b'const endpoint="/api/import/file/";'
+            return response
+
+    session = AssetSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    html = b"""
+      <script src="https://static.gaiagps.com/assets/map.js"></script>
+      <script src="https://example.com/untrusted.js"></script>
+    """
+    assert client._current_import_paths(html) == ["/api/import/file/"]
+    assert [request[1] for request in session.requests] == [
+        "https://static.gaiagps.com/assets/map.js"
+    ]
+
+
 def test_upload_fails_without_csrf_token():
     client = sync.GaiaClient(
         "secret",
