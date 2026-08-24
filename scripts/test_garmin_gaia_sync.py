@@ -22,12 +22,6 @@ VALID_GPX = b"""<?xml version="1.0"?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1">
   <trk><name>Old name</name><trkseg><trkpt lat="47.1" lon="-122.2"/></trkseg></trk>
 </gpx>"""
-UPLOAD_FORM = b"""
-<form action="/upload/current/" method="post">
-  <input type="hidden" name="csrfmiddlewaretoken" value="masked-csrf">
-  <input type="hidden" name="source" value="web">
-  <input type="file" name="current-files">
-</form>"""
 
 
 class FakeCookies:
@@ -108,25 +102,9 @@ def test_auth_verification_rejects_unauthorized_session():
             assert str(error) == "Gaia session expired or was rejected"
 
 
-def test_upload_uses_curl_multipart_form():
-    created = []
-
-    class FakeCurlMime:
-        def __init__(self):
-            self.parts = []
-            self.closed = False
-            created.append(self)
-
-        def addpart(self, **kwargs):
-            self.parts.append(kwargs)
-
-        def close(self):
-            self.closed = True
-
-    fake_curl_cffi = types.SimpleNamespace(CurlMime=FakeCurlMime)
+def test_upload_uses_requests_encoded_multipart_body():
     session = FakeSession(
         response_url="https://www.gaiagps.com/datasummary/folder/temp/",
-        content=UPLOAD_FORM,
     )
     client = sync.GaiaClient("secret", request_delay=0, session=session)
     client.session.cookies.set(
@@ -135,113 +113,32 @@ def test_upload_uses_curl_multipart_form():
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "track.gpx"
         path.write_bytes(VALID_GPX)
-        with mock.patch.dict(sys.modules, {"curl_cffi": fake_curl_cffi}):
-            assert client.upload_file(path) == "temp"
+        assert client.upload_file(path) == "temp"
 
-    assert created[0].parts == [
-        {
-            "name": "current-files",
-            "filename": "track.gpx",
-            "local_path": path,
-        }
-    ]
-    assert created[0].closed
     assert session.requests[0] == (
         "GET",
         "https://www.gaiagps.com/upload/",
         {},
     )
-    assert session.requests[1][2] == {
-        "multipart": created[0],
-        "data": {
-            "csrfmiddlewaretoken": "masked-csrf",
-            "source": "web",
-            "name": "track.gpx",
-        },
-        "allow_redirects": True,
-        "headers": {
-            "Origin": "https://www.gaiagps.com",
-            "Referer": "https://www.gaiagps.com/upload/",
-            "X-CSRFToken": "csrf-secret",
-        },
-    }
-
-
-def test_upload_form_rejects_missing_or_cross_origin_forms():
-    for html in (
-        b"<html></html>",
-        b"<form action='https://example.com'><input type='file' name='file'></form>",
-    ):
-        try:
-            sync.upload_form(html)
-            raise AssertionError("Expected invalid Gaia upload form to fail")
-        except RuntimeError:
-            pass
-
-
-def test_upload_candidate_discovery_only_reads_same_origin_scripts():
-    class CandidateSession(FakeSession):
-        def request(self, method, url, **kwargs):
-            response = super().request(method, url, **kwargs)
-            if url.endswith("/assets/app.js"):
-                response.content = (
-                    b'const endpoint="/api/import/files/";'
-                    b'const unrelated="/api/tracks/";'
-                )
-            return response
-
-    session = CandidateSession()
-    client = sync.GaiaClient("secret", request_delay=0, session=session)
-    html = b"""
-      <script src="/assets/app.js"></script>
-      <script src="https://example.com/untrusted.js"></script>
-    """
-    assert client._upload_candidates(html) == ["/api/import/files/"]
-    assert [request[1] for request in session.requests] == [
-        "https://www.gaiagps.com/assets/app.js"
-    ]
-
-
-def test_upload_candidate_discovery_falls_back_to_map_assets():
-    class CandidateSession(FakeSession):
-        def request(self, method, url, **kwargs):
-            response = super().request(method, url, **kwargs)
-            if url.endswith("/map/"):
-                response.content = b'<script src="/assets/map.js"></script>'
-            elif url.endswith("/assets/map.js"):
-                response.content = b'const endpoint="/api/upload/current/";'
-            return response
-
-    session = CandidateSession()
-    client = sync.GaiaClient("secret", request_delay=0, session=session)
-    assert client._upload_candidates(b"<html></html>") == [
-        "/api/upload/current/"
-    ]
-    assert [request[1] for request in session.requests] == [
-        "https://www.gaiagps.com/map/",
-        "https://www.gaiagps.com/assets/map.js",
-    ]
-
-
-def test_upload_candidate_discovery_reads_module_preloads():
-    class CandidateSession(FakeSession):
-        def request(self, method, url, **kwargs):
-            response = super().request(method, url, **kwargs)
-            response.content = b'const endpoint="/api/import/current/";'
-            return response
-
-    session = CandidateSession()
-    client = sync.GaiaClient("secret", request_delay=0, session=session)
-    html = b'<link rel="modulepreload" href="/assets/import.js">'
-    assert client._upload_candidates(html) == ["/api/import/current/"]
-    assert session.requests[0][1] == "https://www.gaiagps.com/assets/import.js"
+    upload_request = session.requests[1][2]
+    assert upload_request["allow_redirects"] is True
+    assert b'name="name"' in upload_request["data"]
+    assert b"track.gpx" in upload_request["data"]
+    assert b'name="csrfmiddlewaretoken"' in upload_request["data"]
+    assert b"csrf-secret" in upload_request["data"]
+    assert b'name="files"; filename="track.gpx"' in upload_request["data"]
+    assert VALID_GPX in upload_request["data"]
+    assert upload_request["headers"]["Content-Type"].startswith(
+        "multipart/form-data; boundary="
+    )
+    assert upload_request["headers"]["X-CSRFToken"] == "csrf-secret"
 
 
 def test_upload_fails_without_csrf_token():
     client = sync.GaiaClient(
         "secret",
         request_delay=0,
-        session=FakeSession(content=UPLOAD_FORM),
+        session=FakeSession(),
     )
     try:
         client.upload_file(Path("unused.gpx"))

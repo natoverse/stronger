@@ -65,10 +65,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   Chrome impersonation. Authentication is now checked against the protected
   folder API rather than the public profile page, and the session cookie is
   scoped to the exact `www.gaiagps.com` host used by the client.
-- GPX uploads use `curl_cffi.CurlMime` rather than the Requests-compatible
-  `files` argument, which `curl_cffi` deliberately does not support.
 - Before uploading, the client loads Gaia's upload page to initialize the
   session's CSRF cookie, then submits that token with same-origin headers.
-- The upload request reads the current file field, same-origin form action, and
-  hidden inputs from Gaia's upload page rather than assuming the legacy form
-  remains unchanged.
+- GPX uploads use Requests to encode the legacy multipart form exactly as Gaia
+  expects, then send that body through the browser-impersonated `curl_cffi`
+  session because `curl_cffi` deliberately does not implement `files=`.

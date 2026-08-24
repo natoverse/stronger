@@ -15,15 +15,12 @@ from __future__ import annotations
 import argparse
 import math
 import os
-import re
 import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
-from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urljoin
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
 ROLLING_DAYS = 4
@@ -32,62 +29,21 @@ MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
 
 
-class _UploadFormParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.current = None
-        self.forms = []
-        self.assets = []
+def encode_upload(path, csrf_token):
+    """Build the multipart body expected by Gaia's legacy upload endpoint."""
+    import requests
 
-    def handle_starttag(self, tag, attrs):
-        values = dict(attrs)
-        if tag == "form":
-            self.current = {
-                "action": values.get("action") or "/upload/",
-                "file_field": None,
-                "hidden": {},
-            }
-        elif tag == "script" and values.get("src"):
-            self.assets.append(values["src"])
-        elif tag == "link" and values.get("href"):
-            relation = values.get("rel") or ""
-            if (
-                values["href"].partition("?")[0].endswith(".js")
-                or "modulepreload" in relation
-            ):
-                self.assets.append(values["href"])
-        elif tag == "input" and self.current is not None:
-            input_type = (values.get("type") or "text").lower()
-            name = values.get("name")
-            if input_type == "file" and name:
-                self.current["file_field"] = name
-            elif input_type == "hidden" and name:
-                self.current["hidden"][name] = values.get("value") or ""
-
-    def handle_endtag(self, tag):
-        if tag == "form" and self.current is not None:
-            if self.current["file_field"]:
-                self.forms.append(self.current)
-            self.current = None
-
-
-def upload_form(html):
-    """Return the current same-origin Gaia upload form configuration."""
-    parser = _UploadFormParser()
-    parser.feed(html.decode("utf-8", errors="replace"))
-    if len(parser.forms) != 1:
-        raise RuntimeError(
-            f"Gaia upload page exposed {len(parser.forms)} file forms"
-        )
-    form = parser.forms[0]
-    action_url = urljoin(f"{GAIA_BASE_URL}/upload/", form["action"])
-    if not action_url.startswith(f"{GAIA_BASE_URL}/"):
-        raise RuntimeError("Gaia upload form action was not same-origin")
-    return (
-        action_url.removeprefix(GAIA_BASE_URL),
-        form["file_field"],
-        form["hidden"],
-    )
+    with path.open("rb") as gpx_file:
+        request = requests.Request(
+            "POST",
+            f"{GAIA_BASE_URL}/upload/",
+            files={"files": gpx_file},
+            data={
+                "name": path.name,
+                "csrfmiddlewaretoken": csrf_token,
+            },
+        ).prepare()
+    return request.body, request.headers["Content-Type"]
 
 
 def login_from_tokens(token_bundle):
@@ -225,97 +181,30 @@ class GaiaClient:
         return response.json()
 
     def upload_file(self, path):
-        from curl_cffi import CurlMime
-
         time.sleep(self.request_delay)
-        upload_page = self._request("GET", "/upload/")
+        self._request("GET", "/upload/")
         csrf_token = self.session.cookies.get("csrftoken")
         if not csrf_token:
             raise RuntimeError("Gaia upload page did not provide a CSRF token")
-        try:
-            action, file_field, hidden_fields = upload_form(upload_page.content)
-        except RuntimeError as error:
-            candidates = self._upload_candidates(upload_page.content)
-            detail = ", ".join(candidates) if candidates else "none"
-            final_path = upload_page.url.removeprefix(GAIA_BASE_URL)
-            raise RuntimeError(
-                f"{error} at {final_path}; import paths found: {detail}"
-            ) from error
-        multipart = CurlMime()
-        multipart.addpart(
-            name=file_field,
-            filename=path.name,
-            local_path=path,
+        body, content_type = encode_upload(path, csrf_token)
+        response = self._request(
+            "POST",
+            "/upload/",
+            data=body,
+            allow_redirects=True,
+            headers={
+                "Content-Type": content_type,
+                "Origin": GAIA_BASE_URL,
+                "Referer": f"{GAIA_BASE_URL}/upload/",
+                "X-CSRFToken": csrf_token,
+            },
         )
-        try:
-            response = self._request(
-                "POST",
-                action,
-                multipart=multipart,
-                data={**hidden_fields, "name": path.name},
-                allow_redirects=True,
-                headers={
-                    "Origin": GAIA_BASE_URL,
-                    "Referer": f"{GAIA_BASE_URL}/upload/",
-                    "X-CSRFToken": csrf_token,
-                },
-            )
-        finally:
-            multipart.close()
         if b"File uploaded to queue" in response.content:
             raise RuntimeError("Gaia queued the upload; folder assignment is unknown")
-        folder_id = response.url.rstrip("/").split("/")[-1]
-        if folder_id == "upload":
+        folder_prefix = f"{GAIA_BASE_URL}/datasummary/folder/"
+        if not response.url.startswith(folder_prefix):
             raise RuntimeError("Gaia rejected the GPX upload")
-        return folder_id
-
-    def _upload_candidates(self, html):
-        pages = [html]
-        initial_parser = _UploadFormParser()
-        initial_parser.feed(html.decode("utf-8", errors="replace"))
-        if not initial_parser.assets:
-            pages.append(self._request("GET", "/map/").content)
-
-        candidates = set()
-        sources = []
-        for page in pages:
-            parser = _UploadFormParser()
-            parser.feed(page.decode("utf-8", errors="replace"))
-            sources.extend(parser.assets)
-            sources.extend(
-                match.decode("utf-8", errors="replace")
-                for match in re.findall(
-                    rb"""(?:src|href)=["']([^"']+\.js(?:\?[^"']*)?)["']""",
-                    page,
-                    flags=re.IGNORECASE,
-                )
-            )
-            candidates.update(self._import_paths(page))
-        for source in dict.fromkeys(sources[:20]):
-            script_url = urljoin(f"{GAIA_BASE_URL}/upload/", source)
-            if not script_url.startswith(f"{GAIA_BASE_URL}/"):
-                continue
-            response = self._request(
-                "GET", script_url.removeprefix(GAIA_BASE_URL)
-            )
-            candidates.update(self._import_paths(response.content))
-        return sorted(candidates)[:20]
-
-    @staticmethod
-    def _import_paths(content):
-        paths = set()
-        for match in re.findall(
-            rb"""["']([^"'\\\s]{0,80}(?:upload|import)[^"'\\\s]{0,80})["']""",
-            content,
-            flags=re.IGNORECASE,
-        ):
-            candidate = match.decode("utf-8", errors="replace")
-            if (
-                "/" in candidate
-                and not candidate.partition("?")[0].endswith(".js")
-            ):
-                paths.add(candidate)
-        return paths
+        return response.url.removeprefix(folder_prefix).strip("/")
 
     def put_folder(self, folder):
         time.sleep(self.request_delay)
