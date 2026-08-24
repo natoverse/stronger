@@ -40,13 +40,16 @@ class FakeCookies:
 
 
 class FakeSession:
-    def __init__(self, status_code=200, response_url=None, content=b""):
+    def __init__(
+        self, status_code=200, response_url=None, content=b"", headers=None
+    ):
         self.headers = {}
         self.cookies = FakeCookies()
         self.requests = []
         self.status_code = status_code
         self.response_url = response_url
         self.content = content
+        self.response_headers = headers or {}
 
     def request(self, method, url, **kwargs):
         self.requests.append((method, url, kwargs))
@@ -55,6 +58,7 @@ class FakeSession:
             url=self.response_url or url,
             ok=self.status_code < 400,
             content=self.content,
+            headers=self.response_headers,
         )
 
 
@@ -152,6 +156,44 @@ def test_create_track_fails_without_csrf_token():
         raise AssertionError("Expected missing Gaia CSRF token to fail")
     except RuntimeError as error:
         assert str(error) == "Gaia map page did not provide a CSRF token"
+
+
+def test_write_rejection_retries_with_exponential_backoff():
+    session = FakeSession(status_code=403)
+    delays = []
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=session,
+        write_attempts=3,
+        retry_delay=5,
+        sleep=delays.append,
+    )
+    try:
+        client._request("POST", "/api/v3/tracks/")
+        raise AssertionError("Expected rejected Gaia write to fail")
+    except sync.GaiaWriteRejected as error:
+        assert "temporarily rate limited" in str(error)
+    assert delays == [5, 10]
+    assert len(session.requests) == 3
+
+
+def test_write_rejection_honors_retry_after():
+    session = FakeSession(status_code=429, headers={"Retry-After": "7"})
+    delays = []
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=session,
+        write_attempts=2,
+        sleep=delays.append,
+    )
+    try:
+        client._request("PUT", "/api/objects/folder/1/")
+        raise AssertionError("Expected rate-limited Gaia write to fail")
+    except sync.GaiaWriteRejected:
+        pass
+    assert delays == [7]
 
 
 def test_filters_exact_activity_types():
@@ -375,6 +417,42 @@ def test_run_uploads_only_eligible_valid_tracks():
         assert failures == 0
         assert summary == [("123", "uploaded")]
         assert [path.name for path in Path(directory).iterdir()] == ["garmin-123.gpx"]
+
+
+class RejectingGaia(FakeGaia):
+    def create_track(self, gpx_bytes, title, folder_id, activity_id):
+        self.uploads += 1
+        raise sync.GaiaWriteRejected("rate limited")
+
+
+def test_run_stops_after_persistent_gaia_write_rejection():
+    class TwoActivityGarmin(FakeGarmin):
+        def get_activities_by_date(self, start_date, end_date):
+            return [
+                {
+                    "activityId": 123,
+                    "activityName": "First",
+                    "activityType": {"typeKey": "hiking"},
+                },
+                {
+                    "activityId": 124,
+                    "activityName": "Second",
+                    "activityType": {"typeKey": "hiking"},
+                },
+            ]
+
+    with tempfile.TemporaryDirectory() as directory:
+        gaia = RejectingGaia([{"id": "destination", "tracks": []}], [])
+        summary, failures = sync.run(
+            TwoActivityGarmin(),
+            Path(directory),
+            gaia,
+            "destination",
+            today=date(2026, 8, 24),
+        )
+    assert failures == 1
+    assert summary == [("123", "failed: rate limited")]
+    assert gaia.uploads == 1
 
 
 def _run():

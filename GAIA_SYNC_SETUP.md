@@ -54,7 +54,7 @@ backfills can be rerun safely.
 |---------|--------|
 | Gaia session expired or rejected | Copy a fresh browser `sessionid` into the `GAIA_SESSION_ID` secret. The sync validates it against Gaia's protected folder API before contacting Garmin. |
 | Missing or ambiguous folder | Correct `GAIA_FOLDER_ID`; the sync does not upload before validating it. |
-| Gaia rate limit or rejected upload | Wait and rerun. Successful earlier tracks remain in Gaia. |
+| Gaia write rejected or rate limited | The sync retries writes with 30- and 60-second backoffs, then stops the run to avoid extending an IP-based throttle. Wait and rerun. Successful earlier tracks remain in Gaia. |
 | Marker or folder verification failed | Correct the Gaia destination state, then rerun; the activity marker prevents another upload after a partial import. |
 | Garmin GPX is malformed or empty | Retry later; the per-activity summary exits non-zero without uploading that file. |
 
