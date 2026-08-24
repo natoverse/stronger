@@ -133,7 +133,6 @@ def test_upload_uses_curl_multipart_form():
     assert created[0].parts == [
         {
             "name": "files",
-            "content_type": "application/gpx+xml",
             "filename": "track.gpx",
             "local_path": path,
         }

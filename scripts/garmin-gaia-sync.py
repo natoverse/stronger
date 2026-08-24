@@ -174,7 +174,6 @@ class GaiaClient:
         multipart = CurlMime()
         multipart.addpart(
             name="files",
-            content_type="application/gpx+xml",
             filename=path.name,
             local_path=path,
         )
