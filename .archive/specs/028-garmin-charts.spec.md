@@ -162,3 +162,11 @@ Conversions are display-only — storage remains in metric (matching Strava API 
 - Distance, elevation, and duration chart headers always lead with the total for
   the selected Month, rolling Year, or calendar year, regardless of the chart's
   daily, weekly, or monthly bar aggregation.
+
+## Iteration: activity log period behavior
+
+- Without a search query, the activity log follows the chart's selected date range.
+- While a search query is present, matching activities are shown across all dates;
+  clearing the query restores the selected-range list.
+- Inactive date-range controls use the opaque app background so scrolling content
+  does not show through them.
