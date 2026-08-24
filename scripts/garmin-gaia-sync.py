@@ -15,56 +15,19 @@ from __future__ import annotations
 import argparse
 import math
 import os
-import re
 import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from datetime import date, timedelta
-from html.parser import HTMLParser
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from urllib.parse import urljoin, urlsplit
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
 ROLLING_DAYS = 4
 BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
-
-
-class _AssetParser(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.sources = []
-
-    def handle_starttag(self, tag, attrs):
-        values = dict(attrs)
-        if tag == "script" and values.get("src"):
-            self.sources.append(values["src"])
-        elif tag == "link" and values.get("href"):
-            relation = values.get("rel") or ""
-            if (
-                values["href"].partition("?")[0].endswith(".js")
-                or "modulepreload" in relation
-            ):
-                self.sources.append(values["href"])
-
-
-def encode_upload(path, csrf_token):
-    """Build the multipart body expected by Gaia's legacy upload endpoint."""
-    import requests
-
-    with path.open("rb") as gpx_file:
-        request = requests.Request(
-            "POST",
-            f"{GAIA_BASE_URL}/upload/",
-            files={"files": gpx_file},
-            data={
-                "name": path.name,
-                "csrfmiddlewaretoken": csrf_token,
-            },
-        ).prepare()
-    return request.body, request.headers["Content-Type"]
+MOVING_SPEED_THRESHOLD = 0.25
 
 
 def login_from_tokens(token_bundle):
@@ -154,6 +117,159 @@ def prepare_gpx(gpx_bytes, title):
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
 
+def _child_text(element, local_name):
+    child = next(
+        (
+            item
+            for item in element
+            if item.tag.endswith(f"}}{local_name}") or item.tag == local_name
+        ),
+        None,
+    )
+    return child.text if child is not None else None
+
+
+def _parse_time(value):
+    if not value:
+        raise ValueError("GPX track point is missing a timestamp")
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _iso_utc(value):
+    return value.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _distance(first, second):
+    radius = 6_371_000
+    lat1, lat2 = math.radians(first["lat"]), math.radians(second["lat"])
+    delta_lat = lat2 - lat1
+    delta_lon = math.radians(second["lon"] - first["lon"])
+    haversine = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+    )
+    horizontal = radius * 2 * math.atan2(
+        math.sqrt(haversine), math.sqrt(1 - haversine)
+    )
+    return math.hypot(horizontal, second["elevation"] - first["elevation"])
+
+
+def gaia_track_payload(gpx_bytes, title, folder_id):
+    """Convert a prepared Garmin GPX track to Gaia's JSON track shape."""
+    root = ET.fromstring(gpx_bytes)
+    segments = [
+        element
+        for element in root.iter()
+        if element.tag.endswith("}trkseg") or element.tag == "trkseg"
+    ]
+    points = []
+    for segment in segments:
+        for point in segment:
+            if not (point.tag.endswith("}trkpt") or point.tag == "trkpt"):
+                continue
+            if not (
+                _valid_coordinate(point.get("lat"), -90, 90)
+                and _valid_coordinate(point.get("lon"), -180, 180)
+            ):
+                continue
+            try:
+                elevation = float(_child_text(point, "ele") or 0)
+            except ValueError as error:
+                raise ValueError("GPX track point has invalid elevation") from error
+            if not math.isfinite(elevation):
+                raise ValueError("GPX track point has invalid elevation")
+            points.append(
+                {
+                    "lat": float(point.get("lat")),
+                    "lon": float(point.get("lon")),
+                    "elevation": elevation,
+                    "time": _parse_time(_child_text(point, "time")),
+                }
+            )
+    if len(points) < 2:
+        raise ValueError("Gaia track creation requires at least two timed points")
+
+    distances = []
+    moving_time = 0.0
+    max_speed = 0.0
+    ascent = 0.0
+    descent = 0.0
+    for first, second in zip(points, points[1:]):
+        distance = _distance(first, second)
+        elapsed = (second["time"] - first["time"]).total_seconds()
+        if elapsed < 0:
+            raise ValueError("GPX track point timestamps are out of order")
+        distances.append(distance)
+        elevation_change = second["elevation"] - first["elevation"]
+        ascent += max(elevation_change, 0)
+        descent += max(-elevation_change, 0)
+        if elapsed > 0:
+            speed = distance / elapsed
+            max_speed = max(max_speed, speed)
+            if speed >= MOVING_SPEED_THRESHOLD:
+                moving_time += elapsed
+
+    total_distance = sum(distances)
+    total_time = (points[-1]["time"] - points[0]["time"]).total_seconds()
+    elevations = [point["elevation"] for point in points]
+    latitudes = [point["lat"] for point in points]
+    longitudes = [point["lon"] for point in points]
+    coordinates = [
+        [
+            point["lon"],
+            point["lat"],
+            point["elevation"],
+            int(point["time"].timestamp()),
+        ]
+        for point in points
+    ]
+    final = points[-1]
+    stats = {
+        "distance": total_distance,
+        "total_time": total_time,
+        "moving_time": moving_time,
+        "stopped_time": max(total_time - moving_time, 0),
+        "max_elevation": max(elevations),
+        "min_elevation": min(elevations),
+        "ascent": ascent,
+        "descent": descent,
+        "moving_speed": total_distance / moving_time if moving_time else 0,
+        "average_speed": total_distance / total_time if total_time else 0,
+        "max_speed": max_speed,
+        "max_latitude": max(latitudes),
+        "min_latitude": min(latitudes),
+        "max_longitude": max(longitudes),
+        "min_longitude": min(longitudes),
+        "distance_markers_points": [],
+        "distance_markers": [],
+        "max_smooth_elevation": max(elevations),
+        "min_smooth_elevation": min(elevations),
+        "segment_count": len(segments),
+        "point_count": len(points),
+        "current_segment_start_date": int(points[0]["time"].timestamp()),
+        "prior_segments_time": 0,
+        "final_point": {
+            "latitude": final["lat"],
+            "longitude": final["lon"],
+            "elevation": final["elevation"],
+            "time": _iso_utc(final["time"]),
+        },
+    }
+    return {
+        "geometry": {"type": "LineString", "coordinates": coordinates},
+        "name": title,
+        "stats": stats,
+        "imported": True,
+        "hex_color": "#FFEF00",
+        "create_date": _iso_utc(points[0]["time"]),
+        "parent_folder_id": folder_id,
+        "activity": None,
+    }
+
+
 class GaiaClient:
     """Minimal client for Gaia's unsupported private upload behavior."""
 
@@ -201,57 +317,22 @@ class GaiaClient:
         )
         return response.json()
 
-    def upload_file(self, path):
+    def create_track(self, gpx_bytes, title, folder_id):
         time.sleep(self.request_delay)
-        upload_page = self._request("GET", "/upload/")
+        self._request("GET", "/map/")
         csrf_token = self.session.cookies.get("csrftoken")
         if not csrf_token:
-            raise RuntimeError("Gaia upload page did not provide a CSRF token")
-        body, content_type = encode_upload(path, csrf_token)
-        response = self._request(
+            raise RuntimeError("Gaia map page did not provide a CSRF token")
+        self._request(
             "POST",
-            "/upload/",
-            data=body,
-            allow_redirects=True,
+            "/api/v3/tracks/",
+            json=[gaia_track_payload(gpx_bytes, title, folder_id)],
             headers={
-                "Content-Type": content_type,
                 "Origin": GAIA_BASE_URL,
-                "Referer": f"{GAIA_BASE_URL}/upload/",
+                "Referer": f"{GAIA_BASE_URL}/map/",
                 "X-CSRFToken": csrf_token,
             },
         )
-        if b"File uploaded to queue" in response.content:
-            raise RuntimeError("Gaia queued the upload; folder assignment is unknown")
-        folder_prefix = f"{GAIA_BASE_URL}/datasummary/folder/"
-        if not response.url.startswith(folder_prefix):
-            candidates = self._current_import_paths(upload_page.content)
-            detail = ", ".join(candidates) if candidates else "none"
-            raise RuntimeError(
-                f"Gaia rejected the GPX upload; import paths found: {detail}"
-            )
-        return response.url.removeprefix(folder_prefix).strip("/")
-
-    def _current_import_paths(self, html):
-        parser = _AssetParser()
-        parser.feed(html.decode("utf-8", errors="replace"))
-        candidates = set()
-        for source in parser.sources[:30]:
-            script_url = urljoin(f"{GAIA_BASE_URL}/map/", source)
-            hostname = urlsplit(script_url).hostname or ""
-            if hostname != "gaiagps.com" and not hostname.endswith(".gaiagps.com"):
-                continue
-            response = self.session.request("GET", script_url)
-            if not response.ok:
-                continue
-            candidates.update(
-                match.decode("utf-8", errors="replace")
-                for match in re.findall(
-                    rb"""["'](/[^"'\\\s]{0,100}(?:upload|import)[^"'\\\s]{0,100})["']""",
-                    response.content,
-                    flags=re.IGNORECASE,
-                )
-            )
-        return sorted(candidates)[:20]
 
     def put_folder(self, folder):
         time.sleep(self.request_delay)
@@ -274,14 +355,16 @@ def _one_by_id(objects, object_id, object_name):
     return matches[0]
 
 
-def sync_gpx_to_gaia(client, gpx_path, folder_id, activity_id):
+def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
     """Upload or recover one activity and assign all its tracks to a folder."""
     folders = client.list_objects("folder")
     destination = _one_by_id(folders, folder_id, "folder")
     marker = activity_marker(activity_id)
     tracks = client.list_objects("track")
     matching_tracks = [
-        track for track in tracks if marker in str(track.get("title") or "")
+        track
+        for track in tracks
+        if marker in str(track.get("title") or track.get("name") or "")
     ]
     matching_ids = [str(track["id"]) for track in matching_tracks]
     destination_ids = [str(track_id) for track_id in destination.get("tracks", [])]
@@ -289,22 +372,16 @@ def sync_gpx_to_gaia(client, gpx_path, folder_id, activity_id):
     if matching_ids and all(track_id in destination_ids for track_id in matching_ids):
         return "duplicate"
 
-    temporary_folder_id = None
     if not matching_ids:
-        temporary_folder_id = client.upload_file(gpx_path)
-        folders = client.list_objects("folder")
-        temporary = _one_by_id(folders, temporary_folder_id, "upload folder")
-        matching_ids = [str(track_id) for track_id in temporary.get("tracks", [])]
+        client.create_track(gpx_bytes, title, folder_id)
+        tracks = client.list_objects("track")
+        matching_ids = [
+            str(track["id"])
+            for track in tracks
+            if marker in str(track.get("title") or track.get("name") or "")
+        ]
         if not matching_ids:
             raise RuntimeError("Gaia import produced no tracks")
-        tracks_by_id = {
-            str(track.get("id")): track for track in client.list_objects("track")
-        }
-        if any(
-            marker not in str(tracks_by_id.get(track_id, {}).get("title") or "")
-            for track_id in matching_ids
-        ):
-            raise RuntimeError("Garmin activity marker did not survive Gaia import")
 
     destination["tracks"] = list(
         dict.fromkeys([*destination.get("tracks", []), *matching_ids])
@@ -317,9 +394,7 @@ def sync_gpx_to_gaia(client, gpx_path, folder_id, activity_id):
     if any(track_id not in refreshed_ids for track_id in matching_ids):
         raise RuntimeError("Gaia did not retain destination folder assignment")
 
-    if temporary_folder_id:
-        client.delete_folder(temporary_folder_id)
-    return "uploaded" if temporary_folder_id else "recovered"
+    return "uploaded" if not matching_tracks else "recovered"
 
 
 def activity_date_range(backfill=False, today=None):
@@ -359,7 +434,9 @@ def run(garmin, output_dir, gaia, folder_id, backfill=False, today=None):
                 continue
             path = output_dir / f"garmin-{activity_id}.gpx"
             path.write_bytes(prepared)
-            result = sync_gpx_to_gaia(gaia, path, folder_id, activity_id)
+            result = sync_gpx_to_gaia(
+                gaia, prepared, activity_title(activity), folder_id, activity_id
+            )
             summary.append((activity_id, result))
         except Exception as error:  # noqa: BLE001 - report each activity and continue
             failures += 1

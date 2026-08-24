@@ -67,6 +67,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   scoped to the exact `www.gaiagps.com` host used by the client.
 - Before uploading, the client loads Gaia's upload page to initialize the
   session's CSRF cookie, then submits that token with same-origin headers.
-- GPX uploads use Requests to encode the legacy multipart form exactly as Gaia
-  expects, then send that body through the browser-impersonated `curl_cffi`
-  session because `curl_cffi` deliberately does not implement `files=`.
+- Gaia retired the legacy multipart GPX import behavior used by the initial
+  implementation. The sync now converts Garmin GPX points to Gaia's captured
+  `/api/v3/tracks/` JSON shape and creates the track directly in
+  `GAIA_FOLDER_ID`, preserving coordinates, elevation, timestamps, and summary
+  statistics.

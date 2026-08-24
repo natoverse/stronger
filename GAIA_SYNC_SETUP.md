@@ -28,6 +28,9 @@ sync never creates or guesses a destination folder. It checks the Garmin ID
 marker globally before uploading, so a track left outside the destination by a
 partial failure can be recovered without another upload.
 
+The sync converts each Garmin GPX export to the same JSON track representation
+used by Gaia's web map and creates it directly in the configured folder.
+
 Normal runs query the last 72 hours (today plus the prior three calendar days).
 Only exact Garmin type keys `hiking` and `mountaineering` are eligible. GPX files
 without a valid track-point latitude and longitude are skipped.
