@@ -72,3 +72,7 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   `/api/v3/tracks/` JSON shape and creates the track directly in
   `GAIA_FOLDER_ID`, preserving coordinates, elevation, timestamps, and summary
   statistics.
+- Gaia and GPX track names now contain only the Garmin activity name. The
+  durable Garmin activity ID marker is stored in Gaia's `source` metadata;
+  duplicate detection also recognizes older imports whose marker remains in
+  the title.

@@ -24,9 +24,11 @@ expression in `.github/workflows/garmin-gaia-sync.yml`. Disable or enable
 scheduled runs from the workflow's Actions page.
 
 The configured folder must already exist and match exactly one folder ID. The
-sync never creates or guesses a destination folder. It checks the Garmin ID
-marker globally before uploading, so a track left outside the destination by a
-partial failure can be recovered without another upload.
+sync never creates or guesses a destination folder. Gaia track names use only
+the Garmin activity name. The sync stores the Garmin ID marker in Gaia's source
+metadata and checks it globally before uploading, so a track left outside the
+destination by a partial failure can be recovered without another upload.
+Legacy tracks with the marker in their name remain recognized.
 
 The sync converts each Garmin GPX export to the same JSON track representation
 used by Gaia's web map and creates it directly in the configured folder.
