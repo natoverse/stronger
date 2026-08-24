@@ -10,7 +10,7 @@ flow, so this automation uses unsupported private Gaia web behavior.
 ## Configuration
 
 1. Create or choose an existing Gaia folder. Copy its immutable ID from its
-   Gaia URL and set the Actions variable `GAIA_FOLDER_ID`.
+   Gaia URL and set the Actions secret `GAIA_FOLDER_ID`.
 2. Sign in to Gaia in your browser, inspect the `gaiagps.com` cookies, and copy
    the `sessionid` value into the Actions secret `GAIA_SESSION_ID`. Never store
    it as a variable, file, log, or artifact.

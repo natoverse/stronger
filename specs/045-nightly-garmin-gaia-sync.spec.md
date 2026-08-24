@@ -18,7 +18,7 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - [ ] Imported tracks land in the configured existing Gaia folder, and a missing or ambiguous folder fails safely without creating or choosing another folder.
 - [ ] Re-running after full or partial failure creates no duplicate Gaia track; the durable identity is Garmin activity ID, not title or date.
 - [ ] The Garmin activity ID is embedded in a deterministic imported-track name or description and verified to survive Gaia import; the sync checks that marker in the destination folder before uploading.
-- [ ] `GARMIN_TOKENS` is reused, while Gaia session credentials are stored only as a masked Actions secret and the folder identifier is non-secret configuration; neither appears in logs or artifacts.
+- [ ] `GARMIN_TOKENS` is reused, while Gaia session credentials and the folder identifier are stored as masked Actions secrets; neither appears in logs or artifacts.
 - [ ] Authentication expiry, rate limiting, malformed/empty GPX, rejected upload, and folder-assignment failure produce a non-zero result and an actionable per-activity summary; successful tracks are not rolled back.
 - [ ] Tests cover type filtering, coordinate validation, identity/idempotency, sequencing, configuration validation, and mocked Garmin/Gaia failure responses without contacting either service.
 - [ ] Normal runs query a 72-hour rolling window, and a manual boolean option queries all Garmin history from 2015-01-01.
@@ -54,6 +54,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - The sync uses the existing `requests` dependency rather than adding
   the unmaintained, non-PyPI `gaiagpsclient`. It requires an immutable
   `GAIA_FOLDER_ID`, validates that ID before upload, and never creates a folder.
+- `GAIA_FOLDER_ID` is stored as an Actions secret alongside `GAIA_SESSION_ID`,
+  rather than as an Actions variable.
 - Every imported track title contains `[Garmin activity:<activityId>]`. Duplicate
   and partial-failure recovery checks that marker across all Gaia tracks before
   uploading, then verifies folder membership before deleting Gaia's temporary
