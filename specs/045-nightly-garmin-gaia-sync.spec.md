@@ -44,3 +44,18 @@ Gaia does **not** publish a supported write API or OAuth flow. The only known au
 - Gaia officially supports manual GPX, KML/KMZ, GeoJSON, and FIT imports: https://help.gaiagps.com/hc/en-us/articles/360052763513-Import-GPX-KML-KMZ-GeoJSON-or-FIT-Files-on-gaiagps-com
 - Evidence for the only known automated route is explicitly unofficial: `gaiagpsclient` says Gaia has no published API, uses reverse-engineered browser behavior, and requires a browser-extracted `sessionid` that must be replaced after expiry. Its upload command accepts GPX and can move imported tracks from Gaia's temporary import folder into an exact existing folder, but the project has not shipped a change since 2023, so it is evidence for a spike rather than a dependable supported dependency: https://github.com/kk7ds/gaiagpsclient and https://github.com/kk7ds/gaiagpsclient/blob/1ba0ea4266260ff979c7df483381d01d29fae25d/gaiagps/shell/upload.py
 - **Unresolved blocker:** Gaia's private upload/folder endpoints, session lifetime, terms compatibility, and stable machine-readable identity are undocumented. Owner approval and the live spike are required before enabling writes; folder lookup should prefer a configured immutable ID if Gaia exposes and validates one, otherwise an exact unique name.
+
+## Implementation decisions
+
+- The nightly job is opt-in through `GAIA_SYNC_ENABLED` and runs as a dependent
+  job in the existing Garmin workflow at `GAIA_SYNC_UTC_HOUR` (03:00 UTC by
+  default). Manual dispatch requires the `gaia_sync` input.
+- Until `GAIA_LIVE_VERIFIED=true`, the job produces one-day GPX artifacts for
+  supported manual import and performs no Gaia writes.
+- The upload spike uses the existing `requests` dependency rather than adding
+  the unmaintained, non-PyPI `gaiagpsclient`. It requires an immutable
+  `GAIA_FOLDER_ID`, validates that ID before upload, and never creates a folder.
+- Every imported track title contains `[Garmin activity:<activityId>]`. Duplicate
+  and partial-failure recovery checks that marker across all Gaia tracks before
+  uploading, then verifies folder membership before deleting Gaia's temporary
+  import folder.

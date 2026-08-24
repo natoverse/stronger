@@ -14,6 +14,10 @@ on:
         description: 'Overwrite (upsert) existing rows for the fetched window instead of only appending new ones'
         type: boolean
         default: true
+      gaia_sync:
+        description: 'Export recent hiking GPX tracks for Gaia after Garmin sync'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +25,8 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    outputs:
+      run_gaia: ${{ steps.gaia_gate.outputs.run }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,3 +47,61 @@ jobs:
         # Scheduled runs always overwrite the rolling window so recent rows are
         # refreshed (fixes partial mid-day rows and picks up edited activities).
         run: python scripts/garmin-sync.py ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
+
+      - name: Determine whether to run Gaia export
+        id: gaia_gate
+        env:
+          ENABLED: ${{ vars.GAIA_SYNC_ENABLED }}
+          UTC_HOUR: ${{ vars.GAIA_SYNC_UTC_HOUR }}
+          MANUAL: ${{ inputs.gaia_sync }}
+        run: |
+          hour="${UTC_HOUR:-3}"
+          if [[ ! "$hour" =~ ^[0-9]{1,2}$ ]] || (( 10#$hour > 23 )); then
+            echo "GAIA_SYNC_UTC_HOUR must be an integer from 0 through 23" >&2
+            exit 1
+          fi
+          printf -v hour '%02d' "$((10#$hour))"
+          if [[ "$MANUAL" == "true" ]] || \
+             [[ "$ENABLED" == "true" && "${{ github.event_name }}" == "schedule" && "$(date -u +%H)" == "$hour" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  gaia-sync:
+    needs: sync
+    if: needs.sync.outputs.run_gaia == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Export Garmin tracks
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GAIA_SESSION_ID: ${{ secrets.GAIA_SESSION_ID }}
+          GAIA_FOLDER_ID: ${{ vars.GAIA_FOLDER_ID }}
+          GAIA_LIVE_VERIFIED: ${{ vars.GAIA_LIVE_VERIFIED }}
+        run: |
+          args=(--output-dir gaia-gpx)
+          if [[ "$GAIA_LIVE_VERIFIED" == "true" ]]; then
+            args+=(--upload)
+          fi
+          python scripts/garmin-gaia-sync.py "${args[@]}"
+
+      - name: Upload GPX files for manual Gaia import
+        if: vars.GAIA_LIVE_VERIFIED != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gaia-gpx
+          path: gaia-gpx/*.gpx
+          if-no-files-found: ignore
+          retention-days: 1
