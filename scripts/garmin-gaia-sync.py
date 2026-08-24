@@ -29,6 +29,12 @@ BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
 MOVING_SPEED_THRESHOLD = 0.25
+GAIA_WRITE_ATTEMPTS = 3
+GAIA_RETRY_DELAY_SECONDS = 30.0
+
+
+class GaiaWriteRejected(RuntimeError):
+    """Raised after Gaia repeatedly rejects a write request."""
 
 
 def login_from_tokens(token_bundle):
@@ -275,7 +281,15 @@ def gaia_track_payload(gpx_bytes, title, folder_id, activity_id):
 class GaiaClient:
     """Minimal client for Gaia's unsupported private upload behavior."""
 
-    def __init__(self, session_id, request_delay=2.0, session=None):
+    def __init__(
+        self,
+        session_id,
+        request_delay=2.0,
+        session=None,
+        write_attempts=GAIA_WRITE_ATTEMPTS,
+        retry_delay=GAIA_RETRY_DELAY_SECONDS,
+        sleep=time.sleep,
+    ):
         if session is None:
             from curl_cffi import requests
 
@@ -285,18 +299,42 @@ class GaiaClient:
             "sessionid", session_id, domain="www.gaiagps.com"
         )
         self.request_delay = request_delay
+        self.write_attempts = write_attempts
+        self.retry_delay = retry_delay
+        self.sleep = sleep
 
     def _request(self, method, path, **kwargs):
-        response = self.session.request(method, f"{GAIA_BASE_URL}{path}", **kwargs)
-        if response.status_code in (401, 403) or "login" in response.url:
-            raise RuntimeError("Gaia session expired or was rejected")
-        if response.status_code == 429:
-            raise RuntimeError("Gaia rate limit reached")
-        if not response.ok:
-            raise RuntimeError(
-                f"Gaia request failed ({response.status_code}) at {path}"
+        attempts = self.write_attempts if method in {"POST", "PUT", "DELETE"} else 1
+        for attempt in range(1, attempts + 1):
+            response = self.session.request(
+                method, f"{GAIA_BASE_URL}{path}", **kwargs
             )
-        return response
+            write_rejected = (
+                method in {"POST", "PUT", "DELETE"}
+                and response.status_code in (403, 429)
+            )
+            if write_rejected and attempt < attempts:
+                retry_after = response.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after)
+                except (TypeError, ValueError):
+                    delay = self.retry_delay * (2 ** (attempt - 1))
+                self.sleep(max(delay, 0))
+                continue
+            if write_rejected:
+                raise GaiaWriteRejected(
+                    f"Gaia rejected {method} {path} after {attempts} attempts; "
+                    "the runner may be temporarily rate limited"
+                )
+            if response.status_code in (401, 403) or "login" in response.url:
+                raise RuntimeError("Gaia session expired or was rejected")
+            if response.status_code == 429:
+                raise RuntimeError("Gaia rate limit reached")
+            if not response.ok:
+                raise RuntimeError(
+                    f"Gaia request failed ({response.status_code}) at {path}"
+                )
+            return response
 
     def verify_auth(self):
         self._request(
@@ -320,7 +358,7 @@ class GaiaClient:
         return response.json()
 
     def create_track(self, gpx_bytes, title, folder_id, activity_id):
-        time.sleep(self.request_delay)
+        self.sleep(self.request_delay)
         self._request("GET", "/map/")
         csrf_token = self.session.cookies.get("csrftoken")
         if not csrf_token:
@@ -337,14 +375,14 @@ class GaiaClient:
         )
 
     def put_folder(self, folder):
-        time.sleep(self.request_delay)
+        self.sleep(self.request_delay)
         self._request(
             "PUT", f"/api/objects/folder/{folder['id']}/", json=folder
         )
         return True
 
     def delete_folder(self, folder_id):
-        time.sleep(self.request_delay)
+        self.sleep(self.request_delay)
         self._request("DELETE", f"/api/objects/folder/{folder_id}/")
 
 
@@ -492,6 +530,10 @@ def run(
                 allow_duplicates=allow_duplicates,
             )
             summary.append((activity_id, result))
+        except GaiaWriteRejected as error:
+            failures += 1
+            summary.append((activity_id, f"failed: {error}"))
+            break
         except Exception as error:  # noqa: BLE001 - report each activity and continue
             failures += 1
             summary.append((activity_id, f"failed: {error}"))

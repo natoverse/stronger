@@ -83,3 +83,8 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - Default sync window and track colors (2026-08-24): Normal runs now query today
   plus the prior 29 calendar days. Each new Gaia track receives an independently
   generated random six-digit hexadecimal color instead of a fixed color.
+- Gaia write throttling (2026-08-24): Successful authentication followed by
+  repeated write-only 403 responses is treated as a temporary Gaia rejection,
+  not as an expired session. Writes retry twice with exponential backoff and a
+  run stops after persistent rejection so it does not continue hammering the
+  same GitHub-hosted runner IP.
