@@ -240,6 +240,30 @@ def test_duplicate_in_destination_is_skipped():
     assert gaia.uploads == 0
 
 
+def test_duplicate_in_destination_is_uploaded_when_allowed():
+    gaia = FakeGaia(
+        [{"id": "destination", "tracks": ["existing"]}],
+        [
+            {
+                "id": "existing",
+                "title": "Ridge",
+                "source": "[Garmin activity:123]",
+            }
+        ],
+    )
+    result = sync.sync_gpx_to_gaia(
+        gaia,
+        VALID_GPX,
+        "title",
+        "destination",
+        "123",
+        allow_duplicates=True,
+    )
+    assert result == "uploaded"
+    assert gaia.uploads == 1
+    assert gaia.folders[0]["tracks"] == ["existing", "new-track"]
+
+
 def test_partial_failure_track_is_recovered_without_upload():
     gaia = FakeGaia(
         [{"id": "destination", "tracks": []}],
