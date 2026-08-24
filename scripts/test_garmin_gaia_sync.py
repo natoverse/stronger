@@ -187,6 +187,11 @@ def test_activity_title_uses_activity_name_only():
     renamed = {"activityId": 123, "activityName": "New name", "startTimeLocal": "2026-02-02"}
     assert sync.activity_title(first) == "Ridge"
     assert sync.activity_title(renamed) == "New name"
+    try:
+        sync.activity_title({"activityId": 123, "activityName": " "})
+        raise AssertionError("Expected missing activity name to fail")
+    except ValueError as error:
+        assert str(error) == "missing Garmin activity name"
 
 
 class FakeGaia:

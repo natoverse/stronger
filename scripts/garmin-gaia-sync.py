@@ -58,7 +58,10 @@ def activity_marker(activity_id):
 
 def activity_title(activity):
     """Return the Garmin activity name used for the GPX and Gaia track."""
-    return str(activity.get("activityName") or "").strip()
+    name = str(activity.get("activityName") or "").strip()
+    if not name:
+        raise ValueError("missing Garmin activity name")
+    return name
 
 
 def _valid_coordinate(value, minimum, maximum):
