@@ -27,6 +27,7 @@ ROLLING_DAYS = 4
 BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
+GAIA_DEFAULT_TRACK_COLOR = "#FFEF00"
 MOVING_SPEED_THRESHOLD = 0.25
 
 
@@ -263,7 +264,7 @@ def gaia_track_payload(gpx_bytes, title, folder_id):
         "name": title,
         "stats": stats,
         "imported": True,
-        "hex_color": "#FFEF00",
+        "hex_color": GAIA_DEFAULT_TRACK_COLOR,
         "create_date": _iso_utc(points[0]["time"]),
         "parent_folder_id": folder_id,
         "activity": None,
@@ -382,6 +383,11 @@ def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
         ]
         if not matching_ids:
             raise RuntimeError("Gaia import produced no tracks")
+        refreshed = _one_by_id(client.list_objects("folder"), folder_id, "folder")
+        refreshed_ids = [str(track_id) for track_id in refreshed.get("tracks", [])]
+        if any(track_id not in refreshed_ids for track_id in matching_ids):
+            raise RuntimeError("Gaia did not retain destination folder assignment")
+        return "uploaded"
 
     destination["tracks"] = list(
         dict.fromkeys([*destination.get("tracks", []), *matching_ids])
@@ -394,7 +400,7 @@ def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
     if any(track_id not in refreshed_ids for track_id in matching_ids):
         raise RuntimeError("Gaia did not retain destination folder assignment")
 
-    return "uploaded" if not matching_tracks else "recovered"
+    return "recovered"
 
 
 def activity_date_range(backfill=False, today=None):
