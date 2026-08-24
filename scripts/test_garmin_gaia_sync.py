@@ -202,6 +202,27 @@ def test_upload_candidate_discovery_only_reads_same_origin_scripts():
     ]
 
 
+def test_upload_candidate_discovery_falls_back_to_map_assets():
+    class CandidateSession(FakeSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if url.endswith("/map/"):
+                response.content = b'<script src="/assets/map.js"></script>'
+            elif url.endswith("/assets/map.js"):
+                response.content = b'const endpoint="/api/upload/current/";'
+            return response
+
+    session = CandidateSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    assert client._upload_candidates(b"<html></html>") == [
+        "/api/upload/current/"
+    ]
+    assert [request[1] for request in session.requests] == [
+        "https://www.gaiagps.com/map/",
+        "https://www.gaiagps.com/assets/map.js",
+    ]
+
+
 def test_upload_fails_without_csrf_token():
     client = sync.GaiaClient(
         "secret",

@@ -230,7 +230,10 @@ class GaiaClient:
         except RuntimeError as error:
             candidates = self._upload_candidates(upload_page.content)
             detail = ", ".join(candidates) if candidates else "none"
-            raise RuntimeError(f"{error}; import paths found: {detail}") from error
+            final_path = upload_page.url.removeprefix(GAIA_BASE_URL)
+            raise RuntimeError(
+                f"{error} at {final_path}; import paths found: {detail}"
+            ) from error
         multipart = CurlMime()
         multipart.addpart(
             name=file_field,
@@ -260,10 +263,19 @@ class GaiaClient:
         return folder_id
 
     def _upload_candidates(self, html):
-        parser = _UploadFormParser()
-        parser.feed(html.decode("utf-8", errors="replace"))
+        pages = [html]
+        initial_parser = _UploadFormParser()
+        initial_parser.feed(html.decode("utf-8", errors="replace"))
+        if not initial_parser.scripts:
+            pages.append(self._request("GET", "/map/").content)
+
         candidates = set()
-        for source in parser.scripts[:20]:
+        sources = []
+        for page in pages:
+            parser = _UploadFormParser()
+            parser.feed(page.decode("utf-8", errors="replace"))
+            sources.extend(parser.scripts)
+        for source in dict.fromkeys(sources[:20]):
             script_url = urljoin(f"{GAIA_BASE_URL}/upload/", source)
             if not script_url.startswith(f"{GAIA_BASE_URL}/"):
                 continue
@@ -271,11 +283,13 @@ class GaiaClient:
                 "GET", script_url.removeprefix(GAIA_BASE_URL)
             )
             for match in re.findall(
-                rb"""["'](/[^"'\\\s]{0,160}(?:upload|import)[^"'\\\s]{0,160})["']""",
+                rb"""["']([^"'\\\s]{0,80}(?:upload|import)[^"'\\\s]{0,80})["']""",
                 response.content,
                 flags=re.IGNORECASE,
             ):
-                candidates.add(match.decode("utf-8", errors="replace"))
+                candidate = match.decode("utf-8", errors="replace")
+                if "/" in candidate:
+                    candidates.add(candidate)
         return sorted(candidates)[:20]
 
     def put_folder(self, folder):
