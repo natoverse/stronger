@@ -125,11 +125,6 @@ class GaiaClient:
 
             session = requests.Session(impersonate="chrome")
         self.session = session
-        self.session.headers.update(
-            {
-                "Accept": "application/json, text/plain, */*",
-            }
-        )
         self.session.cookies.set(
             "sessionid", session_id, domain="www.gaiagps.com"
         )

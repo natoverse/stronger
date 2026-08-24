@@ -33,17 +33,18 @@ class FakeCookies:
 
 
 class FakeSession:
-    def __init__(self):
+    def __init__(self, status_code=200):
         self.headers = {}
         self.cookies = FakeCookies()
         self.requests = []
+        self.status_code = status_code
 
     def request(self, method, url, **kwargs):
         self.requests.append((method, url, kwargs))
         return types.SimpleNamespace(
-            status_code=200,
+            status_code=self.status_code,
             url=url,
-            ok=True,
+            ok=self.status_code < 400,
         )
 
 
@@ -64,7 +65,7 @@ def test_gaia_client_uses_browser_impersonation_and_exact_cookie_host():
     assert client.session.cookies.values == [
         ("sessionid", "secret", {"domain": "www.gaiagps.com"})
     ]
-    assert "User-Agent" not in client.session.headers
+    assert client.session.headers == {}
 
 
 def test_auth_verification_uses_protected_api_endpoint():
@@ -78,6 +79,20 @@ def test_auth_verification_uses_protected_api_endpoint():
             {"params": {"count": "1", "page": "1"}},
         )
     ]
+
+
+def test_auth_verification_rejects_unauthorized_session():
+    for status_code in (401, 403):
+        client = sync.GaiaClient(
+            "secret",
+            request_delay=0,
+            session=FakeSession(status_code=status_code),
+        )
+        try:
+            client.verify_auth()
+            raise AssertionError("Expected invalid Gaia session to fail")
+        except RuntimeError as error:
+            assert str(error) == "Gaia session expired or was rejected"
 
 
 def test_filters_exact_activity_types():
