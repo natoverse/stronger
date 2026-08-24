@@ -3617,7 +3617,7 @@ body {
 
 .strava-range-btn {
 	flex: 1;
-	background: rgba(255, 255, 255, 0.06);
+	background: var(--color-bg);
 	border: 1px solid rgba(255, 255, 255, 0.1);
 	color: rgba(255, 255, 255, 0.6);
 	padding: 6px 4px;

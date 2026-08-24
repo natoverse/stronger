@@ -1558,7 +1558,7 @@ function AppContent() {
             emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
             embedded
           />
-          <GarminActivitiesListView activities={garminActivities} />
+          <GarminActivitiesListView activities={garminActivities} range={garminRange} />
         </div>
       </>
     );

@@ -3,13 +3,54 @@ import {
   formatDistance,
   formatDuration,
   formatElevation,
+  getDisplayedActivities,
 } from '../GarminActivitiesListView.js';
+import type { StravaActivity } from '../../model/strava.js';
+
+function activity(date: string, name: string): StravaActivity {
+  return {
+    date,
+    activityType: 'Run',
+    name,
+    duration: 3600,
+    distance: 1609.344,
+    elevationGain: 0,
+  };
+}
 
 describe('Garmin activity card formatting', () => {
   it('formats duration as hours and zero-padded minutes', () => {
     expect(formatDuration(45 * 60)).toBe('0:45');
     expect(formatDuration(65 * 60)).toBe('1:05');
     expect(formatDuration(0)).toBe('—');
+  });
+
+  describe('Garmin activity log filtering', () => {
+    const activities = [
+      activity('2025-06-16', 'Current run'),
+      activity('2025-01-10', 'Older run'),
+    ];
+    const selectedTypes = new Set(['Run']);
+    const today = new Date(2025, 5, 18);
+
+    it('shows only activities in the selected period without a search', () => {
+      expect(getDisplayedActivities(activities, 'month', selectedTypes, '', today)).toEqual([
+        activities[0],
+      ]);
+    });
+
+    it('searches activities across all periods', () => {
+      expect(getDisplayedActivities(activities, 'month', selectedTypes, 'older', today)).toEqual([
+        activities[1],
+      ]);
+    });
+
+    it('returns to the selected period when search is cleared', () => {
+      getDisplayedActivities(activities, 'month', selectedTypes, 'older', today);
+      expect(getDisplayedActivities(activities, 'month', selectedTypes, '', today)).toEqual([
+        activities[0],
+      ]);
+    });
   });
 
   it('formats distance without a space before miles', () => {

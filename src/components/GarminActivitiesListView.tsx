@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
-import type { StravaActivity } from '../model/strava.js';
+import type { StravaActivity, StravaTimeRange } from '../model/strava.js';
 import {
+  filterActivitiesByRange,
   getActivityTypes,
   isStrengthTraining,
   toDisplayUnit,
@@ -23,6 +24,7 @@ function isDefaultType(type: string): boolean {
 
 interface Props {
   activities: StravaActivity[];
+  range: StravaTimeRange;
 }
 
 /* ------------------------------------------------------------------ */
@@ -127,8 +129,29 @@ function TypeFilterDropdown({ allTypes, selectedTypes, onToggle, onSelectAll, on
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function GarminActivitiesListView({ activities }: Props) {
+export function getDisplayedActivities(
+  activities: StravaActivity[],
+  range: StravaTimeRange,
+  selectedTypes: Set<string>,
+  query: string,
+  today: Date = new Date(),
+): StravaActivity[] {
+  const q = query.trim().toLowerCase();
+  const rangeActivities = q ? activities : filterActivitiesByRange(activities, range, today);
+  const typeFiltered = rangeActivities.filter((activity) => selectedTypes.has(activity.activityType));
+  const searched = q
+    ? typeFiltered.filter((activity) => {
+        const name = (activity.name ?? '').toLowerCase();
+        const type = (activity.activityType ?? '').toLowerCase();
+        return name.includes(q) || type.includes(q);
+      })
+    : typeFiltered;
+  return [...searched].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+export function GarminActivitiesListView({ activities, range }: Props) {
   const [query, setQuery] = useState('');
+  const today = useMemo(() => new Date(), []);
 
   // Derive all known types from the full activity list
   const allTypes = useMemo(() => getActivityTypes(activities), [activities]);
@@ -159,19 +182,9 @@ export function GarminActivitiesListView({ activities }: Props) {
   const handleSelectAll = () => setSelectedTypes(new Set(allTypes));
   const handleSelectNone = () => setSelectedTypes(new Set());
 
-  // Filter and sort: search across all activities (no year/range filter)
   const displayed = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const typeFiltered = activities.filter((a) => selectedTypes.has(a.activityType));
-    const searched = q
-      ? typeFiltered.filter((a) => {
-          const name = (a.name ?? '').toLowerCase();
-          const type = (a.activityType ?? '').toLowerCase();
-          return name.includes(q) || type.includes(q);
-        })
-      : typeFiltered;
-    return [...searched].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-  }, [activities, selectedTypes, query]);
+    return getDisplayedActivities(activities, range, selectedTypes, query, today);
+  }, [activities, range, selectedTypes, query, today]);
 
   return (
     <div className="activity-list-view">
