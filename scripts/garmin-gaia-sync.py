@@ -52,16 +52,16 @@ def eligible_activity(activity):
 
 
 def activity_marker(activity_id):
-    """Return the durable marker embedded in every imported track title."""
+    """Return the durable marker stored in imported track metadata."""
     return f"[Garmin activity:{activity_id}]"
 
 
 def activity_title(activity):
-    """Return a deterministic Gaia track title containing the Garmin ID."""
-    activity_id = str(activity.get("activityId") or "")
+    """Return the Garmin activity name used for the GPX and Gaia track."""
     name = str(activity.get("activityName") or "").strip()
-    marker = activity_marker(activity_id)
-    return f"{marker} - {name}" if name else marker
+    if not name:
+        raise ValueError("missing Garmin activity name")
+    return name
 
 
 def _valid_coordinate(value, minimum, maximum):
@@ -158,7 +158,7 @@ def _distance(first, second):
     return math.hypot(horizontal, second["elevation"] - first["elevation"])
 
 
-def gaia_track_payload(gpx_bytes, title, folder_id):
+def gaia_track_payload(gpx_bytes, title, folder_id, activity_id):
     """Convert a prepared Garmin GPX track to Gaia's JSON track shape."""
     root = ET.fromstring(gpx_bytes)
     segments = [
@@ -262,6 +262,7 @@ def gaia_track_payload(gpx_bytes, title, folder_id):
     return {
         "geometry": {"type": "LineString", "coordinates": coordinates},
         "name": title,
+        "source": activity_marker(activity_id),
         "stats": stats,
         "imported": True,
         "hex_color": GAIA_DEFAULT_TRACK_COLOR,
@@ -318,7 +319,7 @@ class GaiaClient:
         )
         return response.json()
 
-    def create_track(self, gpx_bytes, title, folder_id):
+    def create_track(self, gpx_bytes, title, folder_id, activity_id):
         time.sleep(self.request_delay)
         self._request("GET", "/map/")
         csrf_token = self.session.cookies.get("csrftoken")
@@ -327,7 +328,7 @@ class GaiaClient:
         self._request(
             "POST",
             "/api/v3/tracks/",
-            json=[gaia_track_payload(gpx_bytes, title, folder_id)],
+            json=[gaia_track_payload(gpx_bytes, title, folder_id, activity_id)],
             headers={
                 "Origin": GAIA_BASE_URL,
                 "Referer": f"{GAIA_BASE_URL}/map/",
@@ -365,7 +366,10 @@ def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
     matching_tracks = [
         track
         for track in tracks
-        if marker in str(track.get("title") or track.get("name") or "")
+        if any(
+            marker in str(track.get(field) or "")
+            for field in ("source", "title", "name")
+        )
     ]
     matching_ids = [str(track["id"]) for track in matching_tracks]
     destination_ids = [str(track_id) for track_id in destination.get("tracks", [])]
@@ -374,12 +378,15 @@ def sync_gpx_to_gaia(client, gpx_bytes, title, folder_id, activity_id):
         return "duplicate"
 
     if not matching_ids:
-        client.create_track(gpx_bytes, title, folder_id)
+        client.create_track(gpx_bytes, title, folder_id, activity_id)
         tracks = client.list_objects("track")
         matching_ids = [
             str(track["id"])
             for track in tracks
-            if marker in str(track.get("title") or track.get("name") or "")
+            if any(
+                marker in str(track.get(field) or "")
+                for field in ("source", "title", "name")
+            )
         ]
         if not matching_ids:
             raise RuntimeError("Gaia import produced no tracks")

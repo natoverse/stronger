@@ -111,7 +111,7 @@ def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
     client.session.cookies.set(
         "csrftoken", "csrf-secret", domain="www.gaiagps.com"
     )
-    client.create_track(VALID_GPX, "[Garmin activity:123] - Ridge", "folder")
+    client.create_track(VALID_GPX, "Ridge", "folder", "123")
 
     assert session.requests[0][:2] == (
         "GET",
@@ -132,7 +132,8 @@ def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
         100.0,
         1787443200,
     ]
-    assert payload[0]["name"] == "[Garmin activity:123] - Ridge"
+    assert payload[0]["name"] == "Ridge"
+    assert payload[0]["source"] == "[Garmin activity:123]"
     assert payload[0]["parent_folder_id"] == "folder"
     assert payload[0]["stats"]["point_count"] == 2
     assert payload[0]["create_date"] == "2026-08-23T00:00:00.000Z"
@@ -145,7 +146,7 @@ def test_create_track_fails_without_csrf_token():
         session=FakeSession(),
     )
     try:
-        client.create_track(VALID_GPX, "title", "folder")
+        client.create_track(VALID_GPX, "title", "folder", "123")
         raise AssertionError("Expected missing Gaia CSRF token to fail")
     except RuntimeError as error:
         assert str(error) == "Gaia map page did not provide a CSRF token"
@@ -159,11 +160,11 @@ def test_filters_exact_activity_types():
     assert not sync.eligible_activity({"activityType": "hiking"})
 
 
-def test_prepares_valid_gpx_with_deterministic_marker():
-    prepared = sync.prepare_gpx(VALID_GPX, "[Garmin activity:123] - Ridge")
+def test_prepares_valid_gpx_with_activity_name_only():
+    prepared = sync.prepare_gpx(VALID_GPX, "Ridge")
     root = ET.fromstring(prepared)
     names = [node.text for node in root.iter() if node.tag.endswith("}name")]
-    assert names == ["[Garmin activity:123] - Ridge"]
+    assert names == ["Ridge"]
 
 
 def test_rejects_out_of_range_or_missing_coordinates():
@@ -181,11 +182,16 @@ def test_malformed_and_empty_gpx_fail():
             pass
 
 
-def test_activity_title_uses_id_not_date_or_title_for_identity():
+def test_activity_title_uses_activity_name_only():
     first = {"activityId": 123, "activityName": "Ridge", "startTimeLocal": "2026-01-01"}
     renamed = {"activityId": 123, "activityName": "New name", "startTimeLocal": "2026-02-02"}
-    assert sync.activity_marker(first["activityId"]) in sync.activity_title(first)
-    assert sync.activity_marker(renamed["activityId"]) in sync.activity_title(renamed)
+    assert sync.activity_title(first) == "Ridge"
+    assert sync.activity_title(renamed) == "New name"
+    try:
+        sync.activity_title({"activityId": 123, "activityName": " "})
+        raise AssertionError("Expected missing activity name to fail")
+    except ValueError as error:
+        assert str(error) == "missing Garmin activity name"
 
 
 class FakeGaia:
@@ -198,11 +204,15 @@ class FakeGaia:
     def list_objects(self, object_type):
         return self.folders if object_type == "folder" else self.tracks
 
-    def create_track(self, gpx_bytes, title, folder_id):
+    def create_track(self, gpx_bytes, title, folder_id, activity_id):
         self.uploads += 1
         self.folders[0]["tracks"].append("new-track")
         self.tracks.append(
-            {"id": "new-track", "name": "[Garmin activity:123] - Ridge"}
+            {
+                "id": "new-track",
+                "name": title,
+                "source": sync.activity_marker(activity_id),
+            }
         )
 
     def put_folder(self, folder):
@@ -215,7 +225,13 @@ class FakeGaia:
 def test_duplicate_in_destination_is_skipped():
     gaia = FakeGaia(
         [{"id": "destination", "tracks": ["existing"]}],
-        [{"id": "existing", "title": "[Garmin activity:123] - Ridge"}],
+        [
+            {
+                "id": "existing",
+                "title": "Ridge",
+                "source": "[Garmin activity:123]",
+            }
+        ],
     )
     result = sync.sync_gpx_to_gaia(
         gaia, VALID_GPX, "title", "destination", "123"
@@ -235,6 +251,18 @@ def test_partial_failure_track_is_recovered_without_upload():
     assert result == "recovered"
     assert gaia.uploads == 0
     assert gaia.folders[0]["tracks"] == ["existing"]
+
+
+def test_legacy_title_marker_is_still_recognized():
+    gaia = FakeGaia(
+        [{"id": "destination", "tracks": ["existing"]}],
+        [{"id": "existing", "title": "[Garmin activity:123] - Ridge"}],
+    )
+    result = sync.sync_gpx_to_gaia(
+        gaia, VALID_GPX, "Ridge", "destination", "123"
+    )
+    assert result == "duplicate"
+    assert gaia.uploads == 0
 
 
 def test_upload_creates_track_in_destination_folder():
