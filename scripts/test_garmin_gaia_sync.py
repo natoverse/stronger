@@ -179,6 +179,29 @@ def test_upload_form_rejects_missing_or_cross_origin_forms():
             pass
 
 
+def test_upload_candidate_discovery_only_reads_same_origin_scripts():
+    class CandidateSession(FakeSession):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            if url.endswith("/assets/app.js"):
+                response.content = (
+                    b'const endpoint="/api/import/files/";'
+                    b'const unrelated="/api/tracks/";'
+                )
+            return response
+
+    session = CandidateSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    html = b"""
+      <script src="/assets/app.js"></script>
+      <script src="https://example.com/untrusted.js"></script>
+    """
+    assert client._upload_candidates(html) == ["/api/import/files/"]
+    assert [request[1] for request in session.requests] == [
+        "https://www.gaiagps.com/assets/app.js"
+    ]
+
+
 def test_upload_fails_without_csrf_token():
     client = sync.GaiaClient(
         "secret",

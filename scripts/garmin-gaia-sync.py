@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import re
 import sys
 import tempfile
 import time
@@ -36,6 +37,7 @@ class _UploadFormParser(HTMLParser):
         super().__init__()
         self.current = None
         self.forms = []
+        self.scripts = []
 
     def handle_starttag(self, tag, attrs):
         values = dict(attrs)
@@ -45,6 +47,8 @@ class _UploadFormParser(HTMLParser):
                 "file_field": None,
                 "hidden": {},
             }
+        elif tag == "script" and values.get("src"):
+            self.scripts.append(values["src"])
         elif tag == "input" and self.current is not None:
             input_type = (values.get("type") or "text").lower()
             name = values.get("name")
@@ -221,7 +225,12 @@ class GaiaClient:
         csrf_token = self.session.cookies.get("csrftoken")
         if not csrf_token:
             raise RuntimeError("Gaia upload page did not provide a CSRF token")
-        action, file_field, hidden_fields = upload_form(upload_page.content)
+        try:
+            action, file_field, hidden_fields = upload_form(upload_page.content)
+        except RuntimeError as error:
+            candidates = self._upload_candidates(upload_page.content)
+            detail = ", ".join(candidates) if candidates else "none"
+            raise RuntimeError(f"{error}; import paths found: {detail}") from error
         multipart = CurlMime()
         multipart.addpart(
             name=file_field,
@@ -249,6 +258,25 @@ class GaiaClient:
         if folder_id == "upload":
             raise RuntimeError("Gaia rejected the GPX upload")
         return folder_id
+
+    def _upload_candidates(self, html):
+        parser = _UploadFormParser()
+        parser.feed(html.decode("utf-8", errors="replace"))
+        candidates = set()
+        for source in parser.scripts[:20]:
+            script_url = urljoin(f"{GAIA_BASE_URL}/upload/", source)
+            if not script_url.startswith(f"{GAIA_BASE_URL}/"):
+                continue
+            response = self._request(
+                "GET", script_url.removeprefix(GAIA_BASE_URL)
+            )
+            for match in re.findall(
+                rb"""["'](/[^"'\\\s]{0,160}(?:upload|import)[^"'\\\s]{0,160})["']""",
+                response.content,
+                flags=re.IGNORECASE,
+            ):
+                candidates.add(match.decode("utf-8", errors="replace"))
+        return sorted(candidates)[:20]
 
     def put_folder(self, folder):
         time.sleep(self.request_delay)
