@@ -350,7 +350,7 @@ class GaiaClient:
             if reference.tzinfo is None:
                 reference = reference.replace(tzinfo=timezone.utc)
             return max((retry_at - reference).total_seconds(), 0)
-        except (TypeError, ValueError, OverflowError):
+        except (AttributeError, TypeError, ValueError, OverflowError):
             return None
 
     def _request(self, method, path, **kwargs):
@@ -381,7 +381,8 @@ class GaiaClient:
                     "the runner may be temporarily rate limited"
                 )
             if rate_limited:
-                raise GaiaRateLimited(
+                error_type = GaiaWriteRejected if is_write else GaiaRateLimited
+                raise error_type(
                     f"Gaia rate limited {method} {path} after {attempts} attempts; "
                     f"{self._response_details(response)}"
                 )

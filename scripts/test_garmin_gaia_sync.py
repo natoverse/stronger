@@ -106,10 +106,8 @@ def test_auth_verification_rejects_unauthorized_session():
             client.verify_auth()
             raise AssertionError("Expected invalid Gaia session to fail")
         except RuntimeError as error:
-            assert str(error) == "Gaia session expired or was rejected (status 403)" or (
-                status_code == 401
-                and str(error)
-                == "Gaia session expired or was rejected (status 401)"
+            assert str(error) == (
+                f"Gaia session expired or was rejected (status {status_code})"
             )
 
 
