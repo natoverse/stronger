@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Export recent Garmin hiking tracks for Gaia GPS.
+"""Sync recent Garmin hiking tracks to Gaia GPS.
 
-Gaia has no supported write API. By default this script writes validated GPX
-files for manual import. ``--upload`` enables the private-API spike only after
-the live-account checks in GAIA_SYNC_SETUP.md have passed.
+Gaia has no supported write API. This script uses its private web behavior to
+upload validated GPX files into an existing folder.
 
 Required environment variables:
   GARMIN_TOKENS    Saved garminconnect token bundle.
-
-Required with --upload:
   GAIA_SESSION_ID  Browser-extracted Gaia session cookie.
   GAIA_FOLDER_ID   Existing destination folder ID.
 """
@@ -22,11 +19,12 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+from datetime import date, timedelta
 from pathlib import Path
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
-DEFAULT_ACTIVITY_LIMIT = 30
-MAX_ACTIVITY_LIMIT = 100
+ROLLING_DAYS = 4
+BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
 
@@ -249,20 +247,22 @@ def sync_gpx_to_gaia(client, gpx_path, folder_id, activity_id):
     return "uploaded" if temporary_folder_id else "recovered"
 
 
-def _activity_limit(value):
-    try:
-        limit = int(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError("GAIA_ACTIVITY_LIMIT must be an integer") from error
-    if not 1 <= limit <= MAX_ACTIVITY_LIMIT:
-        raise ValueError(f"GAIA_ACTIVITY_LIMIT must be between 1 and {MAX_ACTIVITY_LIMIT}")
-    return limit
+def activity_date_range(backfill=False, today=None):
+    """Return Garmin's inclusive start and exclusive end date bounds."""
+    today = today or date.today()
+    start_date = (
+        BACKFILL_START_DATE
+        if backfill
+        else (today - timedelta(days=ROLLING_DAYS - 1)).isoformat()
+    )
+    return start_date, (today + timedelta(days=1)).isoformat()
 
 
-def run(garmin, output_dir, upload=False, gaia=None, folder_id=None, limit=30):
-    """Process recent activities and return ``(summary, failures)``."""
+def run(garmin, output_dir, gaia, folder_id, backfill=False, today=None):
+    """Process activities in the selected window and return a summary."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    activities = garmin.get_activities(0, limit) or []
+    start_date, end_date = activity_date_range(backfill, today)
+    activities = garmin.get_activities_by_date(start_date, end_date) or []
     summary = []
     failures = 0
 
@@ -284,11 +284,8 @@ def run(garmin, output_dir, upload=False, gaia=None, folder_id=None, limit=30):
                 continue
             path = output_dir / f"garmin-{activity_id}.gpx"
             path.write_bytes(prepared)
-            if upload:
-                result = sync_gpx_to_gaia(gaia, path, folder_id, activity_id)
-                summary.append((activity_id, result))
-            else:
-                summary.append((activity_id, "exported for manual Gaia import"))
+            result = sync_gpx_to_gaia(gaia, path, folder_id, activity_id)
+            summary.append((activity_id, result))
         except Exception as error:  # noqa: BLE001 - report each activity and continue
             failures += 1
             summary.append((activity_id, f"failed: {error}"))
@@ -298,44 +295,36 @@ def run(garmin, output_dir, upload=False, gaia=None, folder_id=None, limit=30):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--upload", action="store_true")
+    parser.add_argument("--backfill", action="store_true")
     parser.add_argument("--output-dir", default="gaia-gpx")
     args = parser.parse_args(argv)
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
-    limit = _activity_limit(
-        os.environ.get("GAIA_ACTIVITY_LIMIT", DEFAULT_ACTIVITY_LIMIT)
-    )
-
-    gaia = None
-    folder_id = None
-    if args.upload:
-        session_id = os.environ.get("GAIA_SESSION_ID")
-        folder_id = os.environ.get("GAIA_FOLDER_ID")
-        if not session_id:
-            raise SystemExit("Missing GAIA_SESSION_ID environment variable")
-        if not folder_id:
-            raise SystemExit("Missing GAIA_FOLDER_ID environment variable")
-        try:
-            delay = float(os.environ.get("GAIA_REQUEST_DELAY_SECONDS", "2"))
-        except ValueError as error:
-            raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must be numeric") from error
-        if delay < 0:
-            raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must not be negative")
-        gaia = GaiaClient(session_id, delay)
-        gaia.verify_auth()
+    session_id = os.environ.get("GAIA_SESSION_ID")
+    folder_id = os.environ.get("GAIA_FOLDER_ID")
+    if not session_id:
+        raise SystemExit("Missing GAIA_SESSION_ID environment variable")
+    if not folder_id:
+        raise SystemExit("Missing GAIA_FOLDER_ID environment variable")
+    try:
+        delay = float(os.environ.get("GAIA_REQUEST_DELAY_SECONDS", "2"))
+    except ValueError as error:
+        raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must be numeric") from error
+    if delay < 0:
+        raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must not be negative")
+    gaia = GaiaClient(session_id, delay)
+    gaia.verify_auth()
 
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
     summary, failures = run(
         garmin,
         Path(args.output_dir),
-        upload=args.upload,
         gaia=gaia,
         folder_id=folder_id,
-        limit=limit,
+        backfill=args.backfill,
     )
     print("Garmin-to-Gaia summary:")
     if not summary:

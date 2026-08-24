@@ -5,6 +5,7 @@ import importlib.util
 import os
 import tempfile
 import xml.etree.ElementTree as ET
+from datetime import date
 from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -125,22 +126,26 @@ def test_missing_or_ambiguous_folder_fails_before_upload():
         assert gaia.uploads == 0
 
 
-def test_activity_limit_is_bounded():
-    assert sync._activity_limit("30") == 30
-    for value in ("0", "101", "bad"):
-        try:
-            sync._activity_limit(value)
-            raise AssertionError("Expected invalid limit to fail")
-        except ValueError:
-            pass
+def test_default_window_covers_last_72_hours():
+    assert sync.activity_date_range(today=date(2026, 8, 24)) == (
+        "2026-08-21",
+        "2026-08-25",
+    )
+
+
+def test_backfill_starts_at_2015():
+    assert sync.activity_date_range(backfill=True, today=date(2026, 8, 24)) == (
+        "2015-01-01",
+        "2026-08-25",
+    )
 
 
 class FakeGarmin:
     class ActivityDownloadFormat:
         GPX = "gpx"
 
-    def get_activities(self, start, limit):
-        assert (start, limit) == (0, 30)
+    def get_activities_by_date(self, start_date, end_date):
+        assert (start_date, end_date) == ("2026-08-21", "2026-08-25")
         return [
             {
                 "activityId": 123,
@@ -155,11 +160,18 @@ class FakeGarmin:
         return VALID_GPX
 
 
-def test_export_mode_writes_only_eligible_valid_tracks():
+def test_run_uploads_only_eligible_valid_tracks():
     with tempfile.TemporaryDirectory() as directory:
-        summary, failures = sync.run(FakeGarmin(), Path(directory))
+        gaia = FakeGaia([{"id": "destination", "tracks": []}], [])
+        summary, failures = sync.run(
+            FakeGarmin(),
+            Path(directory),
+            gaia,
+            "destination",
+            today=date(2026, 8, 24),
+        )
         assert failures == 0
-        assert summary == [("123", "exported for manual Gaia import")]
+        assert summary == [("123", "uploaded")]
         assert [path.name for path in Path(directory).iterdir()] == ["garmin-123.gpx"]
 
 
