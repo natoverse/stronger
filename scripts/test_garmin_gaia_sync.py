@@ -3,10 +3,13 @@
 
 import importlib.util
 import os
+import sys
 import tempfile
+import types
 import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
@@ -17,8 +20,135 @@ _spec.loader.exec_module(sync)
 
 VALID_GPX = b"""<?xml version="1.0"?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1">
-  <trk><name>Old name</name><trkseg><trkpt lat="47.1" lon="-122.2"/></trkseg></trk>
+  <trk><name>Old name</name><trkseg>
+    <trkpt lat="47.1" lon="-122.2"><ele>100</ele><time>2026-08-23T00:00:00Z</time></trkpt>
+    <trkpt lat="47.1001" lon="-122.2001"><ele>105</ele><time>2026-08-23T00:00:10Z</time></trkpt>
+  </trkseg></trk>
 </gpx>"""
+
+
+class FakeCookies:
+    def __init__(self):
+        self.values = []
+
+    def set(self, name, value, **kwargs):
+        self.values.append((name, value, kwargs))
+
+    def get(self, name):
+        matches = [value for key, value, _ in self.values if key == name]
+        return matches[-1] if matches else None
+
+
+class FakeSession:
+    def __init__(self, status_code=200, response_url=None, content=b""):
+        self.headers = {}
+        self.cookies = FakeCookies()
+        self.requests = []
+        self.status_code = status_code
+        self.response_url = response_url
+        self.content = content
+
+    def request(self, method, url, **kwargs):
+        self.requests.append((method, url, kwargs))
+        return types.SimpleNamespace(
+            status_code=self.status_code,
+            url=self.response_url or url,
+            ok=self.status_code < 400,
+            content=self.content,
+        )
+
+
+def test_gaia_client_uses_browser_impersonation_and_exact_cookie_host():
+    created = []
+
+    def session_factory(**kwargs):
+        created.append(kwargs)
+        return FakeSession()
+
+    fake_curl_cffi = types.SimpleNamespace(
+        requests=types.SimpleNamespace(Session=session_factory)
+    )
+    with mock.patch.dict(sys.modules, {"curl_cffi": fake_curl_cffi}):
+        client = sync.GaiaClient("secret", request_delay=0)
+
+    assert created == [{"impersonate": "chrome"}]
+    assert client.session.cookies.values == [
+        ("sessionid", "secret", {"domain": "www.gaiagps.com"})
+    ]
+    assert client.session.headers == {}
+
+
+def test_auth_verification_uses_protected_api_endpoint():
+    session = FakeSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    client.verify_auth()
+    assert session.requests == [
+        (
+            "GET",
+            "https://www.gaiagps.com/api/objects/folder/",
+            {"params": {"count": "1", "page": "1"}},
+        )
+    ]
+
+
+def test_auth_verification_rejects_unauthorized_session():
+    for status_code in (401, 403):
+        client = sync.GaiaClient(
+            "secret",
+            request_delay=0,
+            session=FakeSession(status_code=status_code),
+        )
+        try:
+            client.verify_auth()
+            raise AssertionError("Expected invalid Gaia session to fail")
+        except RuntimeError as error:
+            assert str(error) == "Gaia session expired or was rejected"
+
+
+def test_create_track_uses_captured_json_endpoint_and_csrf_headers():
+    session = FakeSession()
+    client = sync.GaiaClient("secret", request_delay=0, session=session)
+    client.session.cookies.set(
+        "csrftoken", "csrf-secret", domain="www.gaiagps.com"
+    )
+    client.create_track(VALID_GPX, "[Garmin activity:123] - Ridge", "folder")
+
+    assert session.requests[0][:2] == (
+        "GET",
+        "https://www.gaiagps.com/map/",
+    )
+    upload_request = session.requests[1][2]
+    assert session.requests[1][:2] == (
+        "POST",
+        "https://www.gaiagps.com/api/v3/tracks/",
+    )
+    assert upload_request["headers"]["X-CSRFToken"] == "csrf-secret"
+    payload = upload_request["json"]
+    assert len(payload) == 1
+    assert payload[0]["geometry"]["type"] == "LineString"
+    assert payload[0]["geometry"]["coordinates"][0] == [
+        -122.2,
+        47.1,
+        100.0,
+        1787443200,
+    ]
+    assert payload[0]["name"] == "[Garmin activity:123] - Ridge"
+    assert payload[0]["parent_folder_id"] == "folder"
+    assert payload[0]["stats"]["point_count"] == 2
+    assert payload[0]["create_date"] == "2026-08-23T00:00:00.000Z"
+
+
+def test_create_track_fails_without_csrf_token():
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=FakeSession(),
+    )
+    try:
+        client.create_track(VALID_GPX, "title", "folder")
+        raise AssertionError("Expected missing Gaia CSRF token to fail")
+    except RuntimeError as error:
+        assert str(error) == "Gaia map page did not provide a CSRF token"
 
 
 def test_filters_exact_activity_types():
@@ -68,13 +198,12 @@ class FakeGaia:
     def list_objects(self, object_type):
         return self.folders if object_type == "folder" else self.tracks
 
-    def upload_file(self, path):
+    def create_track(self, gpx_bytes, title, folder_id):
         self.uploads += 1
-        self.folders.append({"id": "temp", "tracks": ["new-track"]})
+        self.folders[0]["tracks"].append("new-track")
         self.tracks.append(
-            {"id": "new-track", "title": "[Garmin activity:123] - Ridge"}
+            {"id": "new-track", "name": "[Garmin activity:123] - Ridge"}
         )
-        return "temp"
 
     def put_folder(self, folder):
         return True
@@ -88,7 +217,9 @@ def test_duplicate_in_destination_is_skipped():
         [{"id": "destination", "tracks": ["existing"]}],
         [{"id": "existing", "title": "[Garmin activity:123] - Ridge"}],
     )
-    result = sync.sync_gpx_to_gaia(gaia, Path("unused"), "destination", "123")
+    result = sync.sync_gpx_to_gaia(
+        gaia, VALID_GPX, "title", "destination", "123"
+    )
     assert result == "duplicate"
     assert gaia.uploads == 0
 
@@ -98,18 +229,22 @@ def test_partial_failure_track_is_recovered_without_upload():
         [{"id": "destination", "tracks": []}],
         [{"id": "existing", "title": "[Garmin activity:123] - Ridge"}],
     )
-    result = sync.sync_gpx_to_gaia(gaia, Path("unused"), "destination", "123")
+    result = sync.sync_gpx_to_gaia(
+        gaia, VALID_GPX, "title", "destination", "123"
+    )
     assert result == "recovered"
     assert gaia.uploads == 0
     assert gaia.folders[0]["tracks"] == ["existing"]
 
 
-def test_upload_assigns_tracks_and_removes_temporary_folder():
+def test_upload_creates_track_in_destination_folder():
     gaia = FakeGaia([{"id": "destination", "tracks": []}], [])
-    result = sync.sync_gpx_to_gaia(gaia, Path("unused"), "destination", "123")
+    result = sync.sync_gpx_to_gaia(
+        gaia, VALID_GPX, "title", "destination", "123"
+    )
     assert result == "uploaded"
     assert gaia.folders[0]["tracks"] == ["new-track"]
-    assert gaia.deleted == ["temp"]
+    assert gaia.deleted == []
 
 
 def test_missing_or_ambiguous_folder_fails_before_upload():
@@ -119,7 +254,9 @@ def test_missing_or_ambiguous_folder_fails_before_upload():
     ):
         gaia = FakeGaia(folders, [])
         try:
-            sync.sync_gpx_to_gaia(gaia, Path("unused"), "destination", "123")
+            sync.sync_gpx_to_gaia(
+                gaia, VALID_GPX, "title", "destination", "123"
+            )
             raise AssertionError("Expected folder validation to fail")
         except RuntimeError:
             pass

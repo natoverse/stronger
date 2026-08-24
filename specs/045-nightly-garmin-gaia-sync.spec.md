@@ -60,3 +60,15 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   and partial-failure recovery checks that marker across all Gaia tracks before
   uploading, then verifies folder membership before deleting Gaia's temporary
   import folder.
+- After GitHub-hosted requests received 403 responses with a freshly renewed
+  session, Gaia requests were moved to the existing `curl_cffi` dependency's
+  Chrome impersonation. Authentication is now checked against the protected
+  folder API rather than the public profile page, and the session cookie is
+  scoped to the exact `www.gaiagps.com` host used by the client.
+- Before uploading, the client loads Gaia's upload page to initialize the
+  session's CSRF cookie, then submits that token with same-origin headers.
+- Gaia retired the legacy multipart GPX import behavior used by the initial
+  implementation. The sync now converts Garmin GPX points to Gaia's captured
+  `/api/v3/tracks/` JSON shape and creates the track directly in
+  `GAIA_FOLDER_ID`, preserving coordinates, elevation, timestamps, and summary
+  statistics.
