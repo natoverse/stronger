@@ -4,7 +4,8 @@
 
 :root {
 	--app-header-height: 3.8125rem;
-	--app-header-offset: calc(var(--app-header-height) + 0.5rem);
+	--app-header-gap: 0.25rem;
+	--app-header-offset: calc(var(--app-header-height) + var(--app-header-gap));
 	--color-bg: #000;
 	--color-surface: #0a0a0a;
 	--color-surface-hover: #141414;
@@ -871,11 +872,12 @@ body {
 	padding: 0.75rem 0;
 	font-size: 0.875rem;
 	border-bottom: 1px solid var(--color-border);
-	margin-bottom: 0.5rem;
+	margin-bottom: var(--app-header-gap);
 	position: sticky;
 	top: 0;
 	z-index: 30;
 	background: var(--color-bg);
+	box-shadow: 0 var(--app-header-gap) 0 var(--color-bg);
 }
 
 .toolbar-nav {
