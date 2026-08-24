@@ -167,6 +167,10 @@ class GaiaClient:
         from curl_cffi import CurlMime
 
         time.sleep(self.request_delay)
+        self._request("GET", "/upload/")
+        csrf_token = self.session.cookies.get("csrftoken")
+        if not csrf_token:
+            raise RuntimeError("Gaia upload page did not provide a CSRF token")
         multipart = CurlMime()
         multipart.addpart(
             name="files",
@@ -181,6 +185,11 @@ class GaiaClient:
                 multipart=multipart,
                 data={"name": path.name},
                 allow_redirects=True,
+                headers={
+                    "Origin": GAIA_BASE_URL,
+                    "Referer": f"{GAIA_BASE_URL}/upload/",
+                    "X-CSRFToken": csrf_token,
+                },
             )
         finally:
             multipart.close()

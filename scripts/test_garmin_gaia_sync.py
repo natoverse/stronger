@@ -31,6 +31,10 @@ class FakeCookies:
     def set(self, name, value, **kwargs):
         self.values.append((name, value, kwargs))
 
+    def get(self, name):
+        matches = [value for key, value, _ in self.values if key == name]
+        return matches[-1] if matches else None
+
 
 class FakeSession:
     def __init__(self, status_code=200, response_url=None):
@@ -117,6 +121,9 @@ def test_upload_uses_curl_multipart_form():
         response_url="https://www.gaiagps.com/datasummary/folder/temp/"
     )
     client = sync.GaiaClient("secret", request_delay=0, session=session)
+    client.session.cookies.set(
+        "csrftoken", "csrf-secret", domain="www.gaiagps.com"
+    )
     with tempfile.TemporaryDirectory() as directory:
         path = Path(directory) / "track.gpx"
         path.write_bytes(VALID_GPX)
@@ -132,11 +139,30 @@ def test_upload_uses_curl_multipart_form():
         }
     ]
     assert created[0].closed
-    assert session.requests[0][2] == {
+    assert session.requests[0] == (
+        "GET",
+        "https://www.gaiagps.com/upload/",
+        {},
+    )
+    assert session.requests[1][2] == {
         "multipart": created[0],
         "data": {"name": "track.gpx"},
         "allow_redirects": True,
+        "headers": {
+            "Origin": "https://www.gaiagps.com",
+            "Referer": "https://www.gaiagps.com/upload/",
+            "X-CSRFToken": "csrf-secret",
+        },
     }
+
+
+def test_upload_fails_without_csrf_token():
+    client = sync.GaiaClient("secret", request_delay=0, session=FakeSession())
+    try:
+        client.upload_file(Path("unused.gpx"))
+        raise AssertionError("Expected missing Gaia CSRF token to fail")
+    except RuntimeError as error:
+        assert str(error) == "Gaia upload page did not provide a CSRF token"
 
 
 def test_filters_exact_activity_types():
