@@ -20,13 +20,63 @@ import tempfile
 import time
 import xml.etree.ElementTree as ET
 from datetime import date, timedelta
+from html.parser import HTMLParser
 from pathlib import Path
+from urllib.parse import urljoin
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
 ROLLING_DAYS = 4
 BACKFILL_START_DATE = "2015-01-01"
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
+
+
+class _UploadFormParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.current = None
+        self.forms = []
+
+    def handle_starttag(self, tag, attrs):
+        values = dict(attrs)
+        if tag == "form":
+            self.current = {
+                "action": values.get("action") or "/upload/",
+                "file_field": None,
+                "hidden": {},
+            }
+        elif tag == "input" and self.current is not None:
+            input_type = (values.get("type") or "text").lower()
+            name = values.get("name")
+            if input_type == "file" and name:
+                self.current["file_field"] = name
+            elif input_type == "hidden" and name:
+                self.current["hidden"][name] = values.get("value") or ""
+
+    def handle_endtag(self, tag):
+        if tag == "form" and self.current is not None:
+            if self.current["file_field"]:
+                self.forms.append(self.current)
+            self.current = None
+
+
+def upload_form(html):
+    """Return the current same-origin Gaia upload form configuration."""
+    parser = _UploadFormParser()
+    parser.feed(html.decode("utf-8", errors="replace"))
+    if len(parser.forms) != 1:
+        raise RuntimeError(
+            f"Gaia upload page exposed {len(parser.forms)} file forms"
+        )
+    form = parser.forms[0]
+    action_url = urljoin(f"{GAIA_BASE_URL}/upload/", form["action"])
+    if not action_url.startswith(f"{GAIA_BASE_URL}/"):
+        raise RuntimeError("Gaia upload form action was not same-origin")
+    return (
+        action_url.removeprefix(GAIA_BASE_URL),
+        form["file_field"],
+        form["hidden"],
+    )
 
 
 def login_from_tokens(token_bundle):
@@ -167,22 +217,23 @@ class GaiaClient:
         from curl_cffi import CurlMime
 
         time.sleep(self.request_delay)
-        self._request("GET", "/upload/")
+        upload_page = self._request("GET", "/upload/")
         csrf_token = self.session.cookies.get("csrftoken")
         if not csrf_token:
             raise RuntimeError("Gaia upload page did not provide a CSRF token")
+        action, file_field, hidden_fields = upload_form(upload_page.content)
         multipart = CurlMime()
         multipart.addpart(
-            name="files",
+            name=file_field,
             filename=path.name,
             local_path=path,
         )
         try:
             response = self._request(
                 "POST",
-                "/upload/",
+                action,
                 multipart=multipart,
-                data={"name": path.name},
+                data={**hidden_fields, "name": path.name},
                 allow_redirects=True,
                 headers={
                     "Origin": GAIA_BASE_URL,

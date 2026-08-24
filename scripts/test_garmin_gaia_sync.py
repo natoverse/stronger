@@ -22,6 +22,12 @@ VALID_GPX = b"""<?xml version="1.0"?>
 <gpx xmlns="http://www.topografix.com/GPX/1/1">
   <trk><name>Old name</name><trkseg><trkpt lat="47.1" lon="-122.2"/></trkseg></trk>
 </gpx>"""
+UPLOAD_FORM = b"""
+<form action="/upload/current/" method="post">
+  <input type="hidden" name="csrfmiddlewaretoken" value="masked-csrf">
+  <input type="hidden" name="source" value="web">
+  <input type="file" name="current-files">
+</form>"""
 
 
 class FakeCookies:
@@ -37,12 +43,13 @@ class FakeCookies:
 
 
 class FakeSession:
-    def __init__(self, status_code=200, response_url=None):
+    def __init__(self, status_code=200, response_url=None, content=b""):
         self.headers = {}
         self.cookies = FakeCookies()
         self.requests = []
         self.status_code = status_code
         self.response_url = response_url
+        self.content = content
 
     def request(self, method, url, **kwargs):
         self.requests.append((method, url, kwargs))
@@ -50,7 +57,7 @@ class FakeSession:
             status_code=self.status_code,
             url=self.response_url or url,
             ok=self.status_code < 400,
-            content=b"",
+            content=self.content,
         )
 
 
@@ -118,7 +125,8 @@ def test_upload_uses_curl_multipart_form():
 
     fake_curl_cffi = types.SimpleNamespace(CurlMime=FakeCurlMime)
     session = FakeSession(
-        response_url="https://www.gaiagps.com/datasummary/folder/temp/"
+        response_url="https://www.gaiagps.com/datasummary/folder/temp/",
+        content=UPLOAD_FORM,
     )
     client = sync.GaiaClient("secret", request_delay=0, session=session)
     client.session.cookies.set(
@@ -132,7 +140,7 @@ def test_upload_uses_curl_multipart_form():
 
     assert created[0].parts == [
         {
-            "name": "files",
+            "name": "current-files",
             "filename": "track.gpx",
             "local_path": path,
         }
@@ -145,7 +153,11 @@ def test_upload_uses_curl_multipart_form():
     )
     assert session.requests[1][2] == {
         "multipart": created[0],
-        "data": {"name": "track.gpx"},
+        "data": {
+            "csrfmiddlewaretoken": "masked-csrf",
+            "source": "web",
+            "name": "track.gpx",
+        },
         "allow_redirects": True,
         "headers": {
             "Origin": "https://www.gaiagps.com",
@@ -155,8 +167,24 @@ def test_upload_uses_curl_multipart_form():
     }
 
 
+def test_upload_form_rejects_missing_or_cross_origin_forms():
+    for html in (
+        b"<html></html>",
+        b"<form action='https://example.com'><input type='file' name='file'></form>",
+    ):
+        try:
+            sync.upload_form(html)
+            raise AssertionError("Expected invalid Gaia upload form to fail")
+        except RuntimeError:
+            pass
+
+
 def test_upload_fails_without_csrf_token():
-    client = sync.GaiaClient("secret", request_delay=0, session=FakeSession())
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=FakeSession(content=UPLOAD_FORM),
+    )
     try:
         client.upload_file(Path("unused.gpx"))
         raise AssertionError("Expected missing Gaia CSRF token to fail")

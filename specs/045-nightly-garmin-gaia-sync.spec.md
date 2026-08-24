@@ -69,3 +69,6 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   `files` argument, which `curl_cffi` deliberately does not support.
 - Before uploading, the client loads Gaia's upload page to initialize the
   session's CSRF cookie, then submits that token with same-origin headers.
+- The upload request reads the current file field, same-origin form action, and
+  hidden inputs from Gaia's upload page rather than assuming the legacy form
+  remains unchanged.
