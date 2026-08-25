@@ -366,30 +366,6 @@ def test_duplicate_in_destination_is_skipped():
     assert gaia.uploads == 0
 
 
-def test_duplicate_in_destination_is_uploaded_when_allowed():
-    gaia = FakeGaia(
-        [{"id": "destination", "tracks": ["existing"]}],
-        [
-            {
-                "id": "existing",
-                "title": "Ridge",
-                "source": "[Garmin activity:123]",
-            }
-        ],
-    )
-    result = sync.sync_gpx_to_gaia(
-        gaia,
-        VALID_GPX,
-        "title",
-        "destination",
-        "123",
-        allow_duplicates=True,
-    )
-    assert result == "uploaded"
-    assert gaia.uploads == 1
-    assert gaia.folders[0]["tracks"] == ["existing", "new-track"]
-
-
 def test_partial_failure_track_is_recovered_without_upload():
     gaia = FakeGaia(
         [{"id": "destination", "tracks": []}],
@@ -441,62 +417,6 @@ def test_missing_or_ambiguous_folder_fails_before_upload():
         assert gaia.uploads == 0
 
 
-class ProbeGaia(FakeGaia):
-    def __init__(self, folders, tracks, failures_before_success):
-        super().__init__(folders, tracks)
-        self.failures_before_success = failures_before_success
-        self.puts = 0
-        self.write_attempts = 3
-        self.sleep_calls = []
-
-    def put_folder(self, folder):
-        self.puts += 1
-        if self.puts <= self.failures_before_success:
-            raise sync.GaiaWriteRejected(f"rejected {self.puts}")
-        return True
-
-    def sleep(self, seconds):
-        self.sleep_calls.append(seconds)
-
-
-def test_probe_gaia_write_throttle_reports_acceptance_after_waiting():
-    gaia = ProbeGaia(
-        [{"id": "destination", "tracks": []}],
-        [],
-        failures_before_success=2,
-    )
-    assert sync.probe_gaia_write_throttle(
-        gaia,
-        "destination",
-        interval_seconds=15,
-        max_attempts=3,
-    )
-    assert gaia.puts == 3
-    assert gaia.sleep_calls == [15, 15]
-    assert gaia.write_attempts == 3
-
-
-def test_probe_gaia_write_throttle_fails_after_max_attempts():
-    gaia = ProbeGaia(
-        [{"id": "destination", "tracks": []}],
-        [],
-        failures_before_success=3,
-    )
-    try:
-        sync.probe_gaia_write_throttle(
-            gaia,
-            "destination",
-            interval_seconds=15,
-            max_attempts=2,
-        )
-        raise AssertionError("Expected probe to fail")
-    except RuntimeError as error:
-        assert "still rejected after 2 attempts" in str(error)
-    assert gaia.puts == 2
-    assert gaia.sleep_calls == [15]
-    assert gaia.write_attempts == 3
-
-
 def test_each_track_gets_a_random_color():
     with mock.patch.object(
         sync.random, "randrange", side_effect=(0x000001, 0xABCDEF)
@@ -508,16 +428,9 @@ def test_each_track_gets_a_random_color():
     assert second["hex_color"] == "#ABCDEF"
 
 
-def test_default_window_covers_last_30_days():
+def test_default_window_covers_last_72_hours():
     assert sync.activity_date_range(today=date(2026, 8, 24)) == (
-        "2026-07-26",
-        "2026-08-25",
-    )
-
-
-def test_backfill_starts_at_2015():
-    assert sync.activity_date_range(backfill=True, today=date(2026, 8, 24)) == (
-        "2015-01-01",
+        "2026-08-21",
         "2026-08-25",
     )
 
@@ -527,7 +440,7 @@ class FakeGarmin:
         GPX = "gpx"
 
     def get_activities_by_date(self, start_date, end_date):
-        assert (start_date, end_date) == ("2026-07-26", "2026-08-25")
+        assert (start_date, end_date) == ("2026-08-21", "2026-08-25")
         return [
             {
                 "activityId": 123,
