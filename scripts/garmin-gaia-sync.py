@@ -652,10 +652,10 @@ def run(
             )
             continue
         try:
+            title = activity_title(activity)
             raw_gpx = garmin.download_activity(
                 activity_id, garmin.ActivityDownloadFormat.GPX
             )
-            title = activity_title(activity)
             prepared = prepare_gpx(raw_gpx, title)
             if prepared is None:
                 summary.append(
