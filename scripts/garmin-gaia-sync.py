@@ -636,7 +636,12 @@ def run(
         if not eligible_activity(activity):
             continue
         activity_id = str(activity.get("activityId") or "")
-        title = str(activity.get("activityName") or "").strip() or "(unnamed)"
+        try:
+            title = activity_title(activity)
+            title_error = None
+        except ValueError as error:
+            title = "(unnamed)"
+            title_error = error
         gpx_name = (
             f"garmin-{activity_id}.gpx" if activity_id.isdigit() else "(not written)"
         )
@@ -651,8 +656,18 @@ def run(
                 )
             )
             continue
+        if title_error:
+            failures += 1
+            summary.append(
+                summary_entry(
+                    activity_id,
+                    title,
+                    gpx_name,
+                    f"failed: {title_error}",
+                )
+            )
+            continue
         try:
-            title = activity_title(activity)
             raw_gpx = garmin.download_activity(
                 activity_id, garmin.ActivityDownloadFormat.GPX
             )

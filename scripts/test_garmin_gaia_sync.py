@@ -564,6 +564,45 @@ def test_run_uploads_only_eligible_valid_tracks():
         assert [path.name for path in Path(directory).iterdir()] == ["garmin-123.gpx"]
 
 
+def test_run_reports_missing_title_without_downloading():
+    class MissingTitleGarmin(FakeGarmin):
+        def __init__(self):
+            self.downloads = 0
+
+        def get_activities_by_date(self, start_date, end_date):
+            return [
+                {
+                    "activityId": 123,
+                    "activityName": " ",
+                    "activityType": {"typeKey": "hiking"},
+                }
+            ]
+
+        def download_activity(self, activity_id, download_format):
+            self.downloads += 1
+            return VALID_GPX
+
+    with tempfile.TemporaryDirectory() as directory:
+        garmin = MissingTitleGarmin()
+        summary, failures = sync.run(
+            garmin,
+            Path(directory),
+            FakeGaia([{"id": "destination", "tracks": []}], []),
+            "destination",
+            today=date(2026, 8, 24),
+        )
+    assert failures == 1
+    assert summary == [
+        {
+            "activity_id": "123",
+            "title": "(unnamed)",
+            "gpx_name": "garmin-123.gpx",
+            "result": "failed: missing Garmin activity name",
+        }
+    ]
+    assert garmin.downloads == 0
+
+
 class RejectingGaia(FakeGaia):
     def create_track(self, gpx_bytes, title, folder_id, activity_id):
         self.uploads += 1
