@@ -31,7 +31,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: garmin-gpx-export
-          path: garmin-gpx-export.zip
+          path: garmin-gpx/
           if-no-files-found: error
           retention-days: 30
-
