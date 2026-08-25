@@ -584,7 +584,7 @@ def probe_gaia_write_throttle(
                     f"on attempt {attempt} after {elapsed}"
                 )
                 return True
-            except GaiaRateLimited as error:
+            except GaiaWriteRejected as error:
                 elapsed = datetime.now(timezone.utc) - started
                 if attempt == max_attempts:
                     raise RuntimeError(
