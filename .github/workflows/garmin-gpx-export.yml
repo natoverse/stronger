@@ -1,0 +1,37 @@
+name: Garmin GPX Export
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Export Garmin GPX files
+        env:
+          GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+        run: python scripts/garmin-gpx-export.py
+
+      - name: Upload Garmin GPX archive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: garmin-gpx-export
+          path: garmin-gpx-export.zip
+          if-no-files-found: error
+          retention-days: 30
+
