@@ -13,6 +13,18 @@ on:
         description: 'Upload tracks even when their Garmin activity ID already exists'
         type: boolean
         default: false
+      probe_gaia_write_throttle:
+        description: 'Probe Gaia write throttle timing with idempotent folder writes'
+        type: boolean
+        default: false
+      probe_interval_minutes:
+        description: 'Minutes to wait between Gaia write throttle probes'
+        type: number
+        default: 15
+      probe_max_attempts:
+        description: 'Maximum Gaia write throttle probe attempts'
+        type: number
+        default: 24
 
 permissions:
   contents: read
@@ -41,3 +53,6 @@ jobs:
           python scripts/garmin-gaia-sync.py
           ${{ inputs.backfill && '--backfill' || '' }}
           ${{ inputs.allow_duplicates && '--allow-duplicates' || '' }}
+          ${{ inputs.probe_gaia_write_throttle && '--probe-gaia-write-throttle' || '' }}
+          --probe-interval-minutes ${{ inputs.probe_interval_minutes || 15 }}
+          --probe-max-attempts ${{ inputs.probe_max_attempts || 24 }}
