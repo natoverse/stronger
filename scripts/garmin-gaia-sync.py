@@ -32,6 +32,9 @@ GAIA_BASE_URL = "https://www.gaiagps.com"
 MOVING_SPEED_THRESHOLD = 0.25
 GAIA_WRITE_ATTEMPTS = 3
 GAIA_RETRY_DELAY_SECONDS = 30.0
+GAIA_PROBE_INTERVAL_SECONDS = 15 * 60
+GAIA_PROBE_MAX_ATTEMPTS = 24
+MAX_RESPONSE_BODY_DETAIL = 500
 SENSITIVE_RESPONSE_HEADERS = frozenset(
     {
         "authorization",
@@ -329,6 +332,12 @@ class GaiaClient:
         detail = f"status {response.status_code}"
         if headers:
             detail += f"; headers: {', '.join(headers)}"
+        body = (response.content or b"").decode("utf-8", errors="replace").strip()
+        if body:
+            body = " ".join(body.split())
+            if len(body) > MAX_RESPONSE_BODY_DETAIL:
+                body = f"{body[:MAX_RESPONSE_BODY_DETAIL]}..."
+            detail += f"; body: {body}"
         return detail
 
     @staticmethod
@@ -539,6 +548,63 @@ def sync_gpx_to_gaia(
     return "recovered"
 
 
+def summary_entry(activity_id, title, gpx_name, result):
+    """Return a stable per-activity summary record."""
+    return {
+        "activity_id": activity_id,
+        "title": title,
+        "gpx_name": gpx_name,
+        "result": result,
+    }
+
+
+def probe_gaia_write_throttle(
+    client,
+    folder_id,
+    interval_seconds=GAIA_PROBE_INTERVAL_SECONDS,
+    max_attempts=GAIA_PROBE_MAX_ATTEMPTS,
+):
+    """Probe Gaia's write throttle with an idempotent folder PUT."""
+    if interval_seconds < 0:
+        raise ValueError("probe interval must not be negative")
+    if max_attempts < 1:
+        raise ValueError("probe attempts must be at least 1")
+    folders = client.list_objects("folder")
+    destination = _one_by_id(folders, folder_id, "folder")
+    started = datetime.now(timezone.utc)
+    original_attempts = client.write_attempts
+    client.write_attempts = 1
+    try:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                client.put_folder(destination)
+                elapsed = datetime.now(timezone.utc) - started
+                print(
+                    "Gaia write probe accepted "
+                    f"on attempt {attempt} after {elapsed}"
+                )
+                return True
+            except GaiaRateLimited as error:
+                elapsed = datetime.now(timezone.utc) - started
+                if attempt == max_attempts:
+                    raise RuntimeError(
+                        "Gaia write probe was still rejected "
+                        f"after {max_attempts} attempts over {elapsed}: {error}"
+                    ) from error
+                next_time = datetime.now(timezone.utc) + timedelta(
+                    seconds=interval_seconds
+                )
+                print(
+                    "Gaia write probe rejected "
+                    f"on attempt {attempt} after {elapsed}: {error}; "
+                    f"next probe at {next_time.isoformat(timespec='seconds')}",
+                    file=sys.stderr,
+                )
+                client.sleep(interval_seconds)
+    finally:
+        client.write_attempts = original_attempts
+
+
 def activity_date_range(backfill=False, today=None):
     """Return Garmin's inclusive start and exclusive end date bounds."""
     today = today or date.today()
@@ -570,36 +636,59 @@ def run(
         if not eligible_activity(activity):
             continue
         activity_id = str(activity.get("activityId") or "")
+        title = str(activity.get("activityName") or "").strip() or "(unnamed)"
+        gpx_name = (
+            f"garmin-{activity_id}.gpx" if activity_id.isdigit() else "(not written)"
+        )
         if not activity_id.isdigit():
             failures += 1
-            summary.append(("unknown", "failed: invalid Garmin activity ID"))
+            summary.append(
+                summary_entry(
+                    "unknown",
+                    title,
+                    gpx_name,
+                    "failed: invalid Garmin activity ID",
+                )
+            )
             continue
         try:
             raw_gpx = garmin.download_activity(
                 activity_id, garmin.ActivityDownloadFormat.GPX
             )
-            prepared = prepare_gpx(raw_gpx, activity_title(activity))
+            title = activity_title(activity)
+            prepared = prepare_gpx(raw_gpx, title)
             if prepared is None:
-                summary.append((activity_id, "skipped: no valid track coordinates"))
+                summary.append(
+                    summary_entry(
+                        activity_id,
+                        title,
+                        gpx_name,
+                        "skipped: no valid track coordinates",
+                    )
+                )
                 continue
-            path = output_dir / f"garmin-{activity_id}.gpx"
+            path = output_dir / gpx_name
             path.write_bytes(prepared)
             result = sync_gpx_to_gaia(
                 gaia,
                 prepared,
-                activity_title(activity),
+                title,
                 folder_id,
                 activity_id,
                 allow_duplicates=allow_duplicates,
             )
-            summary.append((activity_id, result))
+            summary.append(summary_entry(activity_id, title, gpx_name, result))
         except GaiaRateLimited as error:
             failures += 1
-            summary.append((activity_id, f"failed: {error}"))
+            summary.append(
+                summary_entry(activity_id, title, gpx_name, f"failed: {error}")
+            )
             break
         except Exception as error:  # noqa: BLE001 - report each activity and continue
             failures += 1
-            summary.append((activity_id, f"failed: {error}"))
+            summary.append(
+                summary_entry(activity_id, title, gpx_name, f"failed: {error}")
+            )
 
     return summary, failures
 
@@ -608,6 +697,23 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--backfill", action="store_true")
     parser.add_argument("--allow-duplicates", action="store_true")
+    parser.add_argument(
+        "--probe-gaia-write-throttle",
+        action="store_true",
+        help="probe Gaia write acceptance with idempotent folder PUTs, then exit",
+    )
+    parser.add_argument(
+        "--probe-interval-minutes",
+        type=float,
+        default=GAIA_PROBE_INTERVAL_SECONDS / 60,
+        help="minutes to wait between Gaia write throttle probes",
+    )
+    parser.add_argument(
+        "--probe-max-attempts",
+        type=int,
+        default=GAIA_PROBE_MAX_ATTEMPTS,
+        help="maximum Gaia write throttle probe attempts",
+    )
     parser.add_argument("--output-dir", default="gaia-gpx")
     args = parser.parse_args(argv)
 
@@ -628,6 +734,14 @@ def main(argv=None):
         raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must not be negative")
     gaia = GaiaClient(session_id, delay)
     gaia.verify_auth()
+    if args.probe_gaia_write_throttle:
+        probe_gaia_write_throttle(
+            gaia,
+            folder_id,
+            interval_seconds=args.probe_interval_minutes * 60,
+            max_attempts=args.probe_max_attempts,
+        )
+        return
 
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
@@ -642,8 +756,13 @@ def main(argv=None):
     print("Garmin-to-Gaia summary:")
     if not summary:
         print("  No eligible hiking or mountaineering activities found.")
-    for activity_id, result in summary:
-        print(f"  {activity_id}: {result}")
+    for entry in summary:
+        print(
+            "  "
+            f"{entry['activity_id']} "
+            f"({entry['title']} / {entry['gpx_name']}): "
+            f"{entry['result']}"
+        )
     if failures:
         raise SystemExit(f"{failures} eligible activities failed")
 

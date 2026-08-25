@@ -96,3 +96,9 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   distinguishable from diagnostics that omitted them. The
   two-second inter-write delay remains configurable; persistent backfill
   throttling should be evaluated at five- and ten-second spacing.
+- Gaia throttle probing and progress logs (2026-08-25): Manual workflow runs can
+  enable a write-throttle probe that repeatedly sends an idempotent update to the
+  configured folder at a configurable interval, reporting each rejection and the
+  first accepted elapsed time. Sync summaries now include each eligible
+  activity's Garmin ID, Garmin title, GPX file name, and result for successful,
+  skipped, and failed activities.

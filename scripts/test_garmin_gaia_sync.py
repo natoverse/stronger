@@ -258,6 +258,26 @@ def test_failure_reports_all_response_headers_and_redacts_sensitive_values():
         assert "secret" not in message
 
 
+def test_failure_reports_short_response_body():
+    session = FakeSession(
+        status_code=403,
+        content=b'{"detail":"Request was throttled. Expected available in 7200 seconds."}',
+    )
+    client = sync.GaiaClient(
+        "secret",
+        request_delay=0,
+        session=session,
+        write_attempts=1,
+    )
+    try:
+        client._request("PUT", "/api/objects/folder/1/")
+        raise AssertionError("Expected rejected Gaia write to fail")
+    except sync.GaiaWriteRejected as error:
+        message = str(error)
+        assert "body:" in message
+        assert "7200 seconds" in message
+
+
 def test_filters_exact_activity_types():
     assert sync.eligible_activity({"activityType": {"typeKey": "hiking"}})
     assert sync.eligible_activity({"activityType": {"typeKey": "mountaineering"}})
@@ -421,6 +441,62 @@ def test_missing_or_ambiguous_folder_fails_before_upload():
         assert gaia.uploads == 0
 
 
+class ProbeGaia(FakeGaia):
+    def __init__(self, folders, tracks, failures_before_success):
+        super().__init__(folders, tracks)
+        self.failures_before_success = failures_before_success
+        self.puts = 0
+        self.write_attempts = 3
+        self.sleep_calls = []
+
+    def put_folder(self, folder):
+        self.puts += 1
+        if self.puts <= self.failures_before_success:
+            raise sync.GaiaWriteRejected(f"rejected {self.puts}")
+        return True
+
+    def sleep(self, seconds):
+        self.sleep_calls.append(seconds)
+
+
+def test_probe_gaia_write_throttle_reports_acceptance_after_waiting():
+    gaia = ProbeGaia(
+        [{"id": "destination", "tracks": []}],
+        [],
+        failures_before_success=2,
+    )
+    assert sync.probe_gaia_write_throttle(
+        gaia,
+        "destination",
+        interval_seconds=15,
+        max_attempts=3,
+    )
+    assert gaia.puts == 3
+    assert gaia.sleep_calls == [15, 15]
+    assert gaia.write_attempts == 3
+
+
+def test_probe_gaia_write_throttle_fails_after_max_attempts():
+    gaia = ProbeGaia(
+        [{"id": "destination", "tracks": []}],
+        [],
+        failures_before_success=3,
+    )
+    try:
+        sync.probe_gaia_write_throttle(
+            gaia,
+            "destination",
+            interval_seconds=15,
+            max_attempts=2,
+        )
+        raise AssertionError("Expected probe to fail")
+    except RuntimeError as error:
+        assert "still rejected after 2 attempts" in str(error)
+    assert gaia.puts == 2
+    assert gaia.sleep_calls == [15]
+    assert gaia.write_attempts == 3
+
+
 def test_each_track_gets_a_random_color():
     with mock.patch.object(
         sync.random, "randrange", side_effect=(0x000001, 0xABCDEF)
@@ -477,7 +553,14 @@ def test_run_uploads_only_eligible_valid_tracks():
             today=date(2026, 8, 24),
         )
         assert failures == 0
-        assert summary == [("123", "uploaded")]
+        assert summary == [
+            {
+                "activity_id": "123",
+                "title": "Ridge",
+                "gpx_name": "garmin-123.gpx",
+                "result": "uploaded",
+            }
+        ]
         assert [path.name for path in Path(directory).iterdir()] == ["garmin-123.gpx"]
 
 
@@ -513,7 +596,14 @@ def test_run_stops_after_persistent_gaia_write_rejection():
             today=date(2026, 8, 24),
         )
     assert failures == 1
-    assert summary == [("123", "failed: rate limited")]
+    assert summary == [
+        {
+            "activity_id": "123",
+            "title": "First",
+            "gpx_name": "garmin-123.gpx",
+            "result": "failed: rate limited",
+        }
+    ]
     assert gaia.uploads == 1
 
 
