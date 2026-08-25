@@ -33,27 +33,14 @@ Legacy tracks with the marker in their name remain recognized.
 The sync converts each Garmin GPX export to the same JSON track representation
 used by Gaia's web map and creates it directly in the configured folder.
 
-Normal runs query the last 30 days (today plus the prior 29 calendar days).
+Every run queries the last 72 hours as four calendar days (today plus the prior
+three days), matching the date-based lookback convention used by the Garmin
+wellness sync.
 Only exact Garmin type keys `hiking` and `mountaineering` are eligible. GPX files
 without a valid track-point latitude and longitude are skipped.
 
-Manual runs can enable **allow_duplicates** to upload eligible tracks even when
-their Garmin activity markers already exist in Gaia. It defaults to false so
-scheduled and ordinary manual runs remain idempotent.
-
-Manual runs can also enable **probe_gaia_write_throttle** to test Gaia's write
-acceptance without syncing Garmin tracks. The probe repeatedly sends an
-idempotent folder update to the configured folder, logs each rejected attempt
-with Gaia's response headers/body, and reports the first accepted attempt and
-elapsed time. Use **probe_interval_minutes** and **probe_max_attempts** to cover
-the expected lockout window.
-
-## Backfilling older tracks
-
-After verifying normal manual runs, manually run **Garmin to Gaia Sync** with
-**backfill** checked. This queries every Garmin activity since **2015-01-01**.
-Existing activity markers prevent duplicate Gaia imports, so interrupted
-backfills can be rerun safely.
+Scheduled and manual runs always check Garmin activity ID markers before upload,
+so rerunning the sync does not duplicate a GPX in Gaia.
 
 ## Recovery
 
@@ -61,11 +48,11 @@ backfills can be rerun safely.
 |---------|--------|
 | Gaia session expired or rejected | Copy a fresh browser `sessionid` into the `GAIA_SESSION_ID` secret. The sync validates it against Gaia's protected folder API before contacting Garmin. |
 | Missing or ambiguous folder | Correct `GAIA_FOLDER_ID`; the sync does not upload before validating it. |
-| Gaia write rejected or rate limited | The sync retries rate-limited reads and writes. It honors numeric and HTTP-date `Retry-After` values; otherwise it waits 30 and 60 seconds. Failures report the status, safe rate-limit headers, and short response body, then stop the run to avoid extending an IP-based throttle. Use the manual write-throttle probe to measure how long Gaia takes to accept writes again, then rerun. Successful earlier tracks remain in Gaia. |
+| Gaia write rejected or rate limited | The sync retries rate-limited reads and writes. It honors numeric and HTTP-date `Retry-After` values; otherwise it waits 30 and 60 seconds. Failures report the status, safe rate-limit headers, and short response body, then stop the run to avoid extending an IP-based throttle. Rerun later; successful earlier tracks remain in Gaia. |
 | Marker or folder verification failed | Correct the Gaia destination state, then rerun; the activity marker prevents another upload after a partial import. |
 | Garmin GPX is malformed or empty | Retry later; the per-activity summary exits non-zero without uploading that file. |
 
 `GAIA_REQUEST_DELAY_SECONDS` controls pacing between Gaia writes and defaults to
-two seconds. If backfills frequently receive 403 or 429 responses, try increasing
-the delay to 5 or 10 seconds. Compare the reported `Retry-After`,
+two seconds. If runs frequently receive 403 or 429 responses, try increasing the
+delay to 5 or 10 seconds. Compare the reported `Retry-After`,
 `RateLimit-Remaining`, and reset headers between runs before changing the default.

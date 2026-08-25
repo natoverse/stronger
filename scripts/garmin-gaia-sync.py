@@ -25,15 +25,12 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
-ROLLING_DAYS = 30
-BACKFILL_START_DATE = "2015-01-01"
+ROLLING_DAYS = 4
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
 MOVING_SPEED_THRESHOLD = 0.25
 GAIA_WRITE_ATTEMPTS = 3
 GAIA_RETRY_DELAY_SECONDS = 30.0
-GAIA_PROBE_INTERVAL_SECONDS = 15 * 60
-GAIA_PROBE_MAX_ATTEMPTS = 24
 MAX_RESPONSE_BODY_DETAIL = 500
 SENSITIVE_RESPONSE_HEADERS = frozenset(
     {
@@ -475,7 +472,6 @@ def sync_gpx_to_gaia(
     title,
     folder_id,
     activity_id,
-    allow_duplicates=False,
 ):
     """Upload or recover one activity and assign all its tracks to a folder."""
     folders = client.list_objects("folder")
@@ -492,27 +488,6 @@ def sync_gpx_to_gaia(
     ]
     matching_ids = [str(track["id"]) for track in matching_tracks]
     destination_ids = [str(track_id) for track_id in destination.get("tracks", [])]
-
-    if allow_duplicates:
-        existing_ids = set(matching_ids)
-        client.create_track(gpx_bytes, title, folder_id, activity_id)
-        tracks = client.list_objects("track")
-        new_matching_ids = [
-            str(track["id"])
-            for track in tracks
-            if str(track["id"]) not in existing_ids
-            and any(
-                marker in str(track.get(field) or "")
-                for field in ("source", "title", "name")
-            )
-        ]
-        if not new_matching_ids:
-            raise RuntimeError("Gaia import produced no new tracks")
-        refreshed = _one_by_id(client.list_objects("folder"), folder_id, "folder")
-        refreshed_ids = [str(track_id) for track_id in refreshed.get("tracks", [])]
-        if any(track_id not in refreshed_ids for track_id in new_matching_ids):
-            raise RuntimeError("Gaia did not retain destination folder assignment")
-        return "uploaded"
 
     if matching_ids and all(track_id in destination_ids for track_id in matching_ids):
         return "duplicate"
@@ -560,61 +535,10 @@ def summary_entry(activity_id, title, gpx_name, result):
     }
 
 
-def probe_gaia_write_throttle(
-    client,
-    folder_id,
-    interval_seconds=GAIA_PROBE_INTERVAL_SECONDS,
-    max_attempts=GAIA_PROBE_MAX_ATTEMPTS,
-):
-    """Probe Gaia's write throttle with an idempotent folder PUT."""
-    if interval_seconds < 0:
-        raise ValueError("probe interval must not be negative")
-    if max_attempts < 1:
-        raise ValueError("probe attempts must be at least 1")
-    folders = client.list_objects("folder")
-    destination = _one_by_id(folders, folder_id, "folder")
-    started = datetime.now(timezone.utc)
-    original_attempts = client.write_attempts
-    client.write_attempts = 1
-    try:
-        for attempt in range(1, max_attempts + 1):
-            try:
-                client.put_folder(destination)
-                elapsed = datetime.now(timezone.utc) - started
-                print(
-                    "Gaia write probe accepted "
-                    f"on attempt {attempt} after {elapsed}"
-                )
-                return True
-            except GaiaWriteRejected as error:
-                elapsed = datetime.now(timezone.utc) - started
-                if attempt == max_attempts:
-                    raise RuntimeError(
-                        "Gaia write probe was still rejected "
-                        f"after {max_attempts} attempts over {elapsed}: {error}"
-                    ) from error
-                next_time = datetime.now(timezone.utc) + timedelta(
-                    seconds=interval_seconds
-                )
-                print(
-                    "Gaia write probe rejected "
-                    f"on attempt {attempt} after {elapsed}: {error}; "
-                    f"next probe at {next_time.isoformat(timespec='seconds')}",
-                    file=sys.stderr,
-                )
-                client.sleep(interval_seconds)
-    finally:
-        client.write_attempts = original_attempts
-
-
-def activity_date_range(backfill=False, today=None):
+def activity_date_range(today=None):
     """Return Garmin's inclusive start and exclusive end date bounds."""
     today = today or date.today()
-    start_date = (
-        BACKFILL_START_DATE
-        if backfill
-        else (today - timedelta(days=ROLLING_DAYS - 1)).isoformat()
-    )
+    start_date = (today - timedelta(days=ROLLING_DAYS - 1)).isoformat()
     return start_date, (today + timedelta(days=1)).isoformat()
 
 
@@ -623,13 +547,11 @@ def run(
     output_dir,
     gaia,
     folder_id,
-    backfill=False,
     today=None,
-    allow_duplicates=False,
 ):
     """Process activities in the selected window and return a summary."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    start_date, end_date = activity_date_range(backfill, today)
+    start_date, end_date = activity_date_range(today)
     activities = garmin.get_activities_by_date(start_date, end_date) or []
     summary = []
     failures = 0
@@ -692,7 +614,6 @@ def run(
                 title,
                 folder_id,
                 activity_id,
-                allow_duplicates=allow_duplicates,
             )
             summary.append(summary_entry(activity_id, title, gpx_name, result))
         except GaiaRateLimited as error:
@@ -712,25 +633,6 @@ def run(
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--backfill", action="store_true")
-    parser.add_argument("--allow-duplicates", action="store_true")
-    parser.add_argument(
-        "--probe-gaia-write-throttle",
-        action="store_true",
-        help="probe Gaia write acceptance with idempotent folder PUTs, then exit",
-    )
-    parser.add_argument(
-        "--probe-interval-minutes",
-        type=float,
-        default=GAIA_PROBE_INTERVAL_SECONDS / 60,
-        help="minutes to wait between Gaia write throttle probes",
-    )
-    parser.add_argument(
-        "--probe-max-attempts",
-        type=int,
-        default=GAIA_PROBE_MAX_ATTEMPTS,
-        help="maximum Gaia write throttle probe attempts",
-    )
     parser.add_argument("--output-dir", default="gaia-gpx")
     args = parser.parse_args(argv)
 
@@ -751,14 +653,6 @@ def main(argv=None):
         raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must not be negative")
     gaia = GaiaClient(session_id, delay)
     gaia.verify_auth()
-    if args.probe_gaia_write_throttle:
-        probe_gaia_write_throttle(
-            gaia,
-            folder_id,
-            interval_seconds=args.probe_interval_minutes * 60,
-            max_attempts=args.probe_max_attempts,
-        )
-        return
 
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
@@ -767,8 +661,6 @@ def main(argv=None):
         Path(args.output_dir),
         gaia=gaia,
         folder_id=folder_id,
-        backfill=args.backfill,
-        allow_duplicates=args.allow_duplicates,
     )
     print("Garmin-to-Gaia summary:")
     if not summary:
