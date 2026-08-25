@@ -44,3 +44,7 @@
 ## Iteration: consistent toolbar tabs
 
 - Monthly behaves like Plan, Sync, and Clear: selecting any toolbar tab closes the active tab and opens the selected one, while selecting the active tab closes it.
+
+## Iteration: toolbar-controlled panels
+
+- Plan, Sync, and Clear no longer render redundant close buttons; their corresponding toolbar tabs are the sole visibility toggles.
