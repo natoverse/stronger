@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -104,21 +103,9 @@ def export_activities(garmin, output_dir, today=None):
     return summary, failures
 
 
-def create_archive(output_dir, archive_path):
-    """Create a ZIP containing the exported GPX files."""
-    archive_path.parent.mkdir(parents=True, exist_ok=True)
-    created = shutil.make_archive(
-        str(archive_path.with_suffix("")),
-        "zip",
-        root_dir=output_dir,
-    )
-    return Path(created)
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="garmin-gpx")
-    parser.add_argument("--archive", default="garmin-gpx-export.zip")
     args = parser.parse_args(argv)
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
@@ -129,7 +116,6 @@ def main(argv=None):
     garmin = gaia_sync.login_from_tokens(garmin_tokens)
     output_dir = Path(args.output_dir)
     summary, failures = export_activities(garmin, output_dir)
-    archive = create_archive(output_dir, Path(args.archive))
 
     print("Garmin GPX export summary:")
     if not summary:
@@ -141,7 +127,7 @@ def main(argv=None):
             f"({entry['title']} / {entry['gpx_name']}): "
             f"{entry['result']}"
         )
-    print(f"Created {archive} with {len(list(output_dir.glob('*.gpx')))} GPX files.")
+    print(f"Exported {len(list(output_dir.glob('*.gpx')))} GPX files to {output_dir}.")
     if failures:
         raise SystemExit(f"{failures} eligible activities failed")
 
@@ -152,4 +138,3 @@ if __name__ == "__main__":
     except Exception as error:  # noqa: BLE001 - concise top-level CI error
         print(f"Garmin GPX export failed: {error}", file=sys.stderr)
         sys.exit(1)
-

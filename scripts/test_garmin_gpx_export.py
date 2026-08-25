@@ -4,7 +4,6 @@
 import importlib.util
 import os
 import tempfile
-import zipfile
 import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
@@ -57,7 +56,7 @@ class FakeGarmin:
         return VALID_GPX if activity_id == "123" else b"<gpx><trk/></gpx>"
 
 
-def test_exports_gaia_eligible_tracks_from_2015_and_creates_zip():
+def test_exports_gaia_eligible_tracks_from_2015():
     garmin = FakeGarmin()
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -65,8 +64,6 @@ def test_exports_gaia_eligible_tracks_from_2015_and_creates_zip():
         summary, failures = export.export_activities(
             garmin, output_dir, today=date(2026, 8, 25)
         )
-        archive = export.create_archive(output_dir, root / "garmin-gpx-export.zip")
-
         assert failures == 0
         assert garmin.downloaded == ["123", "456"]
         assert [item["result"] for item in summary] == [
@@ -74,11 +71,9 @@ def test_exports_gaia_eligible_tracks_from_2015_and_creates_zip():
             "skipped: no valid track coordinates",
         ]
         assert [path.name for path in output_dir.iterdir()] == ["garmin-123.gpx"]
-        with zipfile.ZipFile(archive) as bundle:
-            assert bundle.namelist() == ["garmin-123.gpx"]
-            root = ET.fromstring(bundle.read("garmin-123.gpx"))
-            names = [node.text for node in root.iter() if node.tag.endswith("}name")]
-            assert names == ["Ridge"]
+        root = ET.fromstring((output_dir / "garmin-123.gpx").read_bytes())
+        names = [node.text for node in root.iter() if node.tag.endswith("}name")]
+        assert names == ["Ridge"]
 
 
 def test_reports_failure_without_discarding_successful_exports():
