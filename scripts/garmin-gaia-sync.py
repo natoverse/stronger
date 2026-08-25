@@ -110,6 +110,8 @@ def prepare_gpx(gpx_bytes, title):
         root = ET.fromstring(gpx_bytes)
     except ET.ParseError as error:
         raise ValueError(f"malformed GPX: {error}") from error
+    if root.tag.startswith("{"):
+        ET.register_namespace("", root.tag[1:].partition("}")[0])
 
     tracks = [element for element in root.iter() if element.tag.endswith("}trk")]
     if not tracks:

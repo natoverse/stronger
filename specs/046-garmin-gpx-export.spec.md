@@ -45,3 +45,6 @@ one downloadable ZIP artifact. It never authenticates with or writes to Gaia.
 - The export directory is uploaded directly to `actions/upload-artifact`.
   GitHub therefore creates the only ZIP layer, avoiding the nested archive that
   macOS Archive Utility could not recognize after automatic extraction.
+- Prepared files preserve GPX's default XML namespace rather than serializing
+  elements with an `ns0` prefix, because Gaia's file importer otherwise reports
+  that the valid tracks contain no features.

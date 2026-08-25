@@ -71,7 +71,10 @@ def test_exports_gaia_eligible_tracks_from_2015():
             "skipped: no valid track coordinates",
         ]
         assert [path.name for path in output_dir.iterdir()] == ["garmin-123.gpx"]
-        root = ET.fromstring((output_dir / "garmin-123.gpx").read_bytes())
+        exported_gpx = (output_dir / "garmin-123.gpx").read_bytes()
+        assert b'<gpx xmlns="http://www.topografix.com/GPX/1/1">' in exported_gpx
+        assert b"ns0:" not in exported_gpx
+        root = ET.fromstring(exported_gpx)
         names = [node.text for node in root.iter() if node.tag.endswith("}name")]
         assert names == ["Ridge"]
 
