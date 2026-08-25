@@ -666,20 +666,17 @@ export function CalendarView({
 					<CalendarPush
 						workouts={workouts}
 						cardioActivities={cardioActivities}
-						onClose={() => setActivePanel(null)}
 						onUpdateSchedule={onBulkSchedule}
 					/>
 				)}
 				{activePanel === 'sync' && (
 					<CalendarSync
 						onSync={onSyncCalendar}
-						onClose={() => setActivePanel(null)}
 					/>
 				)}
 				{activePanel === 'clear' && (
 					<CalendarClear
 						onClear={onClearSchedule}
-						onClose={() => setActivePanel(null)}
 					/>
 				)}
 

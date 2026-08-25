@@ -2,16 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CalendarListEntry } from '../google/index.js';
 import type { CalendarSyncResult } from '../google/index.js';
 import { listWritableCalendars, saveCalendarId, loadCalendarId } from '../google/index.js';
-import { RefreshCw, X, Loader, CheckCircle, AlertCircle } from 'lucide-react';
+import { RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface CalendarSyncProps {
   onSync: (calendarId: string) => Promise<CalendarSyncResult>;
-  onClose: () => void;
 }
 
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 
-export function CalendarSync({ onSync, onClose }: CalendarSyncProps) {
+export function CalendarSync({ onSync }: CalendarSyncProps) {
   const [calendars, setCalendars] = useState<CalendarListEntry[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
   const [loadingCalendars, setLoadingCalendars] = useState(true);
@@ -87,9 +86,6 @@ export function CalendarSync({ onSync, onClose }: CalendarSyncProps) {
     <div className="calendar-push">
       <div className="calendar-push-header">
         <h3>Sync with Calendar</h3>
-        <button className="calendar-push-close" onClick={onClose} aria-label="Close">
-          <X size={18} />
-        </button>
       </div>
 
       <div className="calendar-push-section">

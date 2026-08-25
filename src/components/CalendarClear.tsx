@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Trash2, X, CheckCircle, Loader, AlertCircle } from 'lucide-react';
+import { Trash2, CheckCircle, Loader, AlertCircle } from 'lucide-react';
 
 export interface ClearOptions {
   startDate: string;
@@ -17,7 +17,6 @@ export interface ClearResult {
 
 interface CalendarClearProps {
   onClear: (options: ClearOptions) => Promise<ClearResult>;
-  onClose: () => void;
 }
 
 /** Return today's date as YYYY-MM-DD. */
@@ -31,7 +30,7 @@ function today(): string {
 
 type ClearStatus = 'idle' | 'confirm' | 'clearing' | 'done' | 'error';
 
-export function CalendarClear({ onClear, onClose }: CalendarClearProps) {
+export function CalendarClear({ onClear }: CalendarClearProps) {
   const [startDate, setStartDate] = useState(today);
   const [weeks, setWeeks] = useState(4);
   const [clearFlags, setClearFlags] = useState(true);
@@ -90,9 +89,6 @@ export function CalendarClear({ onClear, onClose }: CalendarClearProps) {
     <div className="calendar-push">
       <div className="calendar-push-header">
         <h3>Clear Schedule</h3>
-        <button className="calendar-push-close" onClick={onClose} aria-label="Close">
-          <X size={18} />
-        </button>
       </div>
 
       {/* What to clear */}
