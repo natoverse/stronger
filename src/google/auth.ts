@@ -111,8 +111,6 @@ export async function initGapiClient(): Promise<void> {
 /*  GIS token client                                                   */
 /* ------------------------------------------------------------------ */
 
-let tokenClient: TokenClient | null = null
-
 class SignInCanceledError extends Error {
 	constructor() {
 		super('Google sign-in was canceled.')
@@ -146,14 +144,6 @@ function createTokenClient(
 }
 
 /**
- * Initialise the GIS OAuth2 token client on demand.
- */
-export function initTokenClient(): void {
-	if (tokenClient) return
-	tokenClient = createTokenClient(() => {}, () => {})
-}
-
-/**
  * Request an access token from a user gesture. A fresh client keeps each
  * click's callbacks self-contained.
  */
@@ -163,11 +153,10 @@ function requestToken(loginHint?: string): Promise<TokenResponse> {
 		const timer = setTimeout(() => {
 			if (settled) return
 			settled = true
-			tokenClient = null
 			reject(new Error('Google sign-in timed out. Please try again.'))
 		}, SIGN_IN_TIMEOUT_MS)
 
-		tokenClient = createTokenClient(
+		const client = createTokenClient(
 			(resp) => {
 				if (settled) return
 				settled = true
@@ -188,7 +177,7 @@ function requestToken(loginHint?: string): Promise<TokenResponse> {
 
 		const overrides: TokenRequestOverrides = { prompt: '' }
 		if (loginHint) overrides.login_hint = loginHint
-		tokenClient.requestAccessToken(overrides)
+		client.requestAccessToken(overrides)
 	})
 }
 

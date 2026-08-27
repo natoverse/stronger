@@ -6,7 +6,6 @@ import {
 	loadGapi,
 	loadGis,
 	initGapiClient,
-	initTokenClient,
 	signIn,
 	signOut,
 	hydrateStoredAccessToken,
@@ -83,7 +82,6 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				await Promise.all([loadGapi(), loadGis()])
 				await initGapiClient()
 				if (cancelled) return
-				initTokenClient()
 
 				// Reuse the token only for its Google-provided lifetime.
 				// Once it expires, wait for an explicit sign-in click.

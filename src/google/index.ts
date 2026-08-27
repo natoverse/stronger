@@ -4,7 +4,6 @@ export {
 	loadGapi,
 	loadGis,
 	initGapiClient,
-	initTokenClient,
 	signIn,
 	signOut,
 	hasToken,
