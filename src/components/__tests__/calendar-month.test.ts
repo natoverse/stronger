@@ -68,6 +68,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).not.toContain('>cardio:unknown</span>');
 		expect(markup).toContain('>deleted-workout</span>');
 		expect(markup).not.toContain('hidden-workout');
+		expect(markup.match(/class="calendar-month-tag calendar-month-tag-/g)).toHaveLength(5);
 		expect(markup).toContain('calendar-month-flag-home calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-elsewhere');
