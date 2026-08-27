@@ -731,7 +731,7 @@ export function CalendarView({
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
 											onClick={() => setMonthDayScrollTarget({ date })}
-											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
+											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											<div className="calendar-month-tags">
