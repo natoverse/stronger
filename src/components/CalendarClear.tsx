@@ -86,7 +86,7 @@ export function CalendarClear({ onClear }: CalendarClearProps) {
   })();
 
   return (
-    <div className="calendar-push">
+    <section className="calendar-clear">
       <div className="calendar-push-header">
         <h3>Clear Schedule</h3>
       </div>
@@ -222,6 +222,6 @@ export function CalendarClear({ onClear }: CalendarClearProps) {
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

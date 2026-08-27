@@ -2,10 +2,9 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
-import { CalendarClear } from './CalendarClear.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
 
 interface CalendarViewProps {
@@ -35,7 +34,7 @@ interface CalendarViewProps {
 	onClearSchedule: (options: ClearOptions) => Promise<ClearResult>;
 }
 
-export type CalendarPanel = 'plan' | 'sync' | 'clear' | 'monthly';
+export type CalendarPanel = 'plan' | 'sync' | 'monthly';
 
 export function toggleCalendarPanel(current: CalendarPanel | null, selected: CalendarPanel): CalendarPanel | null {
 	return current === selected ? null : selected;
@@ -680,7 +679,7 @@ export function CalendarView({
 
 	return (
 		<div className="calendar-view">
-			<div className="calendar-fixed-section">
+			<div className={`calendar-fixed-section${activePanel === 'plan' ? ' calendar-fixed-section-plan' : ''}`}>
 				<div className="calendar-toolbar">
 					<button
 						className={`calendar-toolbar-btn${activePanel === 'monthly' ? ' calendar-toolbar-btn-active' : ''}`}
@@ -701,18 +700,13 @@ export function CalendarView({
 					>
 						<RefreshCw size={16} /> Sync
 					</button>
-					<button
-						className={`calendar-toolbar-btn${activePanel === 'clear' ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'clear'))}
-					>
-						<Trash2 size={16} /> Clear
-					</button>
 				</div>
 				{activePanel === 'plan' && (
 					<CalendarPush
 						workouts={workouts}
 						cardioActivities={cardioActivities}
 						onUpdateSchedule={onBulkSchedule}
+						onClear={onClearSchedule}
 					/>
 				)}
 				{activePanel === 'sync' && (
@@ -720,12 +714,6 @@ export function CalendarView({
 						onSync={onSyncCalendar}
 					/>
 				)}
-				{activePanel === 'clear' && (
-					<CalendarClear
-						onClear={onClearSchedule}
-					/>
-				)}
-
 				{activePanel === 'monthly' && (
 					<section className="calendar-month-section" aria-label="Monthly schedule">
 				<div className="calendar-month-controls">

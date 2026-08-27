@@ -2,11 +2,14 @@ import { useState, useCallback } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import { CheckCircle, CalendarCheck } from 'lucide-react';
+import { CalendarClear } from './CalendarClear.js';
+import type { ClearOptions, ClearResult } from './CalendarClear.js';
 
 interface CalendarPushProps {
   workouts: Workout[];
   cardioActivities: CardioActivity[];
   onUpdateSchedule: (entries: WorkoutScheduleEntry[]) => void;
+  onClear: (options: ClearOptions) => Promise<ClearResult>;
 }
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -20,7 +23,7 @@ function today(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule }: CalendarPushProps) {
+export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onClear }: CalendarPushProps) {
   // Weekly day → activity mapping (7 entries)
   // '' = no action (skip), '__rest__' = clear workouts, REST_ID = plan a Rest day, otherwise = workout/cardio id
   const [daySlots, setDaySlots] = useState<string[]>(Array(7).fill(''));
@@ -162,6 +165,8 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule }: C
           </>
         )}
       </button>
+
+      <CalendarClear onClear={onClear} />
     </div>
   );
 }

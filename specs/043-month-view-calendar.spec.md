@@ -95,3 +95,9 @@
 - Month cells show up to three workout tags and are slightly taller to accommodate the additional tag.
 - Month headers show the purple visitors icon beside the location icon, and blocked dates use a red day number.
 - Travel icons use the neon yellow accent in both month headers and detailed day-list controls.
+
+## Iteration: consolidate schedule planning controls
+
+- Clear schedule controls appear below the schedule-filling controls within the Plan panel.
+- Clear is no longer a separate schedule toolbar tab.
+- The Plan panel uses a taller scroll area to accommodate both sets of controls.

@@ -1160,6 +1160,10 @@ body {
 	overflow-y: auto;
 }
 
+.calendar-fixed-section-plan {
+	max-height: 80%;
+}
+
 .calendar-days-scroll {
 	flex: 1;
 	min-height: 0;
@@ -2189,6 +2193,12 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: 0.5rem;
+}
+
+.calendar-clear {
+	margin-top: 1.5rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .calendar-clear-check {
