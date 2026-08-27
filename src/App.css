@@ -3029,6 +3029,7 @@ body {
 	align-items: center;
 	gap: 1rem;
 	padding: 0.5rem 1rem;
+	margin-bottom: 0;
 	background: var(--color-bg);
 	border: none;
 	border-radius: 0;
