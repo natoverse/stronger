@@ -101,3 +101,8 @@
 - Clear schedule controls appear below the schedule-filling controls within the Plan panel.
 - Clear is no longer a separate schedule toolbar tab.
 - The Plan panel uses a taller scroll area to accommodate both sets of controls.
+
+## Iteration: continuous detail-day navigation
+
+- Selecting a month day outside the loaded detail-day range loads every intervening day before scrolling to the selected card.
+- The detail-day list remains continuous when navigating either forward or backward.
