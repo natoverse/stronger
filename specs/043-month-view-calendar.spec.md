@@ -68,3 +68,7 @@
 - Home, elsewhere, and travel are edited as mutually exclusive location options. If legacy data contains multiple locations, the last active option in home → elsewhere → travel order wins.
 - Month days no longer show flag squares or a flag visibility toggle.
 - A single compact, full-color location icon appears to the left of the right-aligned day number, using the same icon and color for every location.
+
+## Iteration: wider scheduled workout tags
+
+- Month-view workout tags use the full available day-cell width so more of each label remains visible.
