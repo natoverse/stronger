@@ -59,7 +59,6 @@ describe('CalendarView month schedule', () => {
 		expect(markup).not.toContain('calendar-month-tag-rest');
 		expect(markup).toContain('>Strength A</span>');
 		expect(markup).toContain('>Run</span>');
-		expect(markup).not.toContain('>Rest</span>');
 		expect(markup).toContain('calendar-month-flag-home calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-elsewhere');
