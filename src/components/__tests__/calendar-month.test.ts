@@ -24,7 +24,7 @@ describe('CalendarView month schedule', () => {
 			],
 			dayFlags: [{
 				date: today,
-				flags: { home: true, elsewhere: false, travel: true, visitors: false, alcohol: false, blocked: false },
+				flags: { home: true, elsewhere: false, travel: true, visitors: false, alcohol: true, blocked: false },
 			}],
 			logRows: [],
 			onAssign: () => undefined,
@@ -61,6 +61,8 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-elsewhere');
 		expect(markup).toContain('Elsewhere: inactive');
+		expect(markup).not.toContain('calendar-month-flag-alcohol');
+		expect(markup).not.toContain('Alcohol: active');
 		expect(markup).toContain('All workouts');
 		expect(markup.match(/aria-pressed="true"/g)).toHaveLength(2);
 		expect(markup).toContain('Monthly');

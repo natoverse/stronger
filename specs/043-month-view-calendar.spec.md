@@ -48,3 +48,7 @@
 ## Iteration: toolbar-controlled panels
 
 - Plan, Sync, and Clear no longer render redundant close buttons; their corresponding toolbar tabs are the sole visibility toggles.
+
+## Iteration: hide alcohol day flag
+
+- The alcohol day flag remains in the persisted data model and sheet schema, but is not shown or editable from daily cards or the monthly calendar.
