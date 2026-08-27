@@ -1169,7 +1169,7 @@ body {
 }
 
 .calendar-month-section {
-	padding: 0 1rem 0.75rem;
+	padding: 0 0 0.75rem;
 }
 
 .calendar-month-controls {
@@ -1724,7 +1724,7 @@ body {
 .calendar-toolbar {
 	display: flex;
 	gap: 0.25rem;
-	padding: 0 1rem 0.75rem;
+	padding: 0 0 0.75rem;
 }
 
 .calendar-toolbar-btn {
@@ -2027,7 +2027,7 @@ body {
 
 
 .calendar-push {
-	margin: 0 1rem 1rem;
+	margin: 0 0 1rem;
 	padding: 1rem;
 	background: var(--color-surface);
 	border: 1px solid rgba(255, 255, 255, 0.08);

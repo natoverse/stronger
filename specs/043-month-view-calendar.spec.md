@@ -80,3 +80,7 @@
 ## Iteration: default home location
 
 - Days without an explicit home, elsewhere, or travel flag display as home in both the monthly calendar and detailed day list.
+
+## Iteration: full-width schedule panels
+
+- Schedule toolbar controls, management panels, and month calendars align with the full width of the detailed day-list cards.
