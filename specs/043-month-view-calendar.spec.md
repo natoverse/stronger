@@ -106,3 +106,7 @@
 
 - Selecting a month day outside the loaded detail-day range loads every intervening day before scrolling to the selected card.
 - The detail-day list remains continuous when navigating either forward or backward.
+
+## Iteration: load selected month remainder
+
+- Selecting a month day loads detailed cards through the final day of that month before scrolling to the selected card.
