@@ -735,20 +735,22 @@ export function CalendarView({
 											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
-											<div className="calendar-month-dots">
-												{scheduled.map((workoutId, dotIndex) => (
+											<div className="calendar-month-tags">
+												{scheduled.slice(0, 2).map((workoutId, tagIndex) => (
 													<span
-														className={`calendar-month-dot calendar-month-dot-${
+														className={`calendar-month-tag calendar-month-tag-${
 															workoutId === REST_ID
 																? 'rest'
 																: workoutId.startsWith('cardio:')
 																	? 'cardio'
 																	: 'strength'
 														}`}
-														key={`${workoutId}-${dotIndex}`}
+														key={`${workoutId}-${tagIndex}`}
 														title={workoutNames.get(workoutId) ?? workoutId}
 														aria-label={workoutNames.get(workoutId) ?? workoutId}
-													/>
+													>
+														{workoutNames.get(workoutId) ?? workoutId}
+													</span>
 												))}
 											</div>
 											{showMonthFlags && (

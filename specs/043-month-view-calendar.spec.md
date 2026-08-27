@@ -48,3 +48,8 @@
 ## Iteration: toolbar-controlled panels
 
 - Plan, Sync, and Clear no longer render redundant close buttons; their corresponding toolbar tabs are the sole visibility toggles.
+
+## Iteration: scheduled workout tags
+
+- Each day renders up to two scheduled workouts as stacked, full-width labeled tags rather than dots.
+- Strength and cardio tags retain their existing pink and blue colors, with black text for contrast.

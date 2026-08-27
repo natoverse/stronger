@@ -11,16 +11,17 @@ describe('CalendarView month schedule', () => {
 		expect(toggleCalendarPanel('monthly', 'monthly')).toBeNull();
 	});
 
-	it('renders color-coded workouts and active day flags in the current month', () => {
+	it('renders up to two color-coded workout tags and active day flags in the current month', () => {
 		const now = new Date();
 		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 		const markup = renderToStaticMarkup(createElement(CalendarView, {
 			workouts: [{ id: 'workout-a', name: 'Strength A', exercises: [], favorite: false }],
 			cardioActivities: [{ id: 'run', name: 'Run' }],
 			workoutSchedule: [
-				{ date: today, workoutId: 'workout-a' },
-				{ date: today, workoutId: 'cardio:run' },
-				{ date: today, workoutId: 'rest' },
+				{ date: `${monthPrefix}-15`, workoutId: 'workout-a' },
+				{ date: `${monthPrefix}-15`, workoutId: 'cardio:run' },
+				{ date: `${monthPrefix}-16`, workoutId: 'rest' },
 			],
 			dayFlags: [{
 				date: today,
@@ -54,9 +55,12 @@ describe('CalendarView month schedule', () => {
 
 		const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 		expect(markup).toContain(monthLabel);
-		expect(markup).toContain('calendar-month-dot-strength');
-		expect(markup).toContain('calendar-month-dot-cardio');
-		expect(markup).toContain('calendar-month-dot-rest');
+		expect(markup).toContain('calendar-month-tag-strength');
+		expect(markup).toContain('calendar-month-tag-cardio');
+		expect(markup).toContain('calendar-month-tag-rest');
+		expect(markup).toContain('>Strength A</span>');
+		expect(markup).toContain('>Run</span>');
+		expect(markup).toContain('>Rest</span>');
 		expect(markup).toContain('calendar-month-flag-home calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-elsewhere');
