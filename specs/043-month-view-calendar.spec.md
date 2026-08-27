@@ -84,3 +84,7 @@
 ## Iteration: full-width schedule panels
 
 - Schedule toolbar controls, management panels, and month calendars align with the full width of the detailed day-list cards.
+
+## Iteration: monthly toolbar position
+
+- Monthly is the leftmost control in the schedule toolbar.
