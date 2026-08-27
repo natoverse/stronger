@@ -46,3 +46,4 @@ A "new exercise" button lets the user add a strength or cardio exercise. New str
 ## Post-merge iterations
 
 - Adding an exercise to an in-progress workout initializes its work set at the exercise's configured top-set weight, rather than its bar weight.
+- Exercise library cards override the workout card's bottom margin so their contents remain vertically centered without wasted space.
