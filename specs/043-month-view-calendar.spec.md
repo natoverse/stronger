@@ -29,7 +29,7 @@
 
 ## Iteration: fixed controls and aligned flags
 
-- Every month day reserves six flag squares in the same order as the detailed day cards. Inactive flags are grey so active colors never shift position.
+- Every month day reserves five flag squares in the same order as the detailed day cards. Inactive flags are grey so active colors never shift position.
 - A compact “Monthly” toolbar control toggles the monthly calendar without changing its filters or visible-month state.
 - The toolbar, open management panel, and optional month calendar remain fixed while the detailed day cards scroll independently below them.
 - Selecting a month day scrolls its card within the independent detailed-day region, leaving the month calendar visible.
@@ -52,3 +52,8 @@
 ## Iteration: hide alcohol day flag
 
 - The alcohol day flag remains in the persisted data model and sheet schema, but is not shown or editable from daily cards or the monthly calendar.
+
+## Iteration: scheduled workout tags
+
+- Each day renders up to two scheduled workouts as stacked, full-width labeled tags rather than dots.
+- Strength and cardio tags retain their existing pink and blue colors, with black text for contrast.
