@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, MapPin, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -269,6 +269,23 @@ function WorkoutTypeFilter({ types, selected, onChange }: WorkoutTypeFilterProps
 const SET_TYPES: SetType[] = ['warmup', 'work', 'backoff', 'joker'];
 const LOCATION_FLAG_KEYS = ['home', 'elsewhere', 'travel'] as const;
 type LocationFlag = typeof LOCATION_FLAG_KEYS[number];
+const LOCATION_ICONS: Record<LocationFlag, typeof House> = {
+	home: House,
+	elsewhere: Palmtree,
+	travel: Plane,
+};
+
+function MonthLocationIcon({ location }: { location: LocationFlag }) {
+	const Icon = LOCATION_ICONS[location];
+	return (
+		<Icon
+			className={`calendar-month-location calendar-month-location-${location}`}
+			size={10}
+			role="img"
+			aria-label={location}
+		/>
+	);
+}
 
 export function getDayLocation(flags?: DayFlags): LocationFlag | null {
 	let location: LocationFlag | null = null;
@@ -754,14 +771,7 @@ export function CalendarView({
 											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<div className="calendar-month-day-heading">
-												{location && (
-													<MapPin
-														className="calendar-month-location"
-														size={10}
-														role="img"
-														aria-label={location}
-													/>
-												)}
+												{location && <MonthLocationIcon location={location} />}
 												<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											</div>
 											<div className="calendar-month-tags">

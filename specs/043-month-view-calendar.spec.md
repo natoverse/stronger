@@ -68,3 +68,7 @@
 - Home, elsewhere, and travel are edited as mutually exclusive location options. If legacy data contains multiple locations, the last active option in home → elsewhere → travel order wins.
 - Month days no longer show flag squares or a flag visibility toggle.
 - A single compact, full-color location icon appears to the left of the right-aligned day number, using the same icon and color for every location.
+
+## Iteration: distinct location icons
+
+- Month days use a green house for home, an orange palm tree for elsewhere, and a red airplane for travel.
