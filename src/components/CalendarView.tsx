@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Martini, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -272,7 +272,6 @@ const DAY_FLAG_OPTIONS: [keyof DayFlags, string, typeof House][] = [
 	['elsewhere', 'Elsewhere', Palmtree],
 	['travel', 'Travel', Plane],
 	['visitors', 'Visitors', Users],
-	['alcohol', 'Alcohol', Martini],
 	['blocked', 'Blocked', Ban],
 ];
 
@@ -483,6 +482,11 @@ export function CalendarView({
 		map.set(REST_ID, 'Rest');
 		return map;
 	}, [workouts, cardioActivities]);
+	const displayWorkoutName = useCallback(
+		(workoutId: string) =>
+			workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId),
+		[workoutNames],
+	);
 
 	const scheduledTypes = useMemo(() => {
 		const seen = new Set<string>();
@@ -732,7 +736,7 @@ export function CalendarView({
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
 											onClick={() => setMonthDayScrollTarget({ date })}
-											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
+											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											<div className="calendar-month-tags">
@@ -746,10 +750,10 @@ export function CalendarView({
 																	: 'strength'
 														}`}
 														key={`${workoutId}-${tagIndex}`}
-														title={workoutNames.get(workoutId) ?? workoutId}
-														aria-label={workoutNames.get(workoutId) ?? workoutId}
+														title={displayWorkoutName(workoutId)}
+														aria-label={displayWorkoutName(workoutId)}
 													>
-														{workoutNames.get(workoutId) ?? workoutId}
+														{displayWorkoutName(workoutId)}
 													</span>
 												))}
 											</div>
