@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CalendarView, toggleCalendarPanel } from '../CalendarView.js';
+import { CalendarView, getDayLocation, toggleCalendarPanel } from '../CalendarView.js';
 
 describe('CalendarView month schedule', () => {
 	it('treats every toolbar panel as a mutually exclusive toggle', () => {
@@ -11,7 +11,13 @@ describe('CalendarView month schedule', () => {
 		expect(toggleCalendarPanel('monthly', 'monthly')).toBeNull();
 	});
 
-	it('renders up to two color-coded workout tags and active day flags in the current month', () => {
+	it('uses the last active location when legacy flags contain multiple locations', () => {
+		expect(getDayLocation({ home: true, elsewhere: true, travel: false, visitors: false, alcohol: false, blocked: false })).toBe('elsewhere');
+		expect(getDayLocation({ home: true, elsewhere: true, travel: true, visitors: false, alcohol: false, blocked: false })).toBe('travel');
+		expect(getDayLocation()).toBeNull();
+	});
+
+	it('renders up to two color-coded workout tags and one location icon in the current month', () => {
 		const now = new Date();
 		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -69,14 +75,14 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('>deleted-workout</span>');
 		expect(markup).not.toContain('hidden-workout');
 		expect(markup.match(/class="calendar-month-tag calendar-month-tag-/g)).toHaveLength(5);
-		expect(markup).toContain('calendar-month-flag-home calendar-month-flag-active');
-		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
-		expect(markup).toContain('calendar-month-flag-elsewhere');
-		expect(markup).toContain('Elsewhere: inactive');
+		expect(markup).toContain('calendar-month-location');
+		expect(markup).toContain('aria-label="travel"');
+		expect(markup.match(/calendar-month-location/g)).toHaveLength(1);
+		expect(markup).not.toContain('calendar-month-flag');
 		expect(markup).not.toContain('calendar-month-flag-alcohol');
 		expect(markup).not.toContain('Alcohol: active');
 		expect(markup).toContain('All workouts');
-		expect(markup.match(/aria-pressed="true"/g)).toHaveLength(2);
+		expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
 		expect(markup).toContain('Monthly');
 		expect(markup).toContain('calendar-fixed-section');
 		expect(markup).toContain('calendar-days-scroll');
