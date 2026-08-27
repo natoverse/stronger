@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
-import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
+import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, MapPin, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Trash2, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import { CalendarClear } from './CalendarClear.js';
@@ -267,6 +267,28 @@ function WorkoutTypeFilter({ types, selected, onChange }: WorkoutTypeFilterProps
 }
 
 const SET_TYPES: SetType[] = ['warmup', 'work', 'backoff', 'joker'];
+const LOCATION_FLAG_KEYS = ['home', 'elsewhere', 'travel'] as const;
+type LocationFlag = typeof LOCATION_FLAG_KEYS[number];
+
+export function getDayLocation(flags?: DayFlags): LocationFlag | null {
+	let location: LocationFlag | null = null;
+	for (const key of LOCATION_FLAG_KEYS) {
+		if (flags?.[key]) location = key;
+	}
+	return location;
+}
+
+function toggleDayLocation(flags: DayFlags, selected: LocationFlag): DayFlags {
+	const active = getDayLocation(flags) === selected;
+	return {
+		...flags,
+		home: false,
+		elsewhere: false,
+		travel: false,
+		[selected]: !active,
+	};
+}
+
 const DAY_FLAG_OPTIONS: [keyof DayFlags, string, typeof House][] = [
 	['home', 'Home', House],
 	['elsewhere', 'Elsewhere', Palmtree],
@@ -431,7 +453,6 @@ export function CalendarView({
 	const [labelDraft, setLabelDraft] = useState('');
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
-	const [showMonthFlags, setShowMonthFlags] = useState(true);
 	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
 	const [futureDayCount, setFutureDayCount] = useState(30);
@@ -696,13 +717,6 @@ export function CalendarView({
 								onChange={setSelectedWorkoutTypes}
 							/>
 						)}
-						<button
-							className={`calendar-month-flags-toggle${showMonthFlags ? ' calendar-month-flags-toggle-active' : ''}`}
-							onClick={() => setShowMonthFlags((show) => !show)}
-							aria-pressed={showMonthFlags}
-						>
-							Flags
-						</button>
 					</div>
 				</div>
 				<div className="calendar-months">
@@ -730,6 +744,7 @@ export function CalendarView({
 									const scheduled = date
 										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
 										: [];
+									const location = date ? getDayLocation(flagsMap.get(date)) : null;
 									return date ? (
 										<button
 											type="button"
@@ -738,7 +753,16 @@ export function CalendarView({
 											onClick={() => setMonthDayScrollTarget({ date })}
 											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map(displayWorkoutName).join(', ')}` : ''}`}
 										>
-											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
+											<div className="calendar-month-day-heading">
+												{location && (
+													<MapPin
+														className="calendar-month-location"
+														size={10}
+														aria-label={location}
+													/>
+												)}
+												<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
+											</div>
 											<div className="calendar-month-tags">
 												{scheduled.slice(0, 2).map((workoutId, tagIndex) => (
 													<span
@@ -757,21 +781,6 @@ export function CalendarView({
 													</span>
 												))}
 											</div>
-											{showMonthFlags && (
-												<div className="calendar-month-flags" aria-label="Day flags">
-													{DAY_FLAG_OPTIONS.map(([key, label]) => {
-														const active = flagsMap.get(date)?.[key] ?? false;
-														return (
-														<span
-															className={`calendar-month-flag calendar-month-flag-${key}${active ? ' calendar-month-flag-active' : ''}`}
-															key={key}
-															title={`${label}: ${active ? 'active' : 'inactive'}`}
-															aria-label={`${label}: ${active ? 'active' : 'inactive'}`}
-														/>
-														);
-													})}
-												</div>
-											)}
 										</button>
 									) : <div className="calendar-month-day calendar-month-day-empty" key={`empty-${index}`} />;
 								})}
@@ -833,12 +842,18 @@ export function CalendarView({
 								<div className="calendar-day-actions">
 									{DAY_FLAG_OPTIONS.map(([key, , Icon]) => {
 										const currentFlags: DayFlags = dayInfo.flags ?? { home: false, elsewhere: false, travel: false, visitors: false, alcohol: false, blocked: false };
-										const active = currentFlags[key];
+										const isLocation = LOCATION_FLAG_KEYS.includes(key as LocationFlag);
+										const active = isLocation ? getDayLocation(currentFlags) === key : currentFlags[key];
 										return (
 											<button
 												key={key}
 												className={`calendar-flag-toggle calendar-flag-${key}${active ? ' calendar-flag-active' : ''}`}
-												onClick={() => onUpdateFlags(dayInfo.date, { ...currentFlags, [key]: !active })}
+												onClick={() => onUpdateFlags(
+													dayInfo.date,
+													isLocation
+														? toggleDayLocation(currentFlags, key as LocationFlag)
+														: { ...currentFlags, [key]: !active },
+												)}
 												aria-label={`Toggle ${key}`}
 											>
 												<Icon size={18} />

@@ -1194,23 +1194,6 @@ body {
 	gap: 0.375rem;
 }
 
-.calendar-month-flags-toggle {
-	min-height: 2rem;
-	padding: 0.375rem 0.625rem;
-	border: 1px solid var(--color-border);
-	border-radius: var(--radius-sm);
-	background: var(--color-surface);
-	color: var(--color-text-muted);
-	font: inherit;
-	font-size: 0.75rem;
-	cursor: pointer;
-}
-
-.calendar-month-flags-toggle-active {
-	border-color: var(--color-primary);
-	color: var(--color-primary);
-}
-
 .calendar-months {
 	display: flex;
 	flex-direction: column;
@@ -1289,6 +1272,19 @@ body {
 	cursor: default;
 }
 
+.calendar-month-day-heading {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	min-height: 1.4rem;
+}
+
+.calendar-month-location {
+	margin-right: auto;
+	color: var(--color-primary);
+	stroke-width: 3;
+}
+
 .calendar-month-day-today .calendar-month-day-number {
 	display: inline-flex;
 	align-items: center;
@@ -1332,27 +1328,6 @@ body {
 .calendar-month-tag-rest {
 	background: #777;
 }
-
-.calendar-month-flags {
-	display: flex;
-	justify-content: center;
-	gap: 0.15rem;
-	margin-top: auto;
-}
-
-.calendar-month-flag {
-	width: 0.3rem;
-	height: 0.3rem;
-	border-radius: 0.05rem;
-	background: #333;
-}
-
-.calendar-month-flag-active.calendar-month-flag-home { background: #4caf50; }
-.calendar-month-flag-active.calendar-month-flag-elsewhere { background: #ff9800; }
-.calendar-month-flag-active.calendar-month-flag-travel { background: #ff2d7b; }
-.calendar-month-flag-active.calendar-month-flag-visitors { background: #bb86fc; }
-.calendar-month-flag-active.calendar-month-flag-alcohol { background: #1565c0; }
-.calendar-month-flag-active.calendar-month-flag-blocked { background: #ff1744; }
 
 .calendar-month-section .calendar-load-more {
 	margin: 0.75rem 0 0;

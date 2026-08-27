@@ -62,3 +62,9 @@
 
 - Month-view workout tags use smaller text, minimal vertical and horizontal padding, and subtly rounded corners.
 - Labels that exceed the available width are clipped without an ellipsis.
+
+## Iteration: exclusive location display
+
+- Home, elsewhere, and travel are edited as mutually exclusive location options. If legacy data contains multiple locations, the last active option in home → elsewhere → travel order wins.
+- Month days no longer show flag squares or a flag visibility toggle.
+- A single compact, full-color location icon appears to the left of the right-aligned day number, using the same icon and color for every location.
