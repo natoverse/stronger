@@ -10,13 +10,14 @@ describe('generatePastDays', () => {
 	});
 
 	describe('includeCalendarDate', () => {
-		it('fills every day back to an earlier selected date', () => {
+		it('fills every day back to an earlier selected date and through its month', () => {
 			const result = includeCalendarDate(['2026-08-21', '2026-08-22'], '2026-08-01');
 
-			expect(result).toHaveLength(22);
+			expect(result).toHaveLength(31);
 			expect(result[0]).toBe('2026-08-01');
 			expect(result[20]).toBe('2026-08-21');
 			expect(result[21]).toBe('2026-08-22');
+			expect(result[result.length - 1]).toBe('2026-08-31');
 		});
 
 		it('fills every day through the end of a later selected month', () => {
@@ -30,7 +31,7 @@ describe('generatePastDays', () => {
 				'2027-01-02',
 				'2027-01-03',
 			]);
-			expect(result.at(-1)).toBe('2027-01-31');
+			expect(result[result.length - 1]).toBe('2027-01-31');
 		});
 
 		it('loads the rest of the month when the selected date is already detailed', () => {
@@ -38,7 +39,7 @@ describe('generatePastDays', () => {
 
 			expect(result).toHaveLength(11);
 			expect(result[0]).toBe('2026-08-21');
-			expect(result.at(-1)).toBe('2026-08-31');
+			expect(result[result.length - 1]).toBe('2026-08-31');
 		});
 
 		it('keeps an already loaded selected month unchanged', () => {
