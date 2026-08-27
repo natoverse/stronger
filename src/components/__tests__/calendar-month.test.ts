@@ -21,6 +21,7 @@ describe('CalendarView month schedule', () => {
 			workoutSchedule: [
 				{ date: `${monthPrefix}-15`, workoutId: 'workout-a' },
 				{ date: `${monthPrefix}-15`, workoutId: 'cardio:run' },
+				{ date: `${monthPrefix}-15`, workoutId: 'hidden-workout' },
 				{ date: `${monthPrefix}-16`, workoutId: 'rest' },
 				{ date: `${monthPrefix}-17`, workoutId: 'cardio:unknown' },
 				{ date: `${monthPrefix}-18`, workoutId: 'deleted-workout' },
@@ -66,6 +67,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('>unknown</span>');
 		expect(markup).not.toContain('>cardio:unknown</span>');
 		expect(markup).toContain('>deleted-workout</span>');
+		expect(markup).not.toContain('hidden-workout');
 		expect(markup).toContain('calendar-month-flag-home calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-travel calendar-month-flag-active');
 		expect(markup).toContain('calendar-month-flag-elsewhere');
