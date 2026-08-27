@@ -287,8 +287,8 @@ function MonthLocationIcon({ location }: { location: LocationFlag }) {
 	);
 }
 
-export function getDayLocation(flags?: DayFlags): LocationFlag | null {
-	let location: LocationFlag | null = null;
+export function getDayLocation(flags?: DayFlags): LocationFlag {
+	let location: LocationFlag = 'home';
 	for (const key of LOCATION_FLAG_KEYS) {
 		if (flags?.[key]) location = key;
 	}

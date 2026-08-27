@@ -72,3 +72,7 @@
 ## Iteration: distinct location icons
 
 - Month days use a green house for home, an orange palm tree for elsewhere, and a red airplane for travel.
+
+## Iteration: default home location
+
+- Days without an explicit home, elsewhere, or travel flag display as home in both the monthly calendar and detailed day list.

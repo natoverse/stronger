@@ -14,7 +14,7 @@ describe('CalendarView month schedule', () => {
 	it('uses the last active location when legacy flags contain multiple locations', () => {
 		expect(getDayLocation({ home: true, elsewhere: true, travel: false, visitors: false, alcohol: false, blocked: false })).toBe('elsewhere');
 		expect(getDayLocation({ home: true, elsewhere: true, travel: true, visitors: false, alcohol: false, blocked: false })).toBe('travel');
-		expect(getDayLocation()).toBeNull();
+		expect(getDayLocation()).toBe('home');
 	});
 
 	it('renders up to two color-coded workout tags and distinct location icons in the current month', () => {
@@ -72,6 +72,7 @@ describe('CalendarView month schedule', () => {
 		}));
 
 		const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+		const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 		expect(markup).toContain(monthLabel);
 		expect(markup).toContain('calendar-month-tag-strength');
 		expect(markup).toContain('calendar-month-tag-cardio');
@@ -91,7 +92,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-location-home');
 		expect(markup).toContain('calendar-month-location-elsewhere');
 		expect(markup).toContain('calendar-month-location-travel');
-		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(3);
+		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(daysInMonth);
 		expect(markup).not.toContain('calendar-month-flag');
 		expect(markup).not.toContain('calendar-month-flag-alcohol');
 		expect(markup).not.toContain('Alcohol: active');
