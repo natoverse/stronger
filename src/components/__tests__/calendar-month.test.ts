@@ -17,7 +17,7 @@ describe('CalendarView month schedule', () => {
 		expect(getDayLocation()).toBeNull();
 	});
 
-	it('renders up to two color-coded workout tags and one location icon in the current month', () => {
+	it('renders up to two color-coded workout tags and distinct location icons in the current month', () => {
 		const now = new Date();
 		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 		const markup = renderToStaticMarkup(createElement(CalendarView, {
@@ -86,7 +86,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup.match(/class="calendar-month-tag calendar-month-tag-/g)).toHaveLength(5);
 		expect(markup).toContain('calendar-month-location');
 		expect(markup).toContain('lucide-house');
-		expect(markup).toContain('lucide-palmtree');
+		expect(markup).toContain('lucide-tree-palm');
 		expect(markup).toContain('lucide-plane');
 		expect(markup).toContain('calendar-month-location-home');
 		expect(markup).toContain('calendar-month-location-elsewhere');
