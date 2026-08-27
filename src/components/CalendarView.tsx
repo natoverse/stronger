@@ -482,8 +482,11 @@ export function CalendarView({
 		map.set(REST_ID, 'Rest');
 		return map;
 	}, [workouts, cardioActivities]);
-	const displayWorkoutName = (workoutId: string) =>
-		workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId);
+	const displayWorkoutName = useCallback(
+		(workoutId: string) =>
+			workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId),
+		[workoutNames],
+	);
 
 	const scheduledTypes = useMemo(() => {
 		const seen = new Set<string>();
