@@ -10,11 +10,24 @@ describe('generatePastDays', () => {
 	});
 
 	describe('includeCalendarDate', () => {
-		it('adds an out-of-range selected date in chronological order', () => {
-			expect(includeCalendarDate(['2026-08-21', '2026-08-22'], '2026-08-01')).toEqual([
-				'2026-08-01',
-				'2026-08-21',
-				'2026-08-22',
+		it('fills every day back to an earlier selected date', () => {
+			const result = includeCalendarDate(['2026-08-21', '2026-08-22'], '2026-08-01');
+
+			expect(result).toHaveLength(22);
+			expect(result[0]).toBe('2026-08-01');
+			expect(result[20]).toBe('2026-08-21');
+			expect(result[21]).toBe('2026-08-22');
+		});
+
+		it('fills every day through a later selected date', () => {
+			const result = includeCalendarDate(['2026-12-30', '2026-12-31'], '2027-01-03');
+
+			expect(result).toEqual([
+				'2026-12-30',
+				'2026-12-31',
+				'2027-01-01',
+				'2027-01-02',
+				'2027-01-03',
 			]);
 		});
 

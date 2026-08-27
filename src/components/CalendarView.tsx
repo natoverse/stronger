@@ -168,9 +168,22 @@ export function buildDayInfos(
 	}));
 }
 
-/** Ensure a selected calendar date is available in the chronological detailed-day list. */
+/** Ensure a selected calendar date and every intervening day are available in the detailed-day list. */
 export function includeCalendarDate(dates: string[], date: string): string[] {
-	return dates.includes(date) ? dates : [...dates, date].sort();
+	if (dates.includes(date)) return dates;
+	if (dates.length === 0) return [date];
+
+	const sorted = [...dates, date].sort();
+	const [startYear, startMonth, startDay] = sorted[0].split('-').map(Number);
+	const [endYear, endMonth, endDay] = sorted[sorted.length - 1].split('-').map(Number);
+	const start = Date.UTC(startYear, startMonth - 1, startDay);
+	const end = Date.UTC(endYear, endMonth - 1, endDay);
+	const result: string[] = [];
+
+	for (let timestamp = start; timestamp <= end; timestamp += 24 * 60 * 60 * 1000) {
+		result.push(new Date(timestamp).toISOString().slice(0, 10));
+	}
+	return result;
 }
 
 export interface MonthGrid {
