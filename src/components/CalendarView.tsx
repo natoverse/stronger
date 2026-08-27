@@ -679,6 +679,13 @@ export function CalendarView({
 			<div className="calendar-fixed-section">
 				<div className="calendar-toolbar">
 					<button
+						className={`calendar-toolbar-btn${activePanel === 'monthly' ? ' calendar-toolbar-btn-active' : ''}`}
+						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'monthly'))}
+						aria-pressed={activePanel === 'monthly'}
+					>
+						Monthly
+					</button>
+					<button
 						className={`calendar-toolbar-btn${activePanel === 'plan' ? ' calendar-toolbar-btn-active' : ''}`}
 						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'plan'))}
 					>
@@ -695,13 +702,6 @@ export function CalendarView({
 						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'clear'))}
 					>
 						<Trash2 size={16} /> Clear
-					</button>
-					<button
-						className={`calendar-toolbar-btn${activePanel === 'monthly' ? ' calendar-toolbar-btn-active' : ''}`}
-						onClick={() => setActivePanel((current) => toggleCalendarPanel(current, 'monthly'))}
-						aria-pressed={activePanel === 'monthly'}
-					>
-						Monthly
 					</button>
 				</div>
 				{activePanel === 'plan' && (

@@ -80,3 +80,7 @@
 ## Iteration: default home location
 
 - Days without an explicit home, elsewhere, or travel flag display as home in both the monthly calendar and detailed day list.
+
+## Iteration: monthly toolbar position
+
+- Monthly is the leftmost control in the schedule toolbar.

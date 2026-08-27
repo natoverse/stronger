@@ -99,6 +99,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('All workouts');
 		expect(markup.match(/aria-pressed="true"/g)).toHaveLength(1);
 		expect(markup).toContain('Monthly');
+		expect(markup.indexOf('Monthly')).toBeLessThan(markup.indexOf('Plan'));
 		expect(markup).toContain('calendar-fixed-section');
 		expect(markup).toContain('calendar-days-scroll');
 		expect(markup).toContain('Load previous days');
