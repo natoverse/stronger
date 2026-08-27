@@ -287,6 +287,16 @@ function MonthLocationIcon({ location }: { location: LocationFlag }) {
 	);
 }
 
+function scheduledWorkoutRank(workoutId: string): number {
+	if (workoutId.startsWith('cardio:')) return 0;
+	if (workoutId === REST_ID) return 2;
+	return 1;
+}
+
+export function orderScheduledWorkouts(workoutIds: string[]): string[] {
+	return workoutIds.slice().sort((a, b) => scheduledWorkoutRank(a) - scheduledWorkoutRank(b));
+}
+
 export function getDayLocation(flags?: DayFlags): LocationFlag {
 	let location: LocationFlag = 'home';
 	for (const key of LOCATION_FLAG_KEYS) {
@@ -558,12 +568,6 @@ export function CalendarView({
 		return visibleMonthOffsets.map((offset) => ({ ...buildMonthGrid(now, offset), offset }));
 	}, [visibleMonthOffsets]);
 
-	// Set of cardio schedule IDs for icon differentiation
-	const cardioIds = useMemo(
-		() => new Set(cardioActivities.map((c) => `cardio:${c.id}`)),
-		[cardioActivities],
-	);
-
 	// Build log sessions grouped by date, using workout names for display
 	const logByDate = useMemo(() => groupLogByDate(logRows, workoutNames), [logRows, workoutNames]);
 
@@ -759,23 +763,36 @@ export function CalendarView({
 								))}
 								{month.dates.map((date, index) => {
 									const scheduled = date
-										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
+										? orderScheduledWorkouts(
+											(scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId)),
+										)
 										: [];
-									const location = date ? getDayLocation(flagsMap.get(date)) : null;
+									const flags = date ? flagsMap.get(date) : undefined;
+									const location = date ? getDayLocation(flags) : null;
 									return date ? (
 										<button
 											type="button"
-											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
+											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}${flags?.blocked ? ' calendar-month-day-blocked' : ''}`}
 											key={date}
 											onClick={() => setMonthDayScrollTarget({ date })}
-											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map(displayWorkoutName).join(', ')}` : ''}`}
+											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 3).map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<div className="calendar-month-day-heading">
-												{location && <MonthLocationIcon location={location} />}
+												<div className="calendar-month-day-icons">
+													{location && <MonthLocationIcon location={location} />}
+													{flags?.visitors && (
+														<Users
+															className="calendar-month-visitors"
+															size={10}
+															role="img"
+															aria-label="visitors"
+														/>
+													)}
+												</div>
 												<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											</div>
 											<div className="calendar-month-tags">
-												{scheduled.slice(0, 2).map((workoutId, tagIndex) => (
+												{scheduled.slice(0, 3).map((workoutId, tagIndex) => (
 													<span
 														className={`calendar-month-tag calendar-month-tag-${
 															workoutId === REST_ID
@@ -824,6 +841,7 @@ export function CalendarView({
 					const today = isToday(dayInfo.date);
 					const weekend = isWeekend(dayInfo.date);
 					const isPast = dayInfo.date < todayStr();
+					const scheduledWorkouts = orderScheduledWorkouts(dayInfo.scheduled);
 
 					// Deduplicate: collect all workout IDs that appear (scheduled + logged)
 					const loggedWorkoutIds = new Set(dayInfo.sessions.map((s) => s.key.workoutId));
@@ -884,10 +902,10 @@ export function CalendarView({
 							</div>
 
 							{/* Scheduled workouts */}
-							{dayInfo.scheduled.length > 0 && (
+							{scheduledWorkouts.length > 0 && (
 								<div className="calendar-workouts">
-									{dayInfo.scheduled.map((wid, idx) => {
-										const isCardio = cardioIds.has(wid);
+									{scheduledWorkouts.map((wid, idx) => {
+										const isCardio = wid.startsWith('cardio:');
 										const isRest = wid === REST_ID;
 										const hasLog = loggedWorkoutIds.has(wid);
 										const session = sessionByWorkoutId.get(wid);

@@ -1255,7 +1255,7 @@ body {
 	position: relative;
 	display: flex;
 	flex-direction: column;
-	min-height: 2.75rem;
+	min-height: 3.25rem;
 	margin: 0;
 	padding: 0.25rem;
 	border: 0;
@@ -1279,8 +1279,14 @@ body {
 	min-height: 1.4rem;
 }
 
-.calendar-month-location {
+.calendar-month-day-icons {
+	display: flex;
+	align-items: center;
+	gap: 0.15rem;
 	margin-right: auto;
+}
+
+.calendar-month-location {
 	stroke-width: 3;
 }
 
@@ -1293,7 +1299,16 @@ body {
 }
 
 .calendar-month-location-travel {
-	color: #ff1744;
+	color: var(--color-joker);
+}
+
+.calendar-month-visitors {
+	color: #bb86fc;
+	stroke-width: 3;
+}
+
+.calendar-month-day-blocked .calendar-month-day-number {
+	color: var(--color-danger);
 }
 
 .calendar-month-day-today .calendar-month-day-number {
@@ -1699,7 +1714,7 @@ body {
 }
 
 .calendar-flag-active.calendar-flag-travel {
-	color: #ff2d7b;
+	color: var(--color-joker);
 	opacity: 1;
 }
 
