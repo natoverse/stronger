@@ -72,3 +72,7 @@
 ## Iteration: wider scheduled workout tags
 
 - Month-view workout tags use the full available day-cell width so more of each label remains visible.
+
+## Iteration: distinct location icons
+
+- Month days use a green house for home, an orange palm tree for elsewhere, and a red airplane for travel.

@@ -1281,8 +1281,19 @@ body {
 
 .calendar-month-location {
 	margin-right: auto;
-	color: var(--color-primary);
 	stroke-width: 3;
+}
+
+.calendar-month-location-home {
+	color: #4caf50;
+}
+
+.calendar-month-location-elsewhere {
+	color: #ff9800;
+}
+
+.calendar-month-location-travel {
+	color: #ff1744;
 }
 
 .calendar-month-day-today .calendar-month-day-number {
