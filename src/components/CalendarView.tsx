@@ -168,12 +168,14 @@ export function buildDayInfos(
 	}));
 }
 
-/** Ensure a selected calendar date and every intervening day are available in the detailed-day list. */
+/** Ensure a selected calendar date, every intervening day, and the rest of its month are available. */
 export function includeCalendarDate(dates: string[], date: string): string[] {
-	if (dates.includes(date)) return dates;
-	if (dates.length === 0) return [date];
+	const [selectedYear, selectedMonth] = date.split('-').map(Number);
+	const monthEnd = new Date(Date.UTC(selectedYear, selectedMonth, 0)).toISOString().slice(0, 10);
+	if (dates.includes(date) && dates.includes(monthEnd)) return dates;
+	if (dates.length === 0) dates = [date];
 
-	const sorted = [...dates, date].sort();
+	const sorted = [...dates, date, monthEnd].sort();
 	const [startYear, startMonth, startDay] = sorted[0].split('-').map(Number);
 	const [endYear, endMonth, endDay] = sorted[sorted.length - 1].split('-').map(Number);
 	const start = Date.UTC(startYear, startMonth - 1, startDay);
