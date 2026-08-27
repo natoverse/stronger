@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { CalendarView, getDayLocation, orderScheduledWorkouts, toggleCalendarPanel } from '../CalendarView.js';
+import { CalendarPush } from '../CalendarPush.js';
 
 describe('CalendarView month schedule', () => {
 	it('treats every toolbar panel as a mutually exclusive toggle', () => {
@@ -9,6 +10,23 @@ describe('CalendarView month schedule', () => {
 		expect(toggleCalendarPanel('monthly', 'plan')).toBe('plan');
 		expect(toggleCalendarPanel('plan', 'monthly')).toBe('monthly');
 		expect(toggleCalendarPanel('monthly', 'monthly')).toBeNull();
+	});
+
+	it('places clear controls below schedule filling in the Plan panel', () => {
+		const markup = renderToStaticMarkup(createElement(CalendarPush, {
+			workouts: [],
+			cardioActivities: [],
+			onUpdateSchedule: () => undefined,
+			onClear: async () => ({
+				flagsCleared: 0,
+				scheduleCleared: 0,
+				calendarEventsDeleted: 0,
+				errors: [],
+			}),
+		}));
+
+		expect(markup.indexOf('<h3>Plan</h3>')).toBeLessThan(markup.indexOf('<h3>Clear Schedule</h3>'));
+		expect(markup).toContain('class="calendar-clear"');
 	});
 
 	it('uses the last active location when legacy flags contain multiple locations', () => {
@@ -121,6 +139,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('Monthly');
 		expect(markup.indexOf('Monthly')).toBeLessThan(markup.indexOf('Plan'));
 		expect(markup).toContain('calendar-fixed-section');
+		expect(markup).not.toContain('>Clear</button>');
 		expect(markup).toContain('calendar-days-scroll');
 		expect(markup).toContain('Load previous days');
 		expect(markup).not.toContain('>History<');
