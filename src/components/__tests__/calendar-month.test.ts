@@ -19,7 +19,6 @@ describe('CalendarView month schedule', () => {
 
 	it('renders up to two color-coded workout tags and one location icon in the current month', () => {
 		const now = new Date();
-		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 		const markup = renderToStaticMarkup(createElement(CalendarView, {
 			workouts: [{ id: 'workout-a', name: 'Strength A', exercises: [], favorite: false }],
@@ -32,10 +31,20 @@ describe('CalendarView month schedule', () => {
 				{ date: `${monthPrefix}-17`, workoutId: 'cardio:unknown' },
 				{ date: `${monthPrefix}-18`, workoutId: 'deleted-workout' },
 			],
-			dayFlags: [{
-				date: today,
-				flags: { home: true, elsewhere: false, travel: true, visitors: false, alcohol: true, blocked: false },
-			}],
+			dayFlags: [
+				{
+					date: `${monthPrefix}-12`,
+					flags: { home: true, elsewhere: false, travel: false, visitors: false, alcohol: false, blocked: false },
+				},
+				{
+					date: `${monthPrefix}-13`,
+					flags: { home: false, elsewhere: true, travel: false, visitors: false, alcohol: false, blocked: false },
+				},
+				{
+					date: `${monthPrefix}-14`,
+					flags: { home: false, elsewhere: false, travel: true, visitors: false, alcohol: true, blocked: false },
+				},
+			],
 			logRows: [],
 			onAssign: () => undefined,
 			onRemove: () => undefined,
@@ -76,8 +85,13 @@ describe('CalendarView month schedule', () => {
 		expect(markup).not.toContain('hidden-workout');
 		expect(markup.match(/class="calendar-month-tag calendar-month-tag-/g)).toHaveLength(5);
 		expect(markup).toContain('calendar-month-location');
-		expect(markup).toContain('aria-label="travel"');
-		expect(markup.match(/calendar-month-location/g)).toHaveLength(1);
+		expect(markup).toContain('lucide-house');
+		expect(markup).toContain('lucide-palmtree');
+		expect(markup).toContain('lucide-plane');
+		expect(markup).toContain('calendar-month-location-home');
+		expect(markup).toContain('calendar-month-location-elsewhere');
+		expect(markup).toContain('calendar-month-location-travel');
+		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(3);
 		expect(markup).not.toContain('calendar-month-flag');
 		expect(markup).not.toContain('calendar-month-flag-alcohol');
 		expect(markup).not.toContain('Alcohol: active');
