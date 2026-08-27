@@ -758,6 +758,7 @@ export function CalendarView({
 													<MapPin
 														className="calendar-month-location"
 														size={10}
+														role="img"
 														aria-label={location}
 													/>
 												)}
