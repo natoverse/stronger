@@ -2,14 +2,11 @@
  * Google OAuth authentication via Google Identity Services (GIS).
  *
  * Access tokens for the Sheets and Calendar APIs are obtained from the
- * GIS OAuth2 token client. Unlike a popup-based flow, the token client
- * can refresh tokens **silently** (no popup, no user gesture) whenever
- * the browser still has an active Google session for a previously
- * consented account. This keeps returning users signed in across
- * reloads without repeatedly clicking a sign-in button.
+ * GIS OAuth2 token client after an explicit user click. Tokens are reused
+ * until Google expires them, then the sign-in button is shown again.
  *
  * The signed-in account email is persisted in a cookie and used as a
- * `login_hint` so silent refreshes resolve without an account picker.
+ * `login_hint` so Google can select the previous account.
  *
  * gapi is still loaded for the Sheets and Calendar REST APIs.
  */
@@ -26,26 +23,15 @@ import {
 	loadUserEmail,
 	clearUserEmail,
 } from './storage.ts'
-import type { TokenClient, TokenError, TokenResponse, TokenRequestOverrides } from './types.ts'
+import type { TokenClient, TokenResponse, TokenRequestOverrides } from './types.ts'
 
 /** OAuth scopes required for identifying the signed-in account. */
 const EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
 
 /**
- * Maximum time to wait for a token request to resolve before treating
- * it as failed. Prevents the UI from hanging indefinitely when GIS
- * neither invokes the success nor the error callback.
+ * Maximum time to wait for an interactive token request to resolve.
  */
-const TOKEN_REQUEST_TIMEOUT_MS = 20_000
-
-/** Allow time for account selection, passwords, 2FA, and consent. */
-const INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS = 5 * 60_000
-
-/** Briefly wait for Google's session state to settle after a popup race. */
-const POPUP_CLOSED_RECOVERY_DELAY_MS = 300
-
-/** Keep a genuine popup dismissal from leaving the button disabled for long. */
-const POPUP_CLOSED_RECOVERY_TIMEOUT_MS = 3_000
+const SIGN_IN_TIMEOUT_MS = 60_000
 
 /**
  * Refresh the token this many milliseconds before its real expiry so a
@@ -125,18 +111,6 @@ export async function initGapiClient(): Promise<void> {
 /*  GIS token client                                                   */
 /* ------------------------------------------------------------------ */
 
-interface ManagedTokenClient {
-	client: TokenClient
-	inUse: boolean
-	setCallbacks: (
-		callback: (resp: TokenResponse) => void,
-		errorCallback: (err: TokenError) => void,
-	) => void
-	clearCallbacks: () => void
-}
-
-let tokenClient: ManagedTokenClient | null = null
-
 class SignInCanceledError extends Error {
 	constructor() {
 		super('Google sign-in was canceled.')
@@ -148,105 +122,61 @@ export function isSignInCanceledError(err: unknown): boolean {
 	return err instanceof SignInCanceledError
 }
 
-function createTokenClient(): ManagedTokenClient {
+function createTokenClient(
+	callback: (resp: TokenResponse) => void,
+	errorCallback: (message: string, canceled: boolean) => void,
+): TokenClient {
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
 	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
-	let callback = (_resp: TokenResponse) => {}
-	let errorCallback = (_err: TokenError) => {}
-	const client = google.accounts.oauth2.initTokenClient({
+	return google.accounts.oauth2.initTokenClient({
 		client_id: GOOGLE_CLIENT_ID,
 		scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
-		callback: (resp) => callback(resp),
-		error_callback: (err) => errorCallback(err),
+		callback,
+		error_callback: (err) => {
+			if (err?.type === 'popup_failed_to_open') {
+				errorCallback('Google sign-in could not open. Allow popups for this site, then try again.', false)
+				return
+			}
+			errorCallback(err?.message || err?.type || 'Google sign-in failed.', err?.type === 'popup_closed')
+		},
 	})
-	return {
-		client,
-		inUse: false,
-		setCallbacks: (nextCallback, nextErrorCallback) => {
-			callback = nextCallback
-			errorCallback = nextErrorCallback
-		},
-		clearCallbacks: () => {
-			callback = () => {}
-			errorCallback = () => {}
-		},
-	}
 }
 
 /**
- * Initialise the GIS OAuth2 token client. Idempotent — safe to call
- * multiple times. A timed-out client is discarded before the next
- * request so its delayed callback cannot settle a newer attempt.
+ * Request an access token from a user gesture. A fresh client keeps each
+ * click's callbacks self-contained.
  */
-export function initTokenClient(): void {
-	if (tokenClient) return
-	tokenClient = createTokenClient()
-}
-
-/**
- * Request an access token from the GIS token client, wrapped in a
- * promise. A `none` prompt performs a silent refresh (no UI); an empty
- * prompt allows GIS to show consent / account selection only when
- * required. Rejects on error or after a timeout.
- */
-function requestToken(opts: { interactive: boolean; loginHint?: string; timeoutMs?: number }): Promise<TokenResponse> {
+function requestToken(loginHint?: string): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
-		if (!tokenClient) {
-			reject(new Error('Token client is not initialised. Call initTokenClient() first.'))
-			return
-		}
-
 		let settled = false
-		if (tokenClient.inUse) tokenClient = createTokenClient()
-		const managedClient = tokenClient
-		managedClient.inUse = true
-		const client = managedClient.client
-		const timeoutMs = opts.timeoutMs ?? (opts.interactive
-			? INTERACTIVE_TOKEN_REQUEST_TIMEOUT_MS
-			: TOKEN_REQUEST_TIMEOUT_MS)
 		const timer = setTimeout(() => {
-				if (settled) return
-				settled = true
-				managedClient.clearCallbacks()
-				managedClient.inUse = false
-				if (tokenClient === managedClient) tokenClient = null
-				reject(new Error('Google sign-in timed out.'))
-			}, timeoutMs)
+			if (settled) return
+			settled = true
+			reject(new Error('Google sign-in timed out. Please try again.'))
+		}, SIGN_IN_TIMEOUT_MS)
 
-		managedClient.setCallbacks(
+		const client = createTokenClient(
 			(resp) => {
 				if (settled) return
 				settled = true
 				clearTimeout(timer)
-				managedClient.clearCallbacks()
-				managedClient.inUse = false
 				if (resp.error || !resp.access_token) {
 					reject(new Error(resp.error_description || resp.error || 'No access token returned from Google.'))
 					return
 				}
 				resolve(resp)
 			},
-			(err) => {
+			(message, canceled) => {
 				if (settled) return
 				settled = true
 				clearTimeout(timer)
-				managedClient.clearCallbacks()
-				managedClient.inUse = false
-				if (err?.type === 'popup_failed_to_open') {
-					reject(new Error('Google sign-in could not open. Allow popups for this site, then try again.'))
-					return
-				}
-				if (err?.type === 'popup_closed') {
-					reject(new SignInCanceledError())
-					return
-				}
-				reject(new Error(err?.message || err?.type || 'Google sign-in failed.'))
+				reject(canceled ? new SignInCanceledError() : new Error(message))
 			},
 		)
 
-		const overrides: TokenRequestOverrides = { prompt: opts.interactive ? '' : 'none' }
-		if (opts.loginHint) overrides.login_hint = opts.loginHint
+		const overrides: TokenRequestOverrides = { prompt: '' }
+		if (loginHint) overrides.login_hint = loginHint
 		client.requestAccessToken(overrides)
 	})
 }
@@ -289,7 +219,6 @@ async function fetchAndStoreEmail(accessToken: string): Promise<void> {
  * so only one token request is issued at a time.
  */
 let pendingSignIn: Promise<string> | null = null
-let pendingSilentSignIn: Promise<string> | null = null
 
 /**
  * Interactive sign-in. Requests an access token, allowing GIS to show
@@ -305,28 +234,8 @@ export function signIn(): Promise<string> {
 		if (!window.gapi?.client) {
 			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
 		}
-		initTokenClient()
 		const loginHint = loadUserEmail() ?? undefined
-		let resp: TokenResponse
-		try {
-			resp = await requestToken({ interactive: true, loginHint })
-		} catch (err) {
-			if (!isSignInCanceledError(err)) throw err
-
-			// GIS can report popup_closed just before its newly established
-			// session becomes available. Recover silently so a successful
-			// first click does not require another click.
-			await new Promise((resolve) => setTimeout(resolve, POPUP_CLOSED_RECOVERY_DELAY_MS))
-			try {
-				resp = await requestToken({
-					interactive: false,
-					loginHint,
-					timeoutMs: POPUP_CLOSED_RECOVERY_TIMEOUT_MS,
-				})
-			} catch {
-				throw err
-			}
-		}
+		const resp = await requestToken(loginHint)
 		const accessToken = applyTokenResponse(resp)
 		await fetchAndStoreEmail(accessToken)
 		return accessToken
@@ -335,33 +244,6 @@ export function signIn(): Promise<string> {
 	})
 
 	return pendingSignIn
-}
-
-/**
- * Silent sign-in. Attempts to obtain an access token without any UI,
- * using the persisted account email as a login_hint. Resolves for
- * returning users whose Google session is still active and who have
- * already consented; rejects otherwise (caller should then show the
- * interactive sign-in button).
- */
-export function silentSignIn(): Promise<string> {
-	if (pendingSilentSignIn) return pendingSilentSignIn
-
-	pendingSilentSignIn = (async () => {
-		if (!window.gapi?.client) {
-			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
-		}
-		initTokenClient()
-		const loginHint = loadUserEmail() ?? undefined
-		const resp = await requestToken({ interactive: false, loginHint })
-		const accessToken = applyTokenResponse(resp)
-		if (!loadUserEmail()) await fetchAndStoreEmail(accessToken)
-		return accessToken
-	})().finally(() => {
-		pendingSilentSignIn = null
-	})
-
-	return pendingSilentSignIn
 }
 
 /**
@@ -463,28 +345,15 @@ export function describeSheetError(err: unknown): string {
 /* ------------------------------------------------------------------ */
 
 /**
- * In-flight re-authentication promise. Used to deduplicate concurrent
- * retry attempts so only one token request is issued at a time.
- */
-let reauthPromise: Promise<string> | null = null
-
-/**
- * Execute an async operation, and if it fails with a 401 auth error,
- * silently refresh the access token via `silentSignIn()` and retry once.
- *
- * Concurrent callers share a single re-auth attempt. If the silent
- * refresh fails (session expired), the error propagates so the caller
- * can surface the interactive sign-in screen.
+ * Execute an async operation and clear an expired token after a 401.
+ * Re-authentication always requires the user to click the sign-in button.
  */
 export async function withAuthRetry<T>(fn: () => Promise<T>): Promise<T> {
 	try {
 		return await fn()
 	} catch (err) {
 		if (!isAuthError(err)) throw err
-		if (!reauthPromise) {
-			reauthPromise = silentSignIn().finally(() => { reauthPromise = null })
-		}
-		await reauthPromise
-		return await fn()
+		clearAuth()
+		throw err
 	}
 }
