@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { CalendarView, getDayLocation, toggleCalendarPanel } from '../CalendarView.js';
+import { CalendarView, getDayLocation, orderScheduledWorkouts, toggleCalendarPanel } from '../CalendarView.js';
 
 describe('CalendarView month schedule', () => {
 	it('treats every toolbar panel as a mutually exclusive toggle', () => {
@@ -17,7 +17,23 @@ describe('CalendarView month schedule', () => {
 		expect(getDayLocation()).toBe('home');
 	});
 
-	it('renders up to two color-coded workout tags and distinct location icons in the current month', () => {
+	it('orders cardio before strength and rest without changing order within each type', () => {
+		expect(orderScheduledWorkouts([
+			'strength-b',
+			'rest',
+			'cardio:run',
+			'strength-a',
+			'cardio:bike',
+		])).toEqual([
+			'cardio:run',
+			'cardio:bike',
+			'strength-b',
+			'strength-a',
+			'rest',
+		]);
+	});
+
+	it('renders up to three color-coded workout tags and day status icons in the current month', () => {
 		const now = new Date();
 		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 		const markup = renderToStaticMarkup(createElement(CalendarView, {
@@ -42,7 +58,7 @@ describe('CalendarView month schedule', () => {
 				},
 				{
 					date: `${monthPrefix}-14`,
-					flags: { home: false, elsewhere: false, travel: true, visitors: false, alcohol: true, blocked: false },
+					flags: { home: false, elsewhere: false, travel: true, visitors: true, alcohol: true, blocked: true },
 				},
 			],
 			logRows: [],
@@ -79,12 +95,13 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-tag-rest');
 		expect(markup).toContain('>Strength A</span>');
 		expect(markup).toContain('>Run</span>');
+		expect(markup.indexOf('>Run</span>')).toBeLessThan(markup.indexOf('>Strength A</span>'));
 		expect(markup).toContain('>Rest</span>');
 		expect(markup).toContain('>unknown</span>');
 		expect(markup).not.toContain('>cardio:unknown</span>');
 		expect(markup).toContain('>deleted-workout</span>');
-		expect(markup).not.toContain('hidden-workout');
-		expect(markup.match(/class="calendar-month-tag calendar-month-tag-/g)).toHaveLength(5);
+		expect(markup).toContain('>hidden-workout</span>');
+		expect(markup.match(/class="calendar-month-tag calendar-month-tag-/g)).toHaveLength(6);
 		expect(markup).toContain('calendar-month-location');
 		expect(markup).toContain('lucide-house');
 		expect(markup).toContain('lucide-tree-palm');
@@ -92,6 +109,9 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-location-home');
 		expect(markup).toContain('calendar-month-location-elsewhere');
 		expect(markup).toContain('calendar-month-location-travel');
+		expect(markup).toContain('calendar-month-visitors');
+		expect(markup).toContain('aria-label="visitors"');
+		expect(markup).toContain('calendar-month-day-blocked');
 		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(daysInMonth);
 		expect(markup).not.toContain('calendar-month-flag');
 		expect(markup).not.toContain('calendar-month-flag-alcohol');

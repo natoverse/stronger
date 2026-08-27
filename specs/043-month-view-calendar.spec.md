@@ -88,3 +88,10 @@
 ## Iteration: monthly toolbar position
 
 - Monthly is the leftmost control in the schedule toolbar.
+
+## Iteration: activity ordering and day status
+
+- Cardio activities are always shown before strength workouts in both month cells and detailed day lists, independent of sheet order. Rest follows both activity types.
+- Month cells show up to three workout tags and are slightly taller to accommodate the additional tag.
+- Month headers show the purple visitors icon beside the location icon, and blocked dates use a red day number.
+- Travel icons use the neon yellow accent in both month headers and detailed day-list controls.
