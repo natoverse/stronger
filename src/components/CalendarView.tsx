@@ -275,6 +275,18 @@ const LOCATION_ICONS: Record<LocationFlag, typeof House> = {
 	travel: Plane,
 };
 
+function MonthLocationIcon({ location }: { location: LocationFlag }) {
+	const Icon = LOCATION_ICONS[location];
+	return (
+		<Icon
+			className={`calendar-month-location calendar-month-location-${location}`}
+			size={10}
+			role="img"
+			aria-label={location}
+		/>
+	);
+}
+
 export function getDayLocation(flags?: DayFlags): LocationFlag | null {
 	let location: LocationFlag | null = null;
 	for (const key of LOCATION_FLAG_KEYS) {
@@ -750,7 +762,6 @@ export function CalendarView({
 										? (scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId))
 										: [];
 									const location = date ? getDayLocation(flagsMap.get(date)) : null;
-									const LocationIcon = location ? LOCATION_ICONS[location] : null;
 									return date ? (
 										<button
 											type="button"
@@ -760,14 +771,7 @@ export function CalendarView({
 											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<div className="calendar-month-day-heading">
-												{location && LocationIcon && (
-													<LocationIcon
-														className={`calendar-month-location calendar-month-location-${location}`}
-														size={10}
-														role="img"
-														aria-label={location}
-													/>
-												)}
+												{location && <MonthLocationIcon location={location} />}
 												<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											</div>
 											<div className="calendar-month-tags">
