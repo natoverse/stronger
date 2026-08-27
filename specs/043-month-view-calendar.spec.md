@@ -53,3 +53,8 @@
 
 - Each day renders up to two scheduled workouts as stacked, full-width labeled tags rather than dots.
 - Strength and cardio tags retain their existing pink and blue colors, with black text for contrast.
+
+## Iteration: compact scheduled workout tags
+
+- Month-view workout tags use smaller text, minimal vertical and horizontal padding, and subtly rounded corners.
+- Labels that exceed the available width are clipped without an ellipsis.
