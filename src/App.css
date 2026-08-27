@@ -1301,29 +1301,36 @@ body {
 	font-weight: 700;
 }
 
-.calendar-month-dots {
+.calendar-month-tags {
 	display: flex;
-	justify-content: center;
-	flex-wrap: wrap;
-	gap: 0.2rem;
+	flex-direction: column;
+	gap: 0.15rem;
 	margin-top: 0.25rem;
 }
 
-.calendar-month-dot {
-	width: 0.35rem;
-	height: 0.35rem;
-	border-radius: 50%;
+.calendar-month-tag {
+	display: block;
+	margin: 0 0.125rem;
+	overflow: hidden;
+	padding: 0.1rem 0.2rem;
+	border-radius: 0.15rem;
+	color: var(--color-bg);
+	font-size: 0.625rem;
+	font-weight: 700;
+	line-height: 1.1;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
-.calendar-month-dot-strength {
+.calendar-month-tag-strength {
 	background: var(--color-accent);
 }
 
-.calendar-month-dot-cardio {
+.calendar-month-tag-cardio {
 	background: var(--color-primary);
 }
 
-.calendar-month-dot-rest {
+.calendar-month-tag-rest {
 	background: #777;
 }
 
