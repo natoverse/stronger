@@ -482,6 +482,8 @@ export function CalendarView({
 		map.set(REST_ID, 'Rest');
 		return map;
 	}, [workouts, cardioActivities]);
+	const displayWorkoutName = (workoutId: string) =>
+		workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId);
 
 	const scheduledTypes = useMemo(() => {
 		const seen = new Set<string>();
@@ -731,7 +733,7 @@ export function CalendarView({
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
 											onClick={() => setMonthDayScrollTarget({ date })}
-											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map((workoutId) => workoutNames.get(workoutId) ?? workoutId).join(', ')}` : ''}`}
+											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 2).map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											<div className="calendar-month-tags">
@@ -745,10 +747,10 @@ export function CalendarView({
 																	: 'strength'
 														}`}
 														key={`${workoutId}-${tagIndex}`}
-														title={workoutNames.get(workoutId) ?? workoutId}
-														aria-label={workoutNames.get(workoutId) ?? workoutId}
+														title={displayWorkoutName(workoutId)}
+														aria-label={displayWorkoutName(workoutId)}
 													>
-														{workoutNames.get(workoutId) ?? workoutId}
+														{displayWorkoutName(workoutId)}
 													</span>
 												))}
 											</div>
