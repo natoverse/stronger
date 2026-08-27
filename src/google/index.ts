@@ -6,7 +6,6 @@ export {
 	initGapiClient,
 	initTokenClient,
 	signIn,
-	silentSignIn,
 	signOut,
 	hasToken,
 	hydrateStoredAccessToken,

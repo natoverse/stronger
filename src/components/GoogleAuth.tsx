@@ -9,7 +9,6 @@ import {
 	initTokenClient,
 	signIn,
 	signOut,
-	silentSignIn,
 	hydrateStoredAccessToken,
 	clearAuth,
 	isAuthError,
@@ -74,7 +73,7 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 	const [signInPending, setSignInPending] = useState(false)
 
 	/* ---------------------------------------------------------------- */
-	/*  Load Google scripts and restore access silently on load        */
+	/*  Load Google scripts and restore an unexpired token on load     */
 	/* ---------------------------------------------------------------- */
 	useEffect(() => {
 		let cancelled = false
@@ -86,20 +85,9 @@ export function GoogleAuth({ onConnected, onDisconnected, onNeedsSetup, onOpenCa
 				if (cancelled) return
 				initTokenClient()
 
-				// Try to restore access silently. A valid persisted token is
-				// applied immediately; otherwise attempt a silent token refresh
-				// (no popup, no user gesture) for returning users whose Google
-				// session is still active. Only fall back to the sign-in button
-				// when silent restore fails.
-				let authed = hydrateStoredAccessToken()
-				if (!authed) {
-					try {
-						await silentSignIn()
-						authed = true
-					} catch {
-						authed = false
-					}
-				}
+				// Reuse the token only for its Google-provided lifetime.
+				// Once it expires, wait for an explicit sign-in click.
+				const authed = hydrateStoredAccessToken()
 				if (cancelled) return
 
 				if (!authed) {
