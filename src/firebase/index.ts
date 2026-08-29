@@ -1,5 +1,7 @@
 export { isFirebaseConfigured, firebaseAuth, firestore } from './client.ts'
 export { observeAuth, signInToStronger, signOutOfStronger } from './auth.ts'
+export { previewSheetMigration, importSheetMigration } from './migration.ts'
+export type { MigrationPreview } from './migration.ts'
 export {
 	SCHEMA_VERSION,
 	ensureUser,
@@ -36,8 +38,13 @@ export {
 	updateMealLogEntry,
 	updateMealLogEntryCategory,
 	readGarminActivities,
+	writeGarminActivities,
+	writeStravaActivities,
 	readGarminWellnessEntries,
+	writeGarminWellnessEntries,
 	readWithingsMeasurements,
+	writeWithingsMeasurements,
+	recordMigration,
 	verifyScheduleTab,
 	createScheduleTab,
 	verifyWorkoutScheduleTab,

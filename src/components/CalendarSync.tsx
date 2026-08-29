@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import type { CalendarListEntry } from '../google/index.js';
 import type { CalendarSyncResult } from '../google/index.js';
-import { listWritableCalendars, saveCalendarId, loadCalendarId } from '../google/index.js';
+import { authorizeCalendar, listWritableCalendars, saveCalendarId, loadCalendarId } from '../google/index.js';
 import { RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface CalendarSyncProps {
@@ -13,34 +13,29 @@ type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
 export function CalendarSync({ onSync }: CalendarSyncProps) {
   const [calendars, setCalendars] = useState<CalendarListEntry[]>([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('');
-  const [loadingCalendars, setLoadingCalendars] = useState(true);
+  const [loadingCalendars, setLoadingCalendars] = useState(false);
+  const [authorized, setAuthorized] = useState(false);
   const [calendarError, setCalendarError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncResult, setSyncResult] = useState<CalendarSyncResult | null>(null);
 
-  // Load user's writable calendars on mount
-  useEffect(() => {
-    let cancelled = false;
+  const loadCalendars = useCallback(async () => {
     setLoadingCalendars(true);
     setCalendarError(null);
-
-    listWritableCalendars()
-      .then((cals) => {
-        if (cancelled) return;
+    try {
+        await authorizeCalendar();
+        const cals = await listWritableCalendars();
         setCalendars(cals);
         const saved = loadCalendarId();
         const savedCal = saved ? cals.find((c) => c.id === saved) : null;
         const primary = cals.find((c) => c.primary);
         setSelectedCalendarId(savedCal?.id ?? primary?.id ?? cals[0]?.id ?? '');
+        setAuthorized(true);
         setLoadingCalendars(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
+    } catch (err) {
         setCalendarError(err instanceof Error ? err.message : String(err));
         setLoadingCalendars(false);
-      });
-
-    return () => { cancelled = true; };
+    }
   }, []);
 
   const canSync = selectedCalendarId && syncStatus !== 'syncing';
@@ -94,8 +89,14 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
         </p>
       </div>
 
+      {!authorized && (
+        <button className="calendar-push-btn" onClick={() => void loadCalendars()} disabled={loadingCalendars}>
+          {loadingCalendars ? <><Loader size={16} className="spin" /> Connecting…</> : 'Connect Google Calendar'}
+        </button>
+      )}
+
       {/* Calendar picker */}
-      <div className="calendar-push-section">
+      {authorized && <div className="calendar-push-section">
         <label className="calendar-push-label" htmlFor="sync-calendar">
           Target calendar
         </label>
@@ -128,10 +129,10 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
             ))}
           </select>
         )}
-      </div>
+      </div>}
 
       {/* Sync button */}
-      <button
+      {authorized && <button
         className="calendar-push-btn"
         onClick={handleSync}
         disabled={!canSync}
@@ -145,7 +146,7 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
             <RefreshCw size={16} /> Sync with Calendar
           </>
         )}
-      </button>
+      </button>}
 
       {/* Result feedback */}
       {syncResult && syncStatus === 'success' && (

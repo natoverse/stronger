@@ -1,14 +1,49 @@
-import { Sliders, LogOut } from 'lucide-react';
+import { useState } from 'react';
+import { Sliders, LogOut, Database, Loader } from 'lucide-react';
 import type { AppSettings, AppBooleanSettingKey, AppNumericSettingKey } from '../model/index.js';
+import { importSheetMigration, previewSheetMigration } from '../firebase/index.js';
+import type { MigrationPreview } from '../firebase/index.js';
 
 interface Props {
   onSignOut: () => void;
   appSettings: AppSettings;
   onAppSettingChange: (key: AppBooleanSettingKey, value: boolean) => void;
   onAppNumericSettingChange: (key: AppNumericSettingKey, value: number) => void;
+  userId: string;
 }
 
-export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onAppNumericSettingChange }: Props) {
+export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onAppNumericSettingChange, userId }: Props) {
+  const [sheetUrl, setSheetUrl] = useState('');
+  const [migration, setMigration] = useState<MigrationPreview | null>(null);
+  const [migrationBusy, setMigrationBusy] = useState(false);
+  const [replaceExisting, setReplaceExisting] = useState(false);
+  const [migrationMessage, setMigrationMessage] = useState<string | null>(null);
+
+  async function previewMigration() {
+    setMigrationBusy(true);
+    setMigrationMessage(null);
+    try {
+      setMigration(await previewSheetMigration(sheetUrl));
+    } catch (error) {
+      setMigrationMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMigrationBusy(false);
+    }
+  }
+
+  async function runMigration() {
+    if (!migration) return;
+    setMigrationBusy(true);
+    setMigrationMessage(null);
+    try {
+      await importSheetMigration(userId, migration, replaceExisting);
+      setMigrationMessage('Import complete. Reload Stronger to use the imported data.');
+    } catch (error) {
+      setMigrationMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setMigrationBusy(false);
+    }
+  }
 
   return (
     <div className="settings-view">
@@ -363,14 +398,65 @@ export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onApp
 
       </div>
 
+      <div className="settings-section">
+        <h3 className="settings-section-title">
+          <Database size={18} />
+          Import Google Sheet
+        </h3>
+        <p className="settings-disconnect-description">
+          Copy an existing Stronger spreadsheet into this Firebase account.
+          Google Sheets access is used only for this import.
+        </p>
+        <input
+          className="sheet-url-input"
+          type="url"
+          placeholder="https://docs.google.com/spreadsheets/d/…"
+          value={sheetUrl}
+          onChange={(event) => {
+            setSheetUrl(event.target.value);
+            setMigration(null);
+          }}
+        />
+        <button className="btn-primary" onClick={() => void previewMigration()} disabled={!sheetUrl || migrationBusy}>
+          {migrationBusy ? <><Loader size={16} className="spin" /> Reading…</> : 'Preview import'}
+        </button>
+        {migration && (
+          <div>
+            <p className="settings-disconnect-description">
+              {Object.entries(migration.counts)
+                .filter(([, count]) => count > 0)
+                .map(([name, count]) => `${name}: ${count}`)
+                .join(' · ') || 'No records found'}
+            </p>
+            {migration.warnings.map((warning) => <p className="auth-error" key={warning}>{warning}</p>)}
+            <label className="settings-toggle-row">
+              <span className="settings-toggle-label">
+                <span className="settings-toggle-name">Replace existing data</span>
+                <span className="settings-toggle-description">Required when this Firebase account already contains Stronger data</span>
+              </span>
+              <input
+                type="checkbox"
+                className="settings-toggle-input"
+                checked={replaceExisting}
+                onChange={(event) => setReplaceExisting(event.target.checked)}
+              />
+              <span className="settings-toggle-switch" />
+            </label>
+            <button className="btn-primary" onClick={() => void runMigration()} disabled={migrationBusy}>
+              {migrationBusy ? 'Importing…' : 'Import to Firebase'}
+            </button>
+          </div>
+        )}
+        {migrationMessage && <p className="settings-disconnect-description">{migrationMessage}</p>}
+      </div>
+
       <div className="settings-section settings-section-disconnect">
         <h3 className="settings-section-title">
           <LogOut size={18} />
           Sign Out
         </h3>
         <p className="settings-disconnect-description">
-          Sign out and disconnect from the current Google Sheet.
-          Your data in the sheet will not be deleted.
+          Sign out of Stronger. Your Firebase data will not be deleted.
         </p>
         <button className="btn-danger" onClick={() => {
           if (window.confirm('Sign out of Stronger? You can sign back in later.')) {
