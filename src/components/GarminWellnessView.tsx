@@ -470,8 +470,44 @@ export function goalBarCap(
   aggregation: WellnessAggregation,
 ): number | null {
   if (!(goal > 0)) return null;
+  return scaledGoal(goal, aggregation) * multiple;
+}
+
+function scaledGoal(goal: number, aggregation: WellnessAggregation): number {
   const scale = aggregation === 'week' ? 7 : aggregation === 'month' ? 30 : 1;
-  return goal * scale * multiple;
+  return goal * scale;
+}
+
+export function goalSummaryLabel(
+  current: number | null,
+  goal: number,
+  aggregation: WellnessAggregation,
+  metric: Parameters<typeof formatWellnessValue>[1],
+  unit: string,
+): string {
+  if (current === null) return '';
+
+  const currentLabel = formatWellnessValue(current, metric);
+  if (!(goal > 0)) return `${currentLabel}${unit ? ` ${unit}` : ''}`;
+
+  const goalLabel = formatWellnessValue(scaledGoal(goal, aggregation), metric);
+  return `${currentLabel} / ${goalLabel}${unit ? ` ${unit}` : ''}`;
+}
+
+export function intensityGoalSummaryLabel(
+  current: number | null,
+  weekTotal: number | null,
+  weeklyGoal: number,
+): string {
+  if (current === null) return '';
+
+  const unit = WELLNESS_METRIC_UNITS.intensityMinModerate;
+  const currentLabel = formatWellnessValue(current, 'intensityMinModerate');
+  if (!(weeklyGoal > 0) || weekTotal === null) return `${currentLabel} ${unit}`;
+
+  const weekTotalLabel = formatWellnessValue(weekTotal, 'intensityMinModerate');
+  const weeklyGoalLabel = formatWellnessValue(weeklyGoal, 'intensityMinModerate');
+  return `${currentLabel} - ${weekTotalLabel} / ${weeklyGoalLabel} ${unit}`;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1631,6 +1667,13 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     (v: number | null) => formatWellnessValue(v, metric);
 
   const loadFocusFmt = (v: number | null) => (v === null ? '—' : String(Math.round(v)));
+  const latestIntensityBucket = [...intensityData.buckets].reverse().find((bucket) => bucket.value !== null);
+  const intensityWeekTotal = aggregation === 'day'
+    ? latestIntensityBucket?.cumulative ?? null
+    : aggregation === 'week'
+      ? latestIntensityBucket?.value ?? null
+      // Month buckets do not have a meaningful single-week total.
+      : null;
 
   return (
     <div className={embedded ? 'strava-subview' : 'strava-view'}>
@@ -1828,7 +1871,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.steps}
         unit={WELLNESS_METRIC_UNITS.steps}
         buckets={stepsData.buckets}
-        summaryLabel={summaryStr(summaryValue(stepsData), 'steps', '')}
+        summaryLabel={goalSummaryLabel(summaryValue(stepsData), stepsGoal, aggregation, 'steps', '')}
         formatValue={numFmt('steps')}
         legendItems={stepsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? goalColor(v, stepsGoal, aggregation, ACCENT) : GRAY}
@@ -1838,7 +1881,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.floors}
         unit={WELLNESS_METRIC_UNITS.floors}
         buckets={floorsData.buckets}
-        summaryLabel={summaryStr(summaryValue(floorsData), 'floors', '')}
+        summaryLabel={goalSummaryLabel(summaryValue(floorsData), floorsGoal, aggregation, 'floors', '')}
         formatValue={numFmt('floors')}
         legendItems={floorsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? goalColor(v, floorsGoal, aggregation, ACCENT) : GRAY}
@@ -1848,7 +1891,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label="Intensity Minutes"
         unit={WELLNESS_METRIC_UNITS.intensityMinModerate}
         buckets={intensityData.buckets}
-        summaryLabel={summaryStr(summaryValue(intensityData), 'intensityMinModerate', WELLNESS_METRIC_UNITS.intensityMinModerate)}
+        summaryLabel={intensityGoalSummaryLabel(summaryValue(intensityData), intensityWeekTotal, weeklyIntensityMinGoal)}
         formatValue={numFmt('intensityMinModerate')}
         legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v, key) => goalColorFromKey(key, v !== null ? ACCENT : GRAY)}
