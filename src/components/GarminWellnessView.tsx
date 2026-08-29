@@ -560,6 +560,19 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
 
   const fmtY = (v: number) => formatValue(v);
 
+  const hasCumulative = buckets.some((b) => b.cumulative !== undefined && b.cumulative !== null);
+  const cumulativePath = (() => {
+    if (!hasCumulative) return '';
+    const cmds: string[] = [];
+    let lastWasNull = true;
+    buckets.forEach((b, i) => {
+      if (b.cumulative === undefined || b.cumulative === null) { lastWasNull = true; return; }
+      cmds.push(`${lastWasNull ? 'M' : 'L'} ${xCenter(i)} ${yBar(b.cumulative)}`);
+      lastWasNull = false;
+    });
+    return cmds.join(' ');
+  })();
+
   return (
     <div className="strava-chart-card">
       <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems} />
@@ -592,6 +605,18 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
               x2={VIEW_BOX_W - CHART_PADDING.right} y2={yBar(tick)}
               className="strava-grid-line"
             />
+          ))}
+
+          {/* Week-boundary gridlines (day aggregation only) */}
+          {buckets.map((b, i) => (
+            b.isWeekStart && i > 0 ? (
+              <line
+                key={`week-${i}`}
+                x1={CHART_PADDING.left + barWidth * i} y1={CHART_PADDING.top}
+                x2={CHART_PADDING.left + barWidth * i} y2={CHART_PADDING.top + PLOT_H}
+                className="strava-week-boundary-line"
+              />
+            ) : null
           ))}
 
           {/* Left axis labels */}
@@ -652,6 +677,20 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
             );
           })}
 
+          {/* Cumulative weekly-total overlay line (day aggregation only) */}
+          {cumulativePath && <path d={cumulativePath} className="strava-cumulative-line" fill="none" />}
+          {hasCumulative && buckets.map((b, i) => (
+            b.cumulative === undefined || b.cumulative === null ? null : (
+              <circle
+                key={`cum-dot-${i}`}
+                cx={xCenter(i)}
+                cy={yBar(b.cumulative)}
+                r={i === activeIndex ? 4 : 2.5}
+                className={`strava-cumulative-dot${i === activeIndex ? ' active' : ''}`}
+              />
+            )
+          ))}
+
           {/* Crosshair */}
           {activeIndex !== null && (
             <line
@@ -671,6 +710,11 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
             <span className="chart-tooltip-value">
               {formatValue(buckets[activeIndex].value)}{unit ? ` ${unit}` : ''}
             </span>
+            {hasCumulative && buckets[activeIndex].cumulative != null && (
+              <span className="chart-tooltip-value">
+                Week: {formatValue(buckets[activeIndex].cumulative!)}{unit ? ` ${unit}` : ''}
+              </span>
+            )}
             <span className="chart-tooltip-date">{buckets[activeIndex].label}</span>
           </div>
         )}
@@ -1534,6 +1578,11 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     return cap === null ? null : { min: 0, max: cap };
   }, [floorsGoal, aggregation]);
   const intensityDomain = useMemo(() => {
+    // Day view shows a Monday-start cumulative line, so the axis caps at the
+    // weekly goal itself (matching Garmin) rather than a per-day multiple.
+    if (aggregation === 'day') {
+      return weeklyIntensityMinGoal > 0 ? { min: 0, max: weeklyIntensityMinGoal } : null;
+    }
     const cap = goalBarCap(weeklyIntensityMinGoal / 7, 2, aggregation);
     return cap === null ? null : { min: 0, max: cap };
   }, [weeklyIntensityMinGoal, aggregation]);

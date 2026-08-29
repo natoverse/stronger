@@ -3906,6 +3906,12 @@ body {
 	stroke-dasharray: 6 4;
 }
 
+.strava-week-boundary-line {
+	stroke: rgba(255, 255, 255, 0.1);
+	stroke-width: 0.5;
+	pointer-events: none;
+}
+
 .strava-bar.active {
 	opacity: 1;
 	filter: drop-shadow(0 0 3px var(--color-primary));
