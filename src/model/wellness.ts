@@ -438,7 +438,8 @@ export function buildIntensityMinCombinedChartData(
       weekTotals.set(wk, (weekTotals.get(wk) ?? 0) + val);
     }
 
-    const buckets: WellnessBucket[] = slots.map(({ key, label }) => {
+    let runningCumulative = 0;
+    const buckets: WellnessBucket[] = slots.map(({ key, label }, idx) => {
       // key is the ISO date string in day mode
       const value = dailyTotals.has(key) ? dailyTotals.get(key)! : null;
 
@@ -452,12 +453,20 @@ export function buildIntensityMinCombinedChartData(
       const isWeekStart = dow === 0;
 
       // Running Monday→this-day total, for a cumulative progress-line overlay.
-      let cumulative = 0;
-      const cursor = new Date(d);
-      cursor.setDate(cursor.getDate() - dow);
-      while (cursor <= d) {
-        cumulative += dailyTotals.get(toISODate(cursor)) ?? 0;
-        cursor.setDate(cursor.getDate() + 1);
+      // Accumulated in slot order (O(1) per bucket); the first bucket seeds
+      // from its actual Monday, which may fall before the visible range.
+      if (idx === 0) {
+        runningCumulative = 0;
+        const cursor = new Date(d);
+        cursor.setDate(cursor.getDate() - dow);
+        while (cursor <= d) {
+          runningCumulative += dailyTotals.get(toISODate(cursor)) ?? 0;
+          cursor.setDate(cursor.getDate() + 1);
+        }
+      } else if (isWeekStart) {
+        runningCumulative = value ?? 0;
+      } else {
+        runningCumulative += value ?? 0;
       }
 
       let colorKey = '';
@@ -468,7 +477,7 @@ export function buildIntensityMinCombinedChartData(
           : 'below';
       }
 
-      return { label, value, colorKey, cumulative, isWeekStart };
+      return { label, value, colorKey, cumulative: runningCumulative, isWeekStart };
     });
 
     const summary = totalCount > 0 ? totalSum / totalCount : null;
