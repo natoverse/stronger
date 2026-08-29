@@ -66,6 +66,10 @@ function thresholdLabel(value: number, thresholds: ThresholdBand[], fallback: st
   return fallback;
 }
 
+export function overflowPatternColors(color: string): { background: string; line: string } {
+  return { background: color, line: color };
+}
+
 const TRAINING_READINESS_BANDS: ThresholdBand[] = [
   { max: 25, color: ACCENT, label: 'Poor' },
   { max: 50, color: ORANGE, label: 'Low' },
@@ -584,16 +588,28 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
           viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
-          {/* Overflow hatch for bars that exceed a capped domain */}
+          {/* Overflow hatches retain the corresponding bar's computed color. */}
           {domain !== null && !renderAsDots && (
             <defs>
-              <pattern id={overflowPatternId} width="6" height="6" patternUnits="userSpaceOnUse">
-                <rect width="6" height="6" className="strava-overflow-pattern-bg" />
-                <path
-                  d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
-                  className="strava-overflow-pattern-line"
-                />
-              </pattern>
+              {buckets
+                .map((bucket, index) => ({ bucket, index }))
+                .filter(({ bucket }) => bucket.value !== null && bucket.value > yMax)
+                .map(({ bucket, index }) => {
+                const { value } = bucket;
+                const fill = colorFn ? colorFn(value, bucket.colorKey) : ACCENT;
+                const colors = overflowPatternColors(fill);
+                return (
+                  <pattern key={`overflow-${index}`} id={`${overflowPatternId}-${index}`} width="6" height="6" patternUnits="userSpaceOnUse">
+                    <rect width="6" height="6" fill={colors.background} opacity={0.35} />
+                    <path
+                      d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
+                      fill="none"
+                      stroke={colors.line}
+                      strokeWidth={1.25}
+                    />
+                  </pattern>
+                );
+              })}
             </defs>
           )}
 
@@ -670,7 +686,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
                 y={CHART_PADDING.top + PLOT_H - barH}
                 width={Math.max(barInner, 1)}
                 height={barH}
-                fill={exceedsDomain ? `url(#${overflowPatternId})` : fill}
+                fill={exceedsDomain ? `url(#${overflowPatternId}-${i})` : fill}
                 opacity={i === activeIndex ? 1 : 0.75}
                 rx={2}
               />
