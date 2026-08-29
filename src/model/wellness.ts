@@ -153,6 +153,17 @@ export interface WellnessBucket {
    * Used by color-coded charts to pick bar color independently of value.
    */
   colorKey?: string;
+  /**
+   * Optional cumulative overlay value (e.g. a Monday-start running weekly
+   * total). When present, bar charts draw it as a line sharing the same
+   * y-axis as `value`.
+   */
+  cumulative?: number | null;
+  /**
+   * True when this bucket is the first day of a new week (Monday). Used to
+   * draw a faint vertical week-boundary gridline in day-aggregated charts.
+   */
+  isWeekStart?: boolean;
 }
 
 export interface WellnessChartData {
@@ -191,6 +202,19 @@ function getBucketKey(dateStr: string, aggregation: StravaAggregation): string {
   if (aggregation === 'day') return dateStr;
   const d = new Date(dateStr + 'T00:00:00');
   return aggregation === 'week' ? `W${getISOWeek(d)}` : String(d.getMonth());
+}
+
+/** Format a Date as an ISO 'YYYY-MM-DD' string using local date fields. */
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Monday-start week key ('YYYY-MM-DD' of the Monday) for a given ISO date string. */
+function weekStartKeyFor(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = (d.getDay() + 6) % 7; // 0=Mon..6=Sun
+  d.setDate(d.getDate() - dow);
+  return toISODate(d);
 }
 
 /** Return the modal (most common) string in an array, or '' if empty. */
@@ -366,8 +390,13 @@ export function buildStatusChartData(
  * Build combined intensity-minutes chart data (moderate + vigorous summed).
  *
  * When `weeklyGoal > 0`:
- * - In `'day'` aggregation: each bar's colorKey compares that day's total to
- *   the weekly goal divided by seven.
+ * - In `'day'` aggregation: bars are grouped into Monday-start weeks
+ *   (matching Garmin). Each day's colorKey compares its *week's* cumulative
+ *   total to the weekly goal, so once a week reaches its goal every bar in
+ *   that week (past and future) is colored the same. Each bucket also
+ *   carries a `cumulative` running Monday→day total (for a progress-line
+ *   overlay) and an `isWeekStart` flag on Mondays (for a week-boundary
+ *   gridline).
  * - In `'week'` aggregation: the bar's colorKey compares the week's total to
  *   the weekly goal.
  * - In `'month'` aggregation: compares the month's total to the daily goal
@@ -400,6 +429,15 @@ export function buildIntensityMinCombinedChartData(
     let totalSum = 0;
     let totalCount = 0;
 
+    // Monday-start weekly totals, computed from every known daily total (not
+    // just the visible slots) so a week's goal comparison is correct even
+    // when the displayed range starts mid-week.
+    const weekTotals = new Map<string, number>();
+    for (const [dateStr, val] of dailyTotals) {
+      const wk = weekStartKeyFor(dateStr);
+      weekTotals.set(wk, (weekTotals.get(wk) ?? 0) + val);
+    }
+
     const buckets: WellnessBucket[] = slots.map(({ key, label }) => {
       // key is the ISO date string in day mode
       const value = dailyTotals.has(key) ? dailyTotals.get(key)! : null;
@@ -409,16 +447,28 @@ export function buildIntensityMinCombinedChartData(
         totalCount++;
       }
 
+      const d = new Date(key + 'T00:00:00');
+      const dow = (d.getDay() + 6) % 7; // 0=Mon..6=Sun
+      const isWeekStart = dow === 0;
+
+      // Running Monday→this-day total, for a cumulative progress-line overlay.
+      let cumulative = 0;
+      const cursor = new Date(d);
+      cursor.setDate(cursor.getDate() - dow);
+      while (cursor <= d) {
+        cumulative += dailyTotals.get(toISODate(cursor)) ?? 0;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
       let colorKey = '';
       if (weeklyGoal > 0) {
-        const dailyGoal = weeklyGoal / 7;
-        const comparisonValue = value ?? 0;
-        colorKey = comparisonValue >= dailyGoal * 1.25 ? 'exceeded'
-          : comparisonValue >= dailyGoal ? 'met'
+        const weekTotal = weekTotals.get(weekStartKeyFor(key)) ?? 0;
+        colorKey = weekTotal >= weeklyGoal * 1.25 ? 'exceeded'
+          : weekTotal >= weeklyGoal ? 'met'
           : 'below';
       }
 
-      return { label, value, colorKey };
+      return { label, value, colorKey, cumulative, isWeekStart };
     });
 
     const summary = totalCount > 0 ? totalSum / totalCount : null;

@@ -83,12 +83,35 @@ describe('buildWellnessChartData', () => {
   });
 
   describe('buildIntensityMinCombinedChartData', () => {
-    it('uses one seventh of the weekly goal for daily colors', () => {
+    it('colors every day in a Monday-start week by that week\'s cumulative total', () => {
+      // Mon 6/16 + Tue 6/17 + Wed 6/18 = 180, which exceeds 140 * 1.25 = 175,
+      // so all three days (the whole week) should read 'exceeded'. The
+      // following Monday (6/23) starts a new, under-goal week on its own.
       const chart = buildIntensityMinCombinedChartData(
         [
-          makeEntry({ date: '2025-06-15', intensityMinModerate: 19 }),
-          makeEntry({ date: '2025-06-16', intensityMinModerate: 20 }),
-          makeEntry({ date: '2025-06-17', intensityMinModerate: 25 }),
+          makeEntry({ date: '2025-06-16', intensityMinModerate: 60 }),
+          makeEntry({ date: '2025-06-17', intensityMinModerate: 60 }),
+          makeEntry({ date: '2025-06-18', intensityMinModerate: 60 }),
+          makeEntry({ date: '2025-06-23', intensityMinModerate: 10 }),
+        ],
+        'month',
+        'day',
+        140,
+        new Date(2025, 5, 25),
+      );
+
+      expect(chart.buckets.find((bucket) => bucket.label === '6/16')?.colorKey).toBe('exceeded');
+      expect(chart.buckets.find((bucket) => bucket.label === '6/17')?.colorKey).toBe('exceeded');
+      expect(chart.buckets.find((bucket) => bucket.label === '6/18')?.colorKey).toBe('exceeded');
+      expect(chart.buckets.find((bucket) => bucket.label === '6/23')?.colorKey).toBe('below');
+    });
+
+    it('builds a Monday-start cumulative running total and week-start flag for the day view', () => {
+      const chart = buildIntensityMinCombinedChartData(
+        [
+          makeEntry({ date: '2025-06-16', intensityMinModerate: 60 }),
+          makeEntry({ date: '2025-06-17', intensityMinModerate: 60 }),
+          makeEntry({ date: '2025-06-18', intensityMinModerate: 60 }),
         ],
         'month',
         'day',
@@ -96,9 +119,9 @@ describe('buildWellnessChartData', () => {
         new Date(2025, 5, 20),
       );
 
-      expect(chart.buckets.find((bucket) => bucket.label === '6/15')?.colorKey).toBe('below');
-      expect(chart.buckets.find((bucket) => bucket.label === '6/16')?.colorKey).toBe('met');
-      expect(chart.buckets.find((bucket) => bucket.label === '6/17')?.colorKey).toBe('exceeded');
+      expect(chart.buckets.find((bucket) => bucket.label === '6/16')).toMatchObject({ cumulative: 60, isWeekStart: true });
+      expect(chart.buckets.find((bucket) => bucket.label === '6/17')).toMatchObject({ cumulative: 120, isWeekStart: false });
+      expect(chart.buckets.find((bucket) => bucket.label === '6/18')).toMatchObject({ cumulative: 180, isWeekStart: false });
     });
 
     it('uses the weekly goal directly for weekly colors', () => {
