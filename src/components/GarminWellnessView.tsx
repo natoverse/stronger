@@ -678,7 +678,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
           })}
 
           {/* Cumulative weekly-total overlay line (day aggregation only) */}
-          {cumulativePath && <path d={cumulativePath} className="strava-cumulative-line" fill="none" />}
+          {cumulativePath && <path d={cumulativePath} className="wellness-cumulative-line" fill="none" />}
           {hasCumulative && buckets.map((b, i) => (
             b.cumulative === undefined || b.cumulative === null ? null : (
               <circle
@@ -686,7 +686,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
                 cx={xCenter(i)}
                 cy={yBar(b.cumulative)}
                 r={i === activeIndex ? 4 : 2.5}
-                className={`strava-cumulative-dot${i === activeIndex ? ' active' : ''}`}
+                className={`wellness-cumulative-dot${i === activeIndex ? ' active' : ''}`}
               />
             )
           ))}
