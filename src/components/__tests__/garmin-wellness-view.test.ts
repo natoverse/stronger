@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   TRAINING_STATUS_LEGEND_ITEMS,
+  baselineDomain,
+  centeredDomain,
+  goalBarCap,
   enduranceScoreLegendLabel,
   enduranceScoreColor,
   formatAltitudeFeet,
@@ -124,5 +127,36 @@ describe('wellness legend labels', () => {
   it('formats HRV status labels from sheet status text', () => {
     expect(hrvStatusLegendLabel('UNBALANCED')).toBe('Unbalanced');
     expect(hrvStatusLegendLabel('')).toBe('Unknown');
+  });
+});
+
+describe('chart y-domains', () => {
+  it('centers the domain on the current value and never dips below zero', () => {
+    expect(centeredDomain(45, 10)).toEqual({ min: 35, max: 55 });
+    expect(centeredDomain(52, 15)).toEqual({ min: 37, max: 67 });
+    expect(centeredDomain(600, 1000)).toEqual({ min: 0, max: 1600 });
+    expect(centeredDomain(null, 10)).toBeNull();
+  });
+
+  it('pads the HRV baseline band by five on each side', () => {
+    expect(
+      baselineDomain(
+        [
+          { min: 40, max: 60 },
+          { min: 38, max: 64 },
+          { min: null, max: null },
+        ],
+        5,
+      ),
+    ).toEqual({ min: 33, max: 69 });
+    expect(baselineDomain([{ min: null, max: null }], 5)).toBeNull();
+  });
+
+  it('scales goal caps by aggregation and disables them without a goal', () => {
+    expect(goalBarCap(10000, 1.5, 'day')).toBe(15000);
+    expect(goalBarCap(10000, 1.5, 'week')).toBe(105000);
+    expect(goalBarCap(10, 3, 'day')).toBe(30);
+    expect(goalBarCap(150 / 7, 2, 'day')).toBeCloseTo(42.857, 3);
+    expect(goalBarCap(0, 1.5, 'day')).toBeNull();
   });
 });
