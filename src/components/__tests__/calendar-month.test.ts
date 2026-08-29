@@ -106,8 +106,14 @@ describe('CalendarView month schedule', () => {
 		}));
 
 		const monthLabel = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+		const nextMonthLabel = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+			.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+		const followingMonthLabel = new Date(now.getFullYear(), now.getMonth() + 2, 1)
+			.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 		const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 		expect(markup).toContain(monthLabel);
+		expect(markup).toContain(nextMonthLabel);
+		expect(markup).toContain(followingMonthLabel);
 		expect(markup).toContain('calendar-month-tag-strength');
 		expect(markup).toContain('calendar-month-tag-cardio');
 		expect(markup).toContain('calendar-month-tag-rest');
@@ -145,5 +151,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).not.toContain('>History<');
 		expect(markup).toContain('Show next month');
 		expect(markup).not.toContain(`Remove ${monthLabel}`);
+		expect(markup).toContain(`Remove ${nextMonthLabel}`);
+		expect(markup).toContain(`Remove ${followingMonthLabel}`);
 	});
 });
