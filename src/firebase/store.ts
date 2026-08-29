@@ -155,8 +155,13 @@ export async function appendLogRows(uid: string, rows: (string | number | boolea
 				updatedAt: new Date().toISOString(),
 			})
 		}
+
 		await batch.commit()
 	}
+}
+
+export function writeLogRows(uid: string, rows: ParsedLogRow[]): Promise<void> {
+	return replaceCollection(uid, 'workoutSessions', rows, (row) => logDocumentId(row))
 }
 
 export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
@@ -286,6 +291,10 @@ export function writeMealRecents(uid: string, items: FoodItem[]): Promise<void> 
 
 export function readMealLog(uid: string): Promise<MealLogEntry[]> {
 	return readCollection<MealLogEntry>(uid, 'mealLog')
+}
+
+export function writeMealLog(uid: string, entries: MealLogEntry[]): Promise<void> {
+	return replaceCollection(uid, 'mealLog', entries, (entry) => idPart(entry.id))
 }
 
 export async function appendMealLogEntry(uid: string, entry: MealLogEntry): Promise<void> {
