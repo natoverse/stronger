@@ -34,8 +34,6 @@ import {
 	verifySheetAccess,
 } from '../google/index.ts'
 import {
-	appendLogRows,
-	appendMealLogEntry,
 	readConfigZone,
 	readLogZone,
 	readWorkoutDefs,
@@ -47,12 +45,14 @@ import {
 	writeGarminWellnessEntries,
 	writeMealFavorites,
 	writeMealItems,
+	writeMealLog,
 	writeMealRecents,
 	writeSettings,
 	writeStravaActivities,
 	writeWithingsMeasurements,
 	writeWorkoutDefs,
 	writeWorkoutSchedule,
+	writeLogRows,
 } from './store.ts'
 
 interface MigrationData {
@@ -125,14 +125,6 @@ export async function previewSheetMigration(sheetUrl: string): Promise<Migration
 	}
 }
 
-function logToRow(row: ParsedLogRow): (string | number | boolean)[] {
-	return [
-		row.date, row.startTime, row.endTime, row.workoutId, row.exerciseName,
-		row.liftId, row.setNumber, row.setType, row.plannedWeight, row.plannedReps,
-		row.actualWeight, row.actualReps, row.completed ? 'TRUE' : 'FALSE',
-	]
-}
-
 export async function importSheetMigration(
 	uid: string,
 	preview: MigrationPreview,
@@ -161,14 +153,12 @@ export async function importSheetMigration(
 		const data = preview.data
 		await writeConfigValues(uid, data.configs)
 		await writeWorkoutDefs(uid, data.workouts)
-		await appendLogRows(uid, data.logs.map(logToRow))
+		await writeLogRows(uid, data.logs)
 		await writeFlags(uid, data.flags)
 		await writeWorkoutSchedule(uid, data.schedule)
 		await writeCardioActivities(uid, data.cardio)
 		await writeMealItems(uid, data.mealItems)
-		for (const entry of data.mealLog) {
-			await appendMealLogEntry(uid, entry)
-		}
+		await writeMealLog(uid, data.mealLog)
 		await writeMealFavorites(uid, data.favorites)
 		await writeMealRecents(uid, data.recents)
 		await writeStravaActivities(uid, data.strava)
