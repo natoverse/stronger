@@ -13,6 +13,9 @@ export {
 	isSignInCanceledError,
 	describeSheetError,
 	withAuthRetry,
+	authorizeCalendar,
+	authorizeSheetsImport,
+	clearGoogleApiAuthorization,
 } from './auth.ts'
 export {
 	verifySheetAccess,

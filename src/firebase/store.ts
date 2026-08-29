@@ -21,7 +21,7 @@ import type {
 	WithingsMeasurement,
 	WorkoutScheduleEntry,
 } from '../model/index.ts'
-import type { StravaActivity } from '../model/strava.ts'
+import type { StravaActivity } from '../model/types.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import type { ParsedLogRow } from '../google/sheets.ts'
 import { firestore } from './client.ts'
@@ -39,6 +39,7 @@ type CollectionName =
 	| 'mealLog'
 	| 'favoriteFoods'
 	| 'recentFoods'
+	| 'stravaActivities'
 	| 'garminActivities'
 	| 'garminWellness'
 	| 'withingsMeasurements'
@@ -325,12 +326,39 @@ export function readGarminActivities(uid: string): Promise<StravaActivity[]> {
 	return readCollection<StravaActivity>(uid, 'garminActivities')
 }
 
+export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {
+	return replaceCollection(uid, 'garminActivities', items, (item) => idPart(item.stravaId))
+}
+
+export function writeStravaActivities(uid: string, items: StravaActivity[]): Promise<void> {
+	return replaceCollection(uid, 'stravaActivities', items, (item) => idPart(item.stravaId))
+}
+
 export function readGarminWellnessEntries(uid: string): Promise<GarminWellnessEntry[]> {
 	return readCollection<GarminWellnessEntry>(uid, 'garminWellness')
 }
 
+export function writeGarminWellnessEntries(uid: string, items: GarminWellnessEntry[]): Promise<void> {
+	return replaceCollection(uid, 'garminWellness', items, (item) => item.date)
+}
+
 export function readWithingsMeasurements(uid: string): Promise<WithingsMeasurement[]> {
 	return readCollection<WithingsMeasurement>(uid, 'withingsMeasurements')
+}
+
+export function writeWithingsMeasurements(uid: string, items: WithingsMeasurement[]): Promise<void> {
+	return replaceCollection(uid, 'withingsMeasurements', items, (item) => idPart(item.grpId))
+}
+
+export async function recordMigration(
+	uid: string,
+	migrationId: string,
+	value: Record<string, unknown>,
+): Promise<void> {
+	await setDoc(doc(userDoc(uid), 'migrations', migrationId), {
+		...value,
+		updatedAt: new Date().toISOString(),
+	}, { merge: true })
 }
 
 export const verifyScheduleTab = async (_uid?: string) => true

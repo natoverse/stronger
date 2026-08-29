@@ -1719,6 +1719,7 @@ function AppContent() {
         />
         <SettingsView
           onSignOut={handleSignOut}
+          userId={spreadsheetId}
           appSettings={appSettings}
           onAppSettingChange={handleAppSettingChange}
           onAppNumericSettingChange={handleAppNumericSettingChange}
