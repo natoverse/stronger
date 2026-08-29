@@ -4,9 +4,11 @@ import {
   baselineDomain,
   centeredDomain,
   goalBarCap,
+  goalSummaryLabel,
   enduranceScoreLegendLabel,
   enduranceScoreColor,
   formatAltitudeFeet,
+  intensityGoalSummaryLabel,
   formatTrainingStatusLabel,
   hillScoreLegendLabel,
   hillScoreColor,
@@ -168,5 +170,17 @@ describe('chart y-domains', () => {
     expect(goalBarCap(10, 3, 'day')).toBe(30);
     expect(goalBarCap(150 / 7, 2, 'day')).toBeCloseTo(42.857, 3);
     expect(goalBarCap(0, 1.5, 'day')).toBeNull();
+  });
+
+  it('formats activity goal chart summaries as current over goal', () => {
+    expect(goalSummaryLabel(12345, 10000, 'day', 'steps', '')).toBe('12,345 / 10,000');
+    expect(goalSummaryLabel(8, 10, 'week', 'floors', '')).toBe('8 / 70');
+    expect(goalSummaryLabel(8, 0, 'day', 'floors', '')).toBe('8');
+  });
+
+  it('formats intensity summaries as current with week total over weekly goal', () => {
+    expect(intensityGoalSummaryLabel(25, 125, 150)).toBe('25 - 125 / 150 min');
+    expect(intensityGoalSummaryLabel(25, null, 150)).toBe('25 min');
+    expect(intensityGoalSummaryLabel(25, 125, 0)).toBe('25 min');
   });
 });
