@@ -422,6 +422,55 @@ function WellnessChartHeader({ label, summaryLabel, legendItems }: WellnessChart
 }
 
 /* ------------------------------------------------------------------ */
+/*  Y-domain helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+export interface ChartDomain {
+  min: number;
+  max: number;
+}
+
+/**
+ * Y domain centered on the latest value, padded by `pad` in both directions.
+ * Returns null when there is no current value (chart falls back to auto-scale).
+ * The lower bound never goes below zero.
+ */
+export function centeredDomain(current: number | null, pad: number): ChartDomain | null {
+  if (current === null || !Number.isFinite(current)) return null;
+  return { min: Math.max(0, current - pad), max: current + pad };
+}
+
+/**
+ * Y domain covering the visible baseline band, padded by `pad` in both
+ * directions. Returns null when no bucket has a baseline.
+ */
+export function baselineDomain(
+  buckets: { min: number | null; max: number | null }[],
+  pad: number,
+): ChartDomain | null {
+  const mins = buckets.map((b) => b.min).filter((v): v is number => v !== null);
+  const maxs = buckets.map((b) => b.max).filter((v): v is number => v !== null);
+  if (mins.length === 0 && maxs.length === 0) return null;
+  const low = mins.length > 0 ? Math.min(...mins) : Math.min(...maxs);
+  const high = maxs.length > 0 ? Math.max(...maxs) : Math.max(...mins);
+  return { min: Math.max(0, low - pad), max: high + pad };
+}
+
+/**
+ * Bar-axis cap for a goal-based chart: `goal × multiple`, scaled the same way
+ * as `goalColor` (week ×7, month ×30). Returns null when the goal is disabled.
+ */
+export function goalBarCap(
+  goal: number,
+  multiple: number,
+  aggregation: WellnessAggregation,
+): number | null {
+  if (!(goal > 0)) return null;
+  const scale = aggregation === 'week' ? 7 : aggregation === 'month' ? 30 : 1;
+  return goal * scale * multiple;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Y-axis tick helper (same as StravaView)                           */
 /* ------------------------------------------------------------------ */
 
@@ -445,6 +494,15 @@ function niceTicksFor(min: number, max: number, count: number): number[] {
   return ticks;
 }
 
+/**
+ * Ticks constrained to a fixed [min, max] domain. Ticks outside the domain are
+ * dropped and the exact bounds are always included so a capped axis reads true.
+ */
+function domainTicks(min: number, max: number, count: number): number[] {
+  const inner = niceTicksFor(min, max, count).filter((t) => t > min && t < max);
+  return [min, ...inner, max];
+}
+
 /* ------------------------------------------------------------------ */
 /*  WellnessBarChart — standard numeric bar chart                     */
 /* ------------------------------------------------------------------ */
@@ -459,21 +517,33 @@ interface BarChartProps {
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
   renderAsDots?: boolean;
+  /**
+   * Fixed y-axis domain. When set, the axis ignores the data extent: values
+   * outside the domain are clamped to the nearest bound, and bars that exceed
+   * the top of the domain are drawn with the overflow hatch pattern.
+   */
+  domain?: ChartDomain | null;
 }
 
-function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue, renderAsDots = false }: BarChartProps) {
+function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue, renderAsDots = false, domain = null }: BarChartProps) {
   const n = buckets.length;
+  const overflowPatternId = useId();
   if (n === 0) return null;
 
-  const maxBar = Math.max(...buckets.map((b) => b.value ?? 0), 0.001);
+  const dataMax = Math.max(...buckets.map((b) => b.value ?? 0), 0.001);
+  const yMin = domain ? domain.min : 0;
+  const yMax = domain ? Math.max(domain.max, domain.min + 0.001) : dataMax;
+  const span = yMax - yMin;
+
   const barWidth = PLOT_W / n;
   const barGap = Math.max(1, barWidth * 0.15);
   const barInner = barWidth - barGap * 2;
 
+  const clampY = (v: number) => Math.min(Math.max(v, yMin), yMax);
   const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
-  const yBar = (v: number) => CHART_PADDING.top + PLOT_H - (v / maxBar) * PLOT_H;
+  const yBar = (v: number) => CHART_PADDING.top + PLOT_H - ((clampY(v) - yMin) / span) * PLOT_H;
 
-  const yTicks = niceTicksFor(0, maxBar, 4);
+  const yTicks = domain ? domainTicks(yMin, yMax, 4) : niceTicksFor(0, yMax, 4);
 
   const maxLabels = Math.min(n, 8);
   const xLabelIndices: number[] = [];
@@ -501,6 +571,19 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
           viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
         >
+          {/* Overflow hatch for bars that exceed a capped domain */}
+          {domain !== null && !renderAsDots && (
+            <defs>
+              <pattern id={overflowPatternId} width="6" height="6" patternUnits="userSpaceOnUse">
+                <rect width="6" height="6" className="strava-overflow-pattern-bg" />
+                <path
+                  d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
+                  className="strava-overflow-pattern-line"
+                />
+              </pattern>
+            </defs>
+          )}
+
           {/* Grid lines */}
           {yTicks.map((tick) => (
             <line
@@ -553,7 +636,8 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
                 />
               );
             }
-            const barH = Math.max((val / maxBar) * PLOT_H, 0);
+            const barH = Math.max(yBar(yMin) - yBar(val), 0);
+            const exceedsDomain = domain !== null && val > yMax;
             return (
               <rect
                 key={`bar-${i}`}
@@ -561,7 +645,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
                 y={CHART_PADDING.top + PLOT_H - barH}
                 width={Math.max(barInner, 1)}
                 height={barH}
-                fill={fill}
+                fill={exceedsDomain ? `url(#${overflowPatternId})` : fill}
                 opacity={i === activeIndex ? 1 : 0.75}
                 rx={2}
               />
@@ -889,6 +973,8 @@ interface LoadFocusChartProps {
   formatValue: (v: number | null) => string;
   rangeLabel?: string;
   colorFn?: (value: number | null, min: number | null, max: number | null, colorKey?: string) => string;
+  /** Fixed y-axis domain. When set, values outside it are clamped to the bounds. */
+  domain?: ChartDomain | null;
 }
 
 function WellnessLoadFocusChart({
@@ -899,20 +985,26 @@ function WellnessLoadFocusChart({
   formatValue,
   rangeLabel = 'optimal',
   colorFn = loadFocusColor,
+  domain = null,
 }: LoadFocusChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
-  // Y domain spans 0 → max of every value/min/max so dots and band both fit.
+  // Y domain spans 0 → max of every value/min/max so dots and band both fit,
+  // unless an explicit domain is supplied.
   const domainValues = buckets.flatMap((b) => [b.value, b.min, b.max]).filter((v): v is number => v !== null);
-  const maxBar = domainValues.length > 0 ? Math.max(...domainValues, 0.001) : 0.001;
+  const autoMax = domainValues.length > 0 ? Math.max(...domainValues, 0.001) : 0.001;
+  const yMin = domain ? domain.min : 0;
+  const maxBar = domain ? Math.max(domain.max, domain.min + 0.001) : autoMax;
+  const span = maxBar - yMin;
 
   const barWidth = PLOT_W / n;
 
+  const clampY = (v: number) => Math.min(Math.max(v, yMin), maxBar);
   const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
-  const yBar = (v: number) => CHART_PADDING.top + PLOT_H - (v / maxBar) * PLOT_H;
+  const yBar = (v: number) => CHART_PADDING.top + PLOT_H - ((clampY(v) - yMin) / span) * PLOT_H;
 
-  const yTicks = niceTicksFor(0, maxBar, 4);
+  const yTicks = domain ? domainTicks(yMin, maxBar, 4) : niceTicksFor(0, maxBar, 4);
 
   const maxLabels = Math.min(n, 8);
   const xLabelIndices: number[] = [];
@@ -982,6 +1074,7 @@ function WellnessLoadFocusChart({
             if (b.min === null && b.max === null) return null;
             const low = Math.min(b.min ?? b.max!, b.max ?? b.min!);
             const high = Math.max(b.min ?? b.max!, b.max ?? b.min!);
+            if (high < yMin || low > maxBar) return null;
             const yTop = yBar(high);
             const yBottom = yBar(low);
             return (
@@ -1018,7 +1111,7 @@ function WellnessLoadFocusChart({
             let lastWasNull = true;
             for (let i = 0; i < buckets.length; i++) {
               const v = buckets[i][key];
-              if (v === null || v > maxBar) { lastWasNull = true; continue; }
+              if (v === null || v > maxBar || v < yMin) { lastWasNull = true; continue; }
               const cmd = lastWasNull ? 'M' : 'L';
               cmds.push(`${cmd} ${xCenter(i)} ${yBar(v)}`);
               lastWasNull = false;
@@ -1425,6 +1518,26 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const intensityData   = useMemo(() => buildIntensityMinCombinedChartData(entries, range, aggregation, weeklyIntensityMinGoal, today), [entries, range, aggregation, weeklyIntensityMinGoal, today]);
   const caloriesData    = useMemo(() => buildStackedCaloriesChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
 
+  // Fixed y-axis domains: score charts center on the latest value, goal charts
+  // cap at a multiple of the (aggregation-scaled) goal.
+  const vo2Domain       = useMemo(() => centeredDomain(vo2Data.latestValue, 10), [vo2Data.latestValue]);
+  const hillDomain      = useMemo(() => centeredDomain(hillData.latestValue, 20), [hillData.latestValue]);
+  const enduranceDomain = useMemo(() => centeredDomain(enduranceData.latestValue, 1000), [enduranceData.latestValue]);
+  const rhrDomain       = useMemo(() => centeredDomain(rhrData.latestValue, 15), [rhrData.latestValue]);
+  const hrvDomain       = useMemo(() => baselineDomain(hrvData.buckets, 5), [hrvData.buckets]);
+  const stepsDomain     = useMemo(() => {
+    const cap = goalBarCap(stepsGoal, 1.5, aggregation);
+    return cap === null ? null : { min: 0, max: cap };
+  }, [stepsGoal, aggregation]);
+  const floorsDomain    = useMemo(() => {
+    const cap = goalBarCap(floorsGoal, 3, aggregation);
+    return cap === null ? null : { min: 0, max: cap };
+  }, [floorsGoal, aggregation]);
+  const intensityDomain = useMemo(() => {
+    const cap = goalBarCap(weeklyIntensityMinGoal / 7, 2, aggregation);
+    return cap === null ? null : { min: 0, max: cap };
+  }, [weeklyIntensityMinGoal, aggregation]);
+
   if (entries.length === 0) {
     return (
       <div className={embedded ? 'strava-subview' : 'strava-view'}>
@@ -1516,6 +1629,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         colorFn={(v) => v !== null ? vo2MaxColor(v) : GRAY}
         formatValue={numFmt('vo2Max')}
         renderAsDots
+        domain={vo2Domain}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.hillScore}
@@ -1529,6 +1643,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         colorFn={(v) => v !== null ? hillScoreColor(v) : GRAY}
         formatValue={numFmt('hillScore')}
         renderAsDots
+        domain={hillDomain}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.enduranceScore}
@@ -1542,6 +1657,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         colorFn={(v) => v !== null ? enduranceScoreColor(v) : GRAY}
         formatValue={numFmt('enduranceScore')}
         renderAsDots
+        domain={enduranceDomain}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.heatAcclimationPct}
@@ -1589,6 +1705,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('hrvWeeklyAvg')}
         rangeLabel="baseline"
         colorFn={(_, __, ___, key) => key ? hrvStatusColor(key) : ACCENT}
+        domain={hrvDomain}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.restingHR}
@@ -1597,6 +1714,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         summaryLabel={summaryStr(summaryValue(rhrData), 'restingHR', WELLNESS_METRIC_UNITS.restingHR)}
         formatValue={numFmt('restingHR')}
         renderAsDots
+        domain={rhrDomain}
       />
       <WellnessRangeBarChart
         label="Body Battery Range"
@@ -1649,6 +1767,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('steps')}
         legendItems={stepsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? goalColor(v, stepsGoal, aggregation, ACCENT) : GRAY}
+        domain={stepsDomain}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.floors}
@@ -1658,6 +1777,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('floors')}
         legendItems={floorsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? goalColor(v, floorsGoal, aggregation, ACCENT) : GRAY}
+        domain={floorsDomain}
       />
       <WellnessBarChart
         label="Intensity Minutes"
@@ -1667,6 +1787,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('intensityMinModerate')}
         legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v, key) => goalColorFromKey(key, v !== null ? ACCENT : GRAY)}
+        domain={intensityDomain}
       />
       <WellnessStackedCaloriesChart
         buckets={caloriesData.buckets}
