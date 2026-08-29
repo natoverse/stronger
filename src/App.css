@@ -3899,6 +3899,23 @@ body {
 	filter: drop-shadow(0 0 4px var(--color-accent));
 }
 
+/* Subtle variant used for the wellness cumulative (weekly running total) overlay */
+.wellness-cumulative-line {
+	fill: none;
+	stroke: rgba(255, 255, 255, 0.35);
+	stroke-width: 1;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+.wellness-cumulative-dot {
+	fill: rgba(255, 255, 255, 0.35);
+}
+
+.wellness-cumulative-dot.active {
+	fill: rgba(255, 255, 255, 0.7);
+}
+
 .strava-goal-line {
 	fill: none;
 	stroke: rgba(255, 255, 255, 0.4);
