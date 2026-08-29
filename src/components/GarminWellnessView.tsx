@@ -591,12 +591,15 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
           {/* Overflow hatches retain the corresponding bar's computed color. */}
           {domain !== null && !renderAsDots && (
             <defs>
-              {buckets.map((b, i) => {
-                if (b.value === null || b.value <= yMax) return null;
-                const fill = colorFn ? colorFn(b.value, b.colorKey) : ACCENT;
+              {buckets
+                .map((bucket, index) => ({ bucket, index }))
+                .filter(({ bucket }) => bucket.value !== null && bucket.value > yMax)
+                .map(({ bucket, index }) => {
+                const { value } = bucket;
+                const fill = colorFn ? colorFn(value, bucket.colorKey) : ACCENT;
                 const colors = overflowPatternColors(fill);
                 return (
-                  <pattern key={`overflow-${i}`} id={`${overflowPatternId}-${i}`} width="6" height="6" patternUnits="userSpaceOnUse">
+                  <pattern key={`overflow-${index}`} id={`${overflowPatternId}-${index}`} width="6" height="6" patternUnits="userSpaceOnUse">
                     <rect width="6" height="6" fill={colors.background} opacity={0.35} />
                     <path
                       d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
