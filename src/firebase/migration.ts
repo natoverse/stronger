@@ -35,6 +35,7 @@ import {
 } from '../google/index.ts'
 import {
 	appendLogRows,
+	appendMealLogEntry,
 	readConfigZone,
 	readLogZone,
 	readWorkoutDefs,
@@ -166,7 +167,6 @@ export async function importSheetMigration(
 		await writeCardioActivities(uid, data.cardio)
 		await writeMealItems(uid, data.mealItems)
 		for (const entry of data.mealLog) {
-			const { appendMealLogEntry } = await import('./store.ts')
 			await appendMealLogEntry(uid, entry)
 		}
 		await writeMealFavorites(uid, data.favorites)

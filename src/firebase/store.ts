@@ -136,10 +136,11 @@ export function writeCardioActivities(uid: string, activities: CardioActivity[])
 
 export const writeDefaultCardioActivities = writeCardioActivities
 
-function logId(row: ParsedLogRow): string {
+export function logDocumentId(row: ParsedLogRow): string {
 	return [
 		idPart(row.startTime),
 		idPart(row.liftId || row.exerciseName),
+		idPart(row.exerciseName),
 		row.setNumber,
 	].join('_')
 }
@@ -149,7 +150,7 @@ export async function appendLogRows(uid: string, rows: (string | number | boolea
 	for (let start = 0; start < parsed.length; start += 400) {
 		const batch = writeBatch(firestore)
 		for (const row of parsed.slice(start, start + 400)) {
-			batch.set(doc(userCollection(uid, 'workoutSessions'), logId(row)), {
+			batch.set(doc(userCollection(uid, 'workoutSessions'), logDocumentId(row)), {
 				...row,
 				updatedAt: new Date().toISOString(),
 			})
@@ -158,7 +159,7 @@ export async function appendLogRows(uid: string, rows: (string | number | boolea
 	}
 }
 
-function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
+export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
 	if (row.length < 13) return null
 	const strings = row.map(String)
 	const setNumber = Number(strings[6])
@@ -201,7 +202,7 @@ export async function updateLogRows(
 		&& row.workoutId === sessionWorkoutId
 		&& row.startTime === sessionStartTime
 	))
-	await replaceCollection(uid, 'workoutSessions', [...retained, ...updatedRows], (row) => logId(row))
+	await replaceCollection(uid, 'workoutSessions', [...retained, ...updatedRows], (row) => logDocumentId(row))
 }
 
 export async function deleteLogSession(
@@ -230,8 +231,8 @@ export function writeFlags(uid: string, flags: DayFlagEntry[]): Promise<void> {
 	return replaceCollection(uid, 'dayFlags', flags, (entry) => entry.date)
 }
 
-function scheduleId(entry: WorkoutScheduleEntry, index: number): string {
-	return idPart(entry.strongerId || `${entry.date}:${entry.workoutId}:${index}`)
+export function scheduleDocumentId(entry: WorkoutScheduleEntry): string {
+	return idPart(entry.strongerId || `${entry.date}:${entry.workoutId}:${entry.label ?? ''}`)
 }
 
 export function readWorkoutSchedule(uid: string): Promise<WorkoutScheduleEntry[]> {
@@ -239,7 +240,7 @@ export function readWorkoutSchedule(uid: string): Promise<WorkoutScheduleEntry[]
 }
 
 export function writeWorkoutSchedule(uid: string, entries: WorkoutScheduleEntry[]): Promise<void> {
-	return replaceCollection(uid, 'schedule', entries, scheduleId)
+	return replaceCollection(uid, 'schedule', entries, scheduleDocumentId)
 }
 
 export const readSchedule = readWorkoutSchedule
