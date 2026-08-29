@@ -492,11 +492,11 @@ export function CalendarView({
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
 	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
 	const [labelDraft, setLabelDraft] = useState('');
-	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
+	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0, 1, 2]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
 	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
-	const [futureDayCount, setFutureDayCount] = useState(30);
+	const [futureDayCount, setFutureDayCount] = useState(90);
 	const futureDays = useMemo(() => generateFutureDays(futureDayCount), [futureDayCount]);
 
 	// Build a map of date → workoutIds for fast lookup
