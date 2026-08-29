@@ -110,7 +110,10 @@ describe('CalendarView month schedule', () => {
 			.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 		const followingMonthLabel = new Date(now.getFullYear(), now.getMonth() + 2, 1)
 			.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-		const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+		const visibleDays = [0, 1, 2].reduce(
+			(total, offset) => total + new Date(now.getFullYear(), now.getMonth() + offset + 1, 0).getDate(),
+			0,
+		);
 		expect(markup).toContain(monthLabel);
 		expect(markup).toContain(nextMonthLabel);
 		expect(markup).toContain(followingMonthLabel);
@@ -136,7 +139,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-visitors');
 		expect(markup).toContain('aria-label="visitors"');
 		expect(markup).toContain('calendar-month-day-blocked');
-		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(daysInMonth);
+		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(visibleDays);
 		expect(markup).not.toContain('calendar-month-flag');
 		expect(markup).not.toContain('calendar-month-flag-alcohol');
 		expect(markup).not.toContain('Alcohol: active');
