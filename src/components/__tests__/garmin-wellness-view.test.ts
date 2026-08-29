@@ -174,6 +174,7 @@ describe('chart y-domains', () => {
 
   it('formats activity goal chart summaries as current over goal', () => {
     expect(goalSummaryLabel(12345, 10000, 'day', 'steps', '')).toBe('12345 / 10000');
+    // Weekly aggregation compares against seven daily floor goals.
     expect(goalSummaryLabel(8, 10, 'week', 'floors', '')).toBe('8 / 70');
     expect(goalSummaryLabel(8, 0, 'day', 'floors', '')).toBe('8');
   });

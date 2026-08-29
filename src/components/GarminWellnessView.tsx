@@ -1672,6 +1672,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     ? latestIntensityBucket?.cumulative ?? null
     : aggregation === 'week'
       ? latestIntensityBucket?.value ?? null
+      // Month buckets do not have a meaningful single-week total.
       : null;
 
   return (
