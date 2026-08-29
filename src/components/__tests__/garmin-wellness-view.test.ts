@@ -12,6 +12,7 @@ import {
   hillScoreColor,
   hrvStatusLegendLabel,
   hrvStatusColor,
+  overflowPatternColors,
   readinessLegendLabel,
   sleepGoalColor,
   metersToFeet,
@@ -136,6 +137,15 @@ describe('chart y-domains', () => {
     expect(centeredDomain(52, 15)).toEqual({ min: 37, max: 67 });
     expect(centeredDomain(600, 1000)).toEqual({ min: 0, max: 1600 });
     expect(centeredDomain(null, 10)).toBeNull();
+  });
+
+  describe('overflow patterns', () => {
+    it('uses the computed bar color for both hatch layers', () => {
+      expect(overflowPatternColors('#ff1744')).toEqual({
+        background: '#ff1744',
+        line: '#ff1744',
+      });
+    });
   });
 
   it('pads the HRV baseline band by five on each side', () => {
