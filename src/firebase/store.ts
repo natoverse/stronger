@@ -1,0 +1,355 @@
+import {
+	collection,
+	deleteDoc,
+	doc,
+	getDocs,
+	getDoc,
+	setDoc,
+	writeBatch,
+	type DocumentData,
+	type QueryDocumentSnapshot,
+} from 'firebase/firestore'
+import type {
+	CardioActivity,
+	DayFlagEntry,
+	FoodItem,
+	GarminWellnessEntry,
+	LiftConfig,
+	MealCategory,
+	MealItem,
+	MealLogEntry,
+	WithingsMeasurement,
+	WorkoutScheduleEntry,
+} from '../model/index.ts'
+import type { StravaActivity } from '../model/strava.ts'
+import type { WorkoutDefinition } from '../data/sample-workouts.ts'
+import type { ParsedLogRow } from '../google/sheets.ts'
+import { firestore } from './client.ts'
+
+export const SCHEMA_VERSION = 1
+
+type CollectionName =
+	| 'exercises'
+	| 'workouts'
+	| 'workoutSessions'
+	| 'dayFlags'
+	| 'schedule'
+	| 'cardioActivities'
+	| 'mealItems'
+	| 'mealLog'
+	| 'favoriteFoods'
+	| 'recentFoods'
+	| 'garminActivities'
+	| 'garminWellness'
+	| 'withingsMeasurements'
+
+function userDoc(uid: string) {
+	return doc(firestore, 'users', uid)
+}
+
+function userCollection(uid: string, name: CollectionName) {
+	return collection(userDoc(uid), name)
+}
+
+function clean<T>(snapshot: QueryDocumentSnapshot<DocumentData>): T {
+	const value = snapshot.data()
+	delete value.createdAt
+	delete value.updatedAt
+	return value as T
+}
+
+function idPart(value: string): string {
+	return encodeURIComponent(value).split('.').join('%2E')
+}
+
+async function readCollection<T>(uid: string, name: CollectionName): Promise<T[]> {
+	const snapshot = await getDocs(userCollection(uid, name))
+	return snapshot.docs.map((item) => clean<T>(item))
+}
+
+async function replaceCollection<T>(
+	uid: string,
+	name: CollectionName,
+	values: T[],
+	getId: (value: T, index: number) => string,
+): Promise<void> {
+	const existing = await getDocs(userCollection(uid, name))
+	const desired = new Set(values.map(getId))
+	const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = []
+
+	for (const existingDoc of existing.docs) {
+		if (!desired.has(existingDoc.id)) operations.push((batch) => batch.delete(existingDoc.ref))
+	}
+	values.forEach((value, index) => {
+		const ref = doc(userCollection(uid, name), getId(value, index))
+		operations.push((batch) => batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() }))
+	})
+
+	for (let start = 0; start < operations.length; start += 400) {
+		const batch = writeBatch(firestore)
+		for (const operation of operations.slice(start, start + 400)) operation(batch)
+		await batch.commit()
+	}
+}
+
+export async function ensureUser(uid: string): Promise<void> {
+	const ref = userDoc(uid)
+	const snapshot = await getDoc(ref)
+	const now = new Date().toISOString()
+	await setDoc(ref, {
+		schemaVersion: SCHEMA_VERSION,
+		updatedAt: now,
+		...(snapshot.exists() ? {} : { createdAt: now }),
+	}, { merge: true })
+}
+
+export function readConfigZone(uid: string): Promise<LiftConfig[] | null> {
+	return readCollection<LiftConfig>(uid, 'exercises').then((items) => items.length ? items : null)
+}
+
+export function writeDefaultConfig(uid: string, configs: LiftConfig[]): Promise<void> {
+	return replaceCollection(uid, 'exercises', configs, (item) => item.id)
+}
+
+export function writeConfigValues(uid: string, configs: LiftConfig[]): Promise<void> {
+	return writeDefaultConfig(uid, configs)
+}
+
+export function readWorkoutDefs(uid: string, _liftNames?: Map<string, string>): Promise<WorkoutDefinition[] | null> {
+	return readCollection<WorkoutDefinition>(uid, 'workouts').then((items) => items.length ? items : null)
+}
+
+export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
+	return replaceCollection(uid, 'workouts', definitions, (item) => item.id)
+}
+
+export const writeDefaultWorkoutDefs = writeWorkoutDefs
+
+export function readCardioActivities(uid: string): Promise<CardioActivity[] | null> {
+	return readCollection<CardioActivity>(uid, 'cardioActivities').then((items) => items.length ? items : null)
+}
+
+export function writeCardioActivities(uid: string, activities: CardioActivity[]): Promise<void> {
+	return replaceCollection(uid, 'cardioActivities', activities, (item) => item.id)
+}
+
+export const writeDefaultCardioActivities = writeCardioActivities
+
+function logId(row: ParsedLogRow): string {
+	return [
+		idPart(row.startTime),
+		idPart(row.liftId || row.exerciseName),
+		row.setNumber,
+	].join('_')
+}
+
+export async function appendLogRows(uid: string, rows: (string | number | boolean)[][]): Promise<void> {
+	const parsed = rows.map((row) => rowToParsedLogRow(row)).filter((row): row is ParsedLogRow => row !== null)
+	for (let start = 0; start < parsed.length; start += 400) {
+		const batch = writeBatch(firestore)
+		for (const row of parsed.slice(start, start + 400)) {
+			batch.set(doc(userCollection(uid, 'workoutSessions'), logId(row)), {
+				...row,
+				updatedAt: new Date().toISOString(),
+			})
+		}
+		await batch.commit()
+	}
+}
+
+function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
+	if (row.length < 13) return null
+	const strings = row.map(String)
+	const setNumber = Number(strings[6])
+	const plannedWeight = Number(strings[8])
+	const plannedReps = Number(strings[9])
+	const actualWeight = Number(strings[10])
+	const actualReps = Number(strings[11])
+	if (!strings[0] || !strings[1] || !strings[3] || !strings[4] || !Number.isFinite(setNumber)) return null
+	return {
+		date: strings[0],
+		startTime: strings[1],
+		endTime: strings[2],
+		workoutId: strings[3],
+		exerciseName: strings[4],
+		liftId: strings[5],
+		setNumber,
+		setType: strings[7],
+		plannedWeight: Number.isFinite(plannedWeight) ? plannedWeight : 0,
+		plannedReps: Number.isFinite(plannedReps) ? plannedReps : 0,
+		actualWeight: Number.isFinite(actualWeight) ? actualWeight : 0,
+		actualReps: Number.isFinite(actualReps) ? actualReps : 0,
+		completed: strings[12].toUpperCase() === 'TRUE',
+	}
+}
+
+export function readLogZone(uid: string): Promise<ParsedLogRow[]> {
+	return readCollection<ParsedLogRow>(uid, 'workoutSessions')
+}
+
+export async function updateLogRows(
+	uid: string,
+	sessionDate: string,
+	sessionWorkoutId: string,
+	sessionStartTime: string,
+	updatedRows: ParsedLogRow[],
+): Promise<void> {
+	const rows = await readLogZone(uid)
+	const retained = rows.filter((row) => !(
+		row.date === sessionDate
+		&& row.workoutId === sessionWorkoutId
+		&& row.startTime === sessionStartTime
+	))
+	await replaceCollection(uid, 'workoutSessions', [...retained, ...updatedRows], (row) => logId(row))
+}
+
+export async function deleteLogSession(
+	uid: string,
+	sessionDate: string,
+	sessionWorkoutId: string,
+	sessionStartTime: string,
+): Promise<void> {
+	const snapshot = await getDocs(userCollection(uid, 'workoutSessions'))
+	const matches = snapshot.docs.filter((item) => {
+		const row = item.data() as ParsedLogRow
+		return row.date === sessionDate && row.workoutId === sessionWorkoutId && row.startTime === sessionStartTime
+	})
+	for (let start = 0; start < matches.length; start += 400) {
+		const batch = writeBatch(firestore)
+		for (const item of matches.slice(start, start + 400)) batch.delete(item.ref)
+		await batch.commit()
+	}
+}
+
+export function readFlags(uid: string): Promise<DayFlagEntry[]> {
+	return readCollection<DayFlagEntry>(uid, 'dayFlags')
+}
+
+export function writeFlags(uid: string, flags: DayFlagEntry[]): Promise<void> {
+	return replaceCollection(uid, 'dayFlags', flags, (entry) => entry.date)
+}
+
+function scheduleId(entry: WorkoutScheduleEntry, index: number): string {
+	return idPart(entry.strongerId || `${entry.date}:${entry.workoutId}:${index}`)
+}
+
+export function readWorkoutSchedule(uid: string): Promise<WorkoutScheduleEntry[]> {
+	return readCollection<WorkoutScheduleEntry>(uid, 'schedule')
+}
+
+export function writeWorkoutSchedule(uid: string, entries: WorkoutScheduleEntry[]): Promise<void> {
+	return replaceCollection(uid, 'schedule', entries, scheduleId)
+}
+
+export const readSchedule = readWorkoutSchedule
+export const writeSchedule = writeWorkoutSchedule
+
+export async function readSettings(uid: string): Promise<Map<string, string>> {
+	const snapshot = await getDoc(doc(userDoc(uid), 'settings', 'app'))
+	if (!snapshot.exists()) return new Map()
+	const values = snapshot.data().values as Record<string, string> | undefined
+	return new Map(Object.entries(values ?? {}))
+}
+
+export async function writeSettings(uid: string, settings: Map<string, string>): Promise<void> {
+	await setDoc(doc(userDoc(uid), 'settings', 'app'), {
+		values: Object.fromEntries(settings),
+		updatedAt: new Date().toISOString(),
+	})
+}
+
+export function readMealItems(uid: string): Promise<MealItem[]> {
+	return readCollection<MealItem>(uid, 'mealItems')
+}
+
+export function writeMealItems(uid: string, items: MealItem[]): Promise<void> {
+	return replaceCollection(uid, 'mealItems', items, (item) => idPart(item.id))
+}
+
+export function readMealFavorites(uid: string): Promise<FoodItem[]> {
+	return readCollection<FoodItem>(uid, 'favoriteFoods')
+}
+
+export function writeMealFavorites(uid: string, items: FoodItem[]): Promise<void> {
+	return replaceCollection(uid, 'favoriteFoods', items, (item) => idPart(item.code))
+}
+
+export function readMealRecents(uid: string): Promise<FoodItem[]> {
+	return readCollection<FoodItem>(uid, 'recentFoods')
+}
+
+export function writeMealRecents(uid: string, items: FoodItem[]): Promise<void> {
+	return replaceCollection(uid, 'recentFoods', items, (item) => idPart(item.code))
+}
+
+export function readMealLog(uid: string): Promise<MealLogEntry[]> {
+	return readCollection<MealLogEntry>(uid, 'mealLog')
+}
+
+export async function appendMealLogEntry(uid: string, entry: MealLogEntry): Promise<void> {
+	await setDoc(doc(userCollection(uid, 'mealLog'), idPart(entry.id)), {
+		...entry,
+		updatedAt: new Date().toISOString(),
+	})
+}
+
+export async function deleteMealLogEntry(uid: string, id: string): Promise<void> {
+	await deleteDoc(doc(userCollection(uid, 'mealLog'), idPart(id)))
+}
+
+export async function updateMealLogEntry(uid: string, id: string, quantity: number): Promise<void> {
+	await setDoc(doc(userCollection(uid, 'mealLog'), idPart(id)), {
+		quantity,
+		updatedAt: new Date().toISOString(),
+	}, { merge: true })
+}
+
+export async function updateMealLogEntryCategory(
+	uid: string,
+	ids: string[],
+	category: MealCategory,
+): Promise<void> {
+	for (let start = 0; start < ids.length; start += 400) {
+		const batch = writeBatch(firestore)
+		for (const id of ids.slice(start, start + 400)) {
+			batch.set(doc(userCollection(uid, 'mealLog'), idPart(id)), {
+				category,
+				updatedAt: new Date().toISOString(),
+			}, { merge: true })
+		}
+		await batch.commit()
+	}
+}
+
+export function readGarminActivities(uid: string): Promise<StravaActivity[]> {
+	return readCollection<StravaActivity>(uid, 'garminActivities')
+}
+
+export function readGarminWellnessEntries(uid: string): Promise<GarminWellnessEntry[]> {
+	return readCollection<GarminWellnessEntry>(uid, 'garminWellness')
+}
+
+export function readWithingsMeasurements(uid: string): Promise<WithingsMeasurement[]> {
+	return readCollection<WithingsMeasurement>(uid, 'withingsMeasurements')
+}
+
+export const verifyScheduleTab = async (_uid?: string) => true
+export const verifyWorkoutScheduleTab = async (_uid?: string) => true
+export const verifyMealFavoritesTab = async (_uid?: string) => true
+export const verifyMealRecentsTab = async (_uid?: string) => true
+export const verifyGarminTab = async (_uid?: string) => true
+export const verifyGarminWellnessTab = async (_uid?: string) => true
+export const verifyWithingsTab = async (_uid?: string) => true
+export const verifySettingsTab = async (_uid?: string) => true
+export const createScheduleTab = async (_uid?: string) => undefined
+export const createWorkoutScheduleTab = async (_uid?: string) => undefined
+export const createMealFavoritesTab = async (_uid?: string) => undefined
+export const createMealRecentsTab = async (_uid?: string) => undefined
+export const createWithingsTab = async (_uid?: string) => undefined
+export const createSettingsTab = async (_uid?: string) => undefined
+
+export async function withDataRetry<T>(fn: () => Promise<T>): Promise<T> {
+	return fn()
+}
+
+export const withAuthRetry = withDataRetry
