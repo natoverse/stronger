@@ -421,6 +421,22 @@ describe('computeSet', () => {
 		expect(result!.weight).toBe(115); // 120 snaps to 115
 	});
 
+	it('falls back to warmup rounding when raw weight is outside plate-math tolerance', () => {
+		// 60.5% of 200 = 121, which is 6 lbs from 115. Round to 120 rather than
+		// snapping the rounded result to 115.
+		const set: SetTemplate = {
+			setType: 'warmup',
+			percentage: 0.605,
+			weightBasis: { kind: 'topSet' },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		const result = computeSet(set, benchConfig, configs, { roundWarmupPlateMath: true });
+		expect(result).not.toBeNull();
+		expect(result!.weight).toBe(120);
+	});
+
 	it('does not snap non-warmup sets even when roundWarmupPlateMath is true', () => {
 		// 60% of 200 = 120, nearest easy plate is 115 (5 away), but work sets are not snapped
 		const set: SetTemplate = {
@@ -436,9 +452,9 @@ describe('computeSet', () => {
 		expect(result!.weight).toBe(120); // no plate-math rounding for work sets
 	});
 
-	it('leaves warmup weight unchanged when not within tolerance', () => {
+	it('uses warmup rounding when not within plate-math tolerance', () => {
 		// benchConfig: topSetWeight=200
-		// 62% of 200 = 124 → rounded to 125; |125 - 115| = 10, |125 - 135| = 10 — no snap
+		// 62% of 200 = 124; |124 - 115| = 9, |124 - 135| = 11, so fall back to 125
 		const set: SetTemplate = {
 			setType: 'warmup',
 			percentage: 0.62,
@@ -449,7 +465,7 @@ describe('computeSet', () => {
 		};
 		const result = computeSet(set, benchConfig, configs, { roundWarmupPlateMath: true });
 		expect(result).not.toBeNull();
-		expect(result!.weight).toBe(125); // not within 5 of any easy plate weight
+		expect(result!.weight).toBe(125);
 	});
 });
 

@@ -32,7 +32,7 @@ const EASY_PLATE_WEIGHTS: readonly number[] = (() => {
  * If `weight` is within `tolerance` lbs of an "easy plate math" value, return
  * the nearest such value; otherwise return `weight` unchanged.
  */
-export function roundToEasyPlateMath(weight: number, tolerance = 5): number {
+function nearestEasyPlateWeight(weight: number, tolerance: number): number | null {
 	let best: number | null = null;
 	let bestDiff = Infinity;
 	for (const candidate of EASY_PLATE_WEIGHTS) {
@@ -43,7 +43,11 @@ export function roundToEasyPlateMath(weight: number, tolerance = 5): number {
 			bestDiff = diff;
 		}
 	}
-	return best ?? weight;
+	return best;
+}
+
+export function roundToEasyPlateMath(weight: number, tolerance = 5): number {
+	return nearestEasyPlateWeight(weight, tolerance) ?? weight;
 }
 
 
@@ -83,11 +87,20 @@ export function computeSetWeight(
 	set: SetTemplate,
 	liftConfig: LiftConfig,
 	allConfigs: ReadonlyMap<string, LiftConfig>,
+	options?: { roundWarmupPlateMath?: boolean },
 ): number | null {
 	const roundingFactor =
 		set.setType === 'warmup'
 			? liftConfig.warmupRoundingFactor
 			: liftConfig.roundingFactor;
+	const roundCalculatedWeight = (weight: number): number => {
+		const easyPlateWeight =
+			options?.roundWarmupPlateMath && set.setType === 'warmup'
+				? nearestEasyPlateWeight(weight, 5)
+				: null;
+		const rounded = easyPlateWeight ?? roundToNearest(weight, roundingFactor);
+		return Math.max(rounded, liftConfig.minimumWeight);
+	};
 
 	switch (set.weightBasis.kind) {
 		case 'fixed':
@@ -97,32 +110,17 @@ export function computeSetWeight(
 			return liftConfig.barWeight;
 
 		case 'topSet':
-			return computeWeight(
-				set.percentage,
-				liftConfig.topSetWeight,
-				roundingFactor,
-				liftConfig.minimumWeight,
-			);
+			return roundCalculatedWeight(set.percentage * liftConfig.topSetWeight);
 
 		case 'backoff':
-			return computeWeight(
-				set.percentage,
-				liftConfig.backoffWeight,
-				roundingFactor,
-				liftConfig.minimumWeight,
-			);
+			return roundCalculatedWeight(set.percentage * liftConfig.backoffWeight);
 
 		case 'crossReference': {
 			const ref = allConfigs.get(set.weightBasis.liftId);
 			if (!ref) {
 				return null;
 			}
-			return computeWeight(
-				set.percentage,
-				ref.topSetWeight,
-				roundingFactor,
-				liftConfig.minimumWeight,
-			);
+			return roundCalculatedWeight(set.percentage * ref.topSetWeight);
 		}
 
 		case 'relative': {
@@ -130,11 +128,7 @@ export function computeSetWeight(
 				set.weightBasis.reference === 'topSet'
 					? liftConfig.topSetWeight
 					: liftConfig.backoffWeight;
-			const rounded = roundToNearest(
-				base + set.weightBasis.offset,
-				roundingFactor,
-			);
-			return Math.max(rounded, liftConfig.minimumWeight);
+			return roundCalculatedWeight(base + set.weightBasis.offset);
 		}
 	}
 }
@@ -149,15 +143,11 @@ export function computeSet(
 	allConfigs: ReadonlyMap<string, LiftConfig>,
 	options?: { roundWarmupPlateMath?: boolean },
 ): ComputedSet | null {
-	const weight = computeSetWeight(set, liftConfig, allConfigs);
+	const weight = computeSetWeight(set, liftConfig, allConfigs, options);
 	if (weight === null) return null;
-	const finalWeight =
-		options?.roundWarmupPlateMath && set.setType === 'warmup'
-			? roundToEasyPlateMath(weight)
-			: weight;
 	return {
 		setType: set.setType,
-		weight: finalWeight,
+		weight,
 		minReps: set.minReps,
 		maxReps: set.maxReps,
 		amrap: set.amrap,
