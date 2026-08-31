@@ -20,6 +20,7 @@ const benchConfig: LiftConfig = {
 	increment: 2.5,
 	minimumWeight: 95,
 	roundingFactor: 5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell',
 };
@@ -32,6 +33,7 @@ const pressConfig: LiftConfig = {
 	increment: 2.5,
 	minimumWeight: 65,
 	roundingFactor: 2.5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell',
 };
@@ -44,6 +46,7 @@ const skullCrusherConfig: LiftConfig = {
 	increment: 2.5,
 	minimumWeight: 20,
 	roundingFactor: 2.5,
+	warmupRoundingFactor: 5,
 	barWeight: 15,
 	gear: 'barbell',
 };

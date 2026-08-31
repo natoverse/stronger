@@ -35,6 +35,8 @@ export interface LiftConfig {
 	minimumWeight: number;
 	/** All calculated weights are rounded to the nearest multiple of this value. */
 	roundingFactor: number;
+	/** Warmup weights are rounded to the nearest multiple of this value. */
+	warmupRoundingFactor: number;
 	/** Minimum allowable weight for the exercise (e.g. empty bar = 45 lbs). */
 	barWeight: number;
 	/** Equipment type used for this exercise. */

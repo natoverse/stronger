@@ -7,6 +7,7 @@
 		"increment": 2.5,
 		"minimumWeight": 95,
 		"roundingFactor": 5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 45,
 		"gear": "barbell"
 	},
@@ -18,6 +19,7 @@
 		"increment": 5,
 		"minimumWeight": 95,
 		"roundingFactor": 5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 45,
 		"gear": "barbell"
 	},
@@ -29,6 +31,7 @@
 		"increment": 2.5,
 		"minimumWeight": 65,
 		"roundingFactor": 2.5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 45,
 		"gear": "barbell"
 	},
@@ -40,6 +43,7 @@
 		"increment": 5,
 		"minimumWeight": 135,
 		"roundingFactor": 5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 45,
 		"gear": "barbell"
 	},
@@ -51,6 +55,7 @@
 		"increment": 1,
 		"minimumWeight": 15,
 		"roundingFactor": 1,
+		"warmupRoundingFactor": 5,
 		"barWeight": 15,
 		"gear": "barbell"
 	},
@@ -62,6 +67,7 @@
 		"increment": 0,
 		"minimumWeight": 0,
 		"roundingFactor": 0,
+		"warmupRoundingFactor": 5,
 		"barWeight": 0,
 		"gear": "bodyweight"
 	},
@@ -73,6 +79,7 @@
 		"increment": 1,
 		"minimumWeight": 15,
 		"roundingFactor": 1,
+		"warmupRoundingFactor": 5,
 		"barWeight": 15,
 		"gear": "barbell"
 	},
@@ -84,6 +91,7 @@
 		"increment": 2.5,
 		"minimumWeight": 5,
 		"roundingFactor": 2.5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 5,
 		"gear": "dumbbell"
 	},
@@ -95,6 +103,7 @@
 		"increment": 2.5,
 		"minimumWeight": 25,
 		"roundingFactor": 2.5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 5,
 		"gear": "dumbbell"
 	},
@@ -106,6 +115,7 @@
 		"increment": 2.5,
 		"minimumWeight": 5,
 		"roundingFactor": 2.5,
+		"warmupRoundingFactor": 5,
 		"barWeight": 5,
 		"gear": "dumbbell"
 	}

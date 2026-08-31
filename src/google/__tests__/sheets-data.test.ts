@@ -16,11 +16,12 @@ describe('liftConfigToRow', () => {
 		increment: 2.5,
 		minimumWeight: 95,
 		roundingFactor: 5,
+		warmupRoundingFactor: 5,
 		barWeight: 45,
 		gear: 'barbell',
 	};
 
-	it('serializes all nine fields in order', () => {
+	it('serializes all ten fields in order', () => {
 		const row = liftConfigToRow(config);
 		expect(row).toEqual([
 			'bench',
@@ -32,11 +33,12 @@ describe('liftConfigToRow', () => {
 			5,
 			45,
 			'barbell',
+			5,
 		]);
 	});
 
-	it('returns exactly 9 columns', () => {
-		expect(liftConfigToRow(config)).toHaveLength(9);
+	it('returns exactly 10 columns', () => {
+		expect(liftConfigToRow(config)).toHaveLength(10);
 	});
 });
 
@@ -46,7 +48,7 @@ describe('liftConfigToRow', () => {
 
 describe('rowToLiftConfig', () => {
 	it('parses a string array back into a LiftConfig', () => {
-		const row = ['squat', 'Squat', '300', '255', '5', '95', '5', '45', 'barbell'];
+		const row = ['squat', 'Squat', '300', '255', '5', '95', '5', '45', 'barbell', '2.5'];
 		const config = rowToLiftConfig(row);
 		expect(config).toEqual({
 			id: 'squat',
@@ -56,6 +58,7 @@ describe('rowToLiftConfig', () => {
 			increment: 5,
 			minimumWeight: 95,
 			roundingFactor: 5,
+			warmupRoundingFactor: 2.5,
 			barWeight: 45,
 			gear: 'barbell',
 		});
@@ -78,6 +81,7 @@ describe('rowToLiftConfig', () => {
 			increment: 5,
 			minimumWeight: 135,
 			roundingFactor: 5,
+			warmupRoundingFactor: 5,
 			barWeight: 45,
 			gear: 'barbell',
 		};
@@ -119,6 +123,13 @@ describe('rowToLiftConfig', () => {
 		expect(config).not.toBeNull();
 		expect(config!.barWeight).toBe(0);
 		expect(config!.gear).toBe('other');
+	});
+
+	it('defaults warmupRoundingFactor to 5 when the column is absent or blank', () => {
+		const absent = rowToLiftConfig(['bench', 'Bench', '200', '170', '2.5', '95', '2.5', '45', 'barbell']);
+		const blank = rowToLiftConfig(['bench', 'Bench', '200', '170', '2.5', '95', '2.5', '45', 'barbell', '']);
+		expect(absent!.warmupRoundingFactor).toBe(5);
+		expect(blank!.warmupRoundingFactor).toBe(5);
 	});
 
 	it('parses gear type case-insensitively', () => {

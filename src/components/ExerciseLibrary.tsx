@@ -17,6 +17,7 @@ export const DEFAULT_STRENGTH_CONFIG: Omit<LiftConfig, 'id' | 'name'> = {
 	increment: 5,
 	minimumWeight: 45,
 	roundingFactor: 5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell' as GearType,
 };

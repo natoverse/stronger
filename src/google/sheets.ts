@@ -16,7 +16,7 @@ import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 /* ------------------------------------------------------------------ */
 
 /** A1 range for the config zone (open-ended rows). */
-const CONFIG_RANGE = `'${TARGET_TAB_NAME}'!A:I`
+const CONFIG_RANGE = `'${TARGET_TAB_NAME}'!A:J`
 
 /** A1 range for the log zone header (row 1 of the log tab). */
 const LOG_HEADER_RANGE = `'${LOG_TAB_NAME}'!A1:M1`
@@ -37,6 +37,7 @@ const CONFIG_HEADER: string[] = [
 	'roundingFactor',
 	'barWeight',
 	'gear',
+	'warmupRoundingFactor',
 ]
 
 const LOG_HEADER: string[] = [
@@ -212,6 +213,7 @@ export function liftConfigToRow(
 		config.roundingFactor,
 		config.barWeight,
 		config.gear,
+		config.warmupRoundingFactor,
 	]
 }
 
@@ -273,7 +275,12 @@ export function rowToLiftConfig(row: string[]): LiftConfig | null {
 	const rawGear = (row[8] ?? '').trim().toLowerCase();
 	const gear = VALID_GEAR_TYPES.has(rawGear) ? rawGear as LiftConfig['gear'] : 'other';
 
-	return { id, name, topSetWeight, backoffWeight, increment, minimumWeight, roundingFactor, barWeight, gear };
+	// warmupRoundingFactor (col 9) — default to 5 for existing rows
+	const rawWarmupRounding = (row[9] ?? '').trim();
+	const warmupRoundingFactor = rawWarmupRounding ? Number(rawWarmupRounding) : 5;
+	if (!isValidWeight(warmupRoundingFactor)) return null;
+
+	return { id, name, topSetWeight, backoffWeight, increment, minimumWeight, roundingFactor, warmupRoundingFactor, barWeight, gear };
 }
 
 /* ------------------------------------------------------------------ */

@@ -110,8 +110,8 @@ describe('toEditable', () => {
 
 describe('fromEditable', () => {
 	const configs: LiftConfig[] = [
-		{ id: 'bench', name: 'Bench Press', topSetWeight: 200, backoffWeight: 170, increment: 2.5, minimumWeight: 95, roundingFactor: 5, barWeight: 45, gear: 'barbell' },
-		{ id: 'squat', name: 'Squat', topSetWeight: 300, backoffWeight: 255, increment: 5, minimumWeight: 95, roundingFactor: 5, barWeight: 45, gear: 'barbell' },
+		{ id: 'bench', name: 'Bench Press', topSetWeight: 200, backoffWeight: 170, increment: 2.5, minimumWeight: 95, roundingFactor: 5, warmupRoundingFactor: 5, barWeight: 45, gear: 'barbell' },
+		{ id: 'squat', name: 'Squat', topSetWeight: 300, backoffWeight: 255, increment: 5, minimumWeight: 95, roundingFactor: 5, warmupRoundingFactor: 5, barWeight: 45, gear: 'barbell' },
 	];
 
 	it('converts a strength workout back to a definition', () => {
