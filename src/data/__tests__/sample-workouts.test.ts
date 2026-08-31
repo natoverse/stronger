@@ -65,13 +65,19 @@ describe('sampleWorkouts', () => {
 	it('workout rss-int-b-bench has bench press as the primary lift', () => {
 		const a = sampleWorkouts.find((w) => w.id === 'rss-int-b-bench')!;
 		expect(a.exercises[0].name).toContain('Bench Press');
-		expect(a.exercises[0].liftId).toBe('bench-press');
+		expect(a.exercises[0].liftId).toBe('bench');
 	});
 
 	it('workout rss-int-b-squat has squat as the primary lift', () => {
 		const b = sampleWorkouts.find((w) => w.id === 'rss-int-b-squat')!;
 		expect(b.exercises[0].name).toContain('Squat');
 		expect(b.exercises[0].liftId).toBe('squat');
+	});
+
+	it('workout rss-int-b-press has overhead press as the primary lift', () => {
+		const c = sampleWorkouts.find((w) => w.id === 'rss-int-b-press')!;
+		expect(c.exercises[0].name).toContain('Overhead Press');
+		expect(c.exercises[0].liftId).toBe('press');
 	});
 
 	it('references only exercise IDs defined by the default configs', () => {

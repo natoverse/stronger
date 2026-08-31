@@ -1,6 +1,6 @@
 [
 	{
-		"id": "bench-press",
+		"id": "bench",
 		"name": "Bench Press",
 		"topSetWeight": 200,
 		"backoffWeight": 170,
@@ -24,7 +24,7 @@
 		"gear": "barbell"
 	},
 	{
-		"id": "overhead-press",
+		"id": "press",
 		"name": "Overhead Press",
 		"topSetWeight": 140,
 		"backoffWeight": 120,

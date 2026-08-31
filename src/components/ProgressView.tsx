@@ -31,7 +31,7 @@ const METRIC_LABELS: Record<ProgressMetric, string> = {
 };
 
 /** The four main barbell lifts shown prominently at the top. */
-const BIG_FOUR = ['squat', 'bench-press', 'deadlift', 'overhead-press'] as const;
+const BIG_FOUR = ['squat', 'bench', 'deadlift', 'press'] as const;
 
 /**
  * Compute the minimum data-point value across *all* time for a given lift+metric.
@@ -50,9 +50,9 @@ function allTimeMinForLift(
 
 const BIG_FOUR_LABELS: Record<string, string> = {
   squat: 'Squat',
-  'bench-press': 'Bench Press',
+  bench: 'Bench Press',
   deadlift: 'Deadlift',
-  'overhead-press': 'Overhead Press',
+  press: 'Overhead Press',
 };
 
 /* ------------------------------------------------------------------ */

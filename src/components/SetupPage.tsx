@@ -7,7 +7,7 @@ import exercisesJson from '../../lib/exercises.json';
 const libraryDefaults: LiftConfig[] = exercisesJson as LiftConfig[];
 
 /** The four barbell lift IDs shown on the setup page. */
-const BARBELL_LIFT_IDS = ['squat', 'bench-press', 'overhead-press', 'deadlift'] as const;
+const BARBELL_LIFT_IDS = ['squat', 'bench', 'press', 'deadlift'] as const;
 
 /** Barbell lifts pulled from the JSON library for display. */
 const barbellDefaults = libraryDefaults.filter((c) =>

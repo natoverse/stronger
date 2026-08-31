@@ -46,4 +46,5 @@ On confirmation, the app writes the final lift configs to the sheet and proceeds
 
 ## Iteration log
 
-- The setup page and seed workouts use the canonical exercise IDs from `lib/exercises.json`, including `bench-press`, `overhead-press`, and `skull-crusher`. Seed-data tests enforce that workout and cross-reference IDs resolve to configured exercises.
+- The setup page and seed workouts use the canonical exercise IDs from `lib/exercises.json`, including `bench`, `press`, and `skull-crusher`. Seed-data tests enforce that workout and cross-reference IDs resolve to configured exercises.
+- Bench press and overhead press use the concise IDs `bench` and `press`, respectively, matching the IDs used throughout model and Google Sheets tests.

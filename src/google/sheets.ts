@@ -2718,7 +2718,7 @@ export function bodyGoalsToSettings(
 const LIFT_GOAL_KEY_PREFIX = 'liftGoal.'
 
 /** The four main barbell lifts that support goals. */
-const VALID_LIFT_GOAL_IDS = new Set(['squat', 'bench-press', 'deadlift', 'overhead-press'])
+const VALID_LIFT_GOAL_IDS = new Set(['squat', 'bench', 'deadlift', 'press'])
 
 /** A weight goal for one of the Big 4 barbell lifts. */
 export interface LiftGoal {
