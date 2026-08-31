@@ -32,6 +32,7 @@ describe('DEFAULT_STRENGTH_CONFIG', () => {
 	it('has sensible default values', () => {
 		expect(DEFAULT_STRENGTH_CONFIG.topSetWeight).toBeGreaterThan(0);
 		expect(DEFAULT_STRENGTH_CONFIG.increment).toBeGreaterThan(0);
+		expect(DEFAULT_STRENGTH_CONFIG.warmupRoundingFactor).toBe(5);
 		expect(DEFAULT_STRENGTH_CONFIG.gear).toBe('barbell');
 	});
 });

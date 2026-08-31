@@ -30,6 +30,7 @@ const benchConfig: LiftConfig = {
 	increment: 2.5,
 	minimumWeight: 95,
 	roundingFactor: 5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell',
 };
@@ -42,6 +43,7 @@ const squatConfig: LiftConfig = {
 	increment: 5,
 	minimumWeight: 95,
 	roundingFactor: 5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell',
 };
@@ -54,6 +56,7 @@ const pressConfig: LiftConfig = {
 	increment: 2.5,
 	minimumWeight: 65,
 	roundingFactor: 2.5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell',
 };
@@ -66,6 +69,7 @@ const deadliftConfig: LiftConfig = {
 	increment: 5,
 	minimumWeight: 135,
 	roundingFactor: 5,
+	warmupRoundingFactor: 5,
 	barWeight: 45,
 	gear: 'barbell',
 };
@@ -78,6 +82,7 @@ const skullCrusherConfig: LiftConfig = {
 	increment: 2.5,
 	minimumWeight: 20,
 	roundingFactor: 2.5,
+	warmupRoundingFactor: 5,
 	barWeight: 15,
 	gear: 'barbell',
 };
@@ -224,6 +229,21 @@ describe('computeSetWeight', () => {
 		};
 		// 45% of 200 = 90 → rounds to 90, min 95 → 95
 		expect(computeSetWeight(set, benchConfig, configs)).toBe(95);
+	});
+
+	it('uses warmup rounding only for warmup-tagged calculated sets', () => {
+		const warmup: SetTemplate = {
+			setType: 'warmup',
+			percentage: 0.66,
+			weightBasis: { kind: 'topSet' },
+			minReps: 5,
+			maxReps: 5,
+			amrap: false,
+		};
+		const work: SetTemplate = { ...warmup, setType: 'work' };
+
+		expect(computeSetWeight(warmup, pressConfig, configs)).toBe(90);
+		expect(computeSetWeight(work, pressConfig, configs)).toBe(92.5);
 	});
 
 	it('computes 100% top set', () => {
@@ -659,6 +679,7 @@ describe('RSS Intermediate B scenarios', () => {
 			increment: 5,
 			minimumWeight: 5,
 			roundingFactor: 5,
+			warmupRoundingFactor: 5,
 			barWeight: 0,
 			gear: 'dumbbell',
 		};

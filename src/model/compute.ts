@@ -84,6 +84,11 @@ export function computeSetWeight(
 	liftConfig: LiftConfig,
 	allConfigs: ReadonlyMap<string, LiftConfig>,
 ): number | null {
+	const roundingFactor =
+		set.setType === 'warmup'
+			? liftConfig.warmupRoundingFactor
+			: liftConfig.roundingFactor;
+
 	switch (set.weightBasis.kind) {
 		case 'fixed':
 			return set.weightBasis.weight;
@@ -95,7 +100,7 @@ export function computeSetWeight(
 			return computeWeight(
 				set.percentage,
 				liftConfig.topSetWeight,
-				liftConfig.roundingFactor,
+				roundingFactor,
 				liftConfig.minimumWeight,
 			);
 
@@ -103,7 +108,7 @@ export function computeSetWeight(
 			return computeWeight(
 				set.percentage,
 				liftConfig.backoffWeight,
-				liftConfig.roundingFactor,
+				roundingFactor,
 				liftConfig.minimumWeight,
 			);
 
@@ -115,7 +120,7 @@ export function computeSetWeight(
 			return computeWeight(
 				set.percentage,
 				ref.topSetWeight,
-				liftConfig.roundingFactor,
+				roundingFactor,
 				liftConfig.minimumWeight,
 			);
 		}
@@ -127,7 +132,7 @@ export function computeSetWeight(
 					: liftConfig.backoffWeight;
 			const rounded = roundToNearest(
 				base + set.weightBasis.offset,
-				liftConfig.roundingFactor,
+				roundingFactor,
 			);
 			return Math.max(rounded, liftConfig.minimumWeight);
 		}

@@ -21,6 +21,7 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 	const [increment, setIncrement] = useState(existing?.increment ?? DEFAULT_STRENGTH_CONFIG.increment);
 	const [minimumWeight, setMinimumWeight] = useState(existing?.minimumWeight ?? DEFAULT_STRENGTH_CONFIG.minimumWeight);
 	const [roundingFactor, setRoundingFactor] = useState(existing?.roundingFactor ?? DEFAULT_STRENGTH_CONFIG.roundingFactor);
+	const [warmupRoundingFactor, setWarmupRoundingFactor] = useState(existing?.warmupRoundingFactor ?? DEFAULT_STRENGTH_CONFIG.warmupRoundingFactor);
 	const [barWeight, setBarWeight] = useState(existing?.barWeight ?? DEFAULT_STRENGTH_CONFIG.barWeight);
 	const [gear, setGear] = useState<GearType>(existing?.gear ?? DEFAULT_STRENGTH_CONFIG.gear);
 	const [saving, setSaving] = useState(false);
@@ -47,11 +48,12 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 			increment,
 			minimumWeight,
 			roundingFactor,
+			warmupRoundingFactor,
 			barWeight,
 			gear,
 		};
 		onSave(config);
-	}, [isValid, saving, effectiveId, name, topSetWeight, backoffWeight, increment, minimumWeight, roundingFactor, barWeight, gear, onSave]);
+	}, [isValid, saving, effectiveId, name, topSetWeight, backoffWeight, increment, minimumWeight, roundingFactor, warmupRoundingFactor, barWeight, gear, onSave]);
 
 	return (
 		<div className="exercise-editor">
@@ -152,6 +154,19 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 						value={roundingFactor}
 						onFocus={(e) => e.target.select()}
 						onChange={(e) => setRoundingFactor(Number(e.target.value) || 0)}
+					/>
+				</label>
+
+				<label className="editor-field">
+					<span className="editor-label">Warmup Rounding Factor</span>
+					<input
+						className="editor-input"
+						type="number"
+						min="0"
+						step="any"
+						value={warmupRoundingFactor}
+						onFocus={(e) => e.target.select()}
+						onChange={(e) => setWarmupRoundingFactor(Number(e.target.value) || 0)}
 					/>
 				</label>
 
