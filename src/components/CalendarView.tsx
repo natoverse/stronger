@@ -9,6 +9,7 @@ import type { ClearOptions, ClearResult } from './CalendarClear.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
+	workoutDefinitions?: ReadonlyArray<{ id: string; name: string }>;
 	cardioActivities: CardioActivity[];
 	workoutSchedule: WorkoutScheduleEntry[];
 	dayFlags: DayFlagEntry[];
@@ -470,6 +471,7 @@ export function SessionDetail({
 
 export function CalendarView({
 	workouts,
+	workoutDefinitions = [],
 	cardioActivities,
 	workoutSchedule,
 	dayFlags,
@@ -535,6 +537,9 @@ export function CalendarView({
 	// Build a map of workoutId → workout name for display
 	const workoutNames = useMemo(() => {
 		const map = new Map<string, string>();
+		for (const definition of workoutDefinitions) {
+			map.set(definition.id, definition.name);
+		}
 		for (const w of workouts) {
 			map.set(w.id, w.name);
 		}
@@ -543,7 +548,7 @@ export function CalendarView({
 		}
 		map.set(REST_ID, 'Rest');
 		return map;
-	}, [workouts, cardioActivities]);
+	}, [workouts, workoutDefinitions, cardioActivities]);
 	const displayWorkoutName = useCallback(
 		(workoutId: string) =>
 			workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId),
@@ -556,10 +561,10 @@ export function CalendarView({
 		for (const entry of workoutSchedule) {
 			if (!entry.workoutId || seen.has(entry.workoutId)) continue;
 			seen.add(entry.workoutId);
-			types.push({ id: entry.workoutId, name: workoutNames.get(entry.workoutId) ?? entry.workoutId });
+			types.push({ id: entry.workoutId, name: displayWorkoutName(entry.workoutId) });
 		}
 		return types.sort((a, b) => a.name.localeCompare(b.name));
-	}, [workoutSchedule, workoutNames]);
+	}, [workoutSchedule, displayWorkoutName]);
 	const [selectedWorkoutTypes, setSelectedWorkoutTypes] = useState<Set<string>>(
 		() => new Set(scheduledTypes.map((type) => type.id)),
 	);
@@ -915,7 +920,7 @@ export function CalendarView({
 										const deleteKey = session ? sessionKeyStr(session) : null;
 										const isConfirming = deleteKey !== null && confirmDeleteKey === deleteKey;
 										const Icon = isRest ? Moon : isCardio ? HeartPulse : Dumbbell;
-										const workoutName = workoutNames.get(wid) ?? wid;
+										const workoutName = displayWorkoutName(wid);
 										const customLabel = dayInfo.labels?.[wid];
 										const displayName = customLabel || workoutName;
 										const isEditingThisLabel = !isRest

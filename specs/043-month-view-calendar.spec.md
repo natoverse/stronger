@@ -115,3 +115,8 @@
 
 - The monthly calendar initially shows the current month and the following two months.
 - The detailed day list initially loads the next 90 days, matching the three-month planning horizon.
+
+## Iteration: scheduled workout names
+
+- Scheduled strength workouts resolve display names from the persisted workout definitions, even when a workout cannot be computed for execution.
+- Workout IDs remain the fallback only for legacy schedule entries that have no matching definition.
