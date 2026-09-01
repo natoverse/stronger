@@ -52,6 +52,10 @@ test('schedule parser and id retain custom labels', () => {
 		label: "Angel's Rest Trail",
 	})
 	assert.match(scheduleDocumentId(entry), /Angel's%20Rest%20Trail/)
+	assert.notEqual(
+		scheduleDocumentId(entry),
+		scheduleDocumentId({ ...entry, workoutId: 'strength-a' }),
+	)
 })
 
 test('log ids are deterministic and distinguish exercises', () => {
@@ -182,4 +186,52 @@ test('missing optional tabs are excluded instead of cleared', () => {
 	}
 	const { plan } = buildMigrationPlan(rows)
 	assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
+})
+
+test('date-keyed collections keep the last row for duplicate dates', () => {
+	const rows = {
+		exercises: [
+			['id', 'name', 'topSetWeight', 'backoffWeight', 'increment', 'minimumWeight', 'roundingFactor'],
+			['bench', 'Bench', '100', '80', '5', '45', '5'],
+		],
+		workouts: [
+			['workoutId', 'workoutName', 'exerciseOrder', 'exerciseRole', 'liftId', 'setType', 'percentage', 'weightBasis', 'minReps', 'maxReps', 'amrap'],
+			['A', 'A', '1', 'primary', 'bench', 'work', '1', 'topSet', '5', '5', 'FALSE'],
+		],
+		logs: [],
+		dayFlags: [
+			['2026-08-17', 'TRUE', '', '', '', '', ''],
+			['2026-08-17', '', 'TRUE', '', '', '', ''],
+		],
+		schedule: [],
+		cardio: [],
+		mealItems: [],
+		mealLog: [],
+		favoriteFoods: [],
+		recentFoods: [],
+		strava: [],
+		garmin: [],
+		garminWellness: [
+			['2026-08-17', '40', 'LOW'],
+			['2026-08-17', '50', 'BALANCED'],
+		],
+		withings: [],
+		settings: [],
+	}
+
+	const { plan, warnings } = buildMigrationPlan(rows)
+
+	assert.equal(plan.dayFlags.length, 1)
+	assert.deepEqual(plan.dayFlags[0].data.flags, {
+		home: false,
+		elsewhere: true,
+		travel: false,
+		visitors: false,
+		alcohol: false,
+		blocked: false,
+	})
+	assert.equal(plan.garminWellness.length, 1)
+	assert.equal(plan.garminWellness[0].data.hrvWeeklyAvg, 50)
+	assert.ok(warnings.some((warning) => warning.startsWith('Day flags: collapsed 1 duplicate row')))
+	assert.ok(warnings.some((warning) => warning.startsWith('Garmin wellness: collapsed 1 duplicate row')))
 })

@@ -546,13 +546,25 @@ function parseWithingsRow(row) {
 	}
 }
 
-function documents(values, getId) {
+function documents(values, getId, { label, duplicatePolicy = 'error', warnings }) {
 	const byId = new Map()
+	let duplicateCount = 0
 	values.forEach((data, index) => {
 		const id = getId(data, index)
-		if (byId.has(id)) throw new Error(`Duplicate generated document ID: ${id}`)
+		if (byId.has(id)) {
+			if (duplicatePolicy === 'keep-last') {
+				duplicateCount += 1
+			} else {
+				throw new Error(`${label}: duplicate generated document ID: ${id}`)
+			}
+		}
 		byId.set(id, data)
 	})
+	if (duplicateCount > 0) {
+		warnings.push(
+			`${label}: collapsed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'} by document ID; kept the last valid row.`,
+		)
+	}
 	return [...byId].map(([id, data]) => ({ id, data }))
 }
 
@@ -606,22 +618,53 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		const value = text(row[1])
 		if (key && value) settings.set(key, value)
 	}
+	const planDocuments = (label, source, getId, duplicatePolicy = 'error') =>
+		documents(source, getId, { label, duplicatePolicy, warnings })
 
 	const plan = {
-		exercises: documents(values.exercises, (item) => idPart(item.id)),
-		workouts: documents(values.workouts, (item) => idPart(item.id)),
-		...(values.workoutSessions == null ? {} : { workoutSessions: documents(values.workoutSessions, logDocumentId) }),
-		...(values.dayFlags == null ? {} : { dayFlags: documents(values.dayFlags, (item) => item.date) }),
-		...(values.schedule == null ? {} : { schedule: documents(values.schedule, scheduleDocumentId) }),
-		...(values.cardioActivities == null ? {} : { cardioActivities: documents(values.cardioActivities, (item) => idPart(item.id)) }),
-		...(values.mealItems == null ? {} : { mealItems: documents(values.mealItems, (item) => idPart(item.id)) }),
-		...(values.mealLog == null ? {} : { mealLog: documents(values.mealLog, (item) => idPart(item.id)) }),
-		...(values.favoriteFoods == null ? {} : { favoriteFoods: documents(values.favoriteFoods, (item) => idPart(item.code)) }),
-		...(values.recentFoods == null ? {} : { recentFoods: documents(values.recentFoods, (item) => idPart(item.code)) }),
-		...(values.stravaActivities == null ? {} : { stravaActivities: documents(values.stravaActivities, (item) => idPart(item.stravaId)) }),
-		...(values.garminActivities == null ? {} : { garminActivities: documents(values.garminActivities, (item) => idPart(item.stravaId)) }),
-		...(values.garminWellness == null ? {} : { garminWellness: documents(values.garminWellness, (item) => item.date) }),
-		...(values.withingsMeasurements == null ? {} : { withingsMeasurements: documents(values.withingsMeasurements, (item) => idPart(item.grpId)) }),
+		exercises: planDocuments('Exercises', values.exercises, (item) => idPart(item.id)),
+		workouts: planDocuments('Workouts', values.workouts, (item) => idPart(item.id)),
+		...(values.workoutSessions == null ? {} : {
+			workoutSessions: planDocuments('Workout log', values.workoutSessions, logDocumentId),
+		}),
+		...(values.dayFlags == null ? {} : {
+			dayFlags: planDocuments('Day flags', values.dayFlags, (item) => item.date, 'keep-last'),
+		}),
+		...(values.schedule == null ? {} : {
+			schedule: planDocuments('Workout schedule', values.schedule, scheduleDocumentId),
+		}),
+		...(values.cardioActivities == null ? {} : {
+			cardioActivities: planDocuments('Cardio', values.cardioActivities, (item) => idPart(item.id)),
+		}),
+		...(values.mealItems == null ? {} : {
+			mealItems: planDocuments('Meal items', values.mealItems, (item) => idPart(item.id)),
+		}),
+		...(values.mealLog == null ? {} : {
+			mealLog: planDocuments('Meal log', values.mealLog, (item) => idPart(item.id)),
+		}),
+		...(values.favoriteFoods == null ? {} : {
+			favoriteFoods: planDocuments('Favorite foods', values.favoriteFoods, (item) => idPart(item.code)),
+		}),
+		...(values.recentFoods == null ? {} : {
+			recentFoods: planDocuments('Recent foods', values.recentFoods, (item) => idPart(item.code)),
+		}),
+		...(values.stravaActivities == null ? {} : {
+			stravaActivities: planDocuments('Strava', values.stravaActivities, (item) => idPart(item.stravaId)),
+		}),
+		...(values.garminActivities == null ? {} : {
+			garminActivities: planDocuments('Garmin', values.garminActivities, (item) => idPart(item.stravaId)),
+		}),
+		...(values.garminWellness == null ? {} : {
+			garminWellness: planDocuments(
+				'Garmin wellness',
+				values.garminWellness,
+				(item) => item.date,
+				'keep-last',
+			),
+		}),
+		...(values.withingsMeasurements == null ? {} : {
+			withingsMeasurements: planDocuments('Withings', values.withingsMeasurements, (item) => idPart(item.grpId)),
+		}),
 		...(rows.settings == null ? {} : { settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }] }),
 	}
 	return { plan, warnings }

@@ -207,6 +207,7 @@ other users, Firebase Authentication records, or the source spreadsheet.
 | Authentication user does not exist | Copy the exact UID from **Authentication -> Users** and confirm that user and the service-account key belong to the same Firebase project. |
 | Settings reports that Firebase is not configured | Add all six `VITE_FIREBASE_*` repository secrets, then rerun the GitHub Pages deployment so Vite can embed them. |
 | Firebase sign-in reports an unauthorized domain | Add the deployment hostname, such as `example.github.io`, under **Authentication -> Settings -> Authorized domains**. |
+| Dry run warns that duplicate Day Flags or Garmin Wellness rows were collapsed | These collections support one document per date. The migration keeps the last valid sheet row for each repeated date and reports how many rows were collapsed. |
 | Google Sheets request returns `403` | Share the spreadsheet with the Google key's `client_email` as Viewer. |
 | A service-account secret is reported as invalid JSON | Store the complete raw JSON file as the secret; do not base64-encode it or paste a filename. |
 | Required sheet tab is missing or empty | Ensure `Stronger - Exercises` and `Stronger - Workouts` exist and contain data. |

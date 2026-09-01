@@ -80,3 +80,8 @@ authentication, and scheduled sync jobs switch backends.
 - The existing Google Sheets UI exposes an Authentication-only bootstrap in
   Settings so users can create and copy their final Firebase UID before any
   Firestore migration or application-backend switch.
+- Historical Day Flags and Garmin Wellness tabs can contain repeated dates.
+  Migration collapses those one-document-per-day collections by keeping the
+  last valid row and emitting a warning; duplicate IDs remain fatal for other
+  collections. Workout Schedule entries remain distinct by `strongerId` or by
+  their date, workout, and label, so multiple workouts on one day are retained.
