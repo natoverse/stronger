@@ -33,6 +33,13 @@ describe('parseHash', () => {
     });
   });
 
+  it('parses a shared workout import route', () => {
+    expect(parseHash('#/import/abc_123-XYZ')).toEqual({
+      view: 'import',
+      data: 'abc_123-XYZ',
+    });
+  });
+
   it('decodes percent-encoded workout IDs', () => {
     expect(parseHash('#/workout/my%20workout')).toEqual({
       view: 'workout',
@@ -142,6 +149,12 @@ describe('routeToHash', () => {
     );
   });
 
+  it('returns /import/<data> for a shared workout import route', () => {
+    expect(routeToHash({ view: 'import', data: 'abc_123-XYZ' })).toBe(
+      '/import/abc_123-XYZ',
+    );
+  });
+
   it('encodes special characters in workout ID', () => {
     expect(routeToHash({ view: 'workout', workoutId: 'my workout' })).toBe(
       '/workout/my%20workout',
@@ -205,6 +218,7 @@ describe('routeToHash', () => {
       { view: 'list' },
       { view: 'workout', workoutId: 'bench-b' },
       { view: 'workout', workoutId: 'press-c' },
+      { view: 'import', data: 'abc_123-XYZ' },
       { view: 'calendar' },
       { view: 'editor' },
       { view: 'editor', workoutId: 'workout-a' },

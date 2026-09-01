@@ -9,6 +9,8 @@ import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
 import { buildWorkoutsFromConfigs, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
+import { decodeSharedWorkout, encodeSharedWorkout, getImportedWorkoutName } from './data/workout-sharing.js';
+import type { SharedWorkout } from './data/workout-sharing.js';
 import { WorkoutSelect } from './components/WorkoutSelect.js';
 import { WorkoutView } from './components/WorkoutView.js';
 import { WorkoutEditor } from './components/WorkoutEditor.js';
@@ -991,6 +993,47 @@ function AppContent() {
     [definitions, configs, spreadsheetId, navigateTo],
   );
 
+  const handleShareWorkout = useCallback(
+    async (workoutId: string) => {
+      const definition = definitions.find((item) => item.id === workoutId);
+      if (!definition) return;
+      const data = encodeSharedWorkout(definition);
+      const url = `${window.location.origin}${window.location.pathname}#/import/${data}`;
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: definition.name, text: 'Import this workout into Stronger', url });
+        } else if (navigator.clipboard) {
+          await navigator.clipboard.writeText(url);
+          window.alert('Workout link copied.');
+        } else {
+          window.prompt('Copy this workout link:', url);
+        }
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        window.prompt('Copy this workout link:', url);
+      }
+    },
+    [definitions],
+  );
+
+  const handleImportWorkout = useCallback(
+    (shared: SharedWorkout) => {
+      const imported: WorkoutDefinition = {
+        ...shared,
+        id: generateStrongerId(),
+        name: getImportedWorkoutName(shared.name, definitions.map((item) => item.name)),
+      };
+      const updatedDefs = [...definitions, imported];
+      setDefinitions(updatedDefs);
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
+      if (spreadsheetId) {
+        void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
+      }
+      navigateTo({ view: 'list' });
+    },
+    [definitions, configs, spreadsheetId, navigateTo],
+  );
+
   const handleDeleteWorkoutFromList = useCallback(
     (workoutId: string) => {
       if (!confirm('Delete this workout?')) return;
@@ -1248,6 +1291,53 @@ function AppContent() {
   const onOpenGarminActivities = appSettings.showGarminTab ? handleOpenGarminActivities : undefined;
   const onOpenWithings = undefined;
   const onOpenNutrition = appSettings.showNutritionTab ? handleOpenNutrition : undefined;
+
+  if (route.view === 'import') {
+    const shared = decodeSharedWorkout(route.data);
+    const importedName = shared
+      ? getImportedWorkoutName(shared.name, definitions.map((item) => item.name))
+      : null;
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          onGoToList={handleGoToList}
+          onOpenCalendar={handleOpenCalendar}
+          onOpenExercises={handleOpenExercises}
+          onOpenProgress={handleOpenProgress}
+          onOpenGarmin={onOpenGarmin}
+          onOpenWellness={onOpenWellness}
+          onOpenGarminActivities={onOpenGarminActivities}
+          onOpenWithings={onOpenWithings}
+          onOpenNutrition={onOpenNutrition}
+          onOpenSettings={handleOpenSettings}
+        />
+        <section className="workout-import" aria-labelledby="workout-import-title">
+          {shared ? (
+            <>
+              <h1 id="workout-import-title">Import workout?</h1>
+              <p><strong>{shared.name}</strong></p>
+              <p className="workout-import-details">
+                {shared.templates.length} {shared.templates.length === 1 ? 'exercise' : 'exercises'}
+                {importedName !== shared.name && <> · Will be named <strong>{importedName}</strong></>}
+              </p>
+              <div className="workout-import-actions">
+                <button className="btn-link" onClick={() => navigateTo({ view: 'list' })}>Cancel</button>
+                <button className="btn-primary" onClick={() => handleImportWorkout(shared)}>Import</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 id="workout-import-title">Invalid workout link</h1>
+              <p className="workout-import-details">This shared workout could not be read.</p>
+              <button className="btn-primary" onClick={() => navigateTo({ view: 'list' })}>Back to workouts</button>
+            </>
+          )}
+        </section>
+      </>
+    );
+  }
 
   // Show progression review / confirm page after clicking Finish
   if (progressionProposals && pendingFinish) {
@@ -1696,6 +1786,7 @@ function AppContent() {
         onViewSession={handleViewSession}
         onEdit={handleEditWorkout}
         onDuplicate={handleDuplicateWorkout}
+        onShare={handleShareWorkout}
         onDelete={handleDeleteWorkoutFromList}
         onNew={handleNewWorkout}
         onToggleFavorite={handleToggleFavorite}

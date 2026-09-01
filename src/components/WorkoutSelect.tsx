@@ -5,7 +5,7 @@ import type { LogSession } from './CalendarView.js';
 import { groupLogByDate } from './CalendarView.js';
 import { Banner } from './Banner.js';
 import { MotivationalQuote } from './MotivationalQuote.js';
-import { BicepsFlexed, ChevronDown, Pencil, Plus, Star, Bike, Trash2, Check, X, Copy, MoreVertical } from 'lucide-react';
+import { BicepsFlexed, ChevronDown, Pencil, Plus, Star, Bike, Trash2, Check, X, Copy, MoreVertical, Share2 } from 'lucide-react';
 
 interface WorkoutSelectProps {
 	workouts: Workout[];
@@ -16,6 +16,7 @@ interface WorkoutSelectProps {
 	onViewSession?: (session: LogSession) => void;
 	onEdit?: (workoutId: string) => void;
 	onDuplicate?: (workoutId: string) => void;
+	onShare?: (workoutId: string) => void;
 	onDelete?: (workoutId: string) => void;
 	onNew?: () => void;
 	onToggleFavorite?: (workoutId: string, favorite: boolean) => void;
@@ -28,6 +29,7 @@ function WorkoutCard({
 	onSelect,
 	onEdit,
 	onDuplicate,
+	onShare,
 	onDelete,
 	onToggleFavorite,
 	done,
@@ -36,6 +38,7 @@ function WorkoutCard({
 	onSelect: (w: Workout) => void;
 	onEdit?: (id: string) => void;
 	onDuplicate?: (id: string) => void;
+	onShare?: (id: string) => void;
 	onDelete?: (id: string) => void;
 	onToggleFavorite?: (id: string, fav: boolean) => void;
 	done?: boolean;
@@ -54,7 +57,7 @@ function WorkoutCard({
 		return () => document.removeEventListener('mousedown', handleClick);
 	}, [menuOpen]);
 
-	const hasMenu = onEdit || onDuplicate || onDelete;
+	const hasMenu = onEdit || onDuplicate || onShare || onDelete;
 
 	return (
 		<div className={`workout-card-wrapper${done ? ' workout-card-wrapper-done' : ''}`}>
@@ -95,6 +98,11 @@ function WorkoutCard({
 									<Copy size={14} /> Duplicate
 								</button>
 							)}
+							{onShare && (
+								<button className="workout-dropdown-item" onClick={() => { setMenuOpen(false); onShare(w.id); }}>
+									<Share2 size={14} /> Share
+								</button>
+							)}
 							{onDelete && (
 								<button className="workout-dropdown-item workout-dropdown-item-danger" onClick={() => { setMenuOpen(false); onDelete(w.id); }}>
 									<Trash2 size={14} /> Delete
@@ -114,7 +122,7 @@ function todayDateString(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRows, onSelect, onViewSession, onEdit, onDuplicate, onDelete, onNew, onToggleFavorite, cardioActivities, onCardioSave }: WorkoutSelectProps) {
+export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRows, onSelect, onViewSession, onEdit, onDuplicate, onShare, onDelete, onNew, onToggleFavorite, cardioActivities, onCardioSave }: WorkoutSelectProps) {
 	const { favorites, others } = useMemo(() => {
 		const favorites: Workout[] = [];
 		const others: Workout[] = [];
@@ -207,7 +215,7 @@ export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRo
 			) : (
 				<div className="workout-list">
 					{favorites.map((w) => (
-						<WorkoutCard key={w.id} w={w} onSelect={onSelect} onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+						<WorkoutCard key={w.id} w={w} onSelect={onSelect} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 					))}
 					{others.length > 0 && (
 						<>
@@ -220,7 +228,7 @@ export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRo
 								<ChevronDown size={16} className={`more-chevron${moreOpen ? ' more-chevron-open' : ''}`} />
 							</button>
 							{moreOpen && others.map((w) => (
-								<WorkoutCard key={w.id} w={w} onSelect={onSelect} onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+								<WorkoutCard key={w.id} w={w} onSelect={onSelect} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 							))}
 						</>
 					)}
