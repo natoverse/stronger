@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 export type Route =
   | { view: 'list' }
   | { view: 'workout'; workoutId: string }
+  | { view: 'import'; data: string }
   | { view: 'calendar' }
   | { view: 'editor'; workoutId?: string }
   | { view: 'exercises' }
@@ -53,12 +54,16 @@ export function parseHash(hash: string = window.location.hash): Route {
   const match = stripped.match(/^workout\/([^/]+)$/);
   if (match) return { view: 'workout', workoutId: decodeURIComponent(match[1]) };
 
+  const importMatch = stripped.match(/^import\/([A-Za-z0-9_-]+)$/);
+  if (importMatch) return { view: 'import', data: importMatch[1] };
+
   return { view: 'list' };
 }
 
 /** Convert a Route back to a hash string (without the leading `#`). */
 export function routeToHash(route: Route): string {
   if (route.view === 'workout') return `/workout/${encodeURIComponent(route.workoutId)}`;
+  if (route.view === 'import') return `/import/${route.data}`;
   if (route.view === 'calendar') return '/calendar';
   if (route.view === 'editor') return route.workoutId ? `/edit/${encodeURIComponent(route.workoutId)}` : '/edit/new';
   if (route.view === 'exercises') return '/exercises';
