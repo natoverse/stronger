@@ -33,3 +33,7 @@ Existing sheet rows without the new value and newly created exercises default wa
 - Changes to progression increments
 - Changes to easy-plate-math snapping behavior
 - Per-workout or per-set rounding overrides
+
+## Additional decisions
+
+- Existing sheets may already contain unrelated values in column J from before `warmupRoundingFactor` was added. A missing or invalid value in that optional column defaults to 5 lbs instead of discarding the entire exercise row.

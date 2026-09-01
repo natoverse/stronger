@@ -277,8 +277,10 @@ export function rowToLiftConfig(row: string[]): LiftConfig | null {
 
 	// warmupRoundingFactor (col 9) — default to 5 for existing rows
 	const rawWarmupRounding = (row[9] ?? '').trim();
-	const warmupRoundingFactor = rawWarmupRounding ? Number(rawWarmupRounding) : 5;
-	if (!isValidWeight(warmupRoundingFactor)) return null;
+	const parsedWarmupRounding = Number(rawWarmupRounding);
+	const warmupRoundingFactor = rawWarmupRounding && isValidWeight(parsedWarmupRounding)
+		? parsedWarmupRounding
+		: 5;
 
 	return { id, name, topSetWeight, backoffWeight, increment, minimumWeight, roundingFactor, warmupRoundingFactor, barWeight, gear };
 }
