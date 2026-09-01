@@ -35,6 +35,22 @@ temporarily permissive rules.
 Firestore collections do not need to be created manually. The workflow creates
 the `/users/{uid}` document tree when it writes the first migration.
 
+### Minimum spreadsheet
+
+Only these tabs are required:
+
+- `Stronger - Exercises`
+- `Stronger - Workouts`
+
+Every other supported tab is optional, including workout logs, schedules,
+cardio definitions, nutrition, Garmin activities, Garmin wellness, Withings,
+and settings. Missing optional tabs produce warnings and are omitted from the
+migration plan. Replacement mode also leaves the corresponding existing
+Firestore collections untouched when their source tabs are missing.
+
+The deprecated `Stronger - Strava` tab is not read or migrated. Stronger's
+activity views use Garmin data.
+
 ## 3. Configure the Firebase web application
 
 Create a web application under
