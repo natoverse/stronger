@@ -39,7 +39,6 @@ export {
 	updateMealLogEntryCategory,
 	readGarminActivities,
 	writeGarminActivities,
-	writeStravaActivities,
 	readGarminWellnessEntries,
 	writeGarminWellnessEntries,
 	readWithingsMeasurements,

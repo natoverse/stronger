@@ -59,7 +59,6 @@ authentication, and scheduled sync jobs switch backends.
 - `mealLog`
 - `favoriteFoods`
 - `recentFoods`
-- `stravaActivities`
 - `garminActivities`
 - `garminWellness`
 - `withingsMeasurements`
@@ -92,3 +91,9 @@ authentication, and scheduled sync jobs switch backends.
   last valid row and emitting a warning; duplicate IDs remain fatal for other
   collections. Workout Schedule entries remain distinct by `strongerId` or by
   their date, workout, and label, so multiple workouts on one day are retained.
+- Only Exercises and Workouts are required. Missing logs, schedules, cardio,
+  nutrition, Garmin, Garmin Wellness, Withings, or settings tabs produce
+  warnings and are excluded from writes and replacement deletion.
+- The deprecated Strava sheet is not read or migrated. Runtime activity views
+  consume Garmin data; legacy `StravaActivity` names remain only as shared
+  model and chart terminology.

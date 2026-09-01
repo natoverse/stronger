@@ -30,7 +30,6 @@ const TABS = {
 	mealLog: { title: 'Stronger - Meal Log', range: 'A2:K' },
 	favoriteFoods: { title: 'Stronger - Meal Favorites', range: 'A:J' },
 	recentFoods: { title: 'Stronger - Meal Recents', range: 'A:J' },
-	strava: { title: 'Stronger - Strava', range: 'A2:J' },
 	garmin: { title: 'Stronger - Garmin', range: 'A2:Q' },
 	garminWellness: { title: 'Stronger - Garmin Wellness', range: 'A2:AN' },
 	withings: { title: 'Stronger - Withings', range: 'A2:K' },
@@ -48,7 +47,6 @@ const COLLECTION_TABS = {
 	mealLog: ['mealLog'],
 	favoriteFoods: ['favoriteFoods'],
 	recentFoods: ['recentFoods'],
-	stravaActivities: ['strava'],
 	garminActivities: ['garmin'],
 	garminWellness: ['garminWellness'],
 	withingsMeasurements: ['withings'],
@@ -160,7 +158,11 @@ async function fetchJson(url, token, options = {}) {
 	return response.status === 204 ? null : response.json()
 }
 
-async function readSheetData(spreadsheetId, token, requestedCollections) {
+export async function readSheetData(
+	spreadsheetId,
+	token,
+	requestedCollections = Object.keys(COLLECTION_TABS),
+) {
 	const metadata = await fetchJson(
 		`${SHEETS_API_BASE}/${spreadsheetId}?fields=sheets.properties.title`,
 		token,
@@ -470,27 +472,6 @@ function parseFoodRow(row) {
 	}
 }
 
-function parseStravaRow(row) {
-	const parsedDate = date(row[0])
-	const stravaId = text(row[1])
-	const activityType = text(row[2])
-	const values = row.slice(4, 10).map(sheetNonNegative)
-	if (!parsedDate || !stravaId || !activityType || values.length !== 6 || values.some((value) => value == null)) return null
-	const [duration, distance, elevationGain, calories, avgHR, maxHR] = values
-	return {
-		date: parsedDate,
-		stravaId,
-		activityType,
-		name: text(row[3]),
-		duration,
-		distance,
-		elevationGain,
-		calories,
-		avgHR,
-		maxHR,
-	}
-}
-
 function normalizeGarminType(value) {
 	const key = text(value).toLowerCase()
 	if (key === 'strength_training') return 'Weight Training'
@@ -640,7 +621,6 @@ export function buildMigrationPlan(
 		mealLog: optionalRows('mealLog', parseMealLogRow, 'Meal log'),
 		favoriteFoods: optionalRows('favoriteFoods', parseFoodRow, 'Favorite foods', true),
 		recentFoods: optionalRows('recentFoods', parseFoodRow, 'Recent foods', true),
-		stravaActivities: optionalRows('strava', parseStravaRow, 'Strava'),
 		garminActivities: optionalRows('garmin', parseGarminRow, 'Garmin'),
 		garminWellness: optionalRows('garminWellness', parseGarminWellnessRow, 'Garmin wellness'),
 		withingsMeasurements: optionalRows('withings', parseWithingsRow, 'Withings'),
@@ -688,9 +668,6 @@ export function buildMigrationPlan(
 				values.recentFoods.map((item, index) => ({ ...item, _recentOrder: index })),
 				(item) => idPart(item.code),
 			),
-		}),
-		...(!requested.has('stravaActivities') || values.stravaActivities == null ? {} : {
-			stravaActivities: planDocuments('Strava', values.stravaActivities, (item) => idPart(item.stravaId)),
 		}),
 		...(!requested.has('garminActivities') || values.garminActivities == null ? {} : {
 			garminActivities: planDocuments('Garmin', values.garminActivities, (item) => idPart(item.stravaId)),

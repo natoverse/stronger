@@ -48,7 +48,6 @@ type CollectionName =
 	| 'mealLog'
 	| 'favoriteFoods'
 	| 'recentFoods'
-	| 'stravaActivities'
 	| 'garminActivities'
 	| 'garminWellness'
 	| 'withingsMeasurements'
@@ -383,10 +382,6 @@ export function readGarminActivities(uid: string): Promise<StravaActivity[]> {
 
 export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {
 	return replaceCollection(uid, 'garminActivities', items, (item) => idPart(item.stravaId))
-}
-
-export function writeStravaActivities(uid: string, items: StravaActivity[]): Promise<void> {
-	return replaceCollection(uid, 'stravaActivities', items, (item) => idPart(item.stravaId))
 }
 
 export function readGarminWellnessEntries(uid: string): Promise<GarminWellnessEntry[]> {

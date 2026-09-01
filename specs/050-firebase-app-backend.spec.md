@@ -50,7 +50,6 @@ All collections are nested below `/users/{uid}`:
 - `mealLog/{entryId}`
 - `favoriteFoods/{barcode}`
 - `recentFoods/{barcode}`
-- `stravaActivities/{activityId}`
 - `garminActivities/{activityId}`
 - `garminWellness/{date}`
 - `withingsMeasurements/{groupId}`
@@ -74,3 +73,9 @@ The migration action in spec 049 runs before this backend switch. Existing
 Sheets remain the ingestion ledger and backup during stabilization. Garmin,
 Garmin Wellness, and Withings workflows mirror only their own completed
 collections into Firestore after each successful sync.
+
+## Iteration Decisions
+
+- The deprecated Strava collection and write helper were removed. Activity
+  views read Garmin data; the remaining `StravaActivity` type name is legacy
+  shared chart terminology rather than a Strava data dependency.

@@ -6,6 +6,7 @@ import {
 	logDocumentId,
 	parseExerciseRow,
 	parseScheduleRow,
+	readSheetData,
 	scheduleDocumentId,
 } from './firebase-migrate.mjs'
 
@@ -190,7 +191,7 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 	}
 	const { plan } = buildMigrationPlan(rows)
 	assert.equal(plan.workoutSessions[0].data.actualWeight, 0)
-	assert.equal(plan.stravaActivities[0].data.duration, 0)
+	assert.equal('stravaActivities' in plan, false)
 })
 
 test('missing optional tabs are excluded instead of cleared', () => {
@@ -290,4 +291,49 @@ test('date-keyed collections keep the last row for duplicate dates', () => {
 	assert.equal(plan.garminWellness[0].data.hrvWeeklyAvg, 50)
 	assert.ok(warnings.some((warning) => warning.startsWith('Day flags: collapsed 1 duplicate row')))
 	assert.ok(warnings.some((warning) => warning.startsWith('Garmin wellness: collapsed 1 duplicate row')))
+})
+
+test('sheet reader skips every optional tab when only workout tabs exist', async () => {
+	const originalFetch = globalThis.fetch
+	globalThis.fetch = async (url) => {
+		const requestUrl = String(url)
+		const body = requestUrl.includes('fields=sheets.properties.title')
+			? {
+				sheets: [
+					{ properties: { title: 'Stronger - Exercises' } },
+					{ properties: { title: 'Stronger - Workouts' } },
+				],
+			}
+			: requestUrl.includes('Exercises')
+				? {
+					values: [
+						['id', 'name', 'topSetWeight', 'backoffWeight', 'increment', 'minimumWeight', 'roundingFactor'],
+						['bench', 'Bench', '100', '80', '5', '45', '5'],
+					],
+				}
+				: {
+					values: [
+						['workoutId', 'workoutName', 'exerciseOrder', 'exerciseRole', 'liftId', 'setType', 'percentage', 'weightBasis', 'minReps', 'maxReps', 'amrap'],
+						['A', 'A', '1', 'primary', 'bench', 'work', '1', 'topSet', '5', '5', 'FALSE'],
+					],
+				}
+		return {
+			ok: true,
+			status: 200,
+			json: async () => body,
+			text: async () => JSON.stringify(body),
+		}
+	}
+
+	try {
+		const { rows, warnings } = await readSheetData('sheet-id', 'token')
+		const { plan } = buildMigrationPlan(rows, warnings)
+
+		assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
+		assert.ok(warnings.some((warning) => warning.includes('Stronger - Garmin is missing')))
+		assert.ok(warnings.some((warning) => warning.includes('Stronger - Meal Log is missing')))
+		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Strava')))
+	} finally {
+		globalThis.fetch = originalFetch
+	}
 })
