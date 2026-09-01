@@ -37,6 +37,24 @@ const TABS = {
 	settings: { title: 'Stronger - Settings', range: 'A:B' },
 }
 
+const COLLECTION_TABS = {
+	exercises: ['exercises'],
+	workouts: ['exercises', 'workouts'],
+	workoutSessions: ['logs'],
+	dayFlags: ['dayFlags'],
+	schedule: ['schedule'],
+	cardioActivities: ['cardio'],
+	mealItems: ['mealItems'],
+	mealLog: ['mealLog'],
+	favoriteFoods: ['favoriteFoods'],
+	recentFoods: ['recentFoods'],
+	stravaActivities: ['strava'],
+	garminActivities: ['garmin'],
+	garminWellness: ['garminWellness'],
+	withingsMeasurements: ['withings'],
+	settings: ['settings'],
+}
+
 const GARMIN_WELLNESS_FIELDS = [
 	'date',
 	'hrvWeeklyAvg', 'hrvStatus',
@@ -142,7 +160,7 @@ async function fetchJson(url, token, options = {}) {
 	return response.status === 204 ? null : response.json()
 }
 
-async function readSheetData(spreadsheetId, token) {
+async function readSheetData(spreadsheetId, token, requestedCollections) {
 	const metadata = await fetchJson(
 		`${SHEETS_API_BASE}/${spreadsheetId}?fields=sheets.properties.title`,
 		token,
@@ -150,7 +168,12 @@ async function readSheetData(spreadsheetId, token) {
 	const titles = new Set((metadata.sheets ?? []).map((sheet) => sheet.properties?.title).filter(Boolean))
 	const warnings = []
 	const rows = {}
+	const requestedTabs = new Set(requestedCollections.flatMap((collection) => COLLECTION_TABS[collection]))
 	for (const [key, tab] of Object.entries(TABS)) {
+		if (!requestedTabs.has(key)) {
+			rows[key] = null
+			continue
+		}
 		if (!titles.has(tab.title)) {
 			const message = `${tab.title} is missing and will be skipped.`
 			if (tab.required) throw new Error(`Required tab: ${message}`)
@@ -556,8 +579,13 @@ function documents(values, getId) {
 	return [...byId].map(([id, data]) => ({ id, data }))
 }
 
-export function buildMigrationPlan(rows, initialWarnings = []) {
+export function buildMigrationPlan(
+	rows,
+	initialWarnings = [],
+	requestedCollections = Object.keys(COLLECTION_TABS),
+) {
 	const warnings = [...initialWarnings]
+	const requested = new Set(requestedCollections)
 	const validRows = (source, parser, label, skipHeader = false) => {
 		const input = skipHeader ? source.slice(1) : source
 		const values = input.map(parser).filter(Boolean)
@@ -566,13 +594,18 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		return values
 	}
 
-	const exercises = validRows(rows.exercises, parseExerciseRow, 'Exercises', true)
-	if (exercises.length === 0) throw new Error('Required tab Stronger - Exercises contains no valid data rows.')
+	const exercises = rows.exercises == null ? [] : validRows(rows.exercises, parseExerciseRow, 'Exercises', true)
+	if ((requested.has('exercises') || requested.has('workouts')) && exercises.length === 0) {
+		throw new Error('Required tab Stronger - Exercises contains no valid data rows.')
+	}
 	const liftNames = new Map(exercises.map((item) => [item.id, item.name]))
-	const workouts = parseWorkouts(rows.workouts.slice(1), liftNames)
-	if (workouts.length === 0) throw new Error('Required tab Stronger - Workouts contains no valid data rows.')
-	const invalidWorkoutRows = rows.workouts.slice(1).filter((row) => row.some((value) => text(value))).length
-		- rows.workouts.slice(1).map(parseWorkoutRow).filter(Boolean).length
+	const workoutRows = rows.workouts?.slice(1) ?? []
+	const workouts = parseWorkouts(workoutRows, liftNames)
+	if (requested.has('workouts') && workouts.length === 0) {
+		throw new Error('Required tab Stronger - Workouts contains no valid data rows.')
+	}
+	const invalidWorkoutRows = workoutRows.filter((row) => row.some((value) => text(value))).length
+		- workoutRows.map(parseWorkoutRow).filter(Boolean).length
 	if (invalidWorkoutRows > 0) warnings.push(`Workouts: skipped ${invalidWorkoutRows} invalid row${invalidWorkoutRows === 1 ? '' : 's'}.`)
 
 	const optionalRows = (key, parser, label, skipHeader = false) =>
@@ -608,21 +641,26 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 	}
 
 	const plan = {
-		exercises: documents(values.exercises, (item) => idPart(item.id)),
-		workouts: documents(values.workouts, (item) => idPart(item.id)),
-		...(values.workoutSessions == null ? {} : { workoutSessions: documents(values.workoutSessions, logDocumentId) }),
-		...(values.dayFlags == null ? {} : { dayFlags: documents(values.dayFlags, (item) => item.date) }),
-		...(values.schedule == null ? {} : { schedule: documents(values.schedule, scheduleDocumentId) }),
-		...(values.cardioActivities == null ? {} : { cardioActivities: documents(values.cardioActivities, (item) => idPart(item.id)) }),
-		...(values.mealItems == null ? {} : { mealItems: documents(values.mealItems, (item) => idPart(item.id)) }),
-		...(values.mealLog == null ? {} : { mealLog: documents(values.mealLog, (item) => idPart(item.id)) }),
-		...(values.favoriteFoods == null ? {} : { favoriteFoods: documents(values.favoriteFoods, (item) => idPart(item.code)) }),
-		...(values.recentFoods == null ? {} : { recentFoods: documents(values.recentFoods, (item) => idPart(item.code)) }),
-		...(values.stravaActivities == null ? {} : { stravaActivities: documents(values.stravaActivities, (item) => idPart(item.stravaId)) }),
-		...(values.garminActivities == null ? {} : { garminActivities: documents(values.garminActivities, (item) => idPart(item.stravaId)) }),
-		...(values.garminWellness == null ? {} : { garminWellness: documents(values.garminWellness, (item) => item.date) }),
-		...(values.withingsMeasurements == null ? {} : { withingsMeasurements: documents(values.withingsMeasurements, (item) => idPart(item.grpId)) }),
-		...(rows.settings == null ? {} : { settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }] }),
+		...(requested.has('exercises') ? { exercises: documents(values.exercises, (item) => idPart(item.id)) } : {}),
+		...(requested.has('workouts') ? { workouts: documents(values.workouts, (item) => idPart(item.id)) } : {}),
+		...(!requested.has('workoutSessions') || values.workoutSessions == null ? {} : { workoutSessions: documents(values.workoutSessions, logDocumentId) }),
+		...(!requested.has('dayFlags') || values.dayFlags == null ? {} : { dayFlags: documents(values.dayFlags, (item) => item.date) }),
+		...(!requested.has('schedule') || values.schedule == null ? {} : { schedule: documents(values.schedule, scheduleDocumentId) }),
+		...(!requested.has('cardioActivities') || values.cardioActivities == null ? {} : { cardioActivities: documents(values.cardioActivities, (item) => idPart(item.id)) }),
+		...(!requested.has('mealItems') || values.mealItems == null ? {} : { mealItems: documents(values.mealItems, (item) => idPart(item.id)) }),
+		...(!requested.has('mealLog') || values.mealLog == null ? {} : { mealLog: documents(values.mealLog, (item) => idPart(item.id)) }),
+		...(!requested.has('favoriteFoods') || values.favoriteFoods == null ? {} : { favoriteFoods: documents(values.favoriteFoods, (item) => idPart(item.code)) }),
+		...(!requested.has('recentFoods') || values.recentFoods == null ? {} : {
+			recentFoods: documents(
+				values.recentFoods.map((item, index) => ({ ...item, _recentOrder: index })),
+				(item) => idPart(item.code),
+			),
+		}),
+		...(!requested.has('stravaActivities') || values.stravaActivities == null ? {} : { stravaActivities: documents(values.stravaActivities, (item) => idPart(item.stravaId)) }),
+		...(!requested.has('garminActivities') || values.garminActivities == null ? {} : { garminActivities: documents(values.garminActivities, (item) => idPart(item.stravaId)) }),
+		...(!requested.has('garminWellness') || values.garminWellness == null ? {} : { garminWellness: documents(values.garminWellness, (item) => item.date) }),
+		...(!requested.has('withingsMeasurements') || values.withingsMeasurements == null ? {} : { withingsMeasurements: documents(values.withingsMeasurements, (item) => idPart(item.grpId)) }),
+		...(!requested.has('settings') || rows.settings == null ? {} : { settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }] }),
 	}
 	return { plan, warnings }
 }
@@ -724,6 +762,7 @@ export async function writeMigration({
 	token,
 	uid,
 	spreadsheetId,
+	migrationId = `sheet-${idPart(spreadsheetId)}`,
 	plan,
 	warnings,
 	replaceExisting,
@@ -737,7 +776,6 @@ export async function writeMigration({
 		throw new Error(`Destination contains ${existingCount} document(s). Enable replace_existing to continue.`)
 	}
 
-	const migrationId = `sheet-${idPart(spreadsheetId)}`
 	const counts = Object.fromEntries(Object.entries(plan).map(([name, docs]) => [name, docs.length]))
 	await recordDocument(projectId, token, uid, 'migrations', migrationId, {
 		sourceSpreadsheetId: spreadsheetId,
@@ -802,11 +840,16 @@ async function main() {
 		'FIREBASE_SERVICE_ACCOUNT_KEY',
 	)
 	const uid = dryRun ? process.env.FIREBASE_USER_ID : required(process.env.FIREBASE_USER_ID, 'FIREBASE_USER_ID')
+	const requestedCollections = process.env.MIGRATION_COLLECTIONS
+		? process.env.MIGRATION_COLLECTIONS.split(',').map((value) => value.trim()).filter(Boolean)
+		: Object.keys(COLLECTION_TABS)
+	const unknownCollections = requestedCollections.filter((collection) => !COLLECTION_TABS[collection])
+	if (unknownCollections.length) throw new Error(`Unknown MIGRATION_COLLECTIONS: ${unknownCollections.join(', ')}`)
 
 	console.log(`Reading spreadsheet ${spreadsheetId}...`)
 	const sheetsToken = await getAccessToken(googleServiceAccount, ['https://www.googleapis.com/auth/spreadsheets.readonly'])
-	const { rows, warnings: readWarnings } = await readSheetData(spreadsheetId, sheetsToken)
-	const { plan, warnings } = buildMigrationPlan(rows, readWarnings)
+	const { rows, warnings: readWarnings } = await readSheetData(spreadsheetId, sheetsToken, requestedCollections)
+	const { plan, warnings } = buildMigrationPlan(rows, readWarnings, requestedCollections)
 	const counts = Object.fromEntries(Object.entries(plan).map(([name, docs]) => [name, docs.length]))
 
 	console.log('Migration preview:')
@@ -827,6 +870,9 @@ async function main() {
 		token: firestoreToken,
 		uid,
 		spreadsheetId,
+		migrationId: requestedCollections.length === Object.keys(COLLECTION_TABS).length
+			? `sheet-${idPart(spreadsheetId)}`
+			: `sync-${requestedCollections.map(idPart).join('-')}`,
 		plan,
 		warnings,
 		replaceExisting,

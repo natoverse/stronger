@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CardioActivity, LiftConfig, Workout } from '../model/index.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import {
@@ -64,10 +64,14 @@ export function GoogleAuth({
 	const [phase, setPhase] = useState<Phase>('loading')
 	const [error, setError] = useState<string | null>(null)
 	const [signInPending, setSignInPending] = useState(false)
+	const authGenerationRef = useRef(0)
 
-	const connect = useCallback(async (uid: string) => {
+	const connect = useCallback(async (uid: string, generation: number) => {
+		const isCurrent = () => authGenerationRef.current === generation
 		await ensureUser(uid)
+		if (!isCurrent()) return
 		let configs = await readConfigZone(uid)
+		if (!isCurrent()) return
 		if (!configs) {
 			if (onNeedsSetup) {
 				setPhase('connected')
@@ -76,18 +80,23 @@ export function GoogleAuth({
 			}
 			configs = defaultLiftConfigs
 			await writeDefaultConfig(uid, configs)
+			if (!isCurrent()) return
 		}
 
 		let definitions = await readWorkoutDefs(uid)
+		if (!isCurrent()) return
 		if (!definitions) {
 			definitions = workoutDefinitions
 			await writeDefaultWorkoutDefs(uid, definitions)
+			if (!isCurrent()) return
 		}
 
 		let cardio = await readCardioActivities(uid)
+		if (!isCurrent()) return
 		if (!cardio) {
 			cardio = defaultCardioActivities
 			await writeDefaultCardioActivities(uid, cardio)
+			if (!isCurrent()) return
 		}
 
 		setPhase('connected')
@@ -100,18 +109,24 @@ export function GoogleAuth({
 			setPhase('error')
 			return
 		}
-		return observeAuth((user) => {
+		const unsubscribe = observeAuth((user) => {
+			const generation = ++authGenerationRef.current
 			if (!user) {
 				setPhase('sign-in')
 				onDisconnected()
 				return
 			}
 			setPhase('loading')
-			void connect(user.uid).catch((reason) => {
+			void connect(user.uid, generation).catch((reason) => {
+				if (authGenerationRef.current !== generation) return
 				setError(reason instanceof Error ? reason.message : String(reason))
 				setPhase('error')
 			})
 		})
+		return () => {
+			authGenerationRef.current += 1
+			unsubscribe()
+		}
 	}, [connect, onDisconnected])
 
 	const handleSignIn = useCallback(async () => {

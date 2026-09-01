@@ -28,6 +28,15 @@ import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 1
 
+type StoredLogRow = ParsedLogRow & {
+	_migrationSourceRow?: number
+	_documentSequence?: number
+}
+
+type StoredRecentFood = FoodItem & {
+	_recentOrder?: number
+}
+
 type CollectionName =
 	| 'exercises'
 	| 'workouts'
@@ -109,7 +118,7 @@ export function readConfigZone(uid: string): Promise<LiftConfig[] | null> {
 }
 
 export function writeDefaultConfig(uid: string, configs: LiftConfig[]): Promise<void> {
-	return replaceCollection(uid, 'exercises', configs, (item) => item.id)
+	return replaceCollection(uid, 'exercises', configs, (item) => idPart(item.id))
 }
 
 export function writeConfigValues(uid: string, configs: LiftConfig[]): Promise<void> {
@@ -121,7 +130,7 @@ export function readWorkoutDefs(uid: string, _liftNames?: Map<string, string>): 
 }
 
 export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
-	return replaceCollection(uid, 'workouts', definitions, (item) => item.id)
+	return replaceCollection(uid, 'workouts', definitions, (item) => idPart(item.id))
 }
 
 export const writeDefaultWorkoutDefs = writeWorkoutDefs
@@ -131,22 +140,28 @@ export function readCardioActivities(uid: string): Promise<CardioActivity[] | nu
 }
 
 export function writeCardioActivities(uid: string, activities: CardioActivity[]): Promise<void> {
-	return replaceCollection(uid, 'cardioActivities', activities, (item) => item.id)
+	return replaceCollection(uid, 'cardioActivities', activities, (item) => idPart(item.id))
 }
 
 export const writeDefaultCardioActivities = writeCardioActivities
 
-export function logDocumentId(row: ParsedLogRow): string {
+export function logDocumentId(row: StoredLogRow): string {
 	return [
 		idPart(row.startTime),
 		idPart(row.liftId || row.exerciseName),
 		idPart(row.exerciseName),
 		row.setNumber,
+		...(row._migrationSourceRow == null ? [] : [`row-${row._migrationSourceRow}`]),
+		...(row._documentSequence == null ? [] : [`sequence-${row._documentSequence}`]),
 	].join('_')
 }
 
 export async function appendLogRows(uid: string, rows: (string | number | boolean)[][]): Promise<void> {
-	const parsed = rows.map((row) => rowToParsedLogRow(row)).filter((row): row is ParsedLogRow => row !== null)
+	const parsed: StoredLogRow[] = rows
+		.flatMap((row, index) => {
+			const value = rowToParsedLogRow(row)
+			return value ? [{ ...value, _documentSequence: index }] : []
+		})
 	for (let start = 0; start < parsed.length; start += 400) {
 		const batch = writeBatch(firestore)
 		for (const row of parsed.slice(start, start + 400)) {
@@ -158,10 +173,6 @@ export async function appendLogRows(uid: string, rows: (string | number | boolea
 
 		await batch.commit()
 	}
-}
-
-export function writeLogRows(uid: string, rows: ParsedLogRow[]): Promise<void> {
-	return replaceCollection(uid, 'workoutSessions', rows, (row) => logDocumentId(row))
 }
 
 export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
@@ -190,8 +201,20 @@ export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLog
 	}
 }
 
+export function sortLogRows(rows: ParsedLogRow[]): ParsedLogRow[] {
+	return rows.sort((left, right) => {
+			const a = left as StoredLogRow
+			const b = right as StoredLogRow
+			const sessionOrder = a.startTime.localeCompare(b.startTime)
+			if (sessionOrder !== 0) return sessionOrder
+			const aOrder = a._migrationSourceRow ?? a._documentSequence ?? Number.MAX_SAFE_INTEGER
+			const bOrder = b._migrationSourceRow ?? b._documentSequence ?? Number.MAX_SAFE_INTEGER
+			return aOrder - bOrder
+		})
+}
+
 export function readLogZone(uid: string): Promise<ParsedLogRow[]> {
-	return readCollection<ParsedLogRow>(uid, 'workoutSessions')
+	return readCollection<StoredLogRow>(uid, 'workoutSessions').then(sortLogRows)
 }
 
 export async function updateLogRows(
@@ -201,13 +224,32 @@ export async function updateLogRows(
 	sessionStartTime: string,
 	updatedRows: ParsedLogRow[],
 ): Promise<void> {
-	const rows = await readLogZone(uid)
-	const retained = rows.filter((row) => !(
-		row.date === sessionDate
-		&& row.workoutId === sessionWorkoutId
-		&& row.startTime === sessionStartTime
-	))
-	await replaceCollection(uid, 'workoutSessions', [...retained, ...updatedRows], (row) => logDocumentId(row))
+	const snapshot = await getDocs(userCollection(uid, 'workoutSessions'))
+	const matches = snapshot.docs.filter((item) => {
+		const row = item.data() as ParsedLogRow
+		return row.date === sessionDate
+			&& row.workoutId === sessionWorkoutId
+			&& row.startTime === sessionStartTime
+	})
+	const sequencedRows: StoredLogRow[] = updatedRows.map((row, index) => ({
+		...row,
+		_documentSequence: index,
+	}))
+	const desiredIds = new Set(sequencedRows.map(logDocumentId))
+	const staleMatches = matches.filter((item) => !desiredIds.has(item.id))
+	if (staleMatches.length + sequencedRows.length > 500) {
+		throw new Error('Workout session is too large to update atomically.')
+	}
+
+	const batch = writeBatch(firestore)
+	for (const item of staleMatches) batch.delete(item.ref)
+	for (const row of sequencedRows) {
+		batch.set(doc(userCollection(uid, 'workoutSessions'), logDocumentId(row)), {
+			...row,
+			updatedAt: new Date().toISOString(),
+		})
+	}
+	await batch.commit()
 }
 
 export async function deleteLogSession(
@@ -282,11 +324,14 @@ export function writeMealFavorites(uid: string, items: FoodItem[]): Promise<void
 }
 
 export function readMealRecents(uid: string): Promise<FoodItem[]> {
-	return readCollection<FoodItem>(uid, 'recentFoods')
+	return readCollection<StoredRecentFood>(uid, 'recentFoods').then((items) =>
+		items.sort((a, b) => (a._recentOrder ?? Number.MAX_SAFE_INTEGER) - (b._recentOrder ?? Number.MAX_SAFE_INTEGER)),
+	)
 }
 
 export function writeMealRecents(uid: string, items: FoodItem[]): Promise<void> {
-	return replaceCollection(uid, 'recentFoods', items, (item) => idPart(item.code))
+	const stored: StoredRecentFood[] = items.map((item, index) => ({ ...item, _recentOrder: index }))
+	return replaceCollection(uid, 'recentFoods', stored, (item) => idPart(item.code))
 }
 
 export function readMealLog(uid: string): Promise<MealLogEntry[]> {
@@ -358,17 +403,6 @@ export function readWithingsMeasurements(uid: string): Promise<WithingsMeasureme
 
 export function writeWithingsMeasurements(uid: string, items: WithingsMeasurement[]): Promise<void> {
 	return replaceCollection(uid, 'withingsMeasurements', items, (item) => idPart(item.grpId))
-}
-
-export async function recordMigration(
-	uid: string,
-	migrationId: string,
-	value: Record<string, unknown>,
-): Promise<void> {
-	await setDoc(doc(userDoc(uid), 'migrations', migrationId), {
-		...value,
-		updatedAt: new Date().toISOString(),
-	}, { merge: true })
 }
 
 export const verifyScheduleTab = async (_uid?: string) => true

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { CalendarListEntry } from '../google/index.js';
 import type { CalendarSyncResult } from '../google/index.js';
-import { authorizeCalendar, listWritableCalendars, saveCalendarId, loadCalendarId } from '../google/index.js';
+import { authorizeCalendar, clearAuth, listWritableCalendars, saveCalendarId, loadCalendarId } from '../google/index.js';
 import { RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface CalendarSyncProps {
@@ -9,6 +9,12 @@ interface CalendarSyncProps {
 }
 
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
+function errorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined;
+  const value = error as { status?: number; result?: { error?: { code?: number } } };
+  return value.status ?? value.result?.error?.code;
+}
 
 export function CalendarSync({ onSync }: CalendarSyncProps) {
   const [calendars, setCalendars] = useState<CalendarListEntry[]>([]);
@@ -33,6 +39,8 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
         setAuthorized(true);
         setLoadingCalendars(false);
     } catch (err) {
+        clearAuth();
+        setAuthorized(false);
         setCalendarError(err instanceof Error ? err.message : String(err));
         setLoadingCalendars(false);
     }
@@ -51,6 +59,12 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
       setSyncResult(result);
       setSyncStatus(result.errors.length > 0 ? 'error' : 'success');
     } catch (err) {
+      if (errorStatus(err) === 401) {
+        clearAuth();
+        setAuthorized(false);
+        setCalendars([]);
+        setSelectedCalendarId('');
+      }
       setSyncResult({
         created: 0,
         updated: 0,

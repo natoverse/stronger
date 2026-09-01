@@ -23,12 +23,12 @@ interface CalendarViewProps {
 		sessionWorkoutId: string,
 		sessionStartTime: string,
 		updatedRows: ParsedLogRow[],
-	) => void;
+	) => Promise<void>;
 	onDeleteSession: (
 		sessionDate: string,
 		sessionWorkoutId: string,
 		sessionStartTime: string,
-	) => void;
+	) => Promise<void>;
 	onBulkSchedule: (entries: WorkoutScheduleEntry[]) => void;
 	onUpdateFlags: (date: string, flags: DayFlags) => void;
 	onSyncCalendar: (calendarId: string) => Promise<CalendarSyncResult>;
@@ -348,7 +348,7 @@ export function SessionDetail({
 }: {
 	session: LogSession;
 	workoutNames: Map<string, string>;
-	onSave: (updatedRows: ParsedLogRow[]) => void;
+	onSave: (updatedRows: ParsedLogRow[]) => Promise<void>;
 	onClose: () => void;
 }) {
 	const [editRows, setEditRows] = useState<ParsedLogRow[]>(() =>
@@ -356,6 +356,7 @@ export function SessionDetail({
 	);
 	const [saving, setSaving] = useState(false);
 	const [dirty, setDirty] = useState(false);
+	const [saveError, setSaveError] = useState<string | null>(null);
 
 	const { display } = formatDate(session.key.date);
 	const name = workoutNames.get(session.key.workoutId) ?? session.workoutName;
@@ -371,11 +372,15 @@ export function SessionDetail({
 
 	const handleSave = useCallback(async () => {
 		setSaving(true);
-		onSave(editRows);
-		// Brief delay for visual feedback
-		await new Promise((r) => setTimeout(r, 300));
-		setSaving(false);
-		setDirty(false);
+		setSaveError(null);
+		try {
+			await onSave(editRows);
+			setDirty(false);
+		} catch (error) {
+			setSaveError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setSaving(false);
+		}
 	}, [editRows, onSave]);
 
 	// Group rows by exercise
@@ -408,6 +413,7 @@ export function SessionDetail({
 					{saving ? <Check size={18} /> : <Save size={18} />}
 				</button>
 			</div>
+			{saveError && <p className="auth-error">{saveError}</p>}
 
 			<div className="session-detail-exercises">
 				{exerciseOrder.map((eName) => {
@@ -492,6 +498,7 @@ export function CalendarView({
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+	const [sessionMutationError, setSessionMutationError] = useState<string | null>(null);
 	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
 	const [labelDraft, setLabelDraft] = useState('');
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0, 1, 2]);
@@ -657,9 +664,9 @@ export function CalendarView({
 	}, []);
 
 	const handleSaveSession = useCallback(
-		(updatedRows: ParsedLogRow[]) => {
+		async (updatedRows: ParsedLogRow[]) => {
 			if (!activeSession) return;
-			onUpdateLogRows(
+			await onUpdateLogRows(
 				activeSession.key.date,
 				activeSession.key.workoutId,
 				activeSession.key.startTime,
@@ -678,9 +685,14 @@ export function CalendarView({
 	[]);
 
 	const handleDeleteSession = useCallback(
-		(session: LogSession) => {
-			onDeleteSession(session.key.date, session.key.workoutId, session.key.startTime);
-			setConfirmDeleteKey(null);
+		async (session: LogSession) => {
+			setSessionMutationError(null);
+			try {
+				await onDeleteSession(session.key.date, session.key.workoutId, session.key.startTime);
+				setConfirmDeleteKey(null);
+			} catch (error) {
+				setSessionMutationError(error instanceof Error ? error.message : String(error));
+			}
 		},
 		[onDeleteSession],
 	);
@@ -699,6 +711,7 @@ export function CalendarView({
 
 	return (
 		<div className="calendar-view">
+			{sessionMutationError && <p className="auth-error">{sessionMutationError}</p>}
 			<div className={`calendar-fixed-section${activePanel === 'plan' ? ' calendar-fixed-section-plan' : ''}`}>
 				<div className="calendar-toolbar">
 					<button

@@ -1,8 +1,8 @@
-# Feature: Firebase backend and Google Sheets migration
+# Feature: Firebase application backend
 
 > Replace Google Sheets as Stronger's application database with user-scoped
 > Cloud Firestore data while retaining Google authorization only for Calendar
-> sync and one-time imports.
+> sync.
 
 ## What
 
@@ -10,8 +10,7 @@ Stronger currently uses a short-lived Google OAuth access token for both
 application login and every data operation. The app will instead authenticate
 with Firebase Authentication and store each user's data below their Firebase
 UID in Cloud Firestore. Google API authorization becomes an optional,
-task-specific connection used by Calendar sync and by a migration action that
-copies an existing Stronger spreadsheet.
+task-specific connection used only by Calendar sync.
 
 The application remains a client-side React app hosted on GitHub Pages.
 
@@ -26,20 +25,16 @@ The application remains a client-side React app hosted on GitHub Pages.
   access to another user's records.
 - [ ] A new account can seed the existing default exercises, workouts, and
   cardio activities without a spreadsheet.
-- [ ] Settings includes an action that accepts a Stronger Google Sheet URL,
-  previews recognized records, and imports them into the signed-in user's
-  Firestore collections.
-- [ ] Imports use deterministic identifiers and can be retried without creating
-  duplicate records.
-- [ ] Import progress and validation warnings are recorded in Firestore.
-- [ ] Google Sheets authorization is requested only when importing.
+- [ ] The web app contains no Google Sheets migration controls.
 - [ ] Google Calendar authorization is requested only from a calendar sync
   panel and an expired Calendar token does not sign the user out of Stronger.
 - [ ] Existing two-way Calendar synchronization and `strongerId` matching are
   preserved.
+- [ ] Garmin activities, Garmin wellness, and Withings scheduled syncs mirror
+  their completed sheet updates into the corresponding Firestore collections.
 - [ ] Firebase configuration is supplied through public `VITE_FIREBASE_*`
   environment variables; no service-account credential is shipped to the app.
-- [ ] Firestore rules and migration/repository behavior have automated tests.
+- [ ] Firestore rules and repository behavior have automated tests.
 
 ## Firestore Schema
 
@@ -60,21 +55,11 @@ All collections are nested below `/users/{uid}`:
 - `garminWellness/{date}`
 - `withingsMeasurements/{groupId}`
 - `settings/app`
-- `migrations/{migrationId}`
 
 The user document stores `schemaVersion`, setup state, and timestamps. Source
-identifiers are retained as document IDs. Legacy set-level log rows use a
-deterministic document ID derived from session start time, lift, and set number.
-
-## Migration
-
-The import reads all recognized `Stronger - *` tabs with the existing,
-backward-compatible row parsers. It shows counts and warnings before writing.
-The destination must be empty unless the user explicitly chooses replacement.
-Writes are chunked below Firestore batch limits. A migration document records
-the source spreadsheet ID, status, collection counts, warnings, checkpoints,
-and completion time. Retrying the same source uses the same migration and
-record identifiers.
+identifiers are retained as document IDs. Migrated workout-log rows retain
+their source-row discriminator, while new rows use a per-session sequence, so
+repeated instances of the same exercise do not collide.
 
 ## Security and Quotas
 
@@ -85,8 +70,7 @@ secret. Administrative sync credentials remain restricted to GitHub Actions.
 
 ## Rollout
 
-The Sheets reader remains temporarily available only for migration. Existing
-Sheets are retained as backups through the stabilization period. External
-Garmin, Garmin Wellness, and Withings workflows move to deterministic Firestore
-writes before their corresponding sheet readers are retired.
-
+The migration action in spec 049 runs before this backend switch. Existing
+Sheets remain the ingestion ledger and backup during stabilization. Garmin,
+Garmin Wellness, and Withings workflows mirror only their own completed
+collections into Firestore after each successful sync.

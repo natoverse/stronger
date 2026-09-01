@@ -392,6 +392,12 @@ export type WorkoutNameResolver = (workoutId: string) => string | null
 /** Resolves a workout name back to a workoutId. Returns null for unknown names. */
 export type WorkoutIdResolver = (name: string) => string | null
 
+function isCalendarAuthError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false
+	const value = error as { status?: number; result?: { error?: { code?: number } } }
+	return (value.status ?? value.result?.error?.code) === 401
+}
+
 /**
  * Build a Map from calendar event ID → CalendarEventItem for fast lookup.
  */
@@ -493,6 +499,7 @@ export async function syncScheduleWithCalendar(
 	try {
 		calendarEvents = await listEventsInRange(calendarId, startStr, endStr)
 	} catch (err) {
+		if (isCalendarAuthError(err)) throw err
 		const msg = err instanceof Error ? err.message : String(err)
 		result.errors.push(`Failed to list calendar events: ${msg}`)
 		return { updatedSchedule: schedule, result }
@@ -520,6 +527,7 @@ export async function syncScheduleWithCalendar(
 					})
 					result.deleted++
 				} catch (err) {
+					if (isCalendarAuthError(err)) throw err
 					const msg = err instanceof Error ? err.message : String(err)
 					result.errors.push(`Delete event ${entry.calendarEventId}: ${msg}`)
 				}
@@ -571,6 +579,7 @@ export async function syncScheduleWithCalendar(
 						},
 					})
 				} catch (err) {
+					if (isCalendarAuthError(err)) throw err
 					const msg = err instanceof Error ? err.message : String(err)
 					result.errors.push(`Update title for event ${calEvent.id}: ${msg}`)
 				}
@@ -627,6 +636,7 @@ export async function syncScheduleWithCalendar(
 				accountedEventIds.add(resp.result.id)
 				result.created++
 			} catch (err) {
+				if (isCalendarAuthError(err)) throw err
 				const msg = err instanceof Error ? err.message : String(err)
 				result.errors.push(`Create event for ${name} on ${entry.date}: ${msg}`)
 				updatedSyncable.push(entry)
@@ -683,6 +693,7 @@ export async function syncScheduleWithCalendar(
 					},
 				})
 			} catch (err) {
+				if (isCalendarAuthError(err)) throw err
 				const msg = err instanceof Error ? err.message : String(err)
 				result.errors.push(`Update event ${calEvent.id} with strongerId: ${msg}`)
 			}

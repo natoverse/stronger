@@ -106,6 +106,39 @@ test('migration plan groups workout rows and reports invalid rows', () => {
 	assert.ok(warnings.some((warning) => warning.includes('Workouts: skipped 1 invalid row')))
 })
 
+test('migration preserves recent-food ordering metadata', () => {
+	const rows = {
+		exercises: [
+			['id', 'name', 'topSetWeight', 'backoffWeight', 'increment', 'minimumWeight', 'roundingFactor'],
+			['bench', 'Bench', '100', '80', '5', '45', '5'],
+		],
+		workouts: [
+			['workoutId', 'workoutName', 'exerciseOrder', 'exerciseRole', 'liftId', 'setType', 'percentage', 'weightBasis', 'minReps', 'maxReps', 'amrap'],
+			['A', 'A', '1', 'primary', 'bench', 'work', '1', 'topSet', '5', '5', 'FALSE'],
+		],
+		logs: [],
+		dayFlags: [],
+		schedule: [],
+		cardio: [],
+		mealItems: [],
+		mealLog: [],
+		favoriteFoods: [],
+		recentFoods: [
+			['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks'],
+			['first', 'First', '', '', '1', '0', '0', '0', '0', '0'],
+			['second', 'Second', '', '', '1', '0', '0', '0', '0', '0'],
+		],
+		strava: [],
+		garmin: [],
+		garminWellness: [],
+		withings: [],
+		settings: [],
+	}
+	const { plan } = buildMigrationPlan(rows)
+	assert.equal(plan.recentFoods[0].data._recentOrder, 0)
+	assert.equal(plan.recentFoods[1].data._recentOrder, 1)
+})
+
 test('migration plan rejects empty required tabs', () => {
 	const rows = {
 		exercises: [['id', 'name']],
@@ -182,4 +215,27 @@ test('missing optional tabs are excluded instead of cleared', () => {
 	}
 	const { plan } = buildMigrationPlan(rows)
 	assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
+})
+
+test('collection-scoped plans do not require unrelated tabs', () => {
+	const rows = {
+		exercises: null,
+		workouts: null,
+		logs: null,
+		dayFlags: null,
+		schedule: null,
+		cardio: null,
+		mealItems: null,
+		mealLog: null,
+		favoriteFoods: null,
+		recentFoods: null,
+		strava: null,
+		garmin: [['2026-09-01', '42', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170']],
+		garminWellness: null,
+		withings: null,
+		settings: null,
+	}
+	const { plan } = buildMigrationPlan(rows, [], ['garminActivities'])
+	assert.deepEqual(Object.keys(plan), ['garminActivities'])
+	assert.equal(plan.garminActivities[0].id, '42')
 })

@@ -14,8 +14,6 @@ export {
 	describeSheetError,
 	withAuthRetry,
 	authorizeCalendar,
-	authorizeSheetsImport,
-	clearGoogleApiAuthorization,
 } from './auth.ts'
 export {
 	verifySheetAccess,

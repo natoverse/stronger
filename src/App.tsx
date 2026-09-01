@@ -92,9 +92,27 @@ function AppContent() {
   const wellnessLoadedRef = useRef(false);
   const withingsLoadedRef = useRef(false);
   const nutritionLoadedRef = useRef(false);
+  const connectedUserRef = useRef<string | null>(null);
+  const sessionMutationRef = useRef(new Map<string, Promise<void>>());
+
+  const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
+    const previous = sessionMutationRef.current.get(key) ?? Promise.resolve();
+    let queued: Promise<void>;
+    queued = previous
+      .catch(() => undefined)
+      .then(mutation)
+      .finally(() => {
+        if (sessionMutationRef.current.get(key) === queued) {
+          sessionMutationRef.current.delete(key);
+        }
+      });
+    sessionMutationRef.current.set(key, queued);
+    return queued;
+  }, []);
 
   const handleConnected = useCallback(
     (loadedWorkouts: Workout[], loadedConfigs: LiftConfig[], sheetId: string, defs: WorkoutDefinition[], cardio: CardioActivity[]) => {
+      connectedUserRef.current = sheetId;
       setWorkouts(loadedWorkouts);
       setConfigs(loadedConfigs);
       setDefinitions(defs);
@@ -117,6 +135,7 @@ function AppContent() {
   );
 
   const handleNeedsSetup = useCallback((sheetId: string) => {
+    connectedUserRef.current = sheetId;
     setSpreadsheetId(sheetId);
     setSheetConnected(true);
     setNeedsSetup(true);
@@ -125,25 +144,31 @@ function AppContent() {
   const handleSetupConfirm = useCallback(
     async (configs: LiftConfig[]) => {
       if (!spreadsheetId) return;
+      const setupUserId = spreadsheetId;
 
       // Write the user's configs to the sheet (writeDefaultConfig writes
       // the header row too, which is needed for a fresh config zone).
-      await writeDefaultConfig(spreadsheetId, configs);
+      await writeDefaultConfig(setupUserId, configs);
+      if (connectedUserRef.current !== setupUserId) return;
       setConfigs(configs);
 
       // Read or write default workout definitions
       const liftNames = new Map(configs.map((c) => [c.id, c.name]));
-      let defs = await readWorkoutDefs(spreadsheetId, liftNames);
+      let defs = await readWorkoutDefs(setupUserId, liftNames);
+      if (connectedUserRef.current !== setupUserId) return;
       if (!defs) {
-        await writeDefaultWorkoutDefs(spreadsheetId, workoutDefinitions);
+        await writeDefaultWorkoutDefs(setupUserId, workoutDefinitions);
+        if (connectedUserRef.current !== setupUserId) return;
         defs = workoutDefinitions;
       }
       setDefinitions(defs);
 
       // Read or seed default cardio activities
-      let cardio = await readCardioActivities(spreadsheetId);
+      let cardio = await readCardioActivities(setupUserId);
+      if (connectedUserRef.current !== setupUserId) return;
       if (!cardio) {
-        await writeDefaultCardioActivities(spreadsheetId, defaultCardioActivities);
+        await writeDefaultCardioActivities(setupUserId, defaultCardioActivities);
+        if (connectedUserRef.current !== setupUserId) return;
         cardio = [...defaultCardioActivities];
       }
       setCardioActivities(cardio);
@@ -156,6 +181,8 @@ function AppContent() {
   );
 
   const handleDisconnected = useCallback(() => {
+    connectedUserRef.current = null;
+    clearDraft();
     setSheetConnected(false);
     setActiveWorkout(null);
     setPreviousSets(null);
@@ -198,15 +225,18 @@ function AppContent() {
   const loadPreviousSets = useCallback(
     async (sheetId: string, workoutId: string) => {
       try {
+        if (connectedUserRef.current !== sheetId) return;
         // If log data is already loaded, use it directly
         if (logLoadedRef.current && logRows.length > 0) {
           const prev = findPreviousWorkoutSets(logRows, workoutId);
+          if (connectedUserRef.current !== sheetId) return;
           setPreviousSets(prev);
           return;
         }
         // Otherwise fetch from sheet
         await withAuthRetry(async () => {
           const rows = await readLogZone(sheetId);
+          if (connectedUserRef.current !== sheetId) return;
           setLogRows(rows);
           logLoadedRef.current = true;
           const prev = findPreviousWorkoutSets(rows, workoutId);
@@ -335,10 +365,13 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const flagsTabExists = await verifyScheduleTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!flagsTabExists) {
           await createScheduleTab(sheetId);
+          if (connectedUserRef.current !== sheetId) return;
         }
         const flags = await readFlags(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         setDayFlags(flags);
       });
     } catch {
@@ -350,10 +383,13 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const wsTabExists = await verifyWorkoutScheduleTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!wsTabExists) {
           await createWorkoutScheduleTab(sheetId);
+          if (connectedUserRef.current !== sheetId) return;
         }
         const schedule = await readWorkoutSchedule(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         setWorkoutSchedule(schedule);
       });
     } catch {
@@ -365,6 +401,7 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const rows = await readLogZone(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         setLogRows(rows);
         logLoadedRef.current = true;
       });
@@ -377,10 +414,13 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const settingsTabExists = await verifySettingsTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!settingsTabExists) {
           await createSettingsTab(sheetId);
+          if (connectedUserRef.current !== sheetId) return;
         }
         const settings = await readSettings(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         settingsRef.current = settings;
         setStravaGoals(goalsFromSettings(settings));
         setWithingsGoals(bodyGoalsFromSettings(settings));
@@ -392,7 +432,7 @@ function AppContent() {
     } catch {
       // Silently ignore — settings data is optional
     } finally {
-      setSettingsLoaded(true);
+      if (connectedUserRef.current === sheetId) setSettingsLoaded(true);
     }
   }, []);
 
@@ -400,12 +440,14 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const tabExists = await verifyGarminTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!tabExists) {
           // The Garmin tab is created by the sync script, not the app.
           setGarminActivities([]);
           return;
         }
         const activities = await readGarminActivities(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         setGarminActivities(activities);
       });
     } catch {
@@ -417,11 +459,13 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const tabExists = await verifyGarminWellnessTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!tabExists) {
           setWellnessEntries([]);
           return;
         }
         const entries = await readGarminWellnessEntries(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         setWellnessEntries(entries);
       });
     } catch {
@@ -433,10 +477,13 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         const tabExists = await verifyWithingsTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!tabExists) {
           await createWithingsTab(sheetId);
+          if (connectedUserRef.current !== sheetId) return;
         }
         const measurements = await readWithingsMeasurements(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         setWithingsMeasurements(measurements);
       });
     } catch {
@@ -448,13 +495,16 @@ function AppContent() {
     try {
       await withAuthRetry(async () => {
         if (!await verifyMealFavoritesTab(sheetId)) await createMealFavoritesTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         if (!await verifyMealRecentsTab(sheetId)) await createMealRecentsTab(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         const [favorites, recents, entries, items] = await Promise.all([
           readMealFavorites(sheetId),
           readMealRecents(sheetId),
           readMealLog(sheetId),
           readMealItems(sheetId).catch(() => [] as MealItem[]),
         ]);
+        if (connectedUserRef.current !== sheetId) return;
         setMealFavorites(favorites);
         setMealRecents(recents);
         setMealItems(items);
@@ -590,6 +640,8 @@ function AppContent() {
 
   const handleSyncCalendar = useCallback(
     async (calendarId: string): Promise<CalendarSyncResult> => {
+      const syncUserId = spreadsheetId;
+      if (!syncUserId) throw new Error('Not connected to Firebase.');
       const resolveWorkoutName = (workoutId: string): string | null => {
         if (workoutId === REST_ID) return 'Rest';
         if (workoutId.startsWith('cardio:')) {
@@ -612,17 +664,27 @@ function AppContent() {
         return null;
       };
 
+      const scheduleWithIds = workoutSchedule.map((entry) =>
+        entry.workoutId && !entry.strongerId
+          ? { ...entry, strongerId: generateStrongerId() }
+          : entry,
+      );
+      if (scheduleWithIds.some((entry, index) => entry !== workoutSchedule[index])) {
+        await withAuthRetry(() => writeWorkoutSchedule(syncUserId, scheduleWithIds));
+        if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
+        setWorkoutSchedule(scheduleWithIds);
+      }
+
       const { updatedSchedule, result } = await withAuthRetry(() => syncScheduleWithCalendar(
         calendarId,
-        workoutSchedule,
+        scheduleWithIds,
         resolveWorkoutName,
         resolveWorkoutId,
       ));
 
+      if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
+      await withAuthRetry(() => writeWorkoutSchedule(syncUserId, updatedSchedule));
       setWorkoutSchedule(updatedSchedule);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updatedSchedule));
-      }
       return result;
     },
     [workoutSchedule, workouts, cardioActivities, spreadsheetId],
@@ -677,11 +739,11 @@ function AppContent() {
 
         // Try to delete Google Calendar events for cleared entries
         const calendarId = loadCalendarId();
+        const deletedEventIds = new Set<string>();
         if (calendarId) {
           const gapi = window.gapi;
           if (gapi) {
             // Delete events we have direct references to
-            const deletedEventIds = new Set<string>();
             for (const entry of entriesToClear) {
               if (entry.calendarEventId) {
                 try {
@@ -731,8 +793,8 @@ function AppContent() {
         const finalSchedule = updatedSchedule.filter((e) => {
           if (!dateSet.has(e.date)) return true; // keep entries outside range
           if (e.workoutId) return true; // keep entries with workoutIds
-          // In range + blanked: only keep if calendarEventId and we didn't delete it
-          if (e.calendarEventId && !calendarId) return true; // keep for future sync
+          // Retain linkage unless the referenced event was confirmed deleted.
+          if (e.calendarEventId && !deletedEventIds.has(e.calendarEventId)) return true;
           return false;
         });
 
@@ -752,8 +814,13 @@ function AppContent() {
   );
 
   const handleUpdateLogRows = useCallback(
-    (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string, updatedRows: ParsedLogRow[]) => {
-      // Update local state
+    async (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string, updatedRows: ParsedLogRow[]) => {
+      const userId = spreadsheetId;
+      if (!userId) throw new Error('Not connected to Firebase.');
+      const sessionKey = `${sessionDate}|${sessionWorkoutId}|${sessionStartTime}`;
+      await queueSessionMutation(sessionKey, () =>
+        withAuthRetry(() => updateLogRows(userId, sessionDate, sessionWorkoutId, sessionStartTime, updatedRows)));
+      if (connectedUserRef.current !== userId) return;
       setLogRows((prev) => {
         const next = [...prev];
         for (const updated of updatedRows) {
@@ -771,29 +838,26 @@ function AppContent() {
         }
         return next;
       });
-      // Fire-and-forget: write to sheet
-      if (spreadsheetId) {
-        void withAuthRetry(() => updateLogRows(spreadsheetId, sessionDate, sessionWorkoutId, sessionStartTime, updatedRows));
-      }
     },
-    [spreadsheetId],
+    [queueSessionMutation, spreadsheetId],
   );
 
   const handleDeleteSession = useCallback(
-    (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string) => {
-      // Remove matching rows from local state
+    async (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string) => {
+      const userId = spreadsheetId;
+      if (!userId) throw new Error('Not connected to Firebase.');
+      const sessionKey = `${sessionDate}|${sessionWorkoutId}|${sessionStartTime}`;
+      await queueSessionMutation(sessionKey, () =>
+        withAuthRetry(() => deleteLogSession(userId, sessionDate, sessionWorkoutId, sessionStartTime)));
+      if (connectedUserRef.current !== userId) return;
       setLogRows((prev) =>
         prev.filter(
           (r) =>
             !(r.date === sessionDate && r.workoutId === sessionWorkoutId && r.startTime === sessionStartTime),
         ),
       );
-      // Fire-and-forget: delete from sheet
-      if (spreadsheetId) {
-        void withAuthRetry(() => deleteLogSession(spreadsheetId, sessionDate, sessionWorkoutId, sessionStartTime));
-      }
     },
-    [spreadsheetId],
+    [queueSessionMutation, spreadsheetId],
   );
 
   const handleViewSession = useCallback((session: LogSession) => {
@@ -801,10 +865,10 @@ function AppContent() {
   }, []);
 
   const handleViewSessionSave = useCallback(
-    (updatedRows: ParsedLogRow[]) => {
+    async (updatedRows: ParsedLogRow[]) => {
       if (!viewingSession) return;
       const { date, workoutId, startTime } = viewingSession.key;
-      handleUpdateLogRows(date, workoutId, startTime, updatedRows);
+      await handleUpdateLogRows(date, workoutId, startTime, updatedRows);
     },
     [viewingSession, handleUpdateLogRows],
   );
@@ -1719,7 +1783,6 @@ function AppContent() {
         />
         <SettingsView
           onSignOut={handleSignOut}
-          userId={spreadsheetId}
           appSettings={appSettings}
           onAppSettingChange={handleAppSettingChange}
           onAppNumericSettingChange={handleAppNumericSettingChange}

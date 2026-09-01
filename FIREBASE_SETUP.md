@@ -1,8 +1,8 @@
 # Firebase Setup
 
 Stronger uses Firebase Authentication for application login and Cloud Firestore
-for user data. Google OAuth remains separately configured for Calendar sync and
-one-time Google Sheets imports.
+for user data. Google OAuth remains separately configured only for Calendar
+sync.
 
 ## Firebase project
 
@@ -28,12 +28,14 @@ browser bundle. Firestore security is enforced by Authentication and
 `firestore.rules`; never add a Firebase service-account key to a `VITE_*`
 variable.
 
+The scheduled Garmin and Withings workflows also require the administrative
+`FIREBASE_SERVICE_ACCOUNT_KEY` and `FIREBASE_USER_ID` secrets documented in
+`FIREBASE_MIGRATION.md`.
+
 Keep `VITE_GOOGLE_CLIENT_ID` configured as described in `GOOGLE_SETUP.md`.
-Its OAuth client must allow the Sheets API read-only scope for migration and
-the Calendar scope for calendar synchronization.
+Its OAuth client must allow the Calendar scope for calendar synchronization.
 
-## Existing users
+## Migrated data
 
-Sign in to Stronger, open Settings, and use **Import Google Sheet**. Preview the
-source first, review its record counts and warnings, and then import. The source
-spreadsheet is not modified.
+Run the migration workflow documented in `FIREBASE_MIGRATION.md` before
+deploying this backend switch. There is no migration control in the web app.

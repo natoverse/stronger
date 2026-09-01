@@ -263,16 +263,6 @@ export function authorizeCalendar(): Promise<string> {
 	return authorizeScope(`${CALENDAR_SCOPE} ${EMAIL_SCOPE}`)
 }
 
-/** Request read-only Google Sheets access for the one-time migration action. */
-export function authorizeSheetsImport(): Promise<string> {
-	return authorizeScope('https://www.googleapis.com/auth/spreadsheets.readonly')
-}
-
-/** Clear task-specific Google API authorization without signing out of Firebase. */
-export function clearGoogleApiAuthorization(): void {
-	window.gapi?.client.setToken(null)
-}
-
 /**
  * Sign out: revoke the access token, clear it from gapi, and drop the
  * persisted account email.

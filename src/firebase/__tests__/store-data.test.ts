@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../client.ts', () => ({ firestore: {} }))
 
-import { logDocumentId, rowToParsedLogRow, scheduleDocumentId } from '../store.ts'
+import { logDocumentId, rowToParsedLogRow, scheduleDocumentId, sortLogRows } from '../store.ts'
 
 describe('Firestore data identifiers', () => {
 	it('creates stable, distinct log document IDs', () => {
@@ -19,6 +19,10 @@ describe('Firestore data identifiers', () => {
 		expect(second).not.toBeNull()
 		expect(logDocumentId(first!)).not.toBe(logDocumentId(second!))
 		expect(logDocumentId(first!)).toBe(logDocumentId({ ...first! }))
+		expect(logDocumentId({ ...first!, _migrationSourceRow: 2 }))
+			.not.toBe(logDocumentId({ ...first!, _migrationSourceRow: 3 }))
+		expect(logDocumentId({ ...first!, _documentSequence: 0 }))
+			.not.toBe(logDocumentId({ ...first!, _documentSequence: 1 }))
 	})
 
 	it('parses completed flags and numeric set values', () => {
@@ -33,6 +37,31 @@ describe('Firestore data identifiers', () => {
 			actualReps: 9,
 			completed: false,
 		})
+	})
+
+	it('restores session exercise order from stored sequence metadata', () => {
+		const base = {
+			date: '2026-08-29',
+			startTime: '2026-08-29T10:00:00Z',
+			endTime: '2026-08-29T11:00:00Z',
+			workoutId: 'A',
+			liftId: '',
+			setNumber: 1,
+			setType: 'work',
+			plannedWeight: 100,
+			plannedReps: 5,
+			actualWeight: 100,
+			actualReps: 5,
+			completed: true,
+		}
+		const rows = [
+			{ ...base, exerciseName: 'Third', _documentSequence: 2 },
+			{ ...base, exerciseName: 'First', _documentSequence: 0 },
+			{ ...base, exerciseName: 'Second', _documentSequence: 1 },
+		]
+
+		expect(sortLogRows(rows).map((row) => row.exerciseName))
+			.toEqual(['First', 'Second', 'Third'])
 	})
 
 	it('uses Stronger IDs when available and stable source fields otherwise', () => {
