@@ -12,12 +12,12 @@ Accepting adds the workout to the recipient's workout list with a fresh ID. The 
 
 ## Acceptance Criteria
 
-- [ ] Every workout's three-dot menu offers **Share** and produces an auth-independent URL containing its portable definition.
-- [ ] Opening a valid shared-workout URL prompts to import only after the user's Stronger sheet is available.
-- [ ] Accepting writes a new workout to the sheet and shows it in the workout list with a fresh ID.
-- [ ] The imported copy preserves the shared name, optional favorite state, and complete ordered exercise/set templates.
-- [ ] If the shared name already exists, the imported workout is named `<name> copy`.
-- [ ] Declining makes no changes, and malformed or unsupported payloads are rejected safely without writing to the sheet.
+- [x] Every workout's three-dot menu offers **Share** and produces an auth-independent URL containing its portable definition.
+- [x] Opening a valid shared-workout URL prompts to import only after the user's Stronger sheet is available.
+- [x] Accepting writes a new workout to the sheet and shows it in the workout list with a fresh ID.
+- [x] The imported copy preserves the shared name, optional favorite state, and complete ordered exercise/set templates.
+- [x] If the shared name already exists, the imported workout is named `<name> copy`.
+- [x] Declining makes no changes, and malformed or unsupported payloads are rejected safely without writing to the sheet.
 
 ## Scope
 
@@ -32,3 +32,5 @@ Accepting adds the workout to the recipient's workout list with a fresh ID. The 
 ## Notes
 
 The URL is portable data, not authorization. This keeps sharing client-only and leaves each user's Google Sheet as their source of truth.
+
+The implemented route is `#/import/<payload>`, where `payload` is versioned UTF-8 JSON encoded as base64url and omits the source workout ID. Sharing uses the native share sheet when available, then falls back to clipboard or a copy prompt. Further name collisions use `<name> copy 2`, `<name> copy 3`, and so on.
