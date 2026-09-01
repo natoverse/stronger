@@ -35,27 +35,50 @@ temporarily permissive rules.
 Firestore collections do not need to be created manually. The workflow creates
 the `/users/{uid}` document tree when it writes the first migration.
 
-## 3. Create a Firebase Authentication user
+## 3. Configure the Firebase web application
+
+Create a web application under
+**Project settings -> General -> Your apps -> Add app -> Web**. Copy its
+configuration values into these repository secrets:
+
+```text
+VITE_FIREBASE_API_KEY
+VITE_FIREBASE_AUTH_DOMAIN
+VITE_FIREBASE_PROJECT_ID
+VITE_FIREBASE_STORAGE_BUCKET
+VITE_FIREBASE_MESSAGING_SENDER_ID
+VITE_FIREBASE_APP_ID
+```
+
+These values identify the public Firebase web application; they are not
+service-account credentials.
+
+Open **Authentication -> Sign-in method**, enable **Google**, select the
+project support email, and save the provider configuration.
+
+Under **Authentication -> Settings -> Authorized domains**, add the hostname
+where each Stronger deployment runs. The primary GitHub Pages deployment uses
+`natoverse.github.io`. A fork deployed from the `example` GitHub account uses
+`example.github.io`. Add `localhost` separately when local sign-in is needed.
+
+## 4. Create the Firebase Authentication user
 
 The destination path is tied to a Firebase Authentication UID. In the Firebase
-console:
+current Google Sheets-backed Stronger app:
 
-1. Open **Security -> Authentication** and select **Get started** if prompted.
-2. Open the **Users** tab.
-3. Create a user, or sign in once through a Firebase-enabled build of Stronger
-   to create the final Google-authenticated user.
-4. Copy the value in the user's **User UID** column exactly. This becomes
-   `FIREBASE_USER_ID`.
+1. Open **Settings -> Firebase Migration Identity**.
+2. Select **Create Firebase migration ID**.
+3. Sign in with the Google account that will use the Firebase-backed app.
+4. Copy the displayed Firebase UID and save it as `FIREBASE_USER_ID`.
 
-For migration testing, a temporary password user is acceptable. After the
-Firebase UI is available, sign in with the intended Google account, copy that
-account's UID, change `FIREBASE_USER_ID`, and run the migration again for the
-final user. Data migrated under one UID is not automatically moved to another.
+This sign-in creates the permanent Firebase Authentication identity but does
+not read or write Firestore. It is independent of the Google authorization
+that the current app uses for Sheets and Calendar.
 
 Do not use an email address, Google account ID, Firebase project ID, or service
 account ID as `FIREBASE_USER_ID`.
 
-## 4. Create the Firebase service-account key
+## 5. Create the Firebase service-account key
 
 The workflow needs a private key for administrative Firestore writes and for
 checking that `FIREBASE_USER_ID` exists:
@@ -79,7 +102,7 @@ least-privilege project roles in Google Cloud IAM:
 Never commit the JSON key. Delete the local copy after storing it in GitHub if
 it is no longer needed.
 
-## 5. Prepare Google Sheets access
+## 6. Prepare Google Sheets access
 
 The migration also needs a Google service-account key:
 

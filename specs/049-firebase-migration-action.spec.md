@@ -77,3 +77,6 @@ authentication, and scheduled sync jobs switch backends.
 - The guide distinguishes temporary validation UIDs from the final
   Google-authenticated user UID because Firestore data is scoped to the exact
   `/users/{uid}` path and is not automatically transferred between users.
+- The existing Google Sheets UI exposes an Authentication-only bootstrap in
+  Settings so users can create and copy their final Firebase UID before any
+  Firestore migration or application-backend switch.

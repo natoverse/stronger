@@ -1,5 +1,8 @@
+import { lazy, Suspense } from 'react';
 import { Sliders, LogOut } from 'lucide-react';
 import type { AppSettings, AppBooleanSettingKey, AppNumericSettingKey } from '../model/index.js';
+
+const FirebaseMigrationIdentity = lazy(() => import('./FirebaseMigrationIdentity.js'));
 
 interface Props {
   onSignOut: () => void;
@@ -362,6 +365,10 @@ export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onApp
         </div>
 
       </div>
+
+      <Suspense fallback={<div className="settings-section settings-section-firebase">Loading Firebase identity...</div>}>
+        <FirebaseMigrationIdentity />
+      </Suspense>
 
       <div className="settings-section settings-section-disconnect">
         <h3 className="settings-section-title">
