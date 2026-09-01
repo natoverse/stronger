@@ -561,10 +561,10 @@ export function CalendarView({
 		for (const entry of workoutSchedule) {
 			if (!entry.workoutId || seen.has(entry.workoutId)) continue;
 			seen.add(entry.workoutId);
-			types.push({ id: entry.workoutId, name: workoutNames.get(entry.workoutId) ?? entry.workoutId });
+			types.push({ id: entry.workoutId, name: displayWorkoutName(entry.workoutId) });
 		}
 		return types.sort((a, b) => a.name.localeCompare(b.name));
-	}, [workoutSchedule, workoutNames]);
+	}, [workoutSchedule, displayWorkoutName]);
 	const [selectedWorkoutTypes, setSelectedWorkoutTypes] = useState<Set<string>>(
 		() => new Set(scheduledTypes.map((type) => type.id)),
 	);
@@ -920,7 +920,7 @@ export function CalendarView({
 										const deleteKey = session ? sessionKeyStr(session) : null;
 										const isConfirming = deleteKey !== null && confirmDeleteKey === deleteKey;
 										const Icon = isRest ? Moon : isCardio ? HeartPulse : Dumbbell;
-										const workoutName = workoutNames.get(wid) ?? wid;
+										const workoutName = displayWorkoutName(wid);
 										const customLabel = dayInfo.labels?.[wid];
 										const displayName = customLabel || workoutName;
 										const isEditingThisLabel = !isRest
