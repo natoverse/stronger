@@ -94,3 +94,9 @@ authentication, and scheduled sync jobs switch backends.
   in the Firebase destination project and Google Sheets API in the source
   service account's project. `SERVICE_DISABLED` errors are distinguished from
   IAM permission errors in the setup guide.
+- `FIREBASE_SETUP.md` is the canonical project and runtime setup guide. The
+  migration is documented there as a final manual, one-time special case
+  rather than as the primary Firebase setup path.
+- The rollout uses a trusted-forks administration model. Fork owners who hold
+  the Firebase service-account key have project-wide administrative access;
+  per-user UIDs prevent accidental targeting but are not an IAM boundary.

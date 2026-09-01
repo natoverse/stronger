@@ -12,7 +12,10 @@ A barbell training tracker. Single-page React app, Google Sheets as the database
 
 ## Setup
 
-You need a Google Cloud project with OAuth credentials. See **[Google OAuth Setup](GOOGLE_SETUP.md)** for step-by-step instructions.
+For the current Google Sheets application, see
+**[Google OAuth Setup](GOOGLE_SETUP.md)**. For the Firebase backend rollout,
+shared project configuration, and one-time migration, see
+**[Firebase Setup](FIREBASE_SETUP.md)**.
 
 ## Development model
 
@@ -30,5 +33,6 @@ React 19 · TypeScript 5.7 · Vite 6 · Vitest · Google Sheets API · GitHub Pa
 |------|---------|
 | [MANIFESTO.md](MANIFESTO.md) | Vision, principles, scope |
 | [GOOGLE_SETUP.md](GOOGLE_SETUP.md) | OAuth and Sheets configuration |
+| [FIREBASE_SETUP.md](FIREBASE_SETUP.md) | Firebase runtime, administration, and migration setup |
 | [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) | Activity data sync from Garmin Connect |
 | [AGENTS.md](AGENTS.md) | Operational notes for AI agents |

@@ -46,3 +46,5 @@ identity and must not read, write, or initialize Cloud Firestore.
 - Firebase web configuration is embedded during the Vite build, so repository
   secret changes require a new GitHub Pages deployment before the Settings
   bootstrap becomes available.
+- Bootstrap, authorized-domain, and per-fork configuration instructions live
+  in the canonical `FIREBASE_SETUP.md` runtime guide.
