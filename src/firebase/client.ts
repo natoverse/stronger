@@ -27,4 +27,3 @@ export const firestore = (() => {
 		return getFirestore(app)
 	}
 })()
-

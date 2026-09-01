@@ -29,4 +29,3 @@ export async function signInToStronger(): Promise<User> {
 export function signOutOfStronger(): Promise<void> {
 	return firebaseSignOut(firebaseAuth)
 }
-
