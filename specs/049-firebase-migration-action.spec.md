@@ -65,3 +65,15 @@ authentication, and scheduled sync jobs switch backends.
 - `withingsMeasurements`
 - `settings/app`
 - `migrations/{migrationId}`
+
+## Iteration Decisions
+
+- The operator guide now explicitly requires a Standard Firestore
+  **`(default)`** database in production mode. Migration service-account
+  requests are authorized by IAM and do not require permissive Firestore
+  security rules.
+- A custom migration service account needs Cloud Datastore User for document
+  access and Firebase Authentication Viewer to validate the destination UID.
+- The guide distinguishes temporary validation UIDs from the final
+  Google-authenticated user UID because Firestore data is scoped to the exact
+  `/users/{uid}` path and is not automatically transferred between users.
