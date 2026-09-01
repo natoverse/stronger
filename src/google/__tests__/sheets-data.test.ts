@@ -132,6 +132,12 @@ describe('rowToLiftConfig', () => {
 		expect(blank!.warmupRoundingFactor).toBe(5);
 	});
 
+	it('defaults warmupRoundingFactor to 5 when a legacy column J value is not a valid weight', () => {
+		const config = rowToLiftConfig(['bench', 'Bench', '200', '170', '2.5', '95', '2.5', '45', 'barbell', 'legacy note']);
+		expect(config).not.toBeNull();
+		expect(config!.warmupRoundingFactor).toBe(5);
+	});
+
 	it('parses gear type case-insensitively', () => {
 		const config = rowToLiftConfig(['bench', 'Bench', '200', '170', '2.5', '95', '5', '45', 'Barbell']);
 		expect(config).not.toBeNull();
