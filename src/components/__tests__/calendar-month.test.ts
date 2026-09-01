@@ -157,4 +157,43 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain(`Remove ${nextMonthLabel}`);
 		expect(markup).toContain(`Remove ${followingMonthLabel}`);
 	});
+
+	it('uses definition names when a scheduled workout is unavailable for execution', () => {
+		const now = new Date();
+		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+		const markup = renderToStaticMarkup(createElement(CalendarView, {
+			workouts: [],
+			workoutDefinitions: [{ id: 'workout-a', name: 'Strength A' }],
+			cardioActivities: [],
+			workoutSchedule: [{ date: `${monthPrefix}-15`, workoutId: 'workout-a' }],
+			dayFlags: [],
+			logRows: [],
+			onAssign: () => undefined,
+			onRemove: () => undefined,
+			onUpdateLabel: () => undefined,
+			onOpenWorkout: () => undefined,
+			onUpdateLogRows: () => undefined,
+			onDeleteSession: () => undefined,
+			onBulkSchedule: () => undefined,
+			onUpdateFlags: () => undefined,
+			onSyncCalendar: async () => ({
+				created: 0,
+				updated: 0,
+				deleted: 0,
+				pulledCreations: 0,
+				pulledDateChanges: 0,
+				pulledDeletions: 0,
+				errors: [],
+			}),
+			onClearSchedule: async () => ({
+				flagsCleared: 0,
+				scheduleCleared: 0,
+				calendarEventsDeleted: 0,
+				errors: [],
+			}),
+		}));
+
+		expect(markup).toContain('>Strength A</span>');
+		expect(markup).not.toContain('>workout-a</span>');
+	});
 });

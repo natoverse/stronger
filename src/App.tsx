@@ -1476,6 +1476,7 @@ function AppContent() {
         />
         <CalendarView
           workouts={workouts}
+          workoutDefinitions={definitions}
           cardioActivities={cardioActivities}
           workoutSchedule={workoutSchedule}
           dayFlags={dayFlags}

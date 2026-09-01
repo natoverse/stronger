@@ -9,6 +9,7 @@ import type { ClearOptions, ClearResult } from './CalendarClear.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
+	workoutDefinitions?: ReadonlyArray<{ id: string; name: string }>;
 	cardioActivities: CardioActivity[];
 	workoutSchedule: WorkoutScheduleEntry[];
 	dayFlags: DayFlagEntry[];
@@ -470,6 +471,7 @@ export function SessionDetail({
 
 export function CalendarView({
 	workouts,
+	workoutDefinitions = [],
 	cardioActivities,
 	workoutSchedule,
 	dayFlags,
@@ -535,6 +537,9 @@ export function CalendarView({
 	// Build a map of workoutId → workout name for display
 	const workoutNames = useMemo(() => {
 		const map = new Map<string, string>();
+		for (const definition of workoutDefinitions) {
+			map.set(definition.id, definition.name);
+		}
 		for (const w of workouts) {
 			map.set(w.id, w.name);
 		}
@@ -543,7 +548,7 @@ export function CalendarView({
 		}
 		map.set(REST_ID, 'Rest');
 		return map;
-	}, [workouts, cardioActivities]);
+	}, [workouts, workoutDefinitions, cardioActivities]);
 	const displayWorkoutName = useCallback(
 		(workoutId: string) =>
 			workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId),
