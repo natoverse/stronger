@@ -8,13 +8,13 @@ Google OAuth remains separately configured for Calendar access. Google Sheets
 remains the ingestion ledger for the scheduled Garmin and Withings jobs during
 the Firebase transition.
 
-> **Trusted-forks security model:** every fork owner who receives
-> `FIREBASE_SERVICE_ACCOUNT_KEY` is a trusted administrator of the entire
-> shared Firebase project. Service-account requests bypass Firestore security
-> rules and can access every user's data, not only the UID configured in that
-> fork. UID isolation protects browser sessions; it does not restrict
-> administrative workflow credentials. Do not distribute this key to
-> untrusted users or public fork owners.
+> **OSS and trusted-forks security model:** public forks do not inherit
+> repository secrets and have no access to the shared Firebase project by
+> default. The project maintainer manually adds the Firebase configuration and
+> service-account key only to approved friends-and-family forks. Owners of
+> those provisioned forks are trusted administrators because they control
+> workflows that can use the key. Service-account requests bypass Firestore
+> rules and can access every user's data, not only the configured UID.
 
 ## 1. Create the Firebase project
 
@@ -26,8 +26,9 @@ the Firebase transition.
 4. Under **Your apps**, add a web application and record its Firebase
    configuration object.
 
-All Stronger forks that share the same Firestore database use this same
-Firebase project and web application configuration.
+An independent OSS deployment should create its own Firebase project. Only
+explicitly approved friends-and-family forks use the shared project and web
+application configuration.
 
 ## 2. Enable the required Google Cloud APIs
 
@@ -182,15 +183,17 @@ In that case, the same JSON may be stored in both service-account secrets.
 Never commit a service-account key. Delete the local copy after storing it if
 it is no longer needed.
 
-## 8. Configure each user or fork
+## 8. Configure each approved shared-project fork
 
-Every fork uses the shared Firebase web configuration but has its own
-spreadsheet and Firebase UID.
+Public forks receive no upstream secrets. For each approved friends-and-family
+fork, the shared-project maintainer manually adds the common Firebase
+configuration and administrative key. That fork has its own spreadsheet and
+Firebase UID.
 
 | Secret | Scope | Purpose |
 |---|---|---|
 | `VITE_FIREBASE_*` | Shared | Browser Firebase project configuration |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | Shared, trusted administrators only | Project-wide administrative Firestore writes |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Manually added to approved trusted forks only | Project-wide administrative Firestore writes |
 | `GOOGLE_SERVICE_ACCOUNT_KEY` | Per fork or shared | Reads the user's sheet; scheduled health jobs may also write their ledger tabs |
 | `SPREADSHEET_ID` | Per user | Source Google spreadsheet |
 | `FIREBASE_USER_ID` | Per user | Destination `/users/{uid}` path and scheduled sync owner |
@@ -216,6 +219,10 @@ Configuring a unique `FIREBASE_USER_ID` prevents the provided workflows from
 accidentally targeting another user's tree. It is not a security boundary for
 a fork owner who possesses the service-account key, because that owner can
 modify their workflow or script.
+
+Random public forks cannot use the upstream repository's secrets. They must
+configure their own Firebase project or receive explicit shared-project
+provisioning from the maintainer.
 
 ## 9. Scheduled health synchronization
 

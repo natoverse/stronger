@@ -97,6 +97,8 @@ authentication, and scheduled sync jobs switch backends.
 - `FIREBASE_SETUP.md` is the canonical project and runtime setup guide. The
   migration is documented there as a final manual, one-time special case
   rather than as the primary Firebase setup path.
-- The rollout uses a trusted-forks administration model. Fork owners who hold
-  the Firebase service-account key have project-wide administrative access;
-  per-user UIDs prevent accidental targeting but are not an IAM boundary.
+- Public OSS forks inherit no shared-project secrets. The maintainer manually
+  provisions only approved friends-and-family forks with the shared Firebase
+  configuration and service-account key. Those fork owners are trusted
+  administrators with project-wide access; per-user UIDs prevent accidental
+  targeting but are not an IAM boundary.
