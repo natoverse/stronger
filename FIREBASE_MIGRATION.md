@@ -15,6 +15,72 @@ It is manual-only and defaults to a dry run.
 The migration script takes its destination project from the Firebase service
 account key. There is no separate Firebase project ID secret.
 
+## Required Google Cloud APIs
+
+Enable the APIs before completing the migration setup. The service-account
+JSON files identify the projects where the APIs must be enabled through their
+`project_id` fields.
+
+| API | Service name | Required for | Enable in |
+|---|---|---|---|
+| Cloud Firestore API | `firestore.googleapis.com` | Real migration | Firebase destination project |
+| Identity Toolkit API | `identitytoolkit.googleapis.com` | Real migration UID validation | Firebase destination project |
+| Google Sheets API | `sheets.googleapis.com` | Dry run and real migration | Project that owns the Google Sheets service account |
+
+If the same service account and Google Cloud project are used for both source
+Sheets access and Firebase, enable all three APIs in that project.
+
+A true dry run stops after reading and validating the spreadsheet and does not
+call a `firestore.googleapis.com` URL. A Firestore API error therefore occurs
+only after the workflow has entered the real migration path.
+
+### Enable through Google Cloud Console
+
+1. Open **Google Cloud Console -> APIs & Services -> Library**.
+2. Select the Firebase destination project in the project selector.
+3. Search for **Cloud Firestore API**, open it, and select **Enable**.
+4. Search for **Identity Toolkit API**, open it, and select **Enable**.
+5. Select the project whose ID appears in
+   `GOOGLE_SERVICE_ACCOUNT_KEY.project_id`.
+6. Search for **Google Sheets API**, open it, and select **Enable**.
+7. Wait several minutes for service activation to propagate before rerunning
+   the workflow.
+
+Enabling APIs requires permission such as **Service Usage Admin** on the
+corresponding Google Cloud project.
+
+### Enable through Google Cloud CLI
+
+Replace the project placeholders with the `project_id` values from the two
+service-account JSON files:
+
+```bash
+gcloud services enable \
+  firestore.googleapis.com \
+  identitytoolkit.googleapis.com \
+  --project=YOUR_FIREBASE_PROJECT_ID
+
+gcloud services enable \
+  sheets.googleapis.com \
+  --project=YOUR_GOOGLE_SERVICE_ACCOUNT_PROJECT_ID
+```
+
+Verify the destination services:
+
+```bash
+gcloud services list --enabled \
+  --project=YOUR_FIREBASE_PROJECT_ID \
+  | grep -E 'firestore.googleapis.com|identitytoolkit.googleapis.com'
+```
+
+Verify the source service:
+
+```bash
+gcloud services list --enabled \
+  --project=YOUR_GOOGLE_SERVICE_ACCOUNT_PROJECT_ID \
+  | grep 'sheets.googleapis.com'
+```
+
 ## 2. Create the Firestore database
 
 1. In the Firebase console, open
@@ -219,7 +285,8 @@ other users, Firebase Authentication records, or the source spreadsheet.
 | Error or symptom | Resolution |
 |---|---|
 | Firestore request returns `404` | Create the Standard **`(default)`** database in the same project named by the Firebase key. |
-| Firestore or Authentication request returns `403` | Check the service account's IAM roles. New role grants can take several minutes to apply. |
+| A `403` response contains `SERVICE_DISABLED` | Enable the API named in `metadata.service` in the project named by `metadata.consumer`, wait several minutes, then retry. For Firestore this is `firestore.googleapis.com` in the Firebase destination project. |
+| Firestore or Authentication returns `403` without `SERVICE_DISABLED` | Check the service account's IAM roles. New role grants can take several minutes to apply. |
 | Authentication user does not exist | Copy the exact UID from **Authentication -> Users** and confirm that user and the service-account key belong to the same Firebase project. |
 | Settings reports that Firebase is not configured | Add all six `VITE_FIREBASE_*` repository secrets, then rerun the GitHub Pages deployment so Vite can embed them. |
 | Firebase sign-in reports an unauthorized domain | Add the deployment hostname, such as `example.github.io`, under **Authentication -> Settings -> Authorized domains**. |

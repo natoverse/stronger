@@ -90,3 +90,7 @@ authentication, and scheduled sync jobs switch backends.
 - The deprecated Strava sheet is not read or migrated. Runtime activity views
   consume Garmin data; legacy `StravaActivity` names remain only as shared
   model and chart terminology.
+- Operators must explicitly enable Cloud Firestore and Identity Toolkit APIs
+  in the Firebase destination project and Google Sheets API in the source
+  service account's project. `SERVICE_DISABLED` errors are distinguished from
+  IAM permission errors in the setup guide.
