@@ -1,0 +1,45 @@
+name: Migrate Google Sheet to Firebase
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Read and validate data without writing to Firestore
+        type: boolean
+        default: true
+      replace_existing:
+        description: Delete existing migrated collections before writing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test migration mappings
+        run: node --test scripts/test_firebase_migrate.mjs
+
+      - name: Migrate sheet data
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          REPLACE_EXISTING: ${{ inputs.replace_existing }}
+        run: node scripts/firebase-migrate.mjs
