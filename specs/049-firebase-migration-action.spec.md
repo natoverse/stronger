@@ -97,3 +97,15 @@ authentication, and scheduled sync jobs switch backends.
 - The deprecated Strava sheet is not read or migrated. Runtime activity views
   consume Garmin data; legacy `StravaActivity` names remain only as shared
   model and chart terminology.
+- Operators must explicitly enable Cloud Firestore and Identity Toolkit APIs
+  in the Firebase destination project and Google Sheets API in the source
+  service account's project. `SERVICE_DISABLED` errors are distinguished from
+  IAM permission errors in the setup guide.
+- `FIREBASE_SETUP.md` is the canonical project and runtime setup guide. The
+  migration is documented there as a final manual, one-time special case
+  rather than as the primary Firebase setup path.
+- Public OSS forks inherit no shared-project secrets. The maintainer manually
+  provisions only approved friends-and-family forks with the shared Firebase
+  configuration and service-account key. Those fork owners are trusted
+  administrators with project-wide access; per-user UIDs prevent accidental
+  targeting but are not an IAM boundary.
