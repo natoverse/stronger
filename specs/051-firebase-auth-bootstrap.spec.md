@@ -15,20 +15,20 @@ identity and must not read, write, or initialize Cloud Firestore.
 
 ## Acceptance Criteria
 
-- [ ] Settings shows a Firebase Migration Identity section.
-- [ ] The section reports when the Firebase web application is not configured.
-- [ ] Google sign-in creates or restores the user's permanent Firebase
+- [x] Settings shows a Firebase Migration Identity section.
+- [x] The section reports when the Firebase web application is not configured.
+- [x] Google sign-in creates or restores the user's permanent Firebase
       Authentication account.
-- [ ] The signed-in email and exact Firebase UID are displayed.
-- [ ] The UID can be copied for use as `FIREBASE_USER_ID`.
-- [ ] A user can choose a different Google account if the wrong one was used.
-- [ ] Firebase Authentication persists across page reloads.
-- [ ] Firebase sign-in does not disconnect or replace the current Google Sheets
+- [x] The signed-in email and exact Firebase UID are displayed.
+- [x] The UID can be copied for use as `FIREBASE_USER_ID`.
+- [x] A user can choose a different Google account if the wrong one was used.
+- [x] Firebase Authentication persists across page reloads.
+- [x] Firebase sign-in does not disconnect or replace the current Google Sheets
       session.
-- [ ] The bootstrap imports no Firestore client and performs no Firestore
+- [x] The bootstrap imports no Firestore client and performs no Firestore
       operations.
-- [ ] GitHub Pages builds receive the required `VITE_FIREBASE_*` configuration.
-- [ ] Setup documentation covers authorized domains for the primary site and
+- [x] GitHub Pages builds receive the required `VITE_FIREBASE_*` configuration.
+- [x] Setup documentation covers authorized domains for the primary site and
       fork deployments.
 
 ## Out of Scope
@@ -38,3 +38,11 @@ identity and must not read, write, or initialize Cloud Firestore.
 - Replacing Google Sheets as the application data backend.
 - Managing other users' Firebase Authentication records.
 
+## Iteration Decisions
+
+- Every fork uses the same Firebase web configuration when users share one
+  Firebase project, but each fork stores its own migration UID and spreadsheet
+  ID.
+- Firebase web configuration is embedded during the Vite build, so repository
+  secret changes require a new GitHub Pages deployment before the Settings
+  bootstrap becomes available.

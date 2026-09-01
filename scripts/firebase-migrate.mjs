@@ -569,13 +569,25 @@ function parseWithingsRow(row) {
 	}
 }
 
-function documents(values, getId) {
+function documents(values, getId, { label, duplicatePolicy = 'error', warnings }) {
 	const byId = new Map()
+	let duplicateCount = 0
 	values.forEach((data, index) => {
 		const id = getId(data, index)
-		if (byId.has(id)) throw new Error(`Duplicate generated document ID: ${id}`)
+		if (byId.has(id)) {
+			if (duplicatePolicy === 'keep-last') {
+				duplicateCount += 1
+			} else {
+				throw new Error(`${label}: duplicate generated document ID: ${id}`)
+			}
+		}
 		byId.set(id, data)
 	})
+	if (duplicateCount > 0) {
+		warnings.push(
+			`${label}: collapsed ${duplicateCount} duplicate row${duplicateCount === 1 ? '' : 's'} by document ID; kept the last valid row.`,
+		)
+	}
 	return [...byId].map(([id, data]) => ({ id, data }))
 }
 
@@ -639,28 +651,64 @@ export function buildMigrationPlan(
 		const value = text(row[1])
 		if (key && value) settings.set(key, value)
 	}
+	const planDocuments = (label, source, getId, duplicatePolicy = 'error') =>
+		documents(source, getId, { label, duplicatePolicy, warnings })
 
 	const plan = {
-		...(requested.has('exercises') ? { exercises: documents(values.exercises, (item) => idPart(item.id)) } : {}),
-		...(requested.has('workouts') ? { workouts: documents(values.workouts, (item) => idPart(item.id)) } : {}),
-		...(!requested.has('workoutSessions') || values.workoutSessions == null ? {} : { workoutSessions: documents(values.workoutSessions, logDocumentId) }),
-		...(!requested.has('dayFlags') || values.dayFlags == null ? {} : { dayFlags: documents(values.dayFlags, (item) => item.date) }),
-		...(!requested.has('schedule') || values.schedule == null ? {} : { schedule: documents(values.schedule, scheduleDocumentId) }),
-		...(!requested.has('cardioActivities') || values.cardioActivities == null ? {} : { cardioActivities: documents(values.cardioActivities, (item) => idPart(item.id)) }),
-		...(!requested.has('mealItems') || values.mealItems == null ? {} : { mealItems: documents(values.mealItems, (item) => idPart(item.id)) }),
-		...(!requested.has('mealLog') || values.mealLog == null ? {} : { mealLog: documents(values.mealLog, (item) => idPart(item.id)) }),
-		...(!requested.has('favoriteFoods') || values.favoriteFoods == null ? {} : { favoriteFoods: documents(values.favoriteFoods, (item) => idPart(item.code)) }),
+		...(requested.has('exercises') ? {
+			exercises: planDocuments('Exercises', values.exercises, (item) => idPart(item.id)),
+		} : {}),
+		...(requested.has('workouts') ? {
+			workouts: planDocuments('Workouts', values.workouts, (item) => idPart(item.id)),
+		} : {}),
+		...(!requested.has('workoutSessions') || values.workoutSessions == null ? {} : {
+			workoutSessions: planDocuments('Workout log', values.workoutSessions, logDocumentId),
+		}),
+		...(!requested.has('dayFlags') || values.dayFlags == null ? {} : {
+			dayFlags: planDocuments('Day flags', values.dayFlags, (item) => item.date, 'keep-last'),
+		}),
+		...(!requested.has('schedule') || values.schedule == null ? {} : {
+			schedule: planDocuments('Workout schedule', values.schedule, scheduleDocumentId),
+		}),
+		...(!requested.has('cardioActivities') || values.cardioActivities == null ? {} : {
+			cardioActivities: planDocuments('Cardio', values.cardioActivities, (item) => idPart(item.id)),
+		}),
+		...(!requested.has('mealItems') || values.mealItems == null ? {} : {
+			mealItems: planDocuments('Meal items', values.mealItems, (item) => idPart(item.id)),
+		}),
+		...(!requested.has('mealLog') || values.mealLog == null ? {} : {
+			mealLog: planDocuments('Meal log', values.mealLog, (item) => idPart(item.id)),
+		}),
+		...(!requested.has('favoriteFoods') || values.favoriteFoods == null ? {} : {
+			favoriteFoods: planDocuments('Favorite foods', values.favoriteFoods, (item) => idPart(item.code)),
+		}),
 		...(!requested.has('recentFoods') || values.recentFoods == null ? {} : {
-			recentFoods: documents(
+			recentFoods: planDocuments(
+				'Recent foods',
 				values.recentFoods.map((item, index) => ({ ...item, _recentOrder: index })),
 				(item) => idPart(item.code),
 			),
 		}),
-		...(!requested.has('stravaActivities') || values.stravaActivities == null ? {} : { stravaActivities: documents(values.stravaActivities, (item) => idPart(item.stravaId)) }),
-		...(!requested.has('garminActivities') || values.garminActivities == null ? {} : { garminActivities: documents(values.garminActivities, (item) => idPart(item.stravaId)) }),
-		...(!requested.has('garminWellness') || values.garminWellness == null ? {} : { garminWellness: documents(values.garminWellness, (item) => item.date) }),
-		...(!requested.has('withingsMeasurements') || values.withingsMeasurements == null ? {} : { withingsMeasurements: documents(values.withingsMeasurements, (item) => idPart(item.grpId)) }),
-		...(!requested.has('settings') || rows.settings == null ? {} : { settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }] }),
+		...(!requested.has('stravaActivities') || values.stravaActivities == null ? {} : {
+			stravaActivities: planDocuments('Strava', values.stravaActivities, (item) => idPart(item.stravaId)),
+		}),
+		...(!requested.has('garminActivities') || values.garminActivities == null ? {} : {
+			garminActivities: planDocuments('Garmin', values.garminActivities, (item) => idPart(item.stravaId)),
+		}),
+		...(!requested.has('garminWellness') || values.garminWellness == null ? {} : {
+			garminWellness: planDocuments(
+				'Garmin wellness',
+				values.garminWellness,
+				(item) => item.date,
+				'keep-last',
+			),
+		}),
+		...(!requested.has('withingsMeasurements') || values.withingsMeasurements == null ? {} : {
+			withingsMeasurements: planDocuments('Withings', values.withingsMeasurements, (item) => idPart(item.grpId)),
+		}),
+		...(!requested.has('settings') || rows.settings == null ? {} : {
+			settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }],
+		}),
 	}
 	return { plan, warnings }
 }

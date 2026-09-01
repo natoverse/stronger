@@ -87,3 +87,8 @@ authentication, and scheduled sync jobs switch backends.
   collections.
 - Scheduled mirrors use collection-specific migration status IDs so concurrent
   health workflows do not overwrite the one-time migration record.
+- Historical Day Flags and Garmin Wellness tabs can contain repeated dates.
+  Migration collapses those one-document-per-day collections by keeping the
+  last valid row and emitting a warning; duplicate IDs remain fatal for other
+  collections. Workout Schedule entries remain distinct by `strongerId` or by
+  their date, workout, and label, so multiple workouts on one day are retained.

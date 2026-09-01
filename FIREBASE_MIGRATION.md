@@ -39,19 +39,21 @@ the `/users/{uid}` document tree when it writes the first migration.
 
 Create a web application under
 **Project settings -> General -> Your apps -> Add app -> Web**. Copy its
-configuration values into these repository secrets:
+configuration values into these repository secrets in every fork that will
+use the shared Firebase project:
 
-```text
-VITE_FIREBASE_API_KEY
-VITE_FIREBASE_AUTH_DOMAIN
-VITE_FIREBASE_PROJECT_ID
-VITE_FIREBASE_STORAGE_BUCKET
-VITE_FIREBASE_MESSAGING_SENDER_ID
-VITE_FIREBASE_APP_ID
-```
+| Firebase configuration field | Repository secret |
+|---|---|
+| `apiKey` | `VITE_FIREBASE_API_KEY` |
+| `authDomain` | `VITE_FIREBASE_AUTH_DOMAIN` |
+| `projectId` | `VITE_FIREBASE_PROJECT_ID` |
+| `storageBucket` | `VITE_FIREBASE_STORAGE_BUCKET` |
+| `messagingSenderId` | `VITE_FIREBASE_MESSAGING_SENDER_ID` |
+| `appId` | `VITE_FIREBASE_APP_ID` |
 
 These values identify the public Firebase web application; they are not
-service-account credentials.
+service-account credentials. Every fork should use the same values when all
+users are migrating into the same shared Firebase project.
 
 Open **Authentication -> Sign-in method**, enable **Google**, select the
 project support email, and save the provider configuration.
@@ -61,19 +63,35 @@ where each Stronger deployment runs. The primary GitHub Pages deployment uses
 `natoverse.github.io`. A fork deployed from the `example` GitHub account uses
 `example.github.io`. Add `localhost` separately when local sign-in is needed.
 
+After adding the repository secrets, run or wait for the fork's
+**Deploy to GitHub Pages** workflow. Vite embeds these values at build time, so
+an already-deployed build will continue to report that Firebase is not
+configured until it is rebuilt.
+
 ## 4. Create the Firebase Authentication user
 
-The destination path is tied to a Firebase Authentication UID. In the Firebase
-current Google Sheets-backed Stronger app:
+The destination path is tied to a Firebase Authentication UID. The existing
+Google Sheets-backed UI can create the final identity without accessing
+Firestore:
 
-1. Open **Settings -> Firebase Migration Identity**.
-2. Select **Create Firebase migration ID**.
-3. Sign in with the Google account that will use the Firebase-backed app.
-4. Copy the displayed Firebase UID and save it as `FIREBASE_USER_ID`.
+1. Open the deployed Stronger site and connect the user's Google Sheet normally.
+2. Open **Settings -> Firebase Migration Identity**.
+3. Select **Create Firebase migration ID**.
+4. Sign in with the Google account that will use the Firebase-backed app.
+5. Verify the displayed email, then copy the Firebase UID.
+6. Save that UID as `FIREBASE_USER_ID` in that user's fork.
 
 This sign-in creates the permanent Firebase Authentication identity but does
 not read or write Firestore. It is independent of the Google authorization
 that the current app uses for Sheets and Calendar.
+
+Each person must complete this sign-in with their own Google account. Firebase
+assigns each account a different UID, so migrations from separate forks write
+to separate `/users/{uid}` trees in the shared database. Returning users who
+select the same Google account receive the same UID.
+
+If the wrong account was selected, choose **Choose another Google account** in
+the same Settings section before copying the UID.
 
 Do not use an email address, Google account ID, Firebase project ID, or service
 account ID as `FIREBASE_USER_ID`.
@@ -187,6 +205,9 @@ other users, Firebase Authentication records, or the source spreadsheet.
 | Firestore request returns `404` | Create the Standard **`(default)`** database in the same project named by the Firebase key. |
 | Firestore or Authentication request returns `403` | Check the service account's IAM roles. New role grants can take several minutes to apply. |
 | Authentication user does not exist | Copy the exact UID from **Authentication -> Users** and confirm that user and the service-account key belong to the same Firebase project. |
+| Settings reports that Firebase is not configured | Add all six `VITE_FIREBASE_*` repository secrets, then rerun the GitHub Pages deployment so Vite can embed them. |
+| Firebase sign-in reports an unauthorized domain | Add the deployment hostname, such as `example.github.io`, under **Authentication -> Settings -> Authorized domains**. |
+| Dry run warns that duplicate Day Flags or Garmin Wellness rows were collapsed | These collections support one document per date. The migration keeps the last valid sheet row for each repeated date and reports how many rows were collapsed. |
 | Google Sheets request returns `403` | Share the spreadsheet with the Google key's `client_email` as Viewer. |
 | A service-account secret is reported as invalid JSON | Store the complete raw JSON file as the secret; do not base64-encode it or paste a filename. |
 | Required sheet tab is missing or empty | Ensure `Stronger - Exercises` and `Stronger - Workouts` exist and contain data. |
