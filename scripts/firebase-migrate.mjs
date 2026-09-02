@@ -203,14 +203,51 @@ export function idPart(value) {
 	return encodeURIComponent(String(value)).replaceAll('.', '%2E')
 }
 
-export function logDocumentId(row) {
-	return [
-		idPart(row.startTime),
-		idPart(row.liftId || row.exerciseName),
-		idPart(row.exerciseName),
-		row.setNumber,
-		...(row._migrationSourceRow == null ? [] : [`row-${row._migrationSourceRow}`]),
-	].join('_')
+export function workoutSessionDocumentId(session) {
+	return idPart(`${session.date}:${session.startTime}:${session.workoutId}`)
+}
+
+export function groupWorkoutSessions(rows) {
+	const sessions = new Map()
+	for (const row of rows) {
+		const sessionId = workoutSessionDocumentId(row)
+		if (!sessions.has(sessionId)) {
+			sessions.set(sessionId, {
+				date: row.date,
+				startTime: row.startTime,
+				endTime: row.endTime,
+				workoutId: row.workoutId,
+				exercises: [],
+			})
+		}
+
+		const session = sessions.get(sessionId)
+		if (row.endTime) session.endTime = row.endTime
+		const previousExercise = session.exercises.at(-1)
+		const previousSet = previousExercise?.sets.at(-1)
+		const sameExercise = previousExercise
+			&& previousExercise.liftId === row.liftId
+			&& previousExercise.exerciseName === row.exerciseName
+			&& row.setNumber > previousSet.setNumber
+		const exercise = sameExercise
+			? previousExercise
+			: {
+				liftId: row.liftId,
+				exerciseName: row.exerciseName,
+				sets: [],
+			}
+		if (!sameExercise) session.exercises.push(exercise)
+		exercise.sets.push({
+			setNumber: row.setNumber,
+			setType: row.setType,
+			plannedWeight: row.plannedWeight,
+			plannedReps: row.plannedReps,
+			actualWeight: row.actualWeight,
+			actualReps: row.actualReps,
+			completed: row.completed,
+		})
+	}
+	return [...sessions.values()]
 }
 
 export function scheduleDocumentId(entry) {
@@ -577,7 +614,7 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 				return parsed ? { ...parsed, _migrationSourceRow: row.at(-1) } : null
 			},
 			'Workout log',
-		),
+		).sort((left, right) => left._migrationSourceRow - right._migrationSourceRow),
 		dayFlags: optionalRows('dayFlags', parseDayFlagRow, 'Day flags'),
 		schedule: optionalRows('schedule', parseScheduleRow, 'Workout schedule'),
 		cardioActivities: optionalRows('cardio', parseCardioRow, 'Cardio', true),
@@ -602,7 +639,11 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		exercises: planDocuments('Exercises', values.exercises, (item) => idPart(item.id)),
 		workouts: planDocuments('Workouts', values.workouts, (item) => idPart(item.id)),
 		...(values.workoutSessions == null ? {} : {
-			workoutSessions: planDocuments('Workout log', values.workoutSessions, logDocumentId),
+			workoutSessions: planDocuments(
+				'Workout sessions',
+				groupWorkoutSessions(values.workoutSessions),
+				workoutSessionDocumentId,
+			),
 		}),
 		...(values.dayFlags == null ? {} : {
 			dayFlags: planDocuments('Day flags', values.dayFlags, (item) => item.date, 'keep-last'),
