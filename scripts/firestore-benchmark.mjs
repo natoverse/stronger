@@ -127,13 +127,11 @@ export function renderReport({ tabs, datasets, iterations }) {
 	const lines = [
 		`# Sheets vs Firestore cold-load benchmark (${iterations} iteration${iterations === 1 ? '' : 's'})`,
 		'',
-		'| Tab | Backend | Median cold load | Sheets/Firestore ratio | Logical records | Firestore docs | Datasets loaded |',
-		'| --- | --- | --- | --- | --- | --- | --- |',
+		'| Tab | Sheets cold load | Firestore cold load | Sheets records | Firestore documents |',
+		'| --- | --- | --- | --- | --- |',
 	]
 	for (const tab of tabs) {
-		const ratio = formatRatio(tab.sheets, tab.firestore)
-		lines.push(`| ${tab.label} | Sheets | ${formatResult(tab.sheets)} | ${ratio} | ${formatCount(tab.sheets.count)} | — | ${tab.datasetNames.join(', ')} |`)
-		lines.push(`| ${tab.label} | Firestore | ${formatResult(tab.firestore)} | ${ratio} | ${formatCount(tab.firestore.count)} | ${formatCount(tab.firestore.documents)} | ${tab.datasetNames.join(', ')} |`)
+		lines.push(`| ${tab.label} | ${formatResult(tab.sheets)} | ${formatResult(tab.firestore)} | ${formatCount(tab.sheets.count)} | ${formatCount(tab.firestore.documents)} |`)
 	}
 
 	lines.push(
