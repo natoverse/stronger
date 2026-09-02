@@ -26,6 +26,8 @@ the migrated Firestore documents.
       load plan.
 - [x] Firestore cold loads fetch only the current-year document for yearly
       bucket datasets; older years are excluded from cold-load timing.
+- [x] Firestore cold loads fetch only the next 60 calendar days for schedule
+      and day-flag documents.
 - [x] All Sheets reads required by a tab run concurrently in one timed
       `Promise.all` batch, followed by a separately timed concurrent Firestore
       batch containing the identical logical datasets.
@@ -75,6 +77,9 @@ the migrated Firestore documents.
 - The shared plan identifies yearly bucket datasets. Their Firestore cold-load
   measurement targets only the current calendar-year document, matching the
   staged UI load; the Sheets baseline retains its existing full-range read.
+- The shared plan also identifies date-window datasets and defines a 60-day
+  initial window with 30-day increments. The benchmark times only that initial
+  schedule/day-flag window.
 - Route names, labels, dataset ordering, and default benchmark tabs come
   directly from `lib/firebase-load-plan.json`; the benchmark does not maintain
   a second route map.
@@ -100,3 +105,6 @@ the migrated Firestore documents.
   now benchmark only the current-year document during cold start. The report
   calls out that Sheets still reads its full range, so record-count differences
   are intentional rather than a schema mismatch.
+- Schedule and day flags now use a server-side document-ID range query covering
+  today plus the following 59 days. This matches the UI's initial 60-day
+  calendar window instead of measuring full-collection reads.

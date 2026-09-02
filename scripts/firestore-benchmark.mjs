@@ -20,10 +20,12 @@ const FIRESTORE_API_BASE = 'https://firestore.googleapis.com/v1'
 const FIRESTORE_PAGE_SIZE = 300
 const AUTH_SCHEME = 'Bearer'
 const CURRENT_YEAR = String(new Date().getFullYear())
+const CURRENT_DATE = localDateString(new Date())
 
 export const LOAD_PLAN = JSON.parse(
 	readFileSync(new URL('../lib/firebase-load-plan.json', import.meta.url), 'utf8'),
 )
+const INITIAL_WINDOW_END = addDays(CURRENT_DATE, LOAD_PLAN.initialDateWindowDays)
 
 export const DATASETS = {
 	exercises: { label: 'Exercises', tab: 'Stronger - Exercises', range: 'A:J', headerRows: 1, collection: 'exercises' },
@@ -49,6 +51,10 @@ function validateLoadPlan() {
 	if (undefinedYearBuckets.length) {
 		throw new Error(`Load plan contains undefined yearly dataset(s): ${undefinedYearBuckets.join(', ')}`)
 	}
+	const undefinedDateWindows = LOAD_PLAN.dateWindowDatasets.filter((name) => !(name in DATASETS))
+	if (undefinedDateWindows.length) {
+		throw new Error(`Load plan contains undefined date-window dataset(s): ${undefinedDateWindows.join(', ')}`)
+	}
 	for (const [route, datasets] of Object.entries(LOAD_PLAN.routes)) {
 		const undefinedDatasets = datasets.filter((name) => !(name in DATASETS))
 		if (undefinedDatasets.length) {
@@ -63,6 +69,15 @@ export function parseIterations(value, defaultValue = 3) {
 	const parsed = Number(String(value ?? '').trim())
 	if (!Number.isFinite(parsed) || parsed < 1) return defaultValue
 	return Math.min(Math.floor(parsed), 20)
+}
+
+function localDateString(value) {
+	return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
+}
+
+export function addDays(date, count) {
+	const [year, month, day] = date.split('-').map(Number)
+	return localDateString(new Date(year, month - 1, day + count))
 }
 
 export function selectRoutes(value) {
@@ -132,7 +147,7 @@ export function renderReport({ tabs, datasets, iterations }) {
 	const lines = [
 		`# Sheets vs Firestore cold-load benchmark (${iterations} iteration${iterations === 1 ? '' : 's'})`,
 		'',
-		`Firestore cold loads read only the ${CURRENT_YEAR} document for yearly datasets; Sheets retains its current full-range read.`,
+		`Firestore cold loads read only the ${CURRENT_YEAR} document for yearly datasets and ${CURRENT_DATE} through ${addDays(INITIAL_WINDOW_END, -1)} for schedule data; Sheets retains its current full-range read.`,
 		'',
 		'| Tab | Sheets cold load | Firestore cold load | Sheets records | Firestore documents |',
 		'| --- | --- | --- | --- | --- |',
@@ -232,8 +247,63 @@ async function readFirestoreDocument(projectId, token, uid, collection, document
 	}
 }
 
+async function readFirestoreDateWindow(
+	projectId,
+	token,
+	uid,
+	collection,
+	startDate,
+	endDate,
+	entryField,
+) {
+	const parent = `${FIRESTORE_API_BASE}/projects/${projectId}/databases/(default)/documents`
+		+ `/users/${encodeURIComponent(uid)}`
+	const documentPath = `projects/${projectId}/databases/(default)/documents/users/${uid}/${collection}`
+	const response = await fetch(`${parent}:runQuery`, {
+		method: 'POST',
+		headers: { ...authHeaders(token), 'Content-Type': 'application/json' },
+		body: JSON.stringify({
+			structuredQuery: {
+				from: [{ collectionId: collection }],
+				where: {
+					compositeFilter: {
+						op: 'AND',
+						filters: [
+							{
+								fieldFilter: {
+									field: { fieldPath: '__name__' },
+									op: 'GREATER_THAN_OR_EQUAL',
+									value: { referenceValue: `${documentPath}/${startDate}` },
+								},
+							},
+							{
+								fieldFilter: {
+									field: { fieldPath: '__name__' },
+									op: 'LESS_THAN',
+									value: { referenceValue: `${documentPath}/${endDate}` },
+								},
+							},
+						],
+					},
+				},
+			},
+		}),
+	})
+	const body = await response.text()
+	if (!response.ok) throw new Error(`Firestore request failed (${response.status})`)
+	const documents = JSON.parse(body)
+		.flatMap((result) => result.document ? [result.document] : [])
+	return {
+		count: countFirestoreRecords(documents, entryField),
+		documents: documents.length,
+		bytes: body.length,
+	}
+}
+
 export function firestoreReadScope(name) {
-	return LOAD_PLAN.yearBucketDatasets.includes(name) ? 'currentYear' : 'all'
+	if (LOAD_PLAN.yearBucketDatasets.includes(name)) return 'currentYear'
+	if (LOAD_PLAN.dateWindowDatasets.includes(name)) return 'initialWindow'
+	return 'all'
 }
 
 async function sample(operation) {
@@ -330,8 +400,9 @@ async function main() {
 		readSheets: (name) => readSheetRange(spreadsheetId, sheetsToken, DATASETS[name]),
 		readFirestore: (name) => {
 			const dataset = DATASETS[name]
-			return firestoreReadScope(name) === 'currentYear'
-				? readFirestoreDocument(
+			const scope = firestoreReadScope(name)
+			if (scope === 'currentYear') {
+				return readFirestoreDocument(
 					firebaseServiceAccount.project_id,
 					firestoreToken,
 					uid,
@@ -339,7 +410,19 @@ async function main() {
 					CURRENT_YEAR,
 					dataset.entryField,
 				)
-				: readFirestoreCollection(
+			}
+			if (scope === 'initialWindow') {
+				return readFirestoreDateWindow(
+					firebaseServiceAccount.project_id,
+					firestoreToken,
+					uid,
+					dataset.collection,
+					CURRENT_DATE,
+					INITIAL_WINDOW_END,
+					dataset.entryField,
+				)
+			}
+			return readFirestoreCollection(
 					firebaseServiceAccount.project_id,
 					firestoreToken,
 					uid,
