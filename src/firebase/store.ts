@@ -2,10 +2,13 @@ import {
 	collection,
 	deleteDoc,
 	doc,
+	documentId,
 	getDocs,
 	getDoc,
+	query,
 	runTransaction,
 	setDoc,
+	where,
 	writeBatch,
 	type DocumentData,
 	type QueryDocumentSnapshot,
@@ -28,6 +31,7 @@ import type { ParsedLogRow } from '../google/sheets.ts'
 import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 2
+export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 
 type DatedEntry = {
 	date: string
@@ -98,7 +102,11 @@ function userCollection(uid: string, name: CollectionName) {
 }
 
 function clean<T>(snapshot: QueryDocumentSnapshot<DocumentData>): T {
-	const value = snapshot.data()
+	return cleanValue<T>(snapshot.data())
+}
+
+function cleanValue<T>(data: DocumentData): T {
+	const value = { ...data }
 	delete value.createdAt
 	delete value.updatedAt
 	return value as T
@@ -135,11 +143,43 @@ export function flattenYearBuckets<T extends DatedEntry>(buckets: StoredYearBuck
 	return sortDatedEntries(buckets.flatMap((bucket) => bucket.entries))
 }
 
-function readYearBucketCollection<T extends DatedEntry>(
+export function mergeYearScopedEntries<T extends DatedEntry>(
+	existing: T[],
+	loaded: T[],
+	scope: YearBucketReadScope,
+	currentYear = String(new Date().getFullYear()),
+): T[] {
+	if (scope === 'all') return sortDatedEntries(loaded)
+	const retained = existing.filter((entry) =>
+		scope === 'currentYear'
+			? !entry.date.startsWith(currentYear)
+			: entry.date.startsWith(currentYear))
+	return sortDatedEntries([...retained, ...loaded])
+}
+
+async function readYearBucketCollection<T extends DatedEntry>(
 	uid: string,
 	name: CollectionName,
+	scope: YearBucketReadScope = 'all',
 ): Promise<T[]> {
-	return readCollection<StoredYearBucket<T>>(uid, name).then(flattenYearBuckets)
+	const collectionRef = userCollection(uid, name)
+	const currentYear = String(new Date().getFullYear())
+	let buckets: StoredYearBucket<T>[]
+	if (scope === 'currentYear') {
+		const snapshot = await getDoc(doc(collectionRef, currentYear))
+		buckets = snapshot.exists()
+			? [cleanValue<StoredYearBucket<T>>(snapshot.data())]
+			: []
+	} else if (scope === 'otherYears') {
+		const [past, future] = await Promise.all([
+			getDocs(query(collectionRef, where(documentId(), '<', currentYear))),
+			getDocs(query(collectionRef, where(documentId(), '>', currentYear))),
+		])
+		buckets = [...past.docs, ...future.docs].map((item) => clean<StoredYearBucket<T>>(item))
+	} else {
+		buckets = await readCollection<StoredYearBucket<T>>(uid, name)
+	}
+	return flattenYearBuckets(buckets)
 }
 
 function replaceYearBucketCollection<T extends DatedEntry>(
@@ -290,7 +330,21 @@ export function flattenWorkoutSessions(sessions: StoredWorkoutSession[]): Parsed
 				}))))
 }
 
-export async function appendLogRows(uid: string, rows: (string | number | boolean)[][]): Promise<void> {
+export function mergeWorkoutSessionRows(
+	existing: ParsedLogRow[],
+	incoming: ParsedLogRow[],
+): ParsedLogRow[] {
+	const incomingKeys = new Set(incoming.map(workoutSessionKey))
+	return flattenWorkoutSessions(groupWorkoutSessionRows([
+		...existing.filter((row) => !incomingKeys.has(workoutSessionKey(row))),
+		...incoming,
+	]))
+}
+
+export async function appendLogRows(
+	uid: string,
+	rows: (string | number | boolean)[][],
+): Promise<ParsedLogRow[]> {
 	const parsed = rows.flatMap((row) => {
 		const value = rowToParsedLogRow(row)
 		return value ? [value] : []
@@ -316,6 +370,7 @@ export async function appendLogRows(uid: string, rows: (string | number | boolea
 			})
 		})
 	}
+	return parsed
 }
 
 export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
@@ -344,8 +399,11 @@ export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLog
 	}
 }
 
-export function readLogZone(uid: string): Promise<ParsedLogRow[]> {
-	return readYearBucketCollection<StoredWorkoutSession>(uid, 'workoutSessions')
+export function readLogZone(
+	uid: string,
+	scope: YearBucketReadScope = 'all',
+): Promise<ParsedLogRow[]> {
+	return readYearBucketCollection<StoredWorkoutSession>(uid, 'workoutSessions', scope)
 		.then(flattenWorkoutSessions)
 }
 
@@ -561,24 +619,33 @@ export async function updateMealLogEntryCategory(
 	}
 }
 
-export function readGarminActivities(uid: string): Promise<StravaActivity[]> {
-	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities')
+export function readGarminActivities(
+	uid: string,
+	scope: YearBucketReadScope = 'all',
+): Promise<StravaActivity[]> {
+	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities', scope)
 }
 
 export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {
 	return replaceYearBucketCollection(uid, 'garminActivities', items)
 }
 
-export function readGarminWellnessEntries(uid: string): Promise<GarminWellnessEntry[]> {
-	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness')
+export function readGarminWellnessEntries(
+	uid: string,
+	scope: YearBucketReadScope = 'all',
+): Promise<GarminWellnessEntry[]> {
+	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness', scope)
 }
 
 export function writeGarminWellnessEntries(uid: string, items: GarminWellnessEntry[]): Promise<void> {
 	return replaceYearBucketCollection(uid, 'garminWellness', items)
 }
 
-export function readWithingsMeasurements(uid: string): Promise<WithingsMeasurement[]> {
-	return readYearBucketCollection<WithingsMeasurement>(uid, 'withingsMeasurements')
+export function readWithingsMeasurements(
+	uid: string,
+	scope: YearBucketReadScope = 'all',
+): Promise<WithingsMeasurement[]> {
+	return readYearBucketCollection<WithingsMeasurement>(uid, 'withingsMeasurements', scope)
 }
 
 export function writeWithingsMeasurements(uid: string, items: WithingsMeasurement[]): Promise<void> {

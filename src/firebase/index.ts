@@ -2,6 +2,8 @@ export { isFirebaseConfigured, firebaseAuth, firestore } from './client.ts'
 export { observeAuth, signInToStronger, signOutOfStronger } from './auth.ts'
 export {
 	SCHEMA_VERSION,
+	type YearBucketReadScope,
+	mergeYearScopedEntries,
 	ensureUser,
 	readConfigZone,
 	writeDefaultConfig,
@@ -13,6 +15,7 @@ export {
 	writeCardioActivities,
 	writeDefaultCardioActivities,
 	appendLogRows,
+	mergeWorkoutSessionRows,
 	readLogZone,
 	updateLogRows,
 	deleteLogSession,

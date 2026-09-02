@@ -2,9 +2,10 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealLogEntry, MealItem, FoodItem, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
-import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlags, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, withAuthRetry } from './firebase/index.js';
+import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlags, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
+import type { YearBucketReadScope } from './firebase/index.js';
 import { buildFirebaseLoadQueue, runFirebaseLoadQueue } from './firebase/load-plan.js';
-import type { FirebaseDataset } from './firebase/load-plan.js';
+import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import type { LiftGoal } from './google/index.js';
 import { signOutOfStronger } from './firebase/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
@@ -87,8 +88,8 @@ function AppContent() {
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
-  const logLoadedRef = useRef(false);
-  const dataLoadsRef = useRef(new Map<FirebaseDataset, Promise<void>>());
+  const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>());
+  const dataLoadsRef = useRef(new Map<string, Promise<void>>());
   const loadQueueUserRef = useRef<string | null>(null);
   const connectedUserRef = useRef<string | null>(null);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
@@ -117,7 +118,7 @@ function AppContent() {
       setNeedsSetup(false);
       setDataLoadError(null);
       setPriorityLoadPending(true);
-      logLoadedRef.current = false;
+      logScopesLoadedRef.current.clear();
       dataLoadsRef.current.clear();
       loadQueueUserRef.current = null;
       setSettingsLoaded(false);
@@ -190,7 +191,7 @@ function AppContent() {
     setMealFavorites([]);
     setMealRecents([]);
     setMealLog([]);
-    logLoadedRef.current = false;
+    logScopesLoadedRef.current.clear();
     dataLoadsRef.current.clear();
     loadQueueUserRef.current = null;
     setSettingsLoaded(false);
@@ -207,18 +208,20 @@ function AppContent() {
       try {
         if (connectedUserRef.current !== sheetId) return;
         // If log data is already loaded, use it directly
-        if (logLoadedRef.current && logRows.length > 0) {
+        const loadedScopes = logScopesLoadedRef.current;
+        if (loadedScopes.has('all')
+          || (loadedScopes.has('currentYear') && loadedScopes.has('otherYears'))) {
           const prev = findPreviousWorkoutSets(logRows, workoutId);
           if (connectedUserRef.current !== sheetId) return;
           setPreviousSets(prev);
           return;
         }
-        // Otherwise fetch from sheet
+        // Otherwise fetch the complete Firestore history before starting.
         await withAuthRetry(async () => {
           const rows = await readLogZone(sheetId);
           if (connectedUserRef.current !== sheetId) return;
           setLogRows(rows);
-          logLoadedRef.current = true;
+          logScopesLoadedRef.current.add('all');
           const prev = findPreviousWorkoutSets(rows, workoutId);
           setPreviousSets(prev);
         });
@@ -294,8 +297,9 @@ function AppContent() {
           results,
           startTime,
           endTime,
-        ).then(() => {
-          void loadLogData(sid);
+        ).then((savedRows) => {
+          if (connectedUserRef.current !== sid) return;
+          setLogRows((existing) => mergeWorkoutSessionRows(existing, savedRows));
         });
       }
 
@@ -398,13 +402,16 @@ function AppContent() {
     }
   }, []);
 
-  const loadLogData = useCallback(async (sheetId: string) => {
+  const loadLogData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const rows = await readLogZone(sheetId);
+        const rows = await readLogZone(sheetId, scope);
         if (connectedUserRef.current !== sheetId) return;
-        setLogRows(rows);
-        logLoadedRef.current = true;
+        setLogRows((existing) => mergeYearScopedEntries(existing, rows, scope));
+        logScopesLoadedRef.current.add(scope);
       });
     } catch {
       // Silently ignore — log data is optional for calendar history
@@ -431,36 +438,45 @@ function AppContent() {
     }
   }, []);
 
-  const loadGarminData = useCallback(async (sheetId: string) => {
+  const loadGarminData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const activities = await readGarminActivities(sheetId);
+        const activities = await readGarminActivities(sheetId, scope);
         if (connectedUserRef.current !== sheetId) return;
-        setGarminActivities(activities);
+        setGarminActivities((existing) => mergeYearScopedEntries(existing, activities, scope));
       });
     } catch {
       // Silently ignore — Garmin data is optional
     }
   }, []);
 
-  const loadWellnessData = useCallback(async (sheetId: string) => {
+  const loadWellnessData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const entries = await readGarminWellnessEntries(sheetId);
+        const entries = await readGarminWellnessEntries(sheetId, scope);
         if (connectedUserRef.current !== sheetId) return;
-        setWellnessEntries(entries);
+        setWellnessEntries((existing) => mergeYearScopedEntries(existing, entries, scope));
       });
     } catch {
       // Silently ignore — wellness data is optional
     }
   }, []);
 
-  const loadWithingsData = useCallback(async (sheetId: string) => {
+  const loadWithingsData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const measurements = await readWithingsMeasurements(sheetId);
+        const measurements = await readWithingsMeasurements(sheetId, scope);
         if (connectedUserRef.current !== sheetId) return;
-        setWithingsMeasurements(measurements);
+        setWithingsMeasurements((existing) => mergeYearScopedEntries(existing, measurements, scope));
       });
     } catch {
       // Silently ignore — Withings data is optional
@@ -1236,18 +1252,19 @@ function AppContent() {
     }
   }, [route, activeWorkout, progressionProposals]);
 
-  const executeDatasetLoad = useCallback((dataset: FirebaseDataset, userId: string): Promise<void> => {
+  const executeDatasetLoad = useCallback((request: FirebaseLoadRequest, userId: string): Promise<void> => {
+    const { dataset, scope } = request;
     switch (dataset) {
       case 'exercises': return loadExercisesData(userId);
       case 'workouts': return loadWorkoutDefinitionsData(userId);
       case 'cardioActivities': return loadCardioActivitiesData(userId);
       case 'schedule': return loadWorkoutScheduleData(userId);
       case 'dayFlags': return loadFlagsData(userId);
-      case 'workoutSessions': return loadLogData(userId);
+      case 'workoutSessions': return loadLogData(userId, scope);
       case 'settings': return loadSettingsData(userId);
-      case 'garminActivities': return loadGarminData(userId);
-      case 'garminWellness': return loadWellnessData(userId);
-      case 'withingsMeasurements': return loadWithingsData(userId);
+      case 'garminActivities': return loadGarminData(userId, scope);
+      case 'garminWellness': return loadWellnessData(userId, scope);
+      case 'withingsMeasurements': return loadWithingsData(userId, scope);
       case 'mealItems': return loadMealItemsData(userId);
       case 'mealLog': return loadMealLogData(userId);
       case 'favoriteFoods': return loadMealFavoritesData(userId);
@@ -1270,14 +1287,15 @@ function AppContent() {
     loadWorkoutScheduleData,
   ]);
 
-  const loadDataset = useCallback((dataset: FirebaseDataset, userId: string): Promise<void> => {
-    const existing = dataLoadsRef.current.get(dataset);
+  const loadDataset = useCallback((request: FirebaseLoadRequest, userId: string): Promise<void> => {
+    const key = `${request.dataset}:${request.scope}`;
+    const existing = dataLoadsRef.current.get(key);
     if (existing) return existing;
-    const pending = executeDatasetLoad(dataset, userId).catch((error) => {
-      dataLoadsRef.current.delete(dataset);
+    const pending = executeDatasetLoad(request, userId).catch((error) => {
+      dataLoadsRef.current.delete(key);
       throw error;
     });
-    dataLoadsRef.current.set(dataset, pending);
+    dataLoadsRef.current.set(key, pending);
     return pending;
   }, [executeDatasetLoad]);
 
@@ -1288,7 +1306,7 @@ function AppContent() {
     const queue = buildFirebaseLoadQueue(route.view);
     void runFirebaseLoadQueue(
       queue,
-      (dataset) => loadDataset(dataset, userId),
+      (request) => loadDataset(request, userId),
       async () => {
         if (connectedUserRef.current === userId) setPriorityLoadPending(false);
         await ensureUser(userId);
@@ -1881,7 +1899,7 @@ async function logWorkoutResults(
   results: SetResult[][],
   startTime: string,
   endTime: string,
-): Promise<void> {
+): Promise<ParsedLogRow[]> {
   const now = new Date(endTime);
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const ctx = { date, startTime, endTime, workoutId: workout.id };
@@ -1914,5 +1932,5 @@ async function logWorkoutResults(
     }
   }
 
-  await withAuthRetry(() => appendLogRows(sheetId, rows));
+  return withAuthRetry(() => appendLogRows(sheetId, rows));
 }

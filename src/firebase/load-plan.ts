@@ -17,26 +17,48 @@ export type FirebaseDataset =
 	| 'favoriteFoods'
 	| 'recentFoods'
 
+export type FirebaseLoadScope = 'all' | 'currentYear' | 'otherYears'
+
+export interface FirebaseLoadRequest {
+	dataset: FirebaseDataset
+	scope: FirebaseLoadScope
+}
+
 export interface FirebaseLoadQueue {
-	priority: FirebaseDataset[]
-	deferred: FirebaseDataset[]
+	priority: FirebaseLoadRequest[]
+	deferred: FirebaseLoadRequest[]
 }
 
 const datasetOrder = loadPlan.datasetOrder as FirebaseDataset[]
+const yearBucketDatasets = new Set(loadPlan.yearBucketDatasets as FirebaseDataset[])
 const routes = loadPlan.routes as Record<Route['view'], FirebaseDataset[]>
 
+function request(dataset: FirebaseDataset, scope: FirebaseLoadScope = 'all'): FirebaseLoadRequest {
+	return { dataset, scope }
+}
+
 export function buildFirebaseLoadQueue(view: Route['view']): FirebaseLoadQueue {
-	const priority = [...new Set(routes[view] ?? routes.list)]
-	const selected = new Set(priority)
+	const routeDatasets = [...new Set(routes[view] ?? routes.list)]
+	const selected = new Set(routeDatasets)
+	const priority = routeDatasets.map((dataset) =>
+		request(dataset, yearBucketDatasets.has(dataset) ? 'currentYear' : 'all'))
+	const otherYears = routeDatasets
+		.filter((dataset) => yearBucketDatasets.has(dataset))
+		.map((dataset) => request(dataset, 'otherYears'))
 	return {
 		priority,
-		deferred: datasetOrder.filter((dataset) => !selected.has(dataset)),
+		deferred: [
+			...otherYears,
+			...datasetOrder
+				.filter((dataset) => !selected.has(dataset))
+				.map((dataset) => request(dataset)),
+		],
 	}
 }
 
 export async function runFirebaseLoadQueue(
 	queue: FirebaseLoadQueue,
-	load: (dataset: FirebaseDataset) => Promise<void>,
+	load: (request: FirebaseLoadRequest) => Promise<void>,
 	afterPriority: () => Promise<void> = async () => undefined,
 ): Promise<void> {
 	await Promise.all(queue.priority.map(load))

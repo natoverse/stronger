@@ -37,6 +37,8 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] Firestore rules and repository behavior have automated tests.
 - [ ] Initial data loading prioritizes only the collections required by the
       active route, then prefetches every remaining collection concurrently.
+- [ ] Priority reads for yearly bucket collections fetch only the current
+      calendar year; all other years load in the immediate background batch.
 
 ## Firestore Schema
 
@@ -105,5 +107,10 @@ collections into Firestore after each successful sync.
   activities load requests `garminActivities` before unrelated collections.
   The active view retains its loading state until that priority batch finishes,
   avoiding a false empty-state flash while background prefetch continues.
-- The benchmark consumes the same route load plan, so its Sheets and Firestore
-  tab totals use identical logical dataset requirements.
+- The benchmark consumes the same route load plan. Sheets retains its
+  full-range baseline while Firestore cold-load timing reads only the current
+  year for yearly datasets.
+- Yearly bucket datasets are split by load scope. Active-route cold start reads
+  only the current-year document for workout sessions, Garmin activities,
+  Garmin wellness, and Withings measurements. The immediate deferred batch
+  reads every other year while unrelated datasets prefetch concurrently.
