@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Garmin Wellness Sync — Garmin Connect daily wellness metrics → Google Sheets.
+"""Garmin Wellness Sync — Garmin Connect daily wellness metrics → Firestore.
 
-Writes one row per day to the "Stronger - Garmin Wellness" tab with all of:
+Writes one entry per day to yearly Firestore bucket documents with all of:
   HRV, sleep, body battery, training readiness, training status, acute/chronic
   load, steps, floors, resting HR, VO2 max (running), intensity minutes, hill
   score, endurance score, daily average stress, and load focus (training load
@@ -10,15 +10,14 @@ Writes one row per day to the "Stronger - Garmin Wellness" tab with all of:
 
 Environment variables (all required):
   GARMIN_TOKENS               – garminconnect token bundle
-  GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account
-  SPREADSHEET_ID              – Google Sheets spreadsheet ID
+  FIREBASE_SERVICE_ACCOUNT_KEY – JSON key for the Firebase service account
+  FIREBASE_USER_ID             – destination UID below ``/users/{uid}``
 
 Flags:
   --backfill   Sync every date since BACKFILL_START_DATE (2021-01-01) instead
                of the default last-72-hours window. Implies ``--overwrite``.
-  --overwrite  Upsert mode: re-fetch every date in the window and rewrite
-               existing rows (matched by date) in place instead of skipping
-               them, so partial mid-day rows and edited days are refreshed.
+  --overwrite  Upsert mode: re-fetch every date in the window and replace
+               matching dates inside their yearly buckets.
 
 Usage:
   python scripts/garmin-wellness-sync.py [--backfill] [--overwrite]
@@ -26,23 +25,21 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import time
 import tempfile
 from datetime import date, timedelta
 from pathlib import Path
-from urllib.parse import quote
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
+from firestore_sync import (
+    get_firestore_access,
+    merge_settings_values,
+    merge_year_bucket_entries,
+    read_year_entries,
+)
 
-SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
-TAB_NAME = "Stronger - Garmin Wellness"
-
-# 40 columns — keep in sync with src/google/sheets.ts GARMIN_WELLNESS_HEADER
+# Keep in sync with the migrated GarminWellnessEntry field order.
 HEADER = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
@@ -64,7 +61,7 @@ HEADER = [
     "loadFocusAnaerobic", "loadFocusAnaerobicMin", "loadFocusAnaerobicMax",
     "hrvBaselineMin", "hrvBaselineMax",
 ]
-COLUMN_COUNT = len(HEADER)   # 40 → A:AN
+COLUMN_COUNT = len(HEADER)
 assert COLUMN_COUNT == 40, "Header count mismatch"
 
 # Default window: the last 72 hours. Wellness data is stored per calendar day,
@@ -80,7 +77,7 @@ PER_DATE_DELAY = 0.15   # seconds between dates (rate-limit courtesy)
 # ---------------------------------------------------------------------------
 
 def _num(v, decimals: int = 1) -> str:
-    """Return a sheet-ready string for v, or '' if null/invalid."""
+    """Return a normalized numeric string for v, or '' if null/invalid."""
     if v is None:
         return ""
     try:
@@ -96,7 +93,7 @@ def _num(v, decimals: int = 1) -> str:
 
 
 def _stress(v) -> str:
-    """Return a sheet-ready daily average stress level (0–100), or '' if absent.
+    """Return a daily average stress level (0–100), or '' if absent.
 
     Garmin reports -1 or -2 for days with no stress data (device not worn),
     which must not be written as a real value.
@@ -315,7 +312,7 @@ def _fetch_readiness(client, cdate: str) -> dict:
 
 def _extract_load_focus(data: dict) -> dict:
     """Extract load-focus (training load balance) fields from a training-status
-    payload. Returns the 9 sheet columns, using '' for any missing value.
+    payload. Returns the 9 stored fields, using '' for any missing value.
 
     Shape: mostRecentTrainingLoadBalance → metricsTrainingLoadBalanceDTOMap →
     {<device-id>: {monthlyLoadAerobicLow, monthlyLoadAerobicLowTargetMin, …}}.
@@ -495,55 +492,6 @@ def _fetch_goals(client) -> dict:
         return {}
 
 
-SETTINGS_TAB_NAME = "Stronger - Settings"
-
-
-def _read_settings(session, spreadsheet_id: str, token: str) -> dict[str, str]:
-    """Read current key-value rows from the Settings tab."""
-    try:
-        settings_range = quote(f"'{SETTINGS_TAB_NAME}'!A:B")
-        data = _sheets_get(
-            session,
-            f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{settings_range}",
-            token,
-        )
-        rows = data.get("values", [])
-        if len(rows) <= 1:
-            return {}
-        return {row[0]: row[1] for row in rows[1:] if len(row) >= 2}
-    except Exception as exc:
-        print(f"  WARNING: settings read: {exc}", file=sys.stderr)
-        return {}
-
-
-def _update_settings_goals(
-    session, spreadsheet_id: str, token: str, goals: dict
-) -> None:
-    """Merge goal key-value pairs into the Settings tab (full overwrite)."""
-    if not goals:
-        return
-    current = _read_settings(session, spreadsheet_id, token)
-    if not current and not goals:
-        return
-    current.update(goals)
-    rows = [["key", "value"]] + [[k, v] for k, v in current.items()]
-    settings_range = quote(f"'{SETTINGS_TAB_NAME}'!A:B")
-    res = session.put(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{settings_range}"
-        "?valueInputOption=RAW",
-        headers={"Authorization": "Bearer " + token},
-        json={"values": rows},
-    )
-    if not res.ok:
-        print(
-            f"  WARNING: settings update failed ({res.status_code}): {res.text}",
-            file=sys.stderr,
-        )
-    else:
-        keys = ", ".join(goals.keys())
-        print(f"Updated {len(goals)} goal setting(s) in Settings tab ({keys}).")
-
-
 def _fetch_vo2max(client, cdate: str) -> dict:
     try:
         data = client.get_max_metrics(cdate)
@@ -596,7 +544,7 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def build_row(client, cdate: str) -> list[str]:
-    """Fetch all wellness metrics for a single date and return a sheet row."""
+    """Fetch all wellness metrics for a single date."""
     row: dict[str, str] = {col: "" for col in HEADER}
     row["date"] = cdate
 
@@ -612,151 +560,26 @@ def build_row(client, cdate: str) -> list[str]:
     return [row[col] for col in HEADER]
 
 
-# ---------------------------------------------------------------------------
-# Google Sheets helpers (service-account REST, same pattern as garmin-sync.py)
-# ---------------------------------------------------------------------------
-
-def get_google_access_token(service_account_key: str) -> str:
-    from google.auth.transport.requests import Request
-    from google.oauth2 import service_account
-
-    key = json.loads(service_account_key) if isinstance(service_account_key, str) else service_account_key
-    creds = service_account.Credentials.from_service_account_info(
-        key, scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    creds.refresh(Request())
-    return creds.token
+def _entry_number(value):
+    if value is None or str(value).strip() == "":
+        return None
+    number = float(value)
+    return int(number) if number.is_integer() else number
 
 
-def _column_letter(n: int) -> str:
-    result = ""
-    while n > 0:
-        n, remainder = divmod(n - 1, 26)
-        result = chr(65 + remainder) + result
-    return result
-
-
-def _sheets_get(session, url: str, token: str) -> dict:
-    res = session.get(url, headers={"Authorization": "Bearer " + token})
-    if not res.ok:
-        raise RuntimeError(f"Sheets GET failed ({res.status_code}): {res.text}")
-    return res.json()
-
-
-def ensure_tab(session, spreadsheet_id: str, token: str) -> None:
-    meta = _sheets_get(
-        session,
-        f"{SHEETS_API_BASE}/{spreadsheet_id}?fields=sheets.properties.title",
-        token,
-    )
-    titles = {s.get("properties", {}).get("title") for s in meta.get("sheets", [])}
-    created = TAB_NAME not in titles
-    if created:
-        create_res = session.post(
-            f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
-            headers={"Authorization": "Bearer " + token},
-            json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
-        )
-        if not create_res.ok:
-            raise RuntimeError(f"Tab creation failed ({create_res.status_code}): {create_res.text}")
-
-    # Keep existing tabs' headers in sync when columns are appended.
-    col = _column_letter(COLUMN_COUNT)
-    header_range = quote(f"'{TAB_NAME}'!A1:{col}1")
-    header_res = session.put(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{header_range}?valueInputOption=RAW",
-        headers={"Authorization": "Bearer " + token},
-        json={"values": [HEADER]},
-    )
-    if not header_res.ok:
-        raise RuntimeError(f"Header write failed ({header_res.status_code}): {header_res.text}")
-    if created:
-        print(f'Created "{TAB_NAME}" tab with header row.')
-
-
-def read_existing_dates(session, spreadsheet_id: str, token: str) -> set[str]:
-    date_range = quote(f"'{TAB_NAME}'!A2:A")
-    data = _sheets_get(
-        session,
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{date_range}",
-        token,
-    )
-    return {row[0].strip() for row in data.get("values", []) if row and row[0]}
-
-
-def read_existing_date_rows(session, spreadsheet_id: str, token: str) -> dict[str, int]:
-    """Return ``{date: row_number}`` for existing data rows (1-based).
-
-    The header is row 1, so the first data row is row 2. If the sheet already
-    holds duplicate dates, the first occurrence wins.
-    """
-    date_range = quote(f"'{TAB_NAME}'!A2:A")
-    data = _sheets_get(
-        session,
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{date_range}",
-        token,
-    )
-    rows: dict[str, int] = {}
-    for offset, row in enumerate(data.get("values", [])):
-        if row and row[0]:
-            key = row[0].strip()
-            if key not in rows:
-                rows[key] = offset + 2
-    return rows
-
-
-def partition_rows(rows, existing_rows, key_index=0):
-    """Split ``rows`` into (updates, appends) for an upsert.
-
-    ``existing_rows`` maps a row key to its 1-based sheet row number.
-    ``updates`` is a list of ``(row_number, row)`` for keys already present;
-    ``appends`` is the list of rows whose key is new.
-    """
-    updates = []
-    appends = []
-    for row in rows:
-        key = row[key_index]
-        if key in existing_rows:
-            updates.append((existing_rows[key], row))
+def wellness_row_to_entry(row):
+    """Convert a fetched row to the exact migrated Firestore model."""
+    entry = {}
+    for index, field in enumerate(HEADER):
+        if field == "date":
+            entry[field] = row[index]
+        elif field == "hrvStatus":
+            entry[field] = row[index]
+        elif field == "trainingStatus":
+            entry[field] = normalize_training_status(row[index])
         else:
-            appends.append(row)
-    return updates, appends
-
-
-def batch_update_rows(session, spreadsheet_id: str, token: str, updates) -> None:
-    """Rewrite specific rows in place via values:batchUpdate."""
-    if not updates:
-        return
-    col = _column_letter(COLUMN_COUNT)
-    data = [
-        {
-            "range": f"'{TAB_NAME}'!A{row_number}:{col}{row_number}",
-            "values": [row],
-        }
-        for row_number, row in updates
-    ]
-    res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values:batchUpdate",
-        headers={"Authorization": "Bearer " + token},
-        json={"valueInputOption": "RAW", "data": data},
-    )
-    if not res.ok:
-        raise RuntimeError(f"Batch update failed ({res.status_code}): {res.text}")
-
-
-def append_rows(session, spreadsheet_id: str, token: str, rows: list[list[str]]) -> None:
-    if not rows:
-        return
-    col = _column_letter(COLUMN_COUNT)
-    append_range = quote(f"'{TAB_NAME}'!A:{col}")
-    res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{append_range}:append"
-        "?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
-        headers={"Authorization": "Bearer " + token},
-        json={"values": rows},
-    )
-    if not res.ok:
-        raise RuntimeError(f"Append failed ({res.status_code}): {res.text}")
+            entry[field] = _entry_number(row[index])
+    return entry
 
 
 # ---------------------------------------------------------------------------
@@ -767,8 +590,8 @@ def main() -> None:
     import requests
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
-    service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
-    spreadsheet_id = os.environ.get("SPREADSHEET_ID")
+    service_account_key = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY")
+    uid = os.environ.get("FIREBASE_USER_ID")
     backfill = "--backfill" in sys.argv
     # Backfill implies overwrite so a full re-sync also refreshes edited days.
     overwrite = backfill or "--overwrite" in sys.argv
@@ -776,23 +599,20 @@ def main() -> None:
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS")
     if not service_account_key:
-        raise SystemExit("Missing GOOGLE_SERVICE_ACCOUNT_KEY")
-    if not spreadsheet_id:
-        raise SystemExit("Missing SPREADSHEET_ID")
+        raise SystemExit("Missing FIREBASE_SERVICE_ACCOUNT_KEY")
+    if not uid:
+        raise SystemExit("Missing FIREBASE_USER_ID")
 
     # 1. Authenticate Garmin
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
 
-    # 2. Authenticate Google
-    print("Authenticating with Google Sheets...")
-    google_token = get_google_access_token(service_account_key)
+    # 2. Authenticate Firestore
+    print("Authenticating with Firestore...")
+    project_id, firestore_token = get_firestore_access(service_account_key)
     session = requests.Session()
 
-    # 3. Ensure tab exists
-    ensure_tab(session, spreadsheet_id, google_token)
-
-    # 4. Determine date range to sync
+    # 3. Determine date range to sync
     today_str = date.today().isoformat()
     if backfill:
         start_str = BACKFILL_START_DATE
@@ -803,25 +623,31 @@ def main() -> None:
 
     all_dates = _date_range(start_str, today_str)
 
-    # 5. Read existing rows. In overwrite mode we refetch every date in the
-    #    window (and rewrite existing rows in place); otherwise only the dates
-    #    missing from the sheet are fetched and appended.
+    # 4. In append-only mode, avoid refetching dates already in Firestore.
     if overwrite:
-        existing_rows = read_existing_date_rows(session, spreadsheet_id, google_token)
-        print(f"Found {len(existing_rows)} existing wellness rows in sheet.")
         dates_to_fetch = all_dates
     else:
-        existing = read_existing_dates(session, spreadsheet_id, google_token)
-        print(f"Found {len(existing)} existing wellness rows in sheet.")
+        existing = {
+            entry["date"]
+            for entry in read_year_entries(
+                session,
+                project_id,
+                firestore_token,
+                uid,
+                "garminWellness",
+                (value[:4] for value in all_dates),
+            )
+        }
+        print(f"Found {len(existing)} existing wellness entries in Firestore.")
         dates_to_fetch = [d for d in all_dates if d not in existing]
     print(f"{len(dates_to_fetch)} date(s) to fetch.")
 
     if not dates_to_fetch:
         print("Nothing to sync.")
-        _sync_goals(garmin, session, spreadsheet_id, google_token)
+        _sync_goals(garmin, session, project_id, firestore_token, uid)
         return
 
-    # 6. Fetch and build rows
+    # 5. Fetch and build entries.
     rows: list[list[str]] = []
     for idx, cdate in enumerate(dates_to_fetch, 1):
         if backfill and idx % 20 == 0:
@@ -830,32 +656,36 @@ def main() -> None:
         if idx < len(dates_to_fetch):
             time.sleep(PER_DATE_DELAY)
 
-    # 7. Write to sheet — upsert in overwrite mode, plain append otherwise.
-    if overwrite:
-        updates, appends = partition_rows(rows, existing_rows)  # key = row[0] (date)
-        if updates:
-            print(f"Updating {len(updates)} existing wellness rows...")
-            batch_update_rows(session, spreadsheet_id, google_token, updates)
-        if appends:
-            print(f"Appending {len(appends)} new wellness rows...")
-            append_rows(session, spreadsheet_id, google_token, appends)
-        print(
-            f"Done — updated {len(updates)}, appended {len(appends)} days of wellness data."
-        )
-    else:
-        print(f"Appending {len(rows)} new wellness rows...")
-        append_rows(session, spreadsheet_id, google_token, rows)
-        print(f"Done — synced {len(rows)} days of wellness data.")
+    entries = [wellness_row_to_entry(row) for row in rows]
+    # A wellness backfill can spend long enough in provider calls for the
+    # original one-hour service-account token to expire.
+    project_id, firestore_token = get_firestore_access(service_account_key)
+    result = merge_year_bucket_entries(
+        session,
+        project_id,
+        firestore_token,
+        uid,
+        "garminWellness",
+        entries,
+        "date",
+        overwrite,
+    )
+    print(
+        f"Done — added {result['added']}, updated {result['updated']} "
+        "days of wellness data in Firestore."
+    )
 
-    # 8. Update goal settings in the Settings tab
-    _sync_goals(garmin, session, spreadsheet_id, google_token)
+    # 6. Update goal settings in Firestore.
+    _sync_goals(garmin, session, project_id, firestore_token, uid)
 
 
-def _sync_goals(garmin, session, spreadsheet_id: str, google_token: str) -> None:
+def _sync_goals(garmin, session, project_id: str, token: str, uid: str) -> None:
     print("Fetching Garmin goals...")
     goals = _fetch_goals(garmin)
     if goals:
-        _update_settings_goals(session, spreadsheet_id, google_token, goals)
+        merge_settings_values(session, project_id, token, uid, goals)
+        keys = ", ".join(goals.keys())
+        print(f"Updated {len(goals)} goal setting(s) in Firestore ({keys}).")
     else:
         print("No goal data available from Garmin (goals may not be set in the app).")
 

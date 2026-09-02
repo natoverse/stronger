@@ -3,9 +3,7 @@
 
 Run with:  python scripts/test_garmin_sync.py
 
-These tests exercise only the pure ``activity_to_row`` mapping — no network,
-no Garmin/Google auth. They mirror the sheet's 17-column layout expected by
-the app (src/google/config.ts).
+These tests exercise only pure mapping behavior — no network or provider auth.
 """
 
 import importlib.util
@@ -117,9 +115,32 @@ def test_non_numeric_metric_defaults_to_zero():
     assert row[6] == "0" and row[9] == "0", row
 
 
-def test_column_letter_matches_span():
-    # 17 columns -> Q
-    assert garmin_sync._column_letter(garmin_sync.COLUMN_COUNT) == "Q"
+def test_maps_firestore_activity_model():
+    row = garmin_sync.activity_to_row({
+        "activityId": 123,
+        "activityName": "Lift",
+        "startTimeLocal": "2026-01-02 06:30:00",
+        "activityType": {"typeKey": "strength_training"},
+        "duration": 600,
+        "distance": 0,
+        "elevationGain": 0,
+        "elevationLoss": 0,
+        "averageHR": 100,
+        "maxHR": 140,
+    })
+    assert garmin_sync.activity_row_to_entry(row) == {
+        "date": "2026-01-02",
+        "stravaId": "123",
+        "activityType": "Weight Training",
+        "name": "Lift",
+        "duration": 600,
+        "distance": 0,
+        "elevationGain": 0,
+        "elevationLoss": 0,
+        "calories": 0,
+        "avgHR": 100,
+        "maxHR": 140,
+    }
 
 
 def test_activity_fetch_end_date_includes_following_day():
@@ -130,26 +151,12 @@ def test_backfill_starts_at_2015():
     assert garmin_sync.BACKFILL_START_DATE == "2015-01-01"
 
 
-def test_partition_rows_splits_updates_and_appends():
-    existing = {"100": 2, "200": 3}
-    rows = [
-        ["2026-01-01", "100", "running"],   # existing -> update row 2
-        ["2026-01-02", "300", "cycling"],   # new -> append
-        ["2026-01-03", "200", "walking"],   # existing -> update row 3
-    ]
-    updates, appends = garmin_sync.partition_rows(rows, existing)
-    assert updates == [
-        (2, ["2026-01-01", "100", "running"]),
-        (3, ["2026-01-03", "200", "walking"]),
-    ]
-    assert appends == [["2026-01-02", "300", "cycling"]]
-
-
-def test_partition_rows_all_new_when_no_existing():
-    rows = [["2026-01-01", "1"], ["2026-01-02", "2"]]
-    updates, appends = garmin_sync.partition_rows(rows, {})
-    assert updates == []
-    assert appends == rows
+def test_skips_firestore_entry_without_activity_type():
+    row = garmin_sync.activity_to_row({
+        "activityId": 123,
+        "startTimeLocal": "2026-01-02 06:30:00",
+    })
+    assert garmin_sync.activity_row_to_entry(row) is None
 
 
 def _run():

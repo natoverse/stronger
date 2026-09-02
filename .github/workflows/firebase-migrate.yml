@@ -11,6 +11,10 @@ on:
         description: Delete existing migrated collections before writing
         type: boolean
         default: false
+      collections:
+        description: Optional comma-separated collections (for example syncState)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -42,4 +46,5 @@ jobs:
           FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
           DRY_RUN: ${{ inputs.dry_run }}
           REPLACE_EXISTING: ${{ inputs.replace_existing }}
+          MIGRATION_COLLECTIONS: ${{ inputs.collections }}
         run: node scripts/firebase-migrate.mjs

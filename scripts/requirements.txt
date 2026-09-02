@@ -7,8 +7,8 @@
 # curl_cffi     – TLS-impersonation HTTP client garminconnect uses to bypass
 #                 Garmin's Cloudflare fingerprinting. Pinned >=0.15.0 for the
 #                 redirect-SSRF fix (GHSA affecting < 0.15.0).
-# google-auth   – Google service-account OAuth for Sheets API access.
-# requests      – HTTP client for the Sheets REST calls.
+# google-auth   – Google service-account OAuth for Firestore REST access.
+# requests      – HTTP client for Firestore REST calls.
 garminconnect>=0.3.4
 curl_cffi>=0.15.0
 google-auth>=2.0.0

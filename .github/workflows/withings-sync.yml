@@ -1,4 +1,4 @@
-name: Withings Sync (Withings → Google Sheets)
+name: Withings Sync (Withings → Firestore)
 
 on:
   schedule:
@@ -18,6 +18,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: firebase-writes
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -30,13 +34,26 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Test Firestore mappings
+        run: node --test scripts/test_firestore_sync.mjs scripts/test_withings_sync.mjs
+
       - name: Run Withings sync script
         env:
           WITHINGS_CLIENT_ID: ${{ secrets.WITHINGS_CLIENT_ID }}
           WITHINGS_CLIENT_SECRET: ${{ secrets.WITHINGS_CLIENT_SECRET }}
           WITHINGS_REFRESH_TOKEN: ${{ secrets.WITHINGS_REFRESH_TOKEN }}
-          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
-          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
         # Scheduled runs always overwrite the rolling window so recent rows are
         # refreshed (fixes partial mid-day rows and picks up edited weigh-ins).
-        run: node scripts/withings-sync.mjs ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
+        run: |
+          for attempt in 1 2 3; do
+            if node scripts/withings-sync.mjs ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "Withings sync attempt $attempt failed; retrying in 60 seconds."
+            sleep 60
+          done

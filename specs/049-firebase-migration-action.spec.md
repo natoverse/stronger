@@ -64,6 +64,7 @@ authentication, and scheduled sync jobs switch backends.
 - `withingsMeasurements/{year}`
 - `settings/app`
 - `migrations/{migrationId}`
+- `/syncState/{uid}` for the administrator-only rotating Withings token
 
 ## Iteration Decisions
 
@@ -79,6 +80,12 @@ authentication, and scheduled sync jobs switch backends.
 - The existing Google Sheets UI exposes an Authentication-only bootstrap in
   Settings so users can create and copy their final Firebase UID before any
   Firestore migration or application-backend switch.
+- The workflow exposes the script's `MIGRATION_COLLECTIONS` filter for manual
+  recovery and one-time subset imports, including `syncState`.
+- Collection-scoped runs do not read, validate, write, or delete unrelated
+  collections.
+- Collection-scoped imports use collection-specific migration status IDs so
+  they do not overwrite the full one-time migration record.
 - Historical Day Flags and Garmin Wellness tabs can contain repeated dates.
   Migration collapses those one-document-per-day collections by keeping the
   last valid row and emitting a warning; duplicate IDs remain fatal for other
@@ -119,3 +126,7 @@ authentication, and scheduled sync jobs switch backends.
   configuration and service-account key. Those fork owners are trusted
   administrators with project-wide access; per-user UIDs prevent accidental
   targeting but are not an IAM boundary.
+- The optional `Stronger - Infra` tab migrates only
+  `withings_refresh_token` into the administrator-only `/syncState/{uid}`
+  document. Operators can select only `syncState` when rerunning migration for
+  the direct-Withings cutover.

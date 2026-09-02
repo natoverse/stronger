@@ -30,6 +30,21 @@ const TABS = {
 	garminWellness: { title: 'Stronger - Garmin Wellness', range: 'A2:AN' },
 	withings: { title: 'Stronger - Withings', range: 'A2:K' },
 	settings: { title: 'Stronger - Settings', range: 'A:B' },
+	infra: { title: 'Stronger - Infra', range: 'A:B' },
+}
+
+const COLLECTION_TABS = {
+	exercises: ['exercises'],
+	workouts: ['exercises', 'workouts'],
+	workoutSessions: ['logs'],
+	dayFlags: ['dayFlags'],
+	schedule: ['schedule'],
+	cardioActivities: ['cardio'],
+	garminActivities: ['garmin'],
+	garminWellness: ['garminWellness'],
+	withingsMeasurements: ['withings'],
+	settings: ['settings'],
+	syncState: ['infra'],
 }
 
 const GARMIN_WELLNESS_FIELDS = [
@@ -137,7 +152,11 @@ async function fetchJson(url, token, options = {}) {
 	return response.status === 204 ? null : response.json()
 }
 
-export async function readSheetData(spreadsheetId, token) {
+export async function readSheetData(
+	spreadsheetId,
+	token,
+	requestedCollections = Object.keys(COLLECTION_TABS),
+) {
 	const metadata = await fetchJson(
 		`${SHEETS_API_BASE}/${spreadsheetId}?fields=sheets.properties.title`,
 		token,
@@ -145,7 +164,12 @@ export async function readSheetData(spreadsheetId, token) {
 	const titles = new Set((metadata.sheets ?? []).map((sheet) => sheet.properties?.title).filter(Boolean))
 	const warnings = []
 	const rows = {}
+	const requestedTabs = new Set(requestedCollections.flatMap((collection) => COLLECTION_TABS[collection]))
 	for (const [key, tab] of Object.entries(TABS)) {
+		if (!requestedTabs.has(key)) {
+			rows[key] = null
+			continue
+		}
 		if (!titles.has(tab.title)) {
 			const message = `${tab.title} is missing and will be skipped.`
 			if (tab.required) throw new Error(`Required tab: ${message}`)
@@ -550,8 +574,13 @@ function documents(values, getId, { label, duplicatePolicy = 'error', warnings }
 	return [...byId].map(([id, data]) => ({ id, data }))
 }
 
-export function buildMigrationPlan(rows, initialWarnings = []) {
+export function buildMigrationPlan(
+	rows,
+	initialWarnings = [],
+	requestedCollections = Object.keys(COLLECTION_TABS),
+) {
 	const warnings = [...initialWarnings]
+	const requested = new Set(requestedCollections)
 	const validRows = (source, parser, label, skipHeader = false) => {
 		const input = skipHeader ? source.slice(1) : source
 		const values = input.map(parser).filter(Boolean)
@@ -560,13 +589,18 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		return values
 	}
 
-	const exercises = validRows(rows.exercises, parseExerciseRow, 'Exercises', true)
-	if (exercises.length === 0) throw new Error('Required tab Stronger - Exercises contains no valid data rows.')
+	const exercises = rows.exercises == null ? [] : validRows(rows.exercises, parseExerciseRow, 'Exercises', true)
+	if ((requested.has('exercises') || requested.has('workouts')) && exercises.length === 0) {
+		throw new Error('Required tab Stronger - Exercises contains no valid data rows.')
+	}
 	const liftNames = new Map(exercises.map((item) => [item.id, item.name]))
-	const workouts = parseWorkouts(rows.workouts.slice(1), liftNames)
-	if (workouts.length === 0) throw new Error('Required tab Stronger - Workouts contains no valid data rows.')
-	const invalidWorkoutRows = rows.workouts.slice(1).filter((row) => row.some((value) => text(value))).length
-		- rows.workouts.slice(1).map(parseWorkoutRow).filter(Boolean).length
+	const workoutRows = rows.workouts?.slice(1) ?? []
+	const workouts = parseWorkouts(workoutRows, liftNames)
+	if (requested.has('workouts') && workouts.length === 0) {
+		throw new Error('Required tab Stronger - Workouts contains no valid data rows.')
+	}
+	const invalidWorkoutRows = workoutRows.filter((row) => row.some((value) => text(value))).length
+		- workoutRows.map(parseWorkoutRow).filter(Boolean).length
 	if (invalidWorkoutRows > 0) warnings.push(`Workouts: skipped ${invalidWorkoutRows} invalid row${invalidWorkoutRows === 1 ? '' : 's'}.`)
 
 	const optionalRows = (key, parser, label, skipHeader = false) =>
@@ -595,40 +629,54 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		const value = text(row[1])
 		if (key && value) settings.set(key, value)
 	}
+	const infra = new Map()
+	for (const row of rows.infra?.slice(1) ?? []) {
+		const key = text(row[0])
+		const value = text(row[1])
+		if (key && value) infra.set(key, value)
+	}
+	const withingsRefreshToken = infra.get('withings_refresh_token')
+	if (requested.has('syncState') && rows.infra != null && !withingsRefreshToken) {
+		warnings.push('Infra: no withings_refresh_token value was found.')
+	}
 	const planDocuments = (label, source, getId, duplicatePolicy = 'error') =>
 		documents(source, getId, { label, duplicatePolicy, warnings })
 
 	const plan = {
-		exercises: planDocuments('Exercises', values.exercises, (item) => idPart(item.id)),
-		workouts: planDocuments('Workouts', values.workouts, (item) => idPart(item.id)),
-		...(values.workoutSessions == null ? {} : {
+		...(requested.has('exercises') ? {
+			exercises: planDocuments('Exercises', values.exercises, (item) => idPart(item.id)),
+		} : {}),
+		...(requested.has('workouts') ? {
+			workouts: planDocuments('Workouts', values.workouts, (item) => idPart(item.id)),
+		} : {}),
+		...(!requested.has('workoutSessions') || values.workoutSessions == null ? {} : {
 			workoutSessions: planDocuments(
 				'Workout session years',
 				groupYearBuckets(groupWorkoutSessions(values.workoutSessions)),
 				yearBucketDocumentId,
 			),
 		}),
-		...(values.dayFlags == null ? {} : {
+		...(!requested.has('dayFlags') || values.dayFlags == null ? {} : {
 			dayFlags: planDocuments('Day flags', values.dayFlags, (item) => item.date, 'keep-last'),
 		}),
-		...(values.schedule == null ? {} : {
+		...(!requested.has('schedule') || values.schedule == null ? {} : {
 			schedule: planDocuments(
 				'Workout schedule days',
 				groupScheduleDays(values.schedule),
 				scheduleDayDocumentId,
 			),
 		}),
-		...(values.cardioActivities == null ? {} : {
+		...(!requested.has('cardioActivities') || values.cardioActivities == null ? {} : {
 			cardioActivities: planDocuments('Cardio', values.cardioActivities, (item) => idPart(item.id)),
 		}),
-		...(values.garminActivities == null ? {} : {
+		...(!requested.has('garminActivities') || values.garminActivities == null ? {} : {
 			garminActivities: planDocuments(
 				'Garmin activity years',
 				groupYearBuckets(values.garminActivities),
 				yearBucketDocumentId,
 			),
 		}),
-		...(values.garminWellness == null ? {} : {
+		...(!requested.has('garminWellness') || values.garminWellness == null ? {} : {
 			garminWellness: planDocuments(
 				'Garmin wellness years',
 				groupYearBuckets(
@@ -642,19 +690,27 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 				yearBucketDocumentId,
 			),
 		}),
-		...(values.withingsMeasurements == null ? {} : {
+		...(!requested.has('withingsMeasurements') || values.withingsMeasurements == null ? {} : {
 			withingsMeasurements: planDocuments(
 				'Withings measurement years',
 				groupYearBuckets(values.withingsMeasurements),
 				yearBucketDocumentId,
 			),
 		}),
-		...(rows.settings == null ? {} : { settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }] }),
+		...(!requested.has('settings') || rows.settings == null ? {} : {
+			settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }],
+		}),
+		...(!requested.has('syncState') || !withingsRefreshToken ? {} : {
+			syncState: [{
+				id: 'withings',
+				data: { withingsRefreshToken },
+			}],
+		}),
 	}
 	return { plan, warnings }
 }
 
-function firestoreValue(value) {
+export function firestoreValue(value) {
 	if (value === null) return { nullValue: null }
 	if (typeof value === 'boolean') return { booleanValue: value }
 	if (typeof value === 'number') {
@@ -676,7 +732,7 @@ function firestoreValue(value) {
 	throw new Error(`Unsupported Firestore value type: ${typeof value}`)
 }
 
-function firestoreFields(value) {
+export function firestoreFields(value) {
 	return Object.fromEntries(
 		Object.entries(value)
 			.filter(([, child]) => child !== undefined)
@@ -689,6 +745,9 @@ function databasePath(projectId) {
 }
 
 function documentName(projectId, uid, collection, id) {
+	if (collection === 'syncState') {
+		return `${databasePath(projectId)}/syncState/${uid}`
+	}
 	return `${databasePath(projectId)}/users/${uid}/${collection}/${id}`
 }
 
@@ -703,6 +762,15 @@ async function commitWrites(projectId, token, writes) {
 }
 
 async function listCollectionDocumentNames(projectId, token, uid, collection) {
+	if (collection === 'syncState') {
+		const name = documentName(projectId, uid, collection, uid)
+		const response = await fetch(`${FIRESTORE_API_BASE}/${name}`, {
+			headers: { Authorization: `Bearer ${token}` },
+		})
+		if (response.status === 404) return []
+		if (!response.ok) throw new Error(`Request failed (${response.status}) ${name}: ${await response.text()}`)
+		return [name]
+	}
 	const names = []
 	let pageToken = ''
 	do {
@@ -751,6 +819,7 @@ export async function writeMigration({
 	token,
 	uid,
 	spreadsheetId,
+	migrationId = `sheet-${idPart(spreadsheetId)}`,
 	plan,
 	warnings,
 	replaceExisting,
@@ -764,7 +833,6 @@ export async function writeMigration({
 		throw new Error(`Destination contains ${existingCount} document(s). Enable replace_existing to continue.`)
 	}
 
-	const migrationId = `sheet-${idPart(spreadsheetId)}`
 	const counts = Object.fromEntries(Object.entries(plan).map(([name, docs]) => [name, docs.length]))
 	await recordDocument(projectId, token, uid, 'migrations', migrationId, {
 		sourceSpreadsheetId: spreadsheetId,
@@ -829,11 +897,16 @@ async function main() {
 		'FIREBASE_SERVICE_ACCOUNT_KEY',
 	)
 	const uid = dryRun ? process.env.FIREBASE_USER_ID : required(process.env.FIREBASE_USER_ID, 'FIREBASE_USER_ID')
+	const requestedCollections = process.env.MIGRATION_COLLECTIONS
+		? process.env.MIGRATION_COLLECTIONS.split(',').map((value) => value.trim()).filter(Boolean)
+		: Object.keys(COLLECTION_TABS)
+	const unknownCollections = requestedCollections.filter((collection) => !COLLECTION_TABS[collection])
+	if (unknownCollections.length) throw new Error(`Unknown MIGRATION_COLLECTIONS: ${unknownCollections.join(', ')}`)
 
 	console.log(`Reading spreadsheet ${spreadsheetId}...`)
 	const sheetsToken = await getAccessToken(googleServiceAccount, ['https://www.googleapis.com/auth/spreadsheets.readonly'])
-	const { rows, warnings: readWarnings } = await readSheetData(spreadsheetId, sheetsToken)
-	const { plan, warnings } = buildMigrationPlan(rows, readWarnings)
+	const { rows, warnings: readWarnings } = await readSheetData(spreadsheetId, sheetsToken, requestedCollections)
+	const { plan, warnings } = buildMigrationPlan(rows, readWarnings, requestedCollections)
 	const counts = Object.fromEntries(Object.entries(plan).map(([name, docs]) => [name, docs.length]))
 
 	console.log('Migration preview:')
@@ -854,6 +927,9 @@ async function main() {
 		token: firestoreToken,
 		uid,
 		spreadsheetId,
+		migrationId: requestedCollections.length === Object.keys(COLLECTION_TABS).length
+			? `sheet-${idPart(spreadsheetId)}`
+			: `sync-${requestedCollections.map(idPart).join('-')}`,
 		plan,
 		warnings,
 		replaceExisting,

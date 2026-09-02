@@ -1,30 +1,27 @@
 #!/usr/bin/env python3
-"""Garmin Sync — Garmin Connect -> Google Sheets pipeline.
+"""Garmin Sync — Garmin Connect -> Firestore pipeline.
 
-Fetches recent activities from Garmin Connect and appends new rows to the
-"Stronger - Garmin" tab in a Google Sheet. Uses a saved ``garminconnect`` token
-bundle for Garmin auth (no interactive login at run time) and a Google service
-account for Sheets access.
+Fetches recent activities from Garmin Connect and merges them into yearly
+Firestore bucket documents. Uses a saved ``garminconnect`` token bundle for
+Garmin auth (no interactive login at run time) and a Firebase service account
+for Firestore access.
 
-The tab uses a Garmin-native schema that is richer than the legacy Strava
-layout (moving duration, elevation loss, speeds, steps, training effect,
-VO2 max). The old "Stronger - Strava" tab is left in place and deprecated
-gradually. See specs/031-garmin-direct-sync.spec.md.
+The provider payload is normalized to the shared activity model used by the
+Firebase UI. See specs/031-garmin-direct-sync.spec.md and
+specs/052-direct-firestore-sync-actions.spec.md.
 
 Environment variables (all required):
   GARMIN_TOKENS               – ``garminconnect`` token bundle (contents of the
                                 saved ``garmin_tokens.json``)
-  GOOGLE_SERVICE_ACCOUNT_KEY  – JSON key for the Google service account
-  SPREADSHEET_ID              – Google Sheets spreadsheet ID
+  FIREBASE_SERVICE_ACCOUNT_KEY – JSON key for the Firebase service account
+  FIREBASE_USER_ID             – destination UID below ``/users/{uid}``
 
 Flags:
   --backfill   One-time import of full history since ``BACKFILL_START_DATE``
-               (2015-01-01) instead of the rolling recent-activity fetch. Dedup
-               by activity ID keeps it idempotent. Implies ``--overwrite``.
-  --overwrite  Upsert mode: rewrite existing rows (matched by activityId) in
-               place instead of skipping them, so edits to older activities and
-               partial mid-day rows are refreshed. New activities are still
-               appended.
+               (2015-01-01) instead of the rolling recent-activity fetch.
+               Implies ``--overwrite``.
+  --overwrite  Upsert mode: replace matching activity IDs inside their yearly
+               buckets. Unrelated entries remain unchanged.
 
 Usage:
   python scripts/garmin-sync.py [--backfill] [--overwrite]
@@ -32,20 +29,14 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 import tempfile
 from datetime import date, timedelta
 from pathlib import Path
-from urllib.parse import quote
 
-SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets"
+from firestore_sync import get_firestore_access, merge_year_bucket_entries
 
-TAB_NAME = "Stronger - Garmin"
-# Garmin-native schema. Column B (`activityId`) is the dedup key. This is
-# intentionally richer than the legacy Strava layout; the app view that reads
-# it is migrated separately (the Strava tab is deprecated gradually).
 HEADER = [
     "date",
     "activityId",
@@ -143,10 +134,10 @@ def _round_dec(value, ndigits=2):
 
 
 def activity_to_row(activity):
-    """Convert a Garmin activity dict to a spreadsheet row.
+    """Convert a Garmin activity dict to the legacy row shape.
 
-    Returns ``None`` for activities missing required fields (date or id) —
-    these would fail to parse when read back by the app.
+    The intermediate row keeps mapping behavior identical to the one-time
+    migration before it is converted to the Firestore application model.
     """
     start = activity.get("startTimeLocal") or activity.get("startTimeGMT") or ""
     date = start[:10]  # "YYYY-MM-DD"
@@ -183,167 +174,31 @@ def activity_to_row(activity):
     ]
 
 
-# ---------------------------------------------------------------------------
-# Google Sheets (service account via REST)
-# ---------------------------------------------------------------------------
-
-def get_google_access_token(service_account_key):
-    from google.auth.transport.requests import Request
-    from google.oauth2 import service_account
-
-    key = (
-        json.loads(service_account_key)
-        if isinstance(service_account_key, str)
-        else service_account_key
-    )
-    creds = service_account.Credentials.from_service_account_info(
-        key,
-        scopes=["https://www.googleapis.com/auth/spreadsheets"],
-    )
-    creds.refresh(Request())
-    return creds.token
-
-
-def _column_letter(count):
-    # A=1 ... Z=26. HEADER has <= 26 columns.
-    return chr(64 + count)
-
-
-def _sheets_get(session, url, token):
-    res = session.get(url, headers={"Authorization": f"Bearer {token}"})
-    if not res.ok:
-        raise RuntimeError(f"Sheets GET failed ({res.status_code}): {res.text}")
-    return res.json()
-
-
-def ensure_tab(session, spreadsheet_id, token):
-    meta = _sheets_get(
-        session,
-        f"{SHEETS_API_BASE}/{spreadsheet_id}?fields=sheets.properties.title",
-        token,
-    )
-    titles = {
-        s.get("properties", {}).get("title") for s in meta.get("sheets", [])
+def activity_row_to_entry(row):
+    """Convert the legacy row shape to the Firestore activity model."""
+    activity_type = normalize_activity_type(row[2])
+    if not activity_type:
+        return None
+    return {
+        "date": row[0],
+        "stravaId": row[1],
+        "activityType": activity_type,
+        "name": row[3],
+        "duration": int(row[4]),
+        "distance": int(row[6]),
+        "elevationGain": int(row[7]),
+        "elevationLoss": int(row[8]),
+        "calories": 0,
+        "avgHR": int(row[9]),
+        "maxHR": int(row[10]),
     }
-    if TAB_NAME in titles:
-        return
-
-    create_res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}:batchUpdate",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"requests": [{"addSheet": {"properties": {"title": TAB_NAME}}}]},
-    )
-    if not create_res.ok:
-        raise RuntimeError(
-            f"Tab creation failed ({create_res.status_code}): {create_res.text}"
-        )
-
-    col = _column_letter(COLUMN_COUNT)
-    header_range = quote(f"'{TAB_NAME}'!A1:{col}1")
-    header_res = session.put(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{header_range}"
-        "?valueInputOption=RAW",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"values": [HEADER]},
-    )
-    if not header_res.ok:
-        raise RuntimeError(
-            f"Header write failed ({header_res.status_code}): {header_res.text}"
-        )
-    print(f'Created "{TAB_NAME}" tab with header row.')
 
 
-def read_existing_ids(session, spreadsheet_id, token):
-    # Read the id column (column B, starting from row 2).
-    id_range = quote(f"'{TAB_NAME}'!B2:B")
-    data = _sheets_get(
-        session,
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{id_range}",
-        token,
-    )
-    ids = set()
-    for row in data.get("values", []):
-        if row and row[0]:
-            ids.add(row[0].strip())
-    return ids
-
-
-def read_existing_id_rows(session, spreadsheet_id, token):
-    """Return ``{activityId: row_number}`` for existing data rows.
-
-    Row numbers are 1-based to match the sheet (the header is row 1, so the
-    first data row is row 2). When the sheet already holds duplicate ids, the
-    first occurrence wins.
-    """
-    id_range = quote(f"'{TAB_NAME}'!B2:B")
-    data = _sheets_get(
-        session,
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{id_range}",
-        token,
-    )
-    rows = {}
-    for offset, row in enumerate(data.get("values", [])):
-        if row and row[0]:
-            key = row[0].strip()
-            if key not in rows:
-                rows[key] = offset + 2
-    return rows
-
-
-def partition_rows(rows, existing_rows, key_index=1):
-    """Split ``rows`` into (updates, appends) for an upsert.
-
-    ``existing_rows`` maps a row key to its 1-based sheet row number.
-    ``updates`` is a list of ``(row_number, row)`` for keys already present;
-    ``appends`` is the list of rows whose key is new.
-    """
-    updates = []
-    appends = []
-    for row in rows:
-        key = row[key_index]
-        if key in existing_rows:
-            updates.append((existing_rows[key], row))
-        else:
-            appends.append(row)
-    return updates, appends
-
-
-def batch_update_rows(session, spreadsheet_id, token, updates):
-    """Rewrite specific rows in place via values:batchUpdate."""
-    if not updates:
-        return
-    col = _column_letter(COLUMN_COUNT)
-    data = [
-        {
-            "range": f"'{TAB_NAME}'!A{row_number}:{col}{row_number}",
-            "values": [row],
-        }
-        for row_number, row in updates
-    ]
-    res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values:batchUpdate",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"valueInputOption": "RAW", "data": data},
-    )
-    if not res.ok:
-        raise RuntimeError(
-            f"Batch update rows failed ({res.status_code}): {res.text}"
-        )
-
-
-def append_rows(session, spreadsheet_id, token, rows):
-    if not rows:
-        return
-    col = _column_letter(COLUMN_COUNT)
-    append_range = quote(f"'{TAB_NAME}'!A:{col}")
-    res = session.post(
-        f"{SHEETS_API_BASE}/{spreadsheet_id}/values/{append_range}:append"
-        "?valueInputOption=RAW&insertDataOption=INSERT_ROWS",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"values": rows},
-    )
-    if not res.ok:
-        raise RuntimeError(f"Append rows failed ({res.status_code}): {res.text}")
+def normalize_activity_type(value):
+    key = str(value or "").strip().lower()
+    if key == "strength_training":
+        return "Weight Training"
+    return " ".join(word.capitalize() for word in key.split("_") if word)
 
 
 # ---------------------------------------------------------------------------
@@ -354,8 +209,8 @@ def main():
     import requests
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
-    service_account_key = os.environ.get("GOOGLE_SERVICE_ACCOUNT_KEY")
-    spreadsheet_id = os.environ.get("SPREADSHEET_ID")
+    service_account_key = os.environ.get("FIREBASE_SERVICE_ACCOUNT_KEY")
+    uid = os.environ.get("FIREBASE_USER_ID")
     backfill = "--backfill" in sys.argv
     # Backfill implies overwrite so re-running a full sync also refreshes edits
     # to older activities (not just appends new ones).
@@ -364,9 +219,9 @@ def main():
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
     if not service_account_key:
-        raise SystemExit("Missing GOOGLE_SERVICE_ACCOUNT_KEY environment variable")
-    if not spreadsheet_id:
-        raise SystemExit("Missing SPREADSHEET_ID environment variable")
+        raise SystemExit("Missing FIREBASE_SERVICE_ACCOUNT_KEY environment variable")
+    if not uid:
+        raise SystemExit("Missing FIREBASE_USER_ID environment variable")
 
     # 1. Authenticate with Garmin using the saved token bundle.
     print("Loading Garmin tokens...")
@@ -384,53 +239,36 @@ def main():
         activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
     print(f"Fetched {len(activities)} activities from Garmin.")
 
-    # 3. Authenticate with Google Sheets.
-    print("Authenticating with Google Sheets...")
-    google_token = get_google_access_token(service_account_key)
-
+    # 3. Authenticate with Firestore.
+    print("Authenticating with Firestore...")
+    project_id, firestore_token = get_firestore_access(service_account_key)
     session = requests.Session()
 
-    # 4. Ensure the tab exists.
-    ensure_tab(session, spreadsheet_id, google_token)
-
-    # 5. Convert fetched activities to rows.
+    # 4. Convert fetched activities to the exact model stored by migration.
     rows = [r for r in (activity_to_row(a) for a in activities) if r is not None]
-
-    if overwrite:
-        # Upsert mode: rewrite existing rows (matched by activityId) in place and
-        # append the rest. Refreshes edited activities and partial mid-day rows.
-        existing_rows = read_existing_id_rows(session, spreadsheet_id, google_token)
-        print(f"Found {len(existing_rows)} existing activities in sheet.")
-        updates, appends = partition_rows(rows, existing_rows)  # key = row[1] (id)
-
-        if not updates and not appends:
-            print("No activities to sync.")
-            return
-
-        if updates:
-            print(f"Updating {len(updates)} existing activities...")
-            batch_update_rows(session, spreadsheet_id, google_token, updates)
-        if appends:
-            print(f"Appending {len(appends)} new activities...")
-            append_rows(session, spreadsheet_id, google_token, appends)
-        print(
-            f"Done — updated {len(updates)}, appended {len(appends)} activities."
-        )
+    entries = [
+        entry
+        for entry in (activity_row_to_entry(row) for row in rows)
+        if entry is not None
+    ]
+    if not entries:
+        print("No valid activities to sync.")
         return
 
-    # Append-only mode: skip activities whose id is already in the sheet.
-    existing_ids = read_existing_ids(session, spreadsheet_id, google_token)
-    print(f"Found {len(existing_ids)} existing activities in sheet.")
-    new_rows = [row for row in rows if row[1] not in existing_ids]  # row[1] = id
-
-    if not new_rows:
-        print("No new activities to sync.")
-        return
-
-    # Append new rows.
-    print(f"Appending {len(new_rows)} new activities...")
-    append_rows(session, spreadsheet_id, google_token, new_rows)
-    print(f"Done — synced {len(new_rows)} new activities.")
+    result = merge_year_bucket_entries(
+        session,
+        project_id,
+        firestore_token,
+        uid,
+        "garminActivities",
+        entries,
+        "stravaId",
+        overwrite,
+    )
+    print(
+        f"Done — added {result['added']}, updated {result['updated']} "
+        "Garmin activities in Firestore."
+    )
 
 
 if __name__ == "__main__":

@@ -4,9 +4,8 @@ Stronger uses a shared Firebase project for Firebase Authentication and Cloud
 Firestore. Each user signs in with Google and owns a separate
 `/users/{firebaseUid}` document tree.
 
-Google OAuth remains separately configured for Calendar access. Google Sheets
-remains the ingestion ledger for the scheduled Garmin and Withings jobs during
-the Firebase transition.
+Google OAuth remains separately configured for Calendar access. Scheduled
+Garmin and Withings jobs write directly to Firestore.
 
 > **OSS and trusted-forks security model:** public forks do not inherit
 > repository secrets and have no access to the shared Firebase project by
@@ -37,9 +36,9 @@ workflow usage:
 
 | API | Service name | Used by | Enable in |
 |---|---|---|---|
-| Cloud Firestore API | `firestore.googleapis.com` | Stronger UI, migration, health sync mirroring | Firebase project |
+| Cloud Firestore API | `firestore.googleapis.com` | Stronger UI, migration, and direct health sync | Firebase project |
 | Identity Toolkit API | `identitytoolkit.googleapis.com` | Firebase Authentication and UID validation | Firebase project |
-| Google Sheets API | `sheets.googleapis.com` | One-time migration and scheduled health sync ledgers | Project that owns the Google Sheets service account |
+| Google Sheets API | `sheets.googleapis.com` | One-time migration and comparison benchmark only | Project that owns the Google Sheets service account |
 
 If one service account and project are used for both Firebase administration
 and Google Sheets, enable all three APIs in that project.
@@ -182,7 +181,7 @@ Firebase login does not replace the separate Google Calendar authorization.
 ## 7. Configure the administrative service account
 
 The browser application does not use a service-account key. The migration and
-scheduled Garmin/Withings Firestore mirrors do.
+scheduled health sync workflows do.
 
 1. Open **Project settings -> Service accounts -> Firebase Admin SDK**.
 2. Select **Generate new private key**.
@@ -197,9 +196,9 @@ A custom service account needs:
 - **Firebase Authentication Viewer** (`roles/firebaseauth.viewer`) for
   validating destination users.
 
-The same service account may be used for Sheets and Firebase if it belongs to
-the Firebase project, has the roles above, and has access to the spreadsheet.
-In that case, the same JSON may be stored in both service-account secrets.
+The same service account may be used for the legacy Sheets migration and
+Firebase if it belongs to the Firebase project, has the roles above, and has
+read access to the spreadsheet.
 
 Never commit a service-account key. Delete the local copy after storing it if
 it is no longer needed.
@@ -208,15 +207,15 @@ it is no longer needed.
 
 Public forks receive no upstream secrets. For each approved friends-and-family
 fork, the shared-project maintainer manually adds the common Firebase
-configuration and administrative key. That fork has its own spreadsheet and
-Firebase UID.
+configuration and administrative key. That fork has its own Firebase UID and
+may have a legacy spreadsheet to migrate.
 
 | Secret | Scope | Purpose |
 |---|---|---|
 | `VITE_FIREBASE_*` | Shared | Browser Firebase project configuration |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | Manually added to approved trusted forks only | Project-wide administrative Firestore writes |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | Per fork or shared | Reads the user's sheet; scheduled health jobs may also write their ledger tabs |
-| `SPREADSHEET_ID` | Per user | Source Google spreadsheet |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | Migration-only | Reads the legacy source sheet |
+| `SPREADSHEET_ID` | Migration-only | Legacy source Google spreadsheet |
 | `FIREBASE_USER_ID` | Per user | Destination `/users/{uid}` path and scheduled sync owner |
 
 Before migrating, create the user's permanent UID from the existing
@@ -247,18 +246,21 @@ provisioning from the maintainer.
 
 ## 9. Scheduled health synchronization
 
-The Garmin, Garmin Wellness, and Withings workflows continue to update their
-Google Sheet tabs, then mirror only their owned collections into Firestore.
-They require:
+Garmin activities, Garmin wellness, and Withings write directly to their
+yearly Firestore bucket collections. They require:
 
 - Their existing provider credentials.
-- `GOOGLE_SERVICE_ACCOUNT_KEY`.
-- `SPREADSHEET_ID`.
 - `FIREBASE_SERVICE_ACCOUNT_KEY`.
 - `FIREBASE_USER_ID`.
 
-Missing Garmin or Withings tabs do not affect the core workout application or
-the one-time migration.
+Every bucket has `{ period, count, entries, updatedAt }`. Incremental syncs use
+optimistic read-modify-write retries and preserve records outside their fetch
+window.
+
+Withings stores its rotating refresh token in the administrator-only
+`/syncState/{uid}` document. Browser rules do not expose that path. Existing
+installations should run the migration workflow once with `collections` set to
+`syncState` before enabling the direct Withings workflow.
 
 ## One-time Google Sheets migration
 
@@ -266,6 +268,10 @@ The **Migrate Google Sheet to Firebase** workflow is a special-case,
 manual-only import. It copies an existing Stronger spreadsheet into the
 configured `/users/{FIREBASE_USER_ID}` tree before the application switches
 its data backend.
+
+The optional `collections` input can migrate a comma-separated subset. Use
+`syncState` to copy only the current Withings token from `Stronger - Infra`
+into `/syncState/{uid}`.
 
 ### Minimum spreadsheet
 
