@@ -1,37 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CardioActivity, LiftConfig, Workout } from '../model/index.ts'
-import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import {
-	buildWorkoutsFromConfigs,
-	defaultCardioActivities,
-	defaultLiftConfigs,
-	workoutDefinitions,
-} from '../data/sample-workouts.ts'
-import {
-	ensureUser,
 	isFirebaseConfigured,
 	observeAuth,
-	readCardioActivities,
-	readConfigZone,
-	readWorkoutDefs,
 	signInToStronger,
 	signOutOfStronger,
-	writeDefaultCardioActivities,
-	writeDefaultConfig,
-	writeDefaultWorkoutDefs,
 } from '../firebase/index.ts'
 import { Calendar, Dumbbell, HeartPulse, Library, Pizza, Settings, SportShoe, TrendingUp } from 'lucide-react'
 
 interface Props {
-	onConnected: (
-		workouts: Workout[],
-		configs: LiftConfig[],
-		userId: string,
-		definitions: WorkoutDefinition[],
-		cardioActivities: CardioActivity[],
-	) => void
+	onConnected: (userId: string) => void
 	onDisconnected: () => void
-	onNeedsSetup?: (userId: string) => void
 	onOpenCalendar?: () => void
 	onOpenExercises?: () => void
 	onOpenProgress?: () => void
@@ -49,7 +27,6 @@ type Phase = 'loading' | 'sign-in' | 'connected' | 'error'
 export function GoogleAuth({
 	onConnected,
 	onDisconnected,
-	onNeedsSetup,
 	onOpenCalendar,
 	onOpenExercises,
 	onOpenProgress,
@@ -66,42 +43,11 @@ export function GoogleAuth({
 	const [signInPending, setSignInPending] = useState(false)
 	const authGenerationRef = useRef(0)
 
-	const connect = useCallback(async (uid: string, generation: number) => {
-		const isCurrent = () => authGenerationRef.current === generation
-		await ensureUser(uid)
-		if (!isCurrent()) return
-		let configs = await readConfigZone(uid)
-		if (!isCurrent()) return
-		if (!configs) {
-			if (onNeedsSetup) {
-				setPhase('connected')
-				onNeedsSetup(uid)
-				return
-			}
-			configs = defaultLiftConfigs
-			await writeDefaultConfig(uid, configs)
-			if (!isCurrent()) return
-		}
-
-		let definitions = await readWorkoutDefs(uid)
-		if (!isCurrent()) return
-		if (!definitions) {
-			definitions = workoutDefinitions
-			await writeDefaultWorkoutDefs(uid, definitions)
-			if (!isCurrent()) return
-		}
-
-		let cardio = await readCardioActivities(uid)
-		if (!isCurrent()) return
-		if (!cardio) {
-			cardio = defaultCardioActivities
-			await writeDefaultCardioActivities(uid, cardio)
-			if (!isCurrent()) return
-		}
-
+	const connect = useCallback((uid: string, generation: number) => {
+		if (authGenerationRef.current !== generation) return
 		setPhase('connected')
-		onConnected(buildWorkoutsFromConfigs(configs, definitions), configs, uid, definitions, cardio)
-	}, [onConnected, onNeedsSetup])
+		onConnected(uid)
+	}, [onConnected])
 
 	useEffect(() => {
 		if (!isFirebaseConfigured()) {
@@ -117,11 +63,7 @@ export function GoogleAuth({
 				return
 			}
 			setPhase('loading')
-			void connect(user.uid, generation).catch((reason) => {
-				if (authGenerationRef.current !== generation) return
-				setError(reason instanceof Error ? reason.message : String(reason))
-				setPhase('error')
-			})
+			connect(user.uid, generation)
 		})
 		return () => {
 			authGenerationRef.current += 1

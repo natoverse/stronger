@@ -35,6 +35,8 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] Firebase configuration is supplied through public `VITE_FIREBASE_*`
   environment variables; no service-account credential is shipped to the app.
 - [ ] Firestore rules and repository behavior have automated tests.
+- [ ] Initial data loading prioritizes only the collections required by the
+      active route, then prefetches every remaining collection concurrently.
 
 ## Firestore Schema
 
@@ -42,7 +44,7 @@ All collections are nested below `/users/{uid}`:
 
 - `exercises/{exerciseId}`
 - `workouts/{workoutId}`
-- `workoutSessions/{sessionId}`
+- `workoutSessions/{year}`
 - `dayFlags/{date}`
 - `schedule/{date}`
 - `cardioActivities/{activityId}`
@@ -50,9 +52,9 @@ All collections are nested below `/users/{uid}`:
 - `mealLog/{entryId}`
 - `favoriteFoods/{barcode}`
 - `recentFoods/{barcode}`
-- `garminActivities/{activityId}`
-- `garminWellness/{date}`
-- `withingsMeasurements/{groupId}`
+- `garminActivities/{year}`
+- `garminWellness/{year}`
+- `withingsMeasurements/{year}`
 - `settings/app`
 
 The user document stores `schemaVersion`, setup state, and timestamps. Source
@@ -65,6 +67,11 @@ model adopts the nested session type directly.
 Each schedule document represents one date and contains an ordered `events`
 array. The Firebase adapter flattens those documents into the existing
 `WorkoutScheduleEntry[]` interface for calendar and planning code.
+
+Workout sessions, Garmin activities, Garmin wellness, and Withings
+measurements use yearly `{ period, count, entries }` bucket documents. The
+Firebase adapter flattens these buckets for the existing application models;
+workout session mutations update only the affected year.
 
 ## Security and Quotas
 
@@ -90,3 +97,13 @@ collections into Firestore after each successful sync.
   Session edits and deletes therefore require one document operation.
 - Scheduled workouts are stored as one document per day with an ordered events
   array, rather than one document per legacy sheet row.
+- Authentication no longer blocks on exercises, workouts, and cardio reads.
+  The active route selects a priority collection batch from
+  `lib/firebase-load-plan.json`; only after that batch completes does one
+  `Promise.all` prefetch every remaining collection and update the user
+  metadata document. This guarantees, for example, that a direct Garmin
+  activities load requests `garminActivities` before unrelated collections.
+  The active view retains its loading state until that priority batch finishes,
+  avoiding a false empty-state flash while background prefetch continues.
+- The benchmark consumes the same route load plan, so its Sheets and Firestore
+  tab totals use identical logical dataset requirements.

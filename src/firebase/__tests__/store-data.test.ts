@@ -5,15 +5,16 @@ vi.mock('../client.ts', () => ({ firestore: {} }))
 import {
 	flattenWorkoutSessions,
 	flattenScheduleDays,
+	flattenYearBuckets,
 	groupScheduleEntries,
 	groupWorkoutSessionRows,
+	groupYearBuckets,
 	rowToParsedLogRow,
 	scheduleDayDocumentId,
-	workoutSessionDocumentId,
 } from '../store.ts'
 
 describe('Firestore data identifiers', () => {
-	it('creates stable, distinct workout session document IDs', () => {
+	it('groups workout sessions into yearly buckets', () => {
 		const first = rowToParsedLogRow([
 			'2026-08-29', '2026-08-29T10:00:00Z', '2026-08-29T11:00:00Z',
 			'A', 'Bench Press', 'bench-press', 1, 'work', 200, 5, 205, 5, 'TRUE',
@@ -25,10 +26,16 @@ describe('Firestore data identifiers', () => {
 
 		expect(first).not.toBeNull()
 		expect(second).not.toBeNull()
-		expect(workoutSessionDocumentId(first!)).toBe(workoutSessionDocumentId(second!))
-		expect(workoutSessionDocumentId(first!)).toBe(workoutSessionDocumentId({ ...first! }))
-		expect(workoutSessionDocumentId(first!))
-			.not.toBe(workoutSessionDocumentId({ ...first!, workoutId: 'B' }))
+		const sessions = groupWorkoutSessionRows([
+			first!,
+			second!,
+			{ ...first!, date: '2025-12-31', startTime: '2025-12-31T10:00:00Z' },
+		])
+		const buckets = groupYearBuckets(sessions)
+
+		expect(buckets.map((bucket) => bucket.period)).toEqual(['2025', '2026'])
+		expect(buckets.map((bucket) => bucket.count)).toEqual([1, 1])
+		expect(flattenYearBuckets(buckets)).toEqual(sessions.reverse())
 	})
 
 	it('parses completed flags and numeric set values', () => {

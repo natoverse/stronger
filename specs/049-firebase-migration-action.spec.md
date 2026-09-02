@@ -55,13 +55,13 @@ authentication, and scheduled sync jobs switch backends.
 
 - `exercises`
 - `workouts`
-- `workoutSessions`
+- `workoutSessions/{year}`
 - `dayFlags`
 - `schedule`
 - `cardioActivities`
-- `garminActivities`
-- `garminWellness`
-- `withingsMeasurements`
+- `garminActivities/{year}`
+- `garminWellness/{year}`
+- `withingsMeasurements/{year}`
 - `settings/app`
 - `migrations/{migrationId}`
 
@@ -93,9 +93,8 @@ authentication, and scheduled sync jobs switch backends.
   their date, workout, and label, so multiple workouts on one day are retained.
 - Workout history follows the same nested-document approach as workout
   definitions. Rows sharing `(date, workoutId, startTime)` are collapsed into
-  one `workoutSessions` document containing ordered exercise and set arrays.
-  Repeated exercise blocks remain distinct when the lift/name changes or set
-  numbering resets.
+  session objects containing ordered exercise and set arrays. Sessions are
+  then grouped into yearly `workoutSessions/{year}` bucket documents.
 - Workout schedule entries are grouped into `schedule/{date}` documents with
   ordered `events` arrays. Event objects retain `workoutId`, `label`,
   `calendarEventId`, and `strongerId`; the date is stored once at the document
@@ -106,6 +105,12 @@ authentication, and scheduled sync jobs switch backends.
 - Nutrition collections (`mealItems`, `mealLog`, `favoriteFoods`, and
   `recentFoods`) are not migrated. Nutrition tracking starts fresh after the
   Firebase application backend is enabled.
+- Append-only histories use yearly bucket documents for
+  `workoutSessions`, `garminActivities`, `garminWellness`, and
+  `withingsMeasurements`. Every bucket stores `{ period, count, entries }`;
+  the migration writer adds `updatedAt`. Yearly Garmin wellness buckets are an
+  explicit choice: current volume is comfortably below Firestore's document
+  limit, and the schema can be revisited if that changes.
 - The deprecated Strava sheet is not read or migrated. Runtime activity views
   consume Garmin data; legacy `StravaActivity` names remain only as shared
   model and chart terminology.

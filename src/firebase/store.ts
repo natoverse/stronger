@@ -4,6 +4,7 @@ import {
 	doc,
 	getDocs,
 	getDoc,
+	runTransaction,
 	setDoc,
 	writeBatch,
 	type DocumentData,
@@ -26,7 +27,18 @@ import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import type { ParsedLogRow } from '../google/sheets.ts'
 import { firestore } from './client.ts'
 
-export const SCHEMA_VERSION = 1
+export const SCHEMA_VERSION = 2
+
+type DatedEntry = {
+	date: string
+	startTime?: string
+}
+
+type StoredYearBucket<T> = {
+	period: string
+	count: number
+	entries: T[]
+}
 
 type StoredWorkoutSet = Pick<
 	ParsedLogRow,
@@ -94,6 +106,48 @@ function clean<T>(snapshot: QueryDocumentSnapshot<DocumentData>): T {
 
 function idPart(value: string): string {
 	return encodeURIComponent(value).split('.').join('%2E')
+}
+
+function yearForDate(date: string): string {
+	const year = date.slice(0, 4)
+	if (!/^\d{4}$/.test(year)) throw new Error(`Cannot create year bucket for invalid date: ${date}`)
+	return year
+}
+
+function sortDatedEntries<T extends DatedEntry>(entries: T[]): T[] {
+	return [...entries].sort((left, right) =>
+		`${left.date}:${left.startTime ?? ''}`.localeCompare(`${right.date}:${right.startTime ?? ''}`))
+}
+
+export function groupYearBuckets<T extends DatedEntry>(entries: T[]): StoredYearBucket<T>[] {
+	const buckets = new Map<string, StoredYearBucket<T>>()
+	for (const entry of sortDatedEntries(entries)) {
+		const period = yearForDate(entry.date)
+		if (!buckets.has(period)) buckets.set(period, { period, count: 0, entries: [] })
+		const bucket = buckets.get(period)!
+		bucket.entries.push(entry)
+		bucket.count = bucket.entries.length
+	}
+	return [...buckets.values()]
+}
+
+export function flattenYearBuckets<T extends DatedEntry>(buckets: StoredYearBucket<T>[]): T[] {
+	return sortDatedEntries(buckets.flatMap((bucket) => bucket.entries))
+}
+
+function readYearBucketCollection<T extends DatedEntry>(
+	uid: string,
+	name: CollectionName,
+): Promise<T[]> {
+	return readCollection<StoredYearBucket<T>>(uid, name).then(flattenYearBuckets)
+}
+
+function replaceYearBucketCollection<T extends DatedEntry>(
+	uid: string,
+	name: CollectionName,
+	entries: T[],
+): Promise<void> {
+	return replaceCollection(uid, name, groupYearBuckets(entries), (bucket) => bucket.period)
 }
 
 async function readCollection<T>(uid: string, name: CollectionName): Promise<T[]> {
@@ -169,16 +223,16 @@ export function writeCardioActivities(uid: string, activities: CardioActivity[])
 
 export const writeDefaultCardioActivities = writeCardioActivities
 
-export function workoutSessionDocumentId(
+function workoutSessionKey(
 	session: Pick<ParsedLogRow, 'date' | 'startTime' | 'workoutId'>,
 ): string {
-	return idPart(`${session.date}:${session.startTime}:${session.workoutId}`)
+	return `${session.date}:${session.startTime}:${session.workoutId}`
 }
 
 export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSession[] {
 	const sessions = new Map<string, StoredWorkoutSession>()
 	for (const row of rows) {
-		const sessionId = workoutSessionDocumentId(row)
+		const sessionId = workoutSessionKey(row)
 		if (!sessions.has(sessionId)) {
 			sessions.set(sessionId, {
 				date: row.date,
@@ -242,16 +296,25 @@ export async function appendLogRows(uid: string, rows: (string | number | boolea
 		return value ? [value] : []
 	})
 	const sessions = groupWorkoutSessionRows(parsed)
-	for (let start = 0; start < sessions.length; start += 400) {
-		const batch = writeBatch(firestore)
-		for (const session of sessions.slice(start, start + 400)) {
-			batch.set(doc(userCollection(uid, 'workoutSessions'), workoutSessionDocumentId(session)), {
-				...session,
+	for (const incoming of groupYearBuckets(sessions)) {
+		const ref = doc(userCollection(uid, 'workoutSessions'), incoming.period)
+		await runTransaction(firestore, async (transaction) => {
+			const snapshot = await transaction.get(ref)
+			const current = snapshot.exists()
+				? (snapshot.data() as StoredYearBucket<StoredWorkoutSession>).entries
+				: []
+			const incomingKeys = new Set(incoming.entries.map(workoutSessionKey))
+			const entries = sortDatedEntries([
+				...current.filter((session) => !incomingKeys.has(workoutSessionKey(session))),
+				...incoming.entries,
+			])
+			transaction.set(ref, {
+				period: incoming.period,
+				count: entries.length,
+				entries,
 				updatedAt: new Date().toISOString(),
 			})
-		}
-
-		await batch.commit()
+		})
 	}
 }
 
@@ -282,7 +345,8 @@ export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLog
 }
 
 export function readLogZone(uid: string): Promise<ParsedLogRow[]> {
-	return readCollection<StoredWorkoutSession>(uid, 'workoutSessions').then(flattenWorkoutSessions)
+	return readYearBucketCollection<StoredWorkoutSession>(uid, 'workoutSessions')
+		.then(flattenWorkoutSessions)
 }
 
 export async function updateLogRows(
@@ -296,19 +360,46 @@ export async function updateLogRows(
 	if (sessions.length !== 1) throw new Error('Updated rows must describe exactly one workout session.')
 
 	const session = sessions[0]
-	const originalId = workoutSessionDocumentId({
+	const originalKey = workoutSessionKey({
 		date: sessionDate,
 		workoutId: sessionWorkoutId,
 		startTime: sessionStartTime,
 	})
-	const updatedId = workoutSessionDocumentId(session)
-	const batch = writeBatch(firestore)
-	if (originalId !== updatedId) batch.delete(doc(userCollection(uid, 'workoutSessions'), originalId))
-	batch.set(doc(userCollection(uid, 'workoutSessions'), updatedId), {
-		...session,
-		updatedAt: new Date().toISOString(),
+	const originalYear = yearForDate(sessionDate)
+	const updatedYear = yearForDate(session.date)
+	const years = [...new Set([originalYear, updatedYear])]
+	await runTransaction(firestore, async (transaction) => {
+		const refs = years.map((year) => doc(userCollection(uid, 'workoutSessions'), year))
+		const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)))
+		const entriesByYear = new Map(years.map((year, index) => [
+			year,
+			snapshots[index].exists()
+				? (snapshots[index].data() as StoredYearBucket<StoredWorkoutSession>).entries
+				: [],
+		]))
+		entriesByYear.set(
+			originalYear,
+			entriesByYear.get(originalYear)!.filter((item) => workoutSessionKey(item) !== originalKey),
+		)
+		entriesByYear.set(updatedYear, [
+			...entriesByYear.get(updatedYear)!.filter((item) => workoutSessionKey(item) !== workoutSessionKey(session)),
+			session,
+		])
+		for (let index = 0; index < years.length; index += 1) {
+			const year = years[index]
+			const entries = sortDatedEntries(entriesByYear.get(year)!)
+			if (entries.length === 0) {
+				transaction.delete(refs[index])
+			} else {
+				transaction.set(refs[index], {
+					period: year,
+					count: entries.length,
+					entries,
+					updatedAt: new Date().toISOString(),
+				})
+			}
+		}
 	})
-	await batch.commit()
 }
 
 export async function deleteLogSession(
@@ -317,14 +408,30 @@ export async function deleteLogSession(
 	sessionWorkoutId: string,
 	sessionStartTime: string,
 ): Promise<void> {
-	await deleteDoc(doc(
-		userCollection(uid, 'workoutSessions'),
-		workoutSessionDocumentId({
-			date: sessionDate,
-			workoutId: sessionWorkoutId,
-			startTime: sessionStartTime,
-		}),
-	))
+	const period = yearForDate(sessionDate)
+	const targetKey = workoutSessionKey({
+		date: sessionDate,
+		workoutId: sessionWorkoutId,
+		startTime: sessionStartTime,
+	})
+	const ref = doc(userCollection(uid, 'workoutSessions'), period)
+	await runTransaction(firestore, async (transaction) => {
+		const snapshot = await transaction.get(ref)
+		if (!snapshot.exists()) return
+		const current = (snapshot.data() as StoredYearBucket<StoredWorkoutSession>).entries
+		const entries = current.filter((session) => workoutSessionKey(session) !== targetKey)
+		if (entries.length === current.length) return
+		if (entries.length === 0) {
+			transaction.delete(ref)
+		} else {
+			transaction.set(ref, {
+				period,
+				count: entries.length,
+				entries,
+				updatedAt: new Date().toISOString(),
+			})
+		}
+	})
 }
 
 export function readFlags(uid: string): Promise<DayFlagEntry[]> {
@@ -455,27 +562,27 @@ export async function updateMealLogEntryCategory(
 }
 
 export function readGarminActivities(uid: string): Promise<StravaActivity[]> {
-	return readCollection<StravaActivity>(uid, 'garminActivities')
+	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities')
 }
 
 export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {
-	return replaceCollection(uid, 'garminActivities', items, (item) => idPart(item.stravaId))
+	return replaceYearBucketCollection(uid, 'garminActivities', items)
 }
 
 export function readGarminWellnessEntries(uid: string): Promise<GarminWellnessEntry[]> {
-	return readCollection<GarminWellnessEntry>(uid, 'garminWellness')
+	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness')
 }
 
 export function writeGarminWellnessEntries(uid: string, items: GarminWellnessEntry[]): Promise<void> {
-	return replaceCollection(uid, 'garminWellness', items, (item) => item.date)
+	return replaceYearBucketCollection(uid, 'garminWellness', items)
 }
 
 export function readWithingsMeasurements(uid: string): Promise<WithingsMeasurement[]> {
-	return readCollection<WithingsMeasurement>(uid, 'withingsMeasurements')
+	return readYearBucketCollection<WithingsMeasurement>(uid, 'withingsMeasurements')
 }
 
 export function writeWithingsMeasurements(uid: string, items: WithingsMeasurement[]): Promise<void> {
-	return replaceCollection(uid, 'withingsMeasurements', items, (item) => idPart(item.grpId))
+	return replaceYearBucketCollection(uid, 'withingsMeasurements', items)
 }
 
 export const verifyScheduleTab = async (_uid?: string) => true

@@ -2,7 +2,9 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealLogEntry, MealItem, FoodItem, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
-import { appendLogRows, readLogZone, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, verifyMealFavoritesTab, createMealFavoritesTab, verifyMealRecentsTab, createMealRecentsTab, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, verifyGarminTab, verifyGarminWellnessTab, readGarminWellnessEntries, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, withAuthRetry } from './firebase/index.js';
+import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlags, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, withAuthRetry } from './firebase/index.js';
+import { buildFirebaseLoadQueue, runFirebaseLoadQueue } from './firebase/load-plan.js';
+import type { FirebaseDataset } from './firebase/load-plan.js';
 import type { LiftGoal } from './google/index.js';
 import { signOutOfStronger } from './firebase/index.js';
 import { syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
@@ -79,19 +81,15 @@ function AppContent() {
   } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const settingsRef = useRef(new Map<string, string>());
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
-  // Lazy-loading flags: track whether secondary data has been fetched
-  const flagsLoadedRef = useRef(false);
-  const workoutScheduleLoadedRef = useRef(false);
   const logLoadedRef = useRef(false);
-  const settingsLoadedRef = useRef(false);
-  const garminLoadedRef = useRef(false);
-  const wellnessLoadedRef = useRef(false);
-  const withingsLoadedRef = useRef(false);
-  const nutritionLoadedRef = useRef(false);
+  const dataLoadsRef = useRef(new Map<FirebaseDataset, Promise<void>>());
+  const loadQueueUserRef = useRef<string | null>(null);
   const connectedUserRef = useRef<string | null>(null);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
 
@@ -111,35 +109,22 @@ function AppContent() {
   }, []);
 
   const handleConnected = useCallback(
-    (loadedWorkouts: Workout[], loadedConfigs: LiftConfig[], sheetId: string, defs: WorkoutDefinition[], cardio: CardioActivity[]) => {
-      connectedUserRef.current = sheetId;
-      setWorkouts(loadedWorkouts);
-      setConfigs(loadedConfigs);
-      setDefinitions(defs);
-      setSpreadsheetId(sheetId);
+    (userId: string) => {
+      if (connectedUserRef.current === userId) return;
+      connectedUserRef.current = userId;
+      setSpreadsheetId(userId);
       setSheetConnected(true);
       setNeedsSetup(false);
-      setCardioActivities(cardio);
-      // Reset lazy-loading flags for new connection
-      flagsLoadedRef.current = false;
-      workoutScheduleLoadedRef.current = false;
+      setDataLoadError(null);
+      setPriorityLoadPending(true);
       logLoadedRef.current = false;
-      settingsLoadedRef.current = false;
+      dataLoadsRef.current.clear();
+      loadQueueUserRef.current = null;
       setSettingsLoaded(false);
-      garminLoadedRef.current = false;
-      wellnessLoadedRef.current = false;
-      withingsLoadedRef.current = false;
-      nutritionLoadedRef.current = false;
+      setPriorityLoadPending(false);
     },
     [],
   );
-
-  const handleNeedsSetup = useCallback((sheetId: string) => {
-    connectedUserRef.current = sheetId;
-    setSpreadsheetId(sheetId);
-    setSheetConnected(true);
-    setNeedsSetup(true);
-  }, []);
 
   const handleSetupConfirm = useCallback(
     async (configs: LiftConfig[]) => {
@@ -176,6 +161,7 @@ function AppContent() {
       const builtWorkouts = buildWorkoutsFromConfigs(configs, defs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current });
       setWorkouts(builtWorkouts);
       setNeedsSetup(false);
+      setDataLoadError(null);
     },
     [spreadsheetId],
   );
@@ -204,16 +190,10 @@ function AppContent() {
     setMealFavorites([]);
     setMealRecents([]);
     setMealLog([]);
-    // Reset lazy-loading flags
-    flagsLoadedRef.current = false;
-    workoutScheduleLoadedRef.current = false;
     logLoadedRef.current = false;
-    settingsLoadedRef.current = false;
+    dataLoadsRef.current.clear();
+    loadQueueUserRef.current = null;
     setSettingsLoaded(false);
-    garminLoadedRef.current = false;
-    wellnessLoadedRef.current = false;
-    withingsLoadedRef.current = false;
-    nutritionLoadedRef.current = false;
     replaceTo({ view: 'list' });
   }, [replaceTo]);
 
@@ -360,16 +340,43 @@ function AppContent() {
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
+  const loadExercisesData = useCallback(async (userId: string) => {
+    const loaded = await readConfigZone(userId);
+    if (connectedUserRef.current !== userId) return;
+    if (!loaded) {
+      setNeedsSetup(true);
+      return;
+    }
+    setConfigs(loaded);
+    setNeedsSetup(false);
+  }, []);
+
+  const loadWorkoutDefinitionsData = useCallback(async (userId: string) => {
+    let loaded = await readWorkoutDefs(userId);
+    if (connectedUserRef.current !== userId) return;
+    if (!loaded) {
+      loaded = workoutDefinitions;
+      await writeDefaultWorkoutDefs(userId, loaded);
+      if (connectedUserRef.current !== userId) return;
+    }
+    setDefinitions(loaded);
+  }, []);
+
+  const loadCardioActivitiesData = useCallback(async (userId: string) => {
+    let loaded = await readCardioActivities(userId);
+    if (connectedUserRef.current !== userId) return;
+    if (!loaded) {
+      loaded = defaultCardioActivities;
+      await writeDefaultCardioActivities(userId, loaded);
+      if (connectedUserRef.current !== userId) return;
+    }
+    setCardioActivities(loaded);
+  }, []);
+
   // Schedule handlers
   const loadFlagsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const flagsTabExists = await verifyScheduleTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!flagsTabExists) {
-          await createScheduleTab(sheetId);
-          if (connectedUserRef.current !== sheetId) return;
-        }
         const flags = await readFlags(sheetId);
         if (connectedUserRef.current !== sheetId) return;
         setDayFlags(flags);
@@ -382,12 +389,6 @@ function AppContent() {
   const loadWorkoutScheduleData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const wsTabExists = await verifyWorkoutScheduleTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!wsTabExists) {
-          await createWorkoutScheduleTab(sheetId);
-          if (connectedUserRef.current !== sheetId) return;
-        }
         const schedule = await readWorkoutSchedule(sheetId);
         if (connectedUserRef.current !== sheetId) return;
         setWorkoutSchedule(schedule);
@@ -413,12 +414,6 @@ function AppContent() {
   const loadSettingsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const settingsTabExists = await verifySettingsTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!settingsTabExists) {
-          await createSettingsTab(sheetId);
-          if (connectedUserRef.current !== sheetId) return;
-        }
         const settings = await readSettings(sheetId);
         if (connectedUserRef.current !== sheetId) return;
         settingsRef.current = settings;
@@ -439,13 +434,6 @@ function AppContent() {
   const loadGarminData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyGarminTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!tabExists) {
-          // The Garmin tab is created by the sync script, not the app.
-          setGarminActivities([]);
-          return;
-        }
         const activities = await readGarminActivities(sheetId);
         if (connectedUserRef.current !== sheetId) return;
         setGarminActivities(activities);
@@ -458,12 +446,6 @@ function AppContent() {
   const loadWellnessData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyGarminWellnessTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!tabExists) {
-          setWellnessEntries([]);
-          return;
-        }
         const entries = await readGarminWellnessEntries(sheetId);
         if (connectedUserRef.current !== sheetId) return;
         setWellnessEntries(entries);
@@ -476,12 +458,6 @@ function AppContent() {
   const loadWithingsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyWithingsTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!tabExists) {
-          await createWithingsTab(sheetId);
-          if (connectedUserRef.current !== sheetId) return;
-        }
         const measurements = await readWithingsMeasurements(sheetId);
         if (connectedUserRef.current !== sheetId) return;
         setWithingsMeasurements(measurements);
@@ -491,27 +467,39 @@ function AppContent() {
     }
   }, []);
 
-  const loadNutritionData = useCallback(async (sheetId: string) => {
+  const loadMealFavoritesData = useCallback(async (sheetId: string) => {
     try {
-      await withAuthRetry(async () => {
-        if (!await verifyMealFavoritesTab(sheetId)) await createMealFavoritesTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        if (!await verifyMealRecentsTab(sheetId)) await createMealRecentsTab(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
-        const [favorites, recents, entries, items] = await Promise.all([
-          readMealFavorites(sheetId),
-          readMealRecents(sheetId),
-          readMealLog(sheetId),
-          readMealItems(sheetId).catch(() => [] as MealItem[]),
-        ]);
-        if (connectedUserRef.current !== sheetId) return;
-        setMealFavorites(favorites);
-        setMealRecents(recents);
-        setMealItems(items);
-        setMealLog(entries);
-      });
+      const favorites = await readMealFavorites(sheetId);
+      if (connectedUserRef.current === sheetId) setMealFavorites(favorites);
     } catch {
-      // Nutrition is optional if the sheet cannot be read.
+      // Nutrition is optional.
+    }
+  }, []);
+
+  const loadMealRecentsData = useCallback(async (sheetId: string) => {
+    try {
+      const recents = await readMealRecents(sheetId);
+      if (connectedUserRef.current === sheetId) setMealRecents(recents);
+    } catch {
+      // Nutrition is optional.
+    }
+  }, []);
+
+  const loadMealLogData = useCallback(async (sheetId: string) => {
+    try {
+      const entries = await readMealLog(sheetId);
+      if (connectedUserRef.current === sheetId) setMealLog(entries);
+    } catch {
+      // Nutrition is optional.
+    }
+  }, []);
+
+  const loadMealItemsData = useCallback(async (sheetId: string) => {
+    try {
+      const items = await readMealItems(sheetId);
+      if (connectedUserRef.current === sheetId) setMealItems(items);
+    } catch {
+      // Nutrition is optional.
     }
   }, []);
 
@@ -1248,37 +1236,69 @@ function AppContent() {
     }
   }, [route, activeWorkout, progressionProposals]);
 
-  // Load workout schedule on home (list) or calendar view
-  useEffect(() => {
-    if ((route.view === 'list' || route.view === 'calendar') && spreadsheetId && !workoutScheduleLoadedRef.current) {
-      workoutScheduleLoadedRef.current = true;
-      void loadWorkoutScheduleData(spreadsheetId);
+  const executeDatasetLoad = useCallback((dataset: FirebaseDataset, userId: string): Promise<void> => {
+    switch (dataset) {
+      case 'exercises': return loadExercisesData(userId);
+      case 'workouts': return loadWorkoutDefinitionsData(userId);
+      case 'cardioActivities': return loadCardioActivitiesData(userId);
+      case 'schedule': return loadWorkoutScheduleData(userId);
+      case 'dayFlags': return loadFlagsData(userId);
+      case 'workoutSessions': return loadLogData(userId);
+      case 'settings': return loadSettingsData(userId);
+      case 'garminActivities': return loadGarminData(userId);
+      case 'garminWellness': return loadWellnessData(userId);
+      case 'withingsMeasurements': return loadWithingsData(userId);
+      case 'mealItems': return loadMealItemsData(userId);
+      case 'mealLog': return loadMealLogData(userId);
+      case 'favoriteFoods': return loadMealFavoritesData(userId);
+      case 'recentFoods': return loadMealRecentsData(userId);
     }
-  }, [route.view, spreadsheetId, loadWorkoutScheduleData]);
+  }, [
+    loadCardioActivitiesData,
+    loadExercisesData,
+    loadFlagsData,
+    loadGarminData,
+    loadLogData,
+    loadMealFavoritesData,
+    loadMealItemsData,
+    loadMealLogData,
+    loadMealRecentsData,
+    loadSettingsData,
+    loadWellnessData,
+    loadWithingsData,
+    loadWorkoutDefinitionsData,
+    loadWorkoutScheduleData,
+  ]);
 
-  // Load day flags when calendar view is first visited
-  useEffect(() => {
-    if (route.view === 'calendar' && spreadsheetId && !flagsLoadedRef.current) {
-      flagsLoadedRef.current = true;
-      void loadFlagsData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadFlagsData]);
+  const loadDataset = useCallback((dataset: FirebaseDataset, userId: string): Promise<void> => {
+    const existing = dataLoadsRef.current.get(dataset);
+    if (existing) return existing;
+    const pending = executeDatasetLoad(dataset, userId).catch((error) => {
+      dataLoadsRef.current.delete(dataset);
+      throw error;
+    });
+    dataLoadsRef.current.set(dataset, pending);
+    return pending;
+  }, [executeDatasetLoad]);
 
-  // Lazy-load log data when calendar or progress view is first visited
   useEffect(() => {
-    if ((route.view === 'calendar' || route.view === 'progress') && spreadsheetId && !logLoadedRef.current) {
-      logLoadedRef.current = true;
-      void loadLogData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadLogData]);
-
-  // Load settings once after connecting (used across multiple views, including toolbar tab visibility).
-  useEffect(() => {
-    if (spreadsheetId && !settingsLoadedRef.current) {
-      settingsLoadedRef.current = true;
-      void loadSettingsData(spreadsheetId);
-    }
-  }, [spreadsheetId, loadSettingsData]);
+    if (!spreadsheetId || loadQueueUserRef.current === spreadsheetId) return;
+    loadQueueUserRef.current = spreadsheetId;
+    const userId = spreadsheetId;
+    const queue = buildFirebaseLoadQueue(route.view);
+    void runFirebaseLoadQueue(
+      queue,
+      (dataset) => loadDataset(dataset, userId),
+      async () => {
+        if (connectedUserRef.current === userId) setPriorityLoadPending(false);
+        await ensureUser(userId);
+      },
+    ).catch((reason) => {
+      if (connectedUserRef.current !== userId) return;
+      setPriorityLoadPending(false);
+      setDataLoadError(reason instanceof Error ? reason.message : String(reason));
+    });
+  }, [loadDataset, route.view, spreadsheetId]);
 
   // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {
@@ -1298,48 +1318,28 @@ function AppContent() {
     replaceTo,
   ]);
 
-  // Lazy-load Garmin activities when the combined activities/wellness view or activity log is first visited.
-  useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'garmin-activities') && spreadsheetId && !garminLoadedRef.current) {
-      garminLoadedRef.current = true;
-      void loadGarminData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadGarminData]);
-
-  // Lazy-load Garmin wellness data when the combined activities/wellness view or
-  // nutrition view (which overlays Garmin calories on its calorie chart) is first visited.
-  useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'nutrition') && spreadsheetId && !wellnessLoadedRef.current) {
-      wellnessLoadedRef.current = true;
-      void loadWellnessData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadWellnessData]);
-
-  // Lazy-load Withings measurements when the progress or withings view is first visited.
-  // (Body-composition goals arrive via the settings read in loadSettingsData.)
-  useEffect(() => {
-    if ((route.view === 'progress' || route.view === 'withings') && spreadsheetId && !withingsLoadedRef.current) {
-      withingsLoadedRef.current = true;
-      void loadWithingsData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadWithingsData]);
-
-  useEffect(() => {
-    if (route.view === 'nutrition' && spreadsheetId && !nutritionLoadedRef.current) {
-      nutritionLoadedRef.current = true;
-      void loadNutritionData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadNutritionData]);
-
   // Gate: require auth + sheet connection before showing workouts
   if (!sheetConnected) {
     return (
       <GoogleAuth
         onConnected={handleConnected}
         onDisconnected={handleDisconnected}
-        onNeedsSetup={handleNeedsSetup}
       />
     );
+  }
+
+  if (dataLoadError) {
+    return (
+      <div className="auth-screen">
+        <p className="auth-error">{dataLoadError}</p>
+        <button className="btn-primary" onClick={() => window.location.reload()}>Retry</button>
+        <button className="btn-link" onClick={() => void handleSignOut()}>Sign out</button>
+      </div>
+    );
+  }
+
+  if (priorityLoadPending) {
+    return <div className="auth-screen"><p className="auth-status">Loading…</p></div>;
   }
 
   // Show setup page for first-time users (empty config zone)

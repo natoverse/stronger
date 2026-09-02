@@ -282,6 +282,12 @@ Nutrition tabs and the deprecated `Stronger - Strava` tab are not read or
 migrated. Nutrition data starts fresh after the Firebase application backend
 is enabled.
 
+Workout sessions, Garmin activities, Garmin wellness, and Withings
+measurements are stored in yearly bucket documents. Each bucket uses the year
+as its document ID and contains `period`, `count`, `entries`, and `updatedAt`.
+Rerun a previous migration with **Replace existing destination data** enabled
+to replace older per-record documents with yearly buckets.
+
 ### Migration secrets
 
 The migration uses the four non-`VITE_*` secrets from the per-user table:
@@ -338,6 +344,30 @@ warning. Multiple Workout Schedule entries on the same date remain distinct.
 
 The migration does not modify the source spreadsheet, other users, or Firebase
 Authentication records.
+
+## Compare Sheets and Firestore read latency
+
+The **Benchmark Sheets vs Firestore reads** workflow
+(`scripts/firestore-benchmark.mjs`) uses `lib/firebase-load-plan.json` to replay
+the datasets required for each selected application route/tab against both
+backends. It is read-only, uses the same four migration secrets, and reports
+logical Firestore records separately from physical bucket documents.
+
+1. Run the migration first, so Firestore holds a current snapshot.
+2. Open **Actions -> Benchmark Sheets vs Firestore reads -> Run workflow**.
+3. Optionally change **iterations** (1-20, default 3) or pass a comma-separated
+   **tabs** list such as `calendar,garmin-activities,nutrition` to narrow the
+   comparison. Leaving it blank runs every default benchmark route from the
+   shared load plan.
+4. Read the markdown table in the job summary. Each tab has separate Sheets and
+   Firestore cold-load rows, followed by per-dataset diagnostic medians. Sheets
+   ranges that include row 1 exclude their header from logical record counts.
+
+For each tab and backend, all required dataset reads start concurrently in one
+timed batch. Sheets and Firestore use the same ordered dataset list, and access
+tokens are acquired before timing starts. A dataset that fails — for example a
+collection or sheet tab that does not exist — is reported without stopping the
+remaining reads.
 
 ## Troubleshooting
 
