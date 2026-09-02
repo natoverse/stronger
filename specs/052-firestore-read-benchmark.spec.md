@@ -23,7 +23,8 @@ the migrated Firestore documents.
 - [x] The number of timed iterations is configurable and clamped to 1-20.
 - [x] A subset of datasets can be selected; unknown names fail fast.
 - [x] Output is a markdown table with per-dataset median times, the Sheets/
-      Firestore speedup ratio, and the row/document counts retrieved.
+      Firestore speedup ratio, logical record counts, and physical Firestore
+      document counts.
 - [x] A "full load" row totals every dataset for each backend, approximating a
       cold application start.
 - [x] A failed read for one dataset is reported in the table without aborting
@@ -54,3 +55,8 @@ the migrated Firestore documents.
   effect of a single slow request.
 - Firestore paginates at 300 documents per page; the timing covers all pages
   required to read the collection.
+- The benchmark understands the migration's aggregate documents. It expands
+  `entries` for yearly workout, Garmin, Garmin wellness, and Withings buckets,
+  and `events` for daily schedule documents. Reports show logical records and
+  physical documents separately so reduced round trips remain visible without
+  making record counts misleading.

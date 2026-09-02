@@ -351,8 +351,9 @@ The **Benchmark Sheets vs Firestore reads** workflow
 (`scripts/firestore-benchmark.mjs`) replays the reads the application performs
 when it loads — exercises, workouts, workout log, day flags, workout schedule,
 cardio, Garmin activities, Garmin wellness, Withings, and settings — against
-both backends and prints their response times side by side. It is read-only and
-uses the same four migration secrets.
+both backends and prints their response times side by side. It is read-only,
+uses the same four migration secrets, and reports logical Firestore records
+separately from physical bucket documents.
 
 1. Run the migration first, so Firestore holds a current snapshot.
 2. Open **Actions -> Benchmark Sheets vs Firestore reads -> Run workflow**.

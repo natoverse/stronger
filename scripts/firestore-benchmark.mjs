@@ -29,13 +29,13 @@ const AUTH_SCHEME = 'Bearer'
 export const DATASETS = {
 	exercises: { label: 'Exercises', tab: 'Stronger - Exercises', range: 'A:J', collection: 'exercises' },
 	workouts: { label: 'Workouts', tab: 'Stronger - Workouts', range: 'A:M', collection: 'workouts' },
-	workoutSessions: { label: 'Workout log', tab: 'Stronger - Log', range: 'A2:M', collection: 'workoutSessions' },
+	workoutSessions: { label: 'Workout log', tab: 'Stronger - Log', range: 'A2:M', collection: 'workoutSessions', entryField: 'entries' },
 	dayFlags: { label: 'Day flags', tab: 'Stronger - Schedule', range: 'A2:G10000', collection: 'dayFlags' },
-	schedule: { label: 'Workout schedule', tab: 'Stronger - Workout Schedule', range: 'A2:E10000', collection: 'schedule' },
+	schedule: { label: 'Workout schedule', tab: 'Stronger - Workout Schedule', range: 'A2:E10000', collection: 'schedule', entryField: 'events' },
 	cardioActivities: { label: 'Cardio', tab: 'Stronger - Cardio', range: 'A:B', collection: 'cardioActivities' },
-	garminActivities: { label: 'Garmin activities', tab: 'Stronger - Garmin', range: 'A2:Q', collection: 'garminActivities' },
-	garminWellness: { label: 'Garmin wellness', tab: 'Stronger - Garmin Wellness', range: 'A2:AN', collection: 'garminWellness' },
-	withingsMeasurements: { label: 'Withings', tab: 'Stronger - Withings', range: 'A2:K', collection: 'withingsMeasurements' },
+	garminActivities: { label: 'Garmin activities', tab: 'Stronger - Garmin', range: 'A2:Q', collection: 'garminActivities', entryField: 'entries' },
+	garminWellness: { label: 'Garmin wellness', tab: 'Stronger - Garmin Wellness', range: 'A2:AN', collection: 'garminWellness', entryField: 'entries' },
+	withingsMeasurements: { label: 'Withings', tab: 'Stronger - Withings', range: 'A2:K', collection: 'withingsMeasurements', entryField: 'entries' },
 	settings: { label: 'Settings', tab: 'Stronger - Settings', range: 'A:B', collection: 'settings' },
 }
 
@@ -79,6 +79,7 @@ export function summarize(samples) {
 		minMs: durations.length ? Math.min(...durations) : null,
 		maxMs: durations.length ? Math.max(...durations) : null,
 		count: measurements.at(-1)?.count ?? null,
+		documents: measurements.at(-1)?.documents ?? null,
 		bytes: measurements.at(-1)?.bytes ?? null,
 		error: measurements.length ? null : samples.at(-1)?.error ?? 'no samples',
 	}
@@ -102,8 +103,8 @@ export function renderReport({ rows, totals, iterations }) {
 	const lines = [
 		`# Sheets vs Firestore read benchmark (${iterations} iteration${iterations === 1 ? '' : 's'})`,
 		'',
-		'| Dataset | Sheets median | Firestore median | Speedup | Sheets rows | Firestore docs |',
-		'| --- | --- | --- | --- | --- | --- |',
+		'| Dataset | Sheets median | Firestore median | Speedup | Sheets rows | Firestore records | Firestore docs |',
+		'| --- | --- | --- | --- | --- | --- | --- |',
 	]
 	for (const row of rows) {
 		lines.push([
@@ -114,6 +115,7 @@ export function renderReport({ rows, totals, iterations }) {
 			formatRatio(row.sheets, row.firestore),
 			formatCount(row.sheets.count),
 			formatCount(row.firestore.count),
+			formatCount(row.firestore.documents),
 			'',
 		].join(' | ').trim())
 	}
@@ -125,6 +127,7 @@ export function renderReport({ rows, totals, iterations }) {
 		formatRatio(totals.sheets, totals.firestore),
 		formatCount(totals.sheets.count),
 		formatCount(totals.firestore.count),
+		formatCount(totals.firestore.documents),
 		'',
 	].join(' | ').trim())
 	return lines.join('\n')
@@ -145,11 +148,28 @@ async function readSheetRange(spreadsheetId, token, tab, range) {
 	return { count: (data.values ?? []).length, bytes: body.length }
 }
 
-async function readFirestoreCollection(projectId, token, uid, collection) {
+export function countFirestoreRecords(documents, entryField) {
+	if (!entryField) return documents.length
+	return documents.reduce((total, document) => {
+		const entries = document.fields?.[entryField]?.arrayValue?.values
+		if (!Array.isArray(entries)) {
+			throw new Error(`Firestore document ${document.name ?? '(unknown)'} is missing ${entryField}`)
+		}
+		const rawCount = document.fields?.count?.integerValue
+		const declaredCount = rawCount == null ? null : Number(rawCount)
+		if (declaredCount != null && (!Number.isInteger(declaredCount) || declaredCount !== entries.length)) {
+			throw new Error(`Firestore document ${document.name ?? '(unknown)'} has an invalid count`)
+		}
+		return total + (declaredCount ?? entries.length)
+	}, 0)
+}
+
+async function readFirestoreCollection(projectId, token, uid, collection, entryField) {
 	const base = `${FIRESTORE_API_BASE}/projects/${projectId}/databases/(default)/documents`
 		+ `/users/${encodeURIComponent(uid)}/${collection}`
 	let pageToken = ''
 	let count = 0
+	let documents = 0
 	let bytes = 0
 	do {
 		const params = new URLSearchParams({ pageSize: String(FIRESTORE_PAGE_SIZE), showMissing: 'false' })
@@ -160,18 +180,20 @@ async function readFirestoreCollection(projectId, token, uid, collection) {
 		const body = await response.text()
 		if (!response.ok) throw new Error(`Firestore request failed (${response.status})`)
 		const data = JSON.parse(body)
-		count += (data.documents ?? []).length
+		const pageDocuments = data.documents ?? []
+		count += countFirestoreRecords(pageDocuments, entryField)
+		documents += pageDocuments.length
 		bytes += body.length
 		pageToken = data.nextPageToken ?? ''
 	} while (pageToken)
-	return { count, bytes }
+	return { count, documents, bytes }
 }
 
 async function sample(operation) {
 	try {
 		return await timed(operation)
 	} catch (error) {
-		return { error: error.message, ms: null, count: null, bytes: null }
+		return { error: error.message, ms: null, count: null, documents: null, bytes: null }
 	}
 }
 
@@ -182,6 +204,7 @@ export async function runBenchmark({ iterations, datasets, readSheets, readFires
 		let sheetsTotal = 0
 		let firestoreTotal = 0
 		let sheetsRows = 0
+		let firestoreRecords = 0
 		let firestoreDocs = 0
 		for (const name of datasets) {
 			const sheetsSample = await sample(() => readSheets(name))
@@ -191,10 +214,11 @@ export async function runBenchmark({ iterations, datasets, readSheets, readFires
 			sheetsTotal += sheetsSample.ms ?? 0
 			firestoreTotal += firestoreSample.ms ?? 0
 			sheetsRows += sheetsSample.count ?? 0
-			firestoreDocs += firestoreSample.count ?? 0
+			firestoreRecords += firestoreSample.count ?? 0
+			firestoreDocs += firestoreSample.documents ?? 0
 		}
 		totals.sheets.push({ ms: sheetsTotal, count: sheetsRows })
-		totals.firestore.push({ ms: firestoreTotal, count: firestoreDocs })
+		totals.firestore.push({ ms: firestoreTotal, count: firestoreRecords, documents: firestoreDocs })
 	}
 	return {
 		iterations,
@@ -245,6 +269,7 @@ async function main() {
 			firestoreToken,
 			uid,
 			DATASETS[name].collection,
+			DATASETS[name].entryField,
 		),
 	})
 
