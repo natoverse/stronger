@@ -282,6 +282,12 @@ Nutrition tabs and the deprecated `Stronger - Strava` tab are not read or
 migrated. Nutrition data starts fresh after the Firebase application backend
 is enabled.
 
+Workout sessions, Garmin activities, Garmin wellness, and Withings
+measurements are stored in yearly bucket documents. Each bucket uses the year
+as its document ID and contains `period`, `count`, `entries`, and `updatedAt`.
+Rerun a previous migration with **Replace existing destination data** enabled
+to replace older per-record documents with yearly buckets.
+
 ### Migration secrets
 
 The migration uses the four non-`VITE_*` secrets from the per-user table:

@@ -5,11 +5,12 @@ import {
 	decodeWeightBasis,
 	groupScheduleDays,
 	groupWorkoutSessions,
+	groupYearBuckets,
 	parseExerciseRow,
 	parseScheduleRow,
 	readSheetData,
 	scheduleDayDocumentId,
-	workoutSessionDocumentId,
+	yearBucketDocumentId,
 } from './firebase-migrate.mjs'
 
 test('exercise parser preserves current fields and legacy warmup default', () => {
@@ -67,18 +68,22 @@ test('schedule rows collapse into one document per day', () => {
 	])
 })
 
-test('workout session ids are deterministic and distinguish sessions', () => {
-	const session = {
-		date: '2026-09-01',
-		startTime: '2026-09-01T12:00:00.000Z',
-		workoutId: 'A',
-	}
-	assert.equal(workoutSessionDocumentId(session), workoutSessionDocumentId({ ...session }))
-	assert.notEqual(
-		workoutSessionDocumentId(session),
-		workoutSessionDocumentId({ ...session, workoutId: 'B' }),
-	)
-	assert.match(workoutSessionDocumentId(session), /2026-09-01T12%3A00%3A00/)
+test('time-series entries collapse into yearly buckets', () => {
+	const buckets = groupYearBuckets([
+		{ date: '2025-12-31', id: 'first' },
+		{ date: '2026-01-01', id: 'second' },
+		{ date: '2026-09-02', id: 'third' },
+	])
+
+	assert.equal(buckets.length, 2)
+	assert.deepEqual(buckets[0], {
+		period: '2025',
+		count: 1,
+		entries: [{ date: '2025-12-31', id: 'first' }],
+	})
+	assert.equal(yearBucketDocumentId(buckets[1]), '2026')
+	assert.equal(buckets[1].count, 2)
+	assert.deepEqual(buckets[1].entries.map((entry) => entry.id), ['second', 'third'])
 })
 
 test('workout log rows collapse into ordered session documents', () => {
@@ -195,12 +200,60 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 		settings: [],
 	}
 	const { plan } = buildMigrationPlan(rows)
-	assert.equal(plan.workoutSessions[0].data.exercises[0].sets[0].actualWeight, 0)
+	assert.equal(plan.workoutSessions[0].id, '2026')
+	assert.equal(plan.workoutSessions[0].data.count, 1)
+	assert.equal(plan.workoutSessions[0].data.entries[0].exercises[0].sets[0].actualWeight, 0)
 	assert.equal('stravaActivities' in plan, false)
 	assert.equal('mealItems' in plan, false)
 	assert.equal('mealLog' in plan, false)
 	assert.equal('favoriteFoods' in plan, false)
 	assert.equal('recentFoods' in plan, false)
+})
+
+test('migration buckets every high-cardinality history by year', () => {
+	const rows = {
+		exercises: [
+			['id', 'name', 'topSetWeight', 'backoffWeight', 'increment', 'minimumWeight', 'roundingFactor'],
+			['bench', 'Bench', '100', '80', '5', '45', '5'],
+		],
+		workouts: [
+			['workoutId', 'workoutName', 'exerciseOrder', 'exerciseRole', 'liftId', 'setType', 'percentage', 'weightBasis', 'minReps', 'maxReps', 'amrap'],
+			['A', 'A', '1', 'primary', 'bench', 'work', '1', 'topSet', '5', '5', 'FALSE'],
+		],
+		logs: [
+			['2025-12-31', '2025-12-31T10:00:00Z', '', 'A', 'Bench', 'bench', '1', 'work', '100', '5', '100', '5', 'TRUE'],
+			['2026-01-01', '2026-01-01T10:00:00Z', '', 'A', 'Bench', 'bench', '1', 'work', '100', '5', '105', '5', 'TRUE'],
+		],
+		dayFlags: [],
+		schedule: [],
+		cardio: [],
+		garmin: [
+			['2025-12-31', 'g-1', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170'],
+			['2026-01-01', 'g-2', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170'],
+		],
+		garminWellness: [
+			['2025-12-31', '40', 'LOW'],
+			['2026-01-01', '50', 'BALANCED'],
+		],
+		withings: [
+			['2025-12-31', 'w-1', '80'],
+			['2026-01-01', 'w-2', '79'],
+		],
+		settings: [],
+	}
+
+	const { plan } = buildMigrationPlan(rows)
+
+	for (const collection of [
+		'workoutSessions',
+		'garminActivities',
+		'garminWellness',
+		'withingsMeasurements',
+	]) {
+		assert.deepEqual(plan[collection].map(({ id }) => id), ['2025', '2026'])
+		assert.deepEqual(plan[collection].map(({ data }) => data.count), [1, 1])
+		assert.deepEqual(plan[collection].map(({ data }) => data.period), ['2025', '2026'])
+	}
 })
 
 test('missing optional tabs are excluded instead of cleared', () => {
@@ -274,7 +327,9 @@ test('date-keyed collections keep the last row for duplicate dates', () => {
 		blocked: false,
 	})
 	assert.equal(plan.garminWellness.length, 1)
-	assert.equal(plan.garminWellness[0].data.hrvWeeklyAvg, 50)
+	assert.equal(plan.garminWellness[0].id, '2026')
+	assert.equal(plan.garminWellness[0].data.count, 1)
+	assert.equal(plan.garminWellness[0].data.entries[0].hrvWeeklyAvg, 50)
 	assert.ok(warnings.some((warning) => warning.startsWith('Day flags: collapsed 1 duplicate row')))
 	assert.ok(warnings.some((warning) => warning.startsWith('Garmin wellness: collapsed 1 duplicate row')))
 })

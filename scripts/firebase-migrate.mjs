@@ -16,7 +16,7 @@ import { pathToFileURL } from 'node:url'
 
 const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const FIRESTORE_API_BASE = 'https://firestore.googleapis.com/v1'
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 const BATCH_SIZE = 400
 
 const TABS = {
@@ -199,14 +199,14 @@ export function idPart(value) {
 	return encodeURIComponent(String(value)).replaceAll('.', '%2E')
 }
 
-export function workoutSessionDocumentId(session) {
-	return idPart(`${session.date}:${session.startTime}:${session.workoutId}`)
+function workoutSessionKey(session) {
+	return `${session.date}:${session.startTime}:${session.workoutId}`
 }
 
 export function groupWorkoutSessions(rows) {
 	const sessions = new Map()
 	for (const row of rows) {
-		const sessionId = workoutSessionDocumentId(row)
+		const sessionId = workoutSessionKey(row)
 		if (!sessions.has(sessionId)) {
 			sessions.set(sessionId, {
 				date: row.date,
@@ -244,6 +244,25 @@ export function groupWorkoutSessions(rows) {
 		})
 	}
 	return [...sessions.values()]
+}
+
+export function yearBucketDocumentId(bucket) {
+	return bucket.period
+}
+
+export function groupYearBuckets(entries) {
+	const buckets = new Map()
+	const ordered = [...entries].sort((left, right) =>
+		`${left.date}:${left.startTime ?? ''}`.localeCompare(`${right.date}:${right.startTime ?? ''}`))
+	for (const entry of ordered) {
+		const period = entry.date?.slice(0, 4)
+		if (!/^\d{4}$/.test(period)) throw new Error(`Cannot create year bucket for invalid date: ${entry.date}`)
+		if (!buckets.has(period)) buckets.set(period, { period, count: 0, entries: [] })
+		const bucket = buckets.get(period)
+		bucket.entries.push(entry)
+		bucket.count = bucket.entries.length
+	}
+	return [...buckets.values()]
 }
 
 export function scheduleDayDocumentId(day) {
@@ -584,9 +603,9 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		workouts: planDocuments('Workouts', values.workouts, (item) => idPart(item.id)),
 		...(values.workoutSessions == null ? {} : {
 			workoutSessions: planDocuments(
-				'Workout sessions',
-				groupWorkoutSessions(values.workoutSessions),
-				workoutSessionDocumentId,
+				'Workout session years',
+				groupYearBuckets(groupWorkoutSessions(values.workoutSessions)),
+				yearBucketDocumentId,
 			),
 		}),
 		...(values.dayFlags == null ? {} : {
@@ -603,18 +622,32 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 			cardioActivities: planDocuments('Cardio', values.cardioActivities, (item) => idPart(item.id)),
 		}),
 		...(values.garminActivities == null ? {} : {
-			garminActivities: planDocuments('Garmin', values.garminActivities, (item) => idPart(item.stravaId)),
+			garminActivities: planDocuments(
+				'Garmin activity years',
+				groupYearBuckets(values.garminActivities),
+				yearBucketDocumentId,
+			),
 		}),
 		...(values.garminWellness == null ? {} : {
 			garminWellness: planDocuments(
-				'Garmin wellness',
-				values.garminWellness,
-				(item) => item.date,
-				'keep-last',
+				'Garmin wellness years',
+				groupYearBuckets(
+					planDocuments(
+						'Garmin wellness',
+						values.garminWellness,
+						(item) => item.date,
+						'keep-last',
+					).map(({ data }) => data),
+				),
+				yearBucketDocumentId,
 			),
 		}),
 		...(values.withingsMeasurements == null ? {} : {
-			withingsMeasurements: planDocuments('Withings', values.withingsMeasurements, (item) => idPart(item.grpId)),
+			withingsMeasurements: planDocuments(
+				'Withings measurement years',
+				groupYearBuckets(values.withingsMeasurements),
+				yearBucketDocumentId,
+			),
 		}),
 		...(rows.settings == null ? {} : { settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }] }),
 	}
