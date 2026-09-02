@@ -360,9 +360,10 @@ logical Firestore records separately from physical bucket documents.
    comparison. Leaving it blank runs every default benchmark route from the
    shared load plan. Nutrition is intentionally excluded from benchmark routes
    until its Firebase rollout begins.
-4. Read the markdown table in the job summary. Each tab has separate Sheets and
-   Firestore cold-load rows, followed by per-dataset diagnostic medians. Sheets
-   ranges that include row 1 exclude their header from logical record counts.
+4. Read the markdown table in the job summary. Each tab has one row with Sheets
+   cold load, Firestore cold load, Sheets records, and Firestore documents,
+   followed by per-dataset diagnostic medians. Sheets ranges that include row 1
+   exclude their header from logical record counts.
 
 For each tab and backend, all required dataset reads start concurrently in one
 timed batch. Sheets and Firestore use the same ordered dataset list, and access

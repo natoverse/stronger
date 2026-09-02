@@ -30,8 +30,9 @@ the migrated Firestore documents.
 - [x] Output is a markdown table with per-dataset median times, the Sheets/
       Firestore speedup ratio, logical record counts, and physical Firestore
       document counts.
-- [x] Output includes separate Sheets and Firestore cold-load rows for every
-      selected tab, with per-dataset detail retained for diagnosis.
+- [x] Output includes one comparison row per selected tab with Sheets cold
+      load, Firestore cold load, Sheets records, and Firestore documents
+      columns; per-dataset detail is retained for diagnosis.
 - [x] Dataset metadata identifies ranges that include a header row, and Sheets
       logical record counts exclude those headers.
 - [x] A failed read for one dataset is reported in the table without aborting
@@ -88,3 +89,5 @@ the migrated Firestore documents.
 - Nutrition is excluded from `benchmarkRoutes` while its Firebase rollout is
   deferred. Its route definition remains in the shared plan for the UI, but the
   benchmark action cannot select or request it.
+- The per-tab summary uses one row per tab rather than separate backend rows,
+  making direct latency and request-shape comparisons easier to scan.

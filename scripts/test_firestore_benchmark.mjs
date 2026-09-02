@@ -168,7 +168,7 @@ test('each tab times one concurrent batch per backend with identical datasets', 
 	assert.equal(report.tabs[0].firestore.documents, expected.length)
 })
 
-test('report renders separate Sheets and Firestore rows for every tab', () => {
+test('report renders one comparison row for every tab', () => {
 	const output = renderReport({
 		iterations: 3,
 		tabs: [{
@@ -185,8 +185,9 @@ test('report renders separate Sheets and Firestore rows for every tab', () => {
 	})
 
 	assert.match(output, /3 iterations/)
-	assert.match(output, /\| Calendar \| Sheets \| 400 ms \| 4\.00x \| 20 \| — \| schedule, dayFlags \|/)
-	assert.match(output, /\| Calendar \| Firestore \| 100 ms \| 4\.00x \| 20 \| 2 \| schedule, dayFlags \|/)
+	assert.match(output, /\| Tab \| Sheets cold load \| Firestore cold load \| Sheets records \| Firestore documents \|/)
+	assert.match(output, /\| Calendar \| 400 ms \| 100 ms \| 20 \| 2 \|/)
+	assert.doesNotMatch(output, /\| Calendar \| Sheets \|/)
 	assert.match(output, /## Per-dataset detail/)
 	assert.match(output, /\| Dataset \| Sheets median \| Firestore median \| Speedup \| Sheets records \|/)
 	assert.match(output, /\| Workout schedule \| 300 ms \| 75 ms \| 4\.00x \| 10 \| 10 \| 1 \|/)
