@@ -131,6 +131,8 @@ A Python script run by the `sheet-backup.yml` GitHub Actions workflow on a daily
 - `garmin-sync.yml` — hourly Garmin Connect → Google Sheets sync
 - `withings-sync.yml` — daily Withings → Google Sheets body-composition sync
 - `sheet-backup.yml` — daily copy of the source spreadsheet to a backup spreadsheet
+- `firebase-migrate.yml` — manual one-time Google Sheets → Firestore migration
+- `firestore-benchmark.yml` — manual Sheets vs Firestore read-latency comparison (`scripts/firestore-benchmark.mjs`)
 - `auto-spec-issues.yml` — creates GitHub issues from new spec files
 - `auto-archive-specs.yml` — moves spec files to `.archive/specs/` when their issue is closed
 

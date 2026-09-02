@@ -63,7 +63,7 @@ const TRAINING_STATUS_CODE_MAP = {
 	8: 'STRAINED',
 }
 
-function required(value, name) {
+export function required(value, name) {
 	if (!value) throw new Error(`Missing ${name} environment variable`)
 	return value
 }
@@ -73,7 +73,7 @@ function boolEnv(value, defaultValue) {
 	return value.toLowerCase() === 'true'
 }
 
-function parseServiceAccount(raw, name) {
+export function parseServiceAccount(raw, name) {
 	try {
 		const value = JSON.parse(raw)
 		if (!value.client_email || !value.private_key || !value.project_id) {
@@ -85,7 +85,7 @@ function parseServiceAccount(raw, name) {
 	}
 }
 
-async function getAccessToken(serviceAccount, scopes) {
+export async function getAccessToken(serviceAccount, scopes) {
 	const now = Math.floor(Date.now() / 1000)
 	const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url')
 	const unsigned = `${encode({ alg: 'RS256', typ: 'JWT' })}.${encode({
