@@ -32,6 +32,8 @@ authentication, and scheduled sync jobs switch backends.
 - [ ] Exercise documents include `warmupRoundingFactor`, including the legacy
       default of `5` when the sheet column is absent.
 - [ ] Workout schedule documents preserve the current optional custom `label`.
+- [ ] Workout schedule rows are collapsed into one document per date with an
+      ordered `events` array.
 - [ ] Workout definitions preserve all weight-basis variants, comments, roles,
       and favorite state.
 - [ ] Workout-log rows are collapsed into one document per workout session,
@@ -98,6 +100,10 @@ authentication, and scheduled sync jobs switch backends.
   one `workoutSessions` document containing ordered exercise and set arrays.
   Repeated exercise blocks remain distinct when the lift/name changes or set
   numbering resets.
+- Workout schedule entries are grouped into `schedule/{date}` documents with
+  ordered `events` arrays. Event objects retain `workoutId`, `label`,
+  `calendarEventId`, and `strongerId`; the date is stored once at the document
+  level.
 - Only Exercises and Workouts are required. Missing logs, schedules, cardio,
   nutrition, Garmin, Garmin Wellness, Withings, or settings tabs produce
   warnings and are excluded from writes and replacement deletion.

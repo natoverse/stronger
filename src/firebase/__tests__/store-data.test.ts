@@ -4,9 +4,11 @@ vi.mock('../client.ts', () => ({ firestore: {} }))
 
 import {
 	flattenWorkoutSessions,
+	flattenScheduleDays,
+	groupScheduleEntries,
 	groupWorkoutSessionRows,
 	rowToParsedLogRow,
-	scheduleDocumentId,
+	scheduleDayDocumentId,
 	workoutSessionDocumentId,
 } from '../store.ts'
 
@@ -73,20 +75,20 @@ describe('Firestore data identifiers', () => {
 		expect(flattenWorkoutSessions(sessions)).toEqual(rows)
 	})
 
-	it('uses Stronger IDs when available and stable source fields otherwise', () => {
-		expect(scheduleDocumentId({
-			date: '2026-08-29',
-			workoutId: 'A',
-			strongerId: 's-fixed',
-		})).toContain('s-fixed')
-		expect(scheduleDocumentId({
-			date: '2026-08-29',
-			workoutId: 'cardio:hike',
-			label: 'Angel Rest',
-		})).toBe(scheduleDocumentId({
-			date: '2026-08-29',
-			workoutId: 'cardio:hike',
-			label: 'Angel Rest',
-		}))
+	it('groups and restores ordered schedule events by day', () => {
+		const entries = [
+			{ date: '2026-08-29', workoutId: 'A', strongerId: 's-fixed' },
+			{ date: '2026-08-29', workoutId: 'cardio:hike', label: 'Angel Rest' },
+			{ date: '2026-08-30', workoutId: 'B' },
+		]
+		const days = groupScheduleEntries(entries)
+
+		expect(days).toHaveLength(2)
+		expect(scheduleDayDocumentId(days[0])).toBe('2026-08-29')
+		expect(days[0].events).toEqual([
+			{ workoutId: 'A', strongerId: 's-fixed' },
+			{ workoutId: 'cardio:hike', label: 'Angel Rest' },
+		])
+		expect(flattenScheduleDays(days)).toEqual(entries)
 	})
 })

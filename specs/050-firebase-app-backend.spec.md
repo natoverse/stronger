@@ -44,7 +44,7 @@ All collections are nested below `/users/{uid}`:
 - `workouts/{workoutId}`
 - `workoutSessions/{sessionId}`
 - `dayFlags/{date}`
-- `schedule/{entryId}`
+- `schedule/{date}`
 - `cardioActivities/{activityId}`
 - `mealItems/{itemId}`
 - `mealLog/{entryId}`
@@ -61,6 +61,10 @@ with ordered `exercises` and nested `sets` arrays, matching the collapsed
 structure used for workout templates. The Firebase adapter flattens these
 documents into the existing `ParsedLogRow[]` interface until the application
 model adopts the nested session type directly.
+
+Each schedule document represents one date and contains an ordered `events`
+array. The Firebase adapter flattens those documents into the existing
+`WorkoutScheduleEntry[]` interface for calendar and planning code.
 
 ## Security and Quotas
 
@@ -84,3 +88,5 @@ collections into Firestore after each successful sync.
 - Workout history is stored atomically as one nested document per session
   instead of carrying the legacy Google Sheets row boundary into Firestore.
   Session edits and deletes therefore require one document operation.
+- Scheduled workouts are stored as one document per day with an ordered events
+  array, rather than one document per legacy sheet row.

@@ -53,6 +53,11 @@ type StoredWorkoutSession = {
 	exercises: StoredWorkoutExercise[]
 }
 
+type StoredScheduleDay = {
+	date: string
+	events: Omit<WorkoutScheduleEntry, 'date'>[]
+}
+
 type StoredRecentFood = FoodItem & {
 	_recentOrder?: number
 }
@@ -330,16 +335,36 @@ export function writeFlags(uid: string, flags: DayFlagEntry[]): Promise<void> {
 	return replaceCollection(uid, 'dayFlags', flags, (entry) => entry.date)
 }
 
-export function scheduleDocumentId(entry: WorkoutScheduleEntry): string {
-	return idPart(entry.strongerId || `${entry.date}:${entry.workoutId}:${entry.label ?? ''}`)
+export function scheduleDayDocumentId(day: Pick<WorkoutScheduleEntry, 'date'>): string {
+	return day.date
+}
+
+export function groupScheduleEntries(entries: WorkoutScheduleEntry[]): StoredScheduleDay[] {
+	const days = new Map<string, StoredScheduleDay>()
+	for (const { date, ...event } of entries) {
+		if (!days.has(date)) days.set(date, { date, events: [] })
+		days.get(date)!.events.push(event)
+	}
+	return [...days.values()]
+}
+
+export function flattenScheduleDays(days: StoredScheduleDay[]): WorkoutScheduleEntry[] {
+	return [...days]
+		.sort((left, right) => left.date.localeCompare(right.date))
+		.flatMap((day) => day.events.map((event) => ({ date: day.date, ...event })))
 }
 
 export function readWorkoutSchedule(uid: string): Promise<WorkoutScheduleEntry[]> {
-	return readCollection<WorkoutScheduleEntry>(uid, 'schedule')
+	return readCollection<StoredScheduleDay>(uid, 'schedule').then(flattenScheduleDays)
 }
 
 export function writeWorkoutSchedule(uid: string, entries: WorkoutScheduleEntry[]): Promise<void> {
-	return replaceCollection(uid, 'schedule', entries, scheduleDocumentId)
+	return replaceCollection(
+		uid,
+		'schedule',
+		groupScheduleEntries(entries),
+		scheduleDayDocumentId,
+	)
 }
 
 export const readSchedule = readWorkoutSchedule
