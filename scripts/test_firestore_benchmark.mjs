@@ -2,34 +2,51 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
 	DATASETS,
+	LOAD_PLAN,
 	countFirestoreRecords,
+	countSheetRecords,
+	getRouteDatasets,
 	median,
 	parseIterations,
 	renderReport,
 	runBenchmark,
-	selectDatasets,
+	selectRoutes,
 	summarize,
 } from './firestore-benchmark.mjs'
 
-test('dataset catalog covers the tabs the application loads', () => {
-	assert.deepEqual(Object.keys(DATASETS), [
-		'exercises',
-		'workouts',
-		'workoutSessions',
-		'dayFlags',
-		'schedule',
-		'cardioActivities',
-		'garminActivities',
-		'garminWellness',
-		'withingsMeasurements',
-		'settings',
-	])
-	assert.equal(DATASETS.workoutSessions.tab, 'Stronger - Log')
-	assert.equal(DATASETS.workoutSessions.range, 'A2:M')
+test('dataset catalog covers the shared load plan and nutrition sheets', () => {
+	assert.deepEqual(Object.keys(DATASETS), LOAD_PLAN.datasetOrder)
+	assert.deepEqual(DATASETS.mealItems, {
+		label: 'Meal items',
+		tab: 'Stronger - Meal Items',
+		range: 'A:J',
+		headerRows: 1,
+		collection: 'mealItems',
+	})
+	assert.equal(DATASETS.mealLog.range, 'A2:K')
+	assert.equal(DATASETS.mealLog.headerRows, undefined)
+	assert.equal(DATASETS.favoriteFoods.collection, 'favoriteFoods')
+	assert.equal(DATASETS.favoriteFoods.headerRows, 1)
+	assert.equal(DATASETS.recentFoods.tab, 'Stronger - Meal Recents')
+	assert.equal(DATASETS.exercises.headerRows, 1)
+	assert.equal(DATASETS.schedule.headerRows, undefined)
 	assert.equal(DATASETS.workoutSessions.entryField, 'entries')
 	assert.equal(DATASETS.schedule.entryField, 'events')
-	assert.equal(DATASETS.garminWellness.range, 'A2:AN')
 	assert.equal(DATASETS.garminWellness.entryField, 'entries')
+})
+
+test('Garmin activities and calendar use the exact shared route datasets', () => {
+	assert.deepEqual(getRouteDatasets('garmin-activities'), ['garminActivities', 'settings'])
+	assert.equal(getRouteDatasets('garmin-activities')[0], 'garminActivities')
+	assert.deepEqual(getRouteDatasets('calendar'), [
+		'schedule',
+		'dayFlags',
+		'workoutSessions',
+		'exercises',
+		'workouts',
+		'cardioActivities',
+		'settings',
+	])
 })
 
 test('iteration count is clamped to a sane range', () => {
@@ -41,10 +58,10 @@ test('iteration count is clamped to a sane range', () => {
 	assert.equal(parseIterations('500'), 20)
 })
 
-test('dataset selection defaults to everything and rejects unknown names', () => {
-	assert.deepEqual(selectDatasets(''), Object.keys(DATASETS))
-	assert.deepEqual(selectDatasets('workouts, schedule'), ['workouts', 'schedule'])
-	assert.throws(() => selectDatasets('workouts,bogus'), /Unknown dataset\(s\): bogus/)
+test('route selection defaults to benchmark tabs and rejects unknown routes', () => {
+	assert.deepEqual(selectRoutes(''), LOAD_PLAN.benchmarkRoutes)
+	assert.deepEqual(selectRoutes('calendar, garmin-activities'), ['calendar', 'garmin-activities'])
+	assert.throws(() => selectRoutes('calendar,bogus'), /Unknown benchmark route\(s\): bogus/)
 })
 
 test('median handles odd and even sample counts', () => {
@@ -62,9 +79,10 @@ test('summaries ignore failed samples and report the failure when all fail', () 
 		]),
 		{ medianMs: 20, minMs: 10, maxMs: 30, count: 2, documents: 1, bytes: 20, error: null },
 	)
-	const failed = summarize([{ error: 'missing collection', ms: null, count: null, documents: null, bytes: null }])
-	assert.equal(failed.medianMs, null)
-	assert.equal(failed.error, 'missing collection')
+	assert.equal(
+		summarize([{ error: 'missing collection', ms: null, count: null, documents: null, bytes: null }]).error,
+		'missing collection',
+	)
 })
 
 test('Firestore record counts expand bucket and schedule arrays', () => {
@@ -84,14 +102,12 @@ test('Firestore record counts expand bucket and schedule arrays', () => {
 			},
 		},
 	], 'entries'), 3)
-	assert.equal(countFirestoreRecords([
-		{
-			name: 'schedule/2026-09-02',
-			fields: {
-				events: { arrayValue: { values: [{ mapValue: {} }, { mapValue: {} }] } },
-			},
+	assert.equal(countFirestoreRecords([{
+		name: 'schedule/2026-09-02',
+		fields: {
+			events: { arrayValue: { values: [{ mapValue: {} }, { mapValue: {} }] } },
 		},
-	], 'events'), 2)
+	}], 'events'), 2)
 	assert.equal(countFirestoreRecords([{ fields: {} }, { fields: {} }]), 2)
 	assert.throws(
 		() => countFirestoreRecords([{ name: 'garminWellness/2026', fields: {} }], 'entries'),
@@ -109,58 +125,68 @@ test('Firestore record counts expand bucket and schedule arrays', () => {
 	)
 })
 
-test('benchmark runs every dataset once per iteration and totals each backend', async () => {
-	const calls = { sheets: [], firestore: [] }
-	const report = await runBenchmark({
-		iterations: 2,
-		datasets: ['exercises', 'workouts'],
-		readSheets: async (name) => {
-			calls.sheets.push(name)
-			return { count: 3 }
-		},
-		readFirestore: async (name) => {
-			calls.firestore.push(name)
-			if (name === 'workouts') throw new Error('collection missing')
-			return { count: 4, documents: 1 }
-		},
-	})
-
-	assert.deepEqual(calls.sheets, ['exercises', 'workouts', 'exercises', 'workouts'])
-	assert.deepEqual(calls.firestore, ['exercises', 'workouts', 'exercises', 'workouts'])
-	assert.equal(report.rows.length, 2)
-	assert.equal(report.rows[0].sheets.count, 3)
-	assert.equal(report.rows[0].firestore.count, 4)
-	assert.equal(report.rows[0].firestore.documents, 1)
-	assert.equal(report.rows[1].firestore.error, 'collection missing')
-	assert.equal(report.totals.sheets.count, 6)
-	assert.equal(report.totals.firestore.count, 4)
-	assert.equal(report.totals.firestore.documents, 1)
-	assert.ok(report.totals.sheets.medianMs >= 0)
+test('Sheets record counts exclude configured header rows', () => {
+	assert.equal(countSheetRecords([['id'], ['one'], ['two']], 1), 2)
+	assert.equal(countSheetRecords([['one'], ['two']]), 2)
+	assert.equal(countSheetRecords([], 1), 0)
+	assert.equal(countSheetRecords([['id']], 1), 0)
 })
 
-test('report renders a side-by-side table with a full-load row', () => {
+function concurrentReader(expectedNames, backend, calls) {
+	const started = new Set()
+	return async (name) => {
+		calls.push(`${backend}:start:${name}`)
+		started.add(name)
+		await Promise.resolve()
+		assert.deepEqual([...started], expectedNames)
+		calls.push(`${backend}:end:${name}`)
+		return backend === 'sheets' ? { count: 2 } : { count: 2, documents: 1 }
+	}
+}
+
+test('each tab times one concurrent batch per backend with identical datasets', async () => {
+	const expected = getRouteDatasets('calendar')
+	const calls = []
+	const report = await runBenchmark({
+		iterations: 1,
+		routes: ['calendar'],
+		readSheets: concurrentReader(expected, 'sheets', calls),
+		readFirestore: concurrentReader(expected, 'firestore', calls),
+	})
+
+	assert.deepEqual(calls.slice(0, expected.length), expected.map((name) => `sheets:start:${name}`))
+	const firestoreStart = calls.indexOf(`firestore:start:${expected[0]}`)
+	assert.ok(calls.slice(0, firestoreStart).every((call) => call.startsWith('sheets:')))
+	assert.deepEqual(
+		calls.slice(firestoreStart, firestoreStart + expected.length),
+		expected.map((name) => `firestore:start:${name}`),
+	)
+	assert.deepEqual(report.tabs[0].datasetNames, expected)
+	assert.equal(report.tabs[0].sheets.count, expected.length * 2)
+	assert.equal(report.tabs[0].firestore.count, expected.length * 2)
+	assert.equal(report.tabs[0].firestore.documents, expected.length)
+})
+
+test('report renders separate Sheets and Firestore rows for every tab', () => {
 	const output = renderReport({
 		iterations: 3,
-		rows: [
-			{
-				label: 'Exercises',
-				sheets: { medianMs: 400, count: 20, error: null },
-				firestore: { medianMs: 100, count: 20, documents: 2, error: null },
-			},
-			{
-				label: 'Workouts',
-				sheets: { medianMs: 300, count: 50, error: null },
-				firestore: { medianMs: null, count: null, documents: null, error: 'collection missing' },
-			},
-		],
-		totals: {
-			sheets: { medianMs: 700, count: 70, error: null },
+		tabs: [{
+			label: 'Calendar',
+			datasetNames: ['schedule', 'dayFlags'],
+			sheets: { medianMs: 400, count: 20, error: null },
 			firestore: { medianMs: 100, count: 20, documents: 2, error: null },
-		},
+		}],
+		datasets: [{
+			label: 'Workout schedule',
+			sheets: { medianMs: 300, count: 10, error: null },
+			firestore: { medianMs: 75, count: 10, documents: 1, error: null },
+		}],
 	})
 
 	assert.match(output, /3 iterations/)
-	assert.match(output, /\| Exercises \| 400 ms \| 100 ms \| 4\.00x \| 20 \| 20 \| 2 \|/)
-	assert.match(output, /\| Workouts \| 300 ms \| error: collection missing \| — \| 50 \| — \| — \|/)
-	assert.match(output, /\*\*Full load \(all datasets\)\*\* \| 700 ms \| 100 ms \| 7\.00x \| 70 \| 20 \| 2 \|/)
+	assert.match(output, /\| Calendar \| Sheets \| 400 ms \| 4\.00x \| 20 \| — \| schedule, dayFlags \|/)
+	assert.match(output, /\| Calendar \| Firestore \| 100 ms \| 4\.00x \| 20 \| 2 \| schedule, dayFlags \|/)
+	assert.match(output, /## Per-dataset detail/)
+	assert.match(output, /\| Dataset \| Sheets median \| Firestore median \| Speedup \| Sheets records \|/)
+	assert.match(output, /\| Workout schedule \| 300 ms \| 75 ms \| 4\.00x \| 10 \| 10 \| 1 \|/)
 })

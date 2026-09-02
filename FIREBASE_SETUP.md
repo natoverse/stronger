@@ -348,26 +348,26 @@ Authentication records.
 ## Compare Sheets and Firestore read latency
 
 The **Benchmark Sheets vs Firestore reads** workflow
-(`scripts/firestore-benchmark.mjs`) replays the reads the application performs
-when it loads — exercises, workouts, workout log, day flags, workout schedule,
-cardio, Garmin activities, Garmin wellness, Withings, and settings — against
-both backends and prints their response times side by side. It is read-only,
-uses the same four migration secrets, and reports logical Firestore records
-separately from physical bucket documents.
+(`scripts/firestore-benchmark.mjs`) uses `lib/firebase-load-plan.json` to replay
+the datasets required for each selected application route/tab against both
+backends. It is read-only, uses the same four migration secrets, and reports
+logical Firestore records separately from physical bucket documents.
 
 1. Run the migration first, so Firestore holds a current snapshot.
 2. Open **Actions -> Benchmark Sheets vs Firestore reads -> Run workflow**.
 3. Optionally change **iterations** (1-20, default 3) or pass a comma-separated
-   **datasets** list such as `workouts,schedule` to narrow the comparison.
-4. Read the markdown table in the job summary: per-dataset median times, the
-   Sheets/Firestore speedup ratio, retrieved row and document counts, and a
-   final full-load row that totals every dataset for each backend.
+   **tabs** list such as `calendar,garmin-activities,nutrition` to narrow the
+   comparison. Leaving it blank runs every default benchmark route from the
+   shared load plan.
+4. Read the markdown table in the job summary. Each tab has separate Sheets and
+   Firestore cold-load rows, followed by per-dataset diagnostic medians. Sheets
+   ranges that include row 1 exclude their header from logical record counts.
 
-Both backends are timed back to back within an iteration, and access tokens are
-acquired before timing starts, so the numbers reflect data retrieval rather
-than authentication. A dataset that fails on one backend — for example a
-collection that was never migrated — is reported in its row without stopping
-the run.
+For each tab and backend, all required dataset reads start concurrently in one
+timed batch. Sheets and Firestore use the same ordered dataset list, and access
+tokens are acquired before timing starts. A dataset that fails — for example a
+collection or sheet tab that does not exist — is reported without stopping the
+remaining reads.
 
 ## Troubleshooting
 

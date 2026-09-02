@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       iterations:
-        description: Number of timed passes over every dataset (1-20)
+        description: Number of timed cold loads per selected tab (1-20)
         type: string
         default: '3'
-      datasets:
-        description: Comma-separated dataset names (blank runs all)
+      tabs:
+        description: Comma-separated benchmark routes/tabs (blank runs shared plan defaults)
         type: string
         default: ''
 
@@ -41,5 +41,5 @@ jobs:
           SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
           FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
           ITERATIONS: ${{ inputs.iterations }}
-          DATASETS: ${{ inputs.datasets }}
+          TABS: ${{ inputs.tabs }}
         run: node scripts/firestore-benchmark.mjs

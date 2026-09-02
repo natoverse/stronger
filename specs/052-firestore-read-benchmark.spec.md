@@ -5,10 +5,9 @@
 
 ## What
 
-Add a manually dispatched GitHub Action that replicates the reads the app
-performs when it loads — exercises, workouts, workout log, day flags, workout
-schedule, cardio, Garmin activities, Garmin wellness, Withings, and settings —
-against both backends and prints their response times side by side.
+Add a manually dispatched GitHub Action that uses the application's shared
+`lib/firebase-load-plan.json` to replicate each benchmark route/tab's cold-load
+reads against both backends and print their response times side by side.
 
 The benchmark reads only. It does not change the application, the sheet, or
 the migrated Firestore documents.
@@ -16,17 +15,25 @@ the migrated Firestore documents.
 ## Acceptance Criteria
 
 - [x] A `workflow_dispatch` workflow runs the comparison on demand.
-- [x] Every dataset the migration writes is read from both backends using the
-      same ranges/collections the app and migration use.
+- [x] Every dataset in the shared load plan, including nutrition, is read from
+      both backends using the same ranges/collections the app uses.
 - [x] Firestore collection reads follow pagination so large collections are
       fully retrieved.
 - [x] The number of timed iterations is configurable and clamped to 1-20.
-- [x] A subset of datasets can be selected; unknown names fail fast.
+- [x] A subset of benchmark routes/tabs can be selected; unknown names fail
+      fast.
+- [x] Each selected tab uses exactly the ordered dataset list in the shared
+      load plan.
+- [x] All Sheets reads required by a tab run concurrently in one timed
+      `Promise.all` batch, followed by a separately timed concurrent Firestore
+      batch containing the identical logical datasets.
 - [x] Output is a markdown table with per-dataset median times, the Sheets/
       Firestore speedup ratio, logical record counts, and physical Firestore
       document counts.
-- [x] A "full load" row totals every dataset for each backend, approximating a
-      cold application start.
+- [x] Output includes separate Sheets and Firestore cold-load rows for every
+      selected tab, with per-dataset detail retained for diagnosis.
+- [x] Dataset metadata identifies ranges that include a header row, and Sheets
+      logical record counts exclude those headers.
 - [x] A failed read for one dataset is reported in the table without aborting
       the run.
 - [x] The report is written to the GitHub Actions step summary as well as the
@@ -49,14 +56,32 @@ the migrated Firestore documents.
 - Both backends are read through their REST APIs with service-account tokens,
   which keeps the comparison symmetric. Token acquisition happens once, before
   timing, so it is excluded from the measurements.
-- Sheets and Firestore reads for a dataset run back to back inside an
-  iteration, so transient network conditions affect both backends similarly.
+- A tab's required Sheets ranges are read concurrently and timed as one batch.
+  The same datasets' Firestore collections are then read concurrently and
+  timed as a separate batch. This matches the Firebase UI's priority-load
+  semantics while keeping the compared logical workload identical.
 - Medians (plus min/max samples) are reported rather than means to reduce the
   effect of a single slow request.
 - Firestore paginates at 300 documents per page; the timing covers all pages
   required to read the collection.
-- The benchmark understands the migration's aggregate documents. It expands
+- The benchmark understands aggregate documents. It expands
   `entries` for yearly workout, Garmin, Garmin wellness, and Withings buckets,
   and `events` for daily schedule documents. Reports show logical records and
   physical documents separately so reduced round trips remain visible without
   making record counts misleading.
+- Route names, labels, dataset ordering, and default benchmark tabs come
+  directly from `lib/firebase-load-plan.json`; the benchmark does not maintain
+  a second route map.
+
+## Iteration decisions — September 2, 2026
+
+- Benchmark selection changed from individual datasets to user-visible
+  routes/tabs because perceived cold-load latency is determined by the slowest
+  concurrent request in a route batch, not the sum of serial dataset reads.
+- Added `mealItems`, `mealLog`, `favoriteFoods`, and `recentFoods` definitions
+  so the Nutrition route can execute the exact shared plan.
+- Kept a secondary per-dataset report for diagnosing a slow or missing source,
+  while making the per-tab Sheets and Firestore rows the primary output.
+- Sheets ranges beginning at row 1 now declare `headerRows: 1`. Reports subtract
+  that metadata from returned value rows, including the header-only case, so
+  both backend count columns describe logical data records.

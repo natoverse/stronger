@@ -1,0 +1,54 @@
+{
+  "datasetOrder": [
+    "exercises",
+    "workouts",
+    "cardioActivities",
+    "schedule",
+    "dayFlags",
+    "workoutSessions",
+    "settings",
+    "garminActivities",
+    "garminWellness",
+    "withingsMeasurements",
+    "mealItems",
+    "mealLog",
+    "favoriteFoods",
+    "recentFoods"
+  ],
+  "routes": {
+    "list": ["exercises", "workouts", "cardioActivities", "schedule", "workoutSessions", "settings"],
+    "workout": ["exercises", "workouts", "workoutSessions", "settings"],
+    "import": ["workouts", "exercises", "settings"],
+    "calendar": ["schedule", "dayFlags", "workoutSessions", "exercises", "workouts", "cardioActivities", "settings"],
+    "editor": ["workouts", "exercises", "settings"],
+    "exercises": ["exercises", "settings"],
+    "exerciseEditor": ["exercises", "settings"],
+    "progress": ["workoutSessions", "withingsMeasurements", "exercises", "settings"],
+    "settings": ["settings"],
+    "garmin": ["garminWellness", "settings"],
+    "garmin-activities": ["garminActivities", "settings"],
+    "wellness": ["garminWellness", "settings"],
+    "withings": ["workoutSessions", "withingsMeasurements", "exercises", "settings"],
+    "nutrition": ["favoriteFoods", "recentFoods", "mealLog", "mealItems", "garminWellness", "settings"]
+  },
+  "benchmarkRoutes": [
+    "list",
+    "calendar",
+    "exercises",
+    "progress",
+    "garmin",
+    "garmin-activities",
+    "nutrition",
+    "settings"
+  ],
+  "labels": {
+    "list": "Workouts",
+    "calendar": "Calendar",
+    "exercises": "Exercises",
+    "progress": "Progress",
+    "garmin": "Garmin wellness",
+    "garmin-activities": "Garmin activities",
+    "nutrition": "Nutrition",
+    "settings": "Settings"
+  }
+}
