@@ -109,8 +109,7 @@ Collections do not need to be created manually.
 5. Add every hostname that will run Stronger.
 
 The primary deployment uses `natoverse.github.io`. A fork owned by the
-`example` GitHub account uses `example.github.io`. Add `localhost` separately
-when local sign-in is needed.
+`example` GitHub account uses `example.github.io`.
 
 Every person must sign in with their own Google account. Firebase assigns each
 account a stable UID, and Firestore rules restrict that account to its matching
@@ -156,10 +155,9 @@ const firebaseConfig = {
 };
 ```
 
-Map the Firebase web configuration object to local environment variables and
-GitHub Actions repository secrets:
+Map the Firebase web configuration object to GitHub Actions repository secrets:
 
-| Firebase field | Environment variable or repository secret |
+| Firebase field | Repository secret |
 |---|---|
 | `apiKey` | `VITE_FIREBASE_API_KEY` |
 | `authDomain` | `VITE_FIREBASE_AUTH_DOMAIN` |
@@ -172,8 +170,7 @@ These values identify the public Firebase web application and are intentionally
 included in the browser bundle. Firestore rules and Authentication protect the
 data; never put a service-account private key in a `VITE_*` variable.
 
-For local development, copy `.env.example` to `.env.local` and fill in the
-values. For GitHub Pages, add the six values under
+Add the six values under
 **Repository Settings -> Secrets and variables -> Actions**.
 
 Vite embeds them during the build. After changing a `VITE_FIREBASE_*` secret,

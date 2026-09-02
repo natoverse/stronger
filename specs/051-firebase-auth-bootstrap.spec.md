@@ -51,3 +51,5 @@ identity and must not read, write, or initialize Cloud Firestore.
 - The guide identifies the Firebase console's
   **Project settings -> General -> Your apps -> SDK setup and configuration ->
   Config** pane as the source of the six `VITE_FIREBASE_*` values.
+- Setup documentation targets GitHub Pages and GitHub Actions only; it does not
+  include a local application-development path.

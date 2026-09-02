@@ -1,6 +1,6 @@
 # Sheet Backup Setup
 
-Stronger keeps a daily backup of your primary spreadsheet in a separate **backup spreadsheet**. A scheduled GitHub Actions workflow (or any machine with `python`) copies every tab from the source sheet into the backup sheet once a day.
+Stronger keeps a daily backup of your primary spreadsheet in a separate **backup spreadsheet**. A scheduled GitHub Actions workflow copies every tab from the source sheet into the backup sheet once a day.
 
 The workflow runs daily at 07:00 UTC and can also be triggered manually. It's a value-only copy: each source tab is created in the backup if missing, cleared, and rewritten with the current source values.
 
@@ -22,22 +22,6 @@ The workflow runs daily at 07:00 UTC and can also be triggered manually. It's a 
    - `BACKUP_SPREADSHEET_ID` — the backup spreadsheet ID from step 1.
 
 That's it — the `Sheet Backup` workflow will run daily and can be triggered manually from the Actions tab.
-
-## Running locally
-
-```sh
-pip install -r scripts/requirements.txt
-export GOOGLE_SERVICE_ACCOUNT_KEY="$(cat service-account.json)"
-export SOURCE_SPREADSHEET_ID="<source spreadsheet id>"
-export BACKUP_SPREADSHEET_ID="<backup spreadsheet id>"
-python scripts/sheet-backup.py
-```
-
-Offline tests for the pure helpers:
-
-```sh
-python scripts/test_sheet_backup.py
-```
 
 ## Environment variables
 
