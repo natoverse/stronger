@@ -21,6 +21,12 @@
     "garminWellness",
     "withingsMeasurements"
   ],
+  "dateWindowDatasets": [
+    "schedule",
+    "dayFlags"
+  ],
+  "initialDateWindowDays": 60,
+  "dateWindowIncrementDays": 30,
   "routes": {
     "list": ["exercises", "workouts", "cardioActivities", "schedule", "workoutSessions", "settings"],
     "workout": ["exercises", "workouts", "workoutSessions", "settings"],

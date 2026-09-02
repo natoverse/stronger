@@ -3,6 +3,7 @@ import test from 'node:test'
 import {
 	DATASETS,
 	LOAD_PLAN,
+	addDays,
 	countFirestoreRecords,
 	countSheetRecords,
 	firestoreReadScope,
@@ -40,16 +41,26 @@ test('dataset catalog covers the shared load plan', () => {
 		'garminWellness',
 		'withingsMeasurements',
 	])
+	assert.deepEqual(LOAD_PLAN.dateWindowDatasets, ['schedule', 'dayFlags'])
+	assert.equal(LOAD_PLAN.initialDateWindowDays, 60)
+	assert.equal(LOAD_PLAN.dateWindowIncrementDays, 30)
 	assert.equal(LOAD_PLAN.benchmarkRoutes.includes('nutrition'), false)
 })
 
-test('cold loads target only the current document for yearly datasets', () => {
+test('cold loads target current buckets and the initial schedule window', () => {
 	assert.equal(firestoreReadScope('workoutSessions'), 'currentYear')
 	assert.equal(firestoreReadScope('garminActivities'), 'currentYear')
 	assert.equal(firestoreReadScope('garminWellness'), 'currentYear')
 	assert.equal(firestoreReadScope('withingsMeasurements'), 'currentYear')
-	assert.equal(firestoreReadScope('schedule'), 'all')
+	assert.equal(firestoreReadScope('schedule'), 'initialWindow')
+	assert.equal(firestoreReadScope('dayFlags'), 'initialWindow')
 	assert.equal(firestoreReadScope('exercises'), 'all')
+})
+
+test('date windows use calendar-day boundaries', () => {
+	assert.equal(addDays('2026-09-02', 60), '2026-11-01')
+	assert.equal(addDays('2026-12-15', 30), '2027-01-14')
+	assert.equal(addDays('2028-02-01', 29), '2028-03-01')
 })
 
 test('Garmin activities and calendar use the exact shared route datasets', () => {
@@ -201,10 +212,8 @@ test('report renders one comparison row for every tab', () => {
 	})
 
 	assert.match(output, /3 iterations/)
-	assert.match(
-		output,
-		new RegExp(`Firestore cold loads read only the ${new Date().getFullYear()} document for yearly datasets`),
-	)
+	assert.match(output, /Firestore cold loads read only the \d{4} document for yearly datasets and/)
+	assert.match(output, /for schedule data; Sheets retains its current full-range read/)
 	assert.match(output, /\| Tab \| Sheets cold load \| Firestore cold load \| Sheets records \| Firestore documents \|/)
 	assert.match(output, /\| Calendar \| 400 ms \| 100 ms \| 20 \| 2 \|/)
 	assert.doesNotMatch(output, /\| Calendar \| Sheets \|/)
