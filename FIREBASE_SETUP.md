@@ -274,11 +274,13 @@ Only these tabs are required:
 - `Stronger - Exercises`
 - `Stronger - Workouts`
 
-Workout logs, schedules, cardio definitions, nutrition, Garmin activities,
-Garmin wellness, Withings, and settings are optional. Missing optional tabs
-produce warnings and are excluded from both writes and replacement deletion.
+Workout logs, schedules, cardio definitions, Garmin activities, Garmin
+wellness, Withings, and settings are optional. Missing optional tabs produce
+warnings and are excluded from both writes and replacement deletion.
 
-The deprecated `Stronger - Strava` tab is not read or migrated.
+Nutrition tabs and the deprecated `Stronger - Strava` tab are not read or
+migrated. Nutrition data starts fresh after the Firebase application backend
+is enabled.
 
 ### Migration secrets
 

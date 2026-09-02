@@ -149,39 +149,6 @@ test('migration plan groups workout rows and reports invalid rows', () => {
 	assert.ok(warnings.some((warning) => warning.includes('Workouts: skipped 1 invalid row')))
 })
 
-test('migration preserves recent-food ordering metadata', () => {
-	const rows = {
-		exercises: [
-			['id', 'name', 'topSetWeight', 'backoffWeight', 'increment', 'minimumWeight', 'roundingFactor'],
-			['bench', 'Bench', '100', '80', '5', '45', '5'],
-		],
-		workouts: [
-			['workoutId', 'workoutName', 'exerciseOrder', 'exerciseRole', 'liftId', 'setType', 'percentage', 'weightBasis', 'minReps', 'maxReps', 'amrap'],
-			['A', 'A', '1', 'primary', 'bench', 'work', '1', 'topSet', '5', '5', 'FALSE'],
-		],
-		logs: [],
-		dayFlags: [],
-		schedule: [],
-		cardio: [],
-		mealItems: [],
-		mealLog: [],
-		favoriteFoods: [],
-		recentFoods: [
-			['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks'],
-			['first', 'First', '', '', '1', '0', '0', '0', '0', '0'],
-			['second', 'Second', '', '', '1', '0', '0', '0', '0', '0'],
-		],
-		strava: [],
-		garmin: [],
-		garminWellness: [],
-		withings: [],
-		settings: [],
-	}
-	const { plan } = buildMigrationPlan(rows)
-	assert.equal(plan.recentFoods[0].data._recentOrder, 0)
-	assert.equal(plan.recentFoods[1].data._recentOrder, 1)
-})
-
 test('migration plan rejects empty required tabs', () => {
 	const rows = {
 		exercises: [['id', 'name']],
@@ -230,6 +197,10 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 	const { plan } = buildMigrationPlan(rows)
 	assert.equal(plan.workoutSessions[0].data.exercises[0].sets[0].actualWeight, 0)
 	assert.equal('stravaActivities' in plan, false)
+	assert.equal('mealItems' in plan, false)
+	assert.equal('mealLog' in plan, false)
+	assert.equal('favoriteFoods' in plan, false)
+	assert.equal('recentFoods' in plan, false)
 })
 
 test('missing optional tabs are excluded instead of cleared', () => {
@@ -369,7 +340,7 @@ test('sheet reader skips every optional tab when only workout tabs exist', async
 
 		assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
 		assert.ok(warnings.some((warning) => warning.includes('Stronger - Garmin is missing')))
-		assert.ok(warnings.some((warning) => warning.includes('Stronger - Meal Log is missing')))
+		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Meal Log')))
 		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Strava')))
 	} finally {
 		globalThis.fetch = originalFetch
