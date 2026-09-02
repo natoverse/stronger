@@ -43,14 +43,11 @@ Stronger uses Google OAuth to read and write a Google Sheet on your behalf, and 
 2. Click **Create Credentials → OAuth client ID**.
 3. Set **Application type** to **Web application**.
 4. Give it a name like `Stronger Web Client`.
-5. Under **Authorized JavaScript origins**, add the origins where the app will run:
+5. Under **Authorized JavaScript origins**, add the GitHub Pages origin:
 
-   | Environment | Origin |
-   |---|---|
-   | Local dev (Vite default) | `http://localhost:5173` |
-   | GitHub Pages | `https://<your-username>.github.io` |
-
-   Add both if you plan to develop locally and deploy to GitHub Pages.
+   ```text
+   https://<your-username>.github.io
+   ```
 
    > Do **not** add a trailing slash or path. Origins are scheme + host + port only.
 
@@ -58,27 +55,13 @@ Stronger uses Google OAuth to read and write a Google Sheet on your behalf, and 
 7. Click **Create**.
 8. Copy the **Client ID** — it looks like `123456789-abcdef.apps.googleusercontent.com`.
 
-## 5. Configure the environment variable
+## 5. Configure GitHub Pages
 
 The app reads the client ID from the `VITE_GOOGLE_CLIENT_ID` environment variable at build time.
 
-### Local development
-
-Create a `.env.local` file in the project root (this file is git-ignored):
-
-```bash
-VITE_GOOGLE_CLIENT_ID=123456789-abcdef.apps.googleusercontent.com
-```
-
-Then start the dev server:
-
-```bash
-npm run dev
-```
-
-### GitHub Pages deployment
-
-If you deploy via GitHub Actions, add `VITE_GOOGLE_CLIENT_ID` as a **repository secret** (Settings → Secrets and variables → Actions → New repository secret) and reference it in your build step. For example, in your workflow:
+Add `VITE_GOOGLE_CLIENT_ID` as a **repository secret**
+(Settings → Secrets and variables → Actions → New repository secret). The
+deployment workflow passes it to the Vite build:
 
 ```yaml
 - name: Build
@@ -97,7 +80,7 @@ If you deploy via GitHub Actions, add `VITE_GOOGLE_CLIENT_ID` as a **repository 
 
 | Problem | Fix |
 |---|---|
-| "Google OAuth client ID is not configured" | The `VITE_GOOGLE_CLIENT_ID` env var is missing or empty. Check your `.env.local` file or CI secrets. |
+| "Google OAuth client ID is not configured" | The `VITE_GOOGLE_CLIENT_ID` repository secret is missing or empty. Add it and rerun the GitHub Pages deployment. |
 | Sign-in popup closes immediately / `idpiframe_initialization_failed` | The current origin is not in your client's **Authorized JavaScript origins**. Double-check scheme, host, and port. |
 | "Access blocked: This app's request is invalid" (error 400) | The OAuth consent screen may not be configured, or the origin is wrong. |
 | "The caller does not have permission" when connecting a sheet | The Google account you signed in with doesn't have access to the spreadsheet. Share the sheet with that account. |

@@ -42,7 +42,7 @@ All collections are nested below `/users/{uid}`:
 
 - `exercises/{exerciseId}`
 - `workouts/{workoutId}`
-- `workoutSessions/{sessionSetId}`
+- `workoutSessions/{sessionId}`
 - `dayFlags/{date}`
 - `schedule/{entryId}`
 - `cardioActivities/{activityId}`
@@ -56,9 +56,11 @@ All collections are nested below `/users/{uid}`:
 - `settings/app`
 
 The user document stores `schemaVersion`, setup state, and timestamps. Source
-identifiers are retained as document IDs. Migrated workout-log rows retain
-their source-row discriminator, while new rows use a per-session sequence, so
-repeated instances of the same exercise do not collide.
+identifiers are retained as document IDs. Each workout session is one document
+with ordered `exercises` and nested `sets` arrays, matching the collapsed
+structure used for workout templates. The Firebase adapter flattens these
+documents into the existing `ParsedLogRow[]` interface until the application
+model adopts the nested session type directly.
 
 ## Security and Quotas
 
@@ -79,3 +81,6 @@ collections into Firestore after each successful sync.
 - The deprecated Strava collection and write helper were removed. Activity
   views read Garmin data; the remaining `StravaActivity` type name is legacy
   shared chart terminology rather than a Strava data dependency.
+- Workout history is stored atomically as one nested document per session
+  instead of carrying the legacy Google Sheets row boundary into Firestore.
+  Session edits and deletes therefore require one document operation.

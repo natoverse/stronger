@@ -2,7 +2,7 @@
 
 A barbell training tracker. Single-page React app, Google Sheets as the database, deployed to GitHub Pages. No backend.
 
-**This project is opinionated.** It reflects one person's planning style and training preferences. No local development is done. No human code is written — all code is authored by AI agents working from specs.
+**This project is opinionated.** It reflects one person's planning style and training preferences. No human code is written — all code is authored by AI agents working from specs and deployed through GitHub Actions.
 
 ## How it works
 

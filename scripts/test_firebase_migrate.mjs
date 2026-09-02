@@ -3,11 +3,12 @@ import test from 'node:test'
 import {
 	buildMigrationPlan,
 	decodeWeightBasis,
-	logDocumentId,
+	groupWorkoutSessions,
 	parseExerciseRow,
 	parseScheduleRow,
 	readSheetData,
 	scheduleDocumentId,
+	workoutSessionDocumentId,
 } from './firebase-migrate.mjs'
 
 test('exercise parser preserves current fields and legacy warmup default', () => {
@@ -59,20 +60,49 @@ test('schedule parser and id retain custom labels', () => {
 	)
 })
 
-test('log ids are deterministic and distinguish exercises', () => {
-	const row = {
+test('workout session ids are deterministic and distinguish sessions', () => {
+	const session = {
+		date: '2026-09-01',
 		startTime: '2026-09-01T12:00:00.000Z',
-		liftId: 'bench.press',
-		exerciseName: 'Bench Press',
-		setNumber: 1,
+		workoutId: 'A',
 	}
-	assert.equal(logDocumentId(row), logDocumentId({ ...row }))
-	assert.notEqual(logDocumentId(row), logDocumentId({ ...row, exerciseName: 'Close Grip Bench' }))
-	assert.match(logDocumentId(row), /bench%2Epress/)
+	assert.equal(workoutSessionDocumentId(session), workoutSessionDocumentId({ ...session }))
 	assert.notEqual(
-		logDocumentId({ ...row, _migrationSourceRow: 2 }),
-		logDocumentId({ ...row, _migrationSourceRow: 3 }),
+		workoutSessionDocumentId(session),
+		workoutSessionDocumentId({ ...session, workoutId: 'B' }),
 	)
+	assert.match(workoutSessionDocumentId(session), /2026-09-01T12%3A00%3A00/)
+})
+
+test('workout log rows collapse into ordered session documents', () => {
+	const base = {
+		date: '2026-09-01',
+		startTime: '2026-09-01T12:00:00.000Z',
+		endTime: '2026-09-01T13:00:00.000Z',
+		workoutId: 'A',
+		liftId: 'bench',
+		exerciseName: 'Bench Press',
+		setType: 'work',
+		plannedWeight: 200,
+		plannedReps: 5,
+		actualWeight: 205,
+		actualReps: 5,
+		completed: true,
+	}
+	const sessions = groupWorkoutSessions([
+		{ ...base, setNumber: 1 },
+		{ ...base, setNumber: 2, actualReps: 4 },
+		{ ...base, liftId: 'row', exerciseName: 'Row', setNumber: 1 },
+		{ ...base, setNumber: 1, actualWeight: 210 },
+		{ ...base, startTime: '2026-09-02T12:00:00.000Z', date: '2026-09-02', setNumber: 1 },
+	])
+
+	assert.equal(sessions.length, 2)
+	assert.equal(sessions[0].exercises.length, 3)
+	assert.equal(sessions[0].exercises[0].sets.length, 2)
+	assert.equal(sessions[0].exercises[0].sets[1].actualReps, 4)
+	assert.equal(sessions[0].exercises[2].sets[0].actualWeight, 210)
+	assert.equal(sessions[1].date, '2026-09-02')
 })
 
 test('migration plan groups workout rows and reports invalid rows', () => {
@@ -190,7 +220,7 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 		settings: [],
 	}
 	const { plan } = buildMigrationPlan(rows)
-	assert.equal(plan.workoutSessions[0].data.actualWeight, 0)
+	assert.equal(plan.workoutSessions[0].data.exercises[0].sets[0].actualWeight, 0)
 	assert.equal('stravaActivities' in plan, false)
 })
 

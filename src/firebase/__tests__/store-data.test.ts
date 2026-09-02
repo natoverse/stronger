@@ -2,10 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('../client.ts', () => ({ firestore: {} }))
 
-import { logDocumentId, rowToParsedLogRow, scheduleDocumentId, sortLogRows } from '../store.ts'
+import {
+	flattenWorkoutSessions,
+	groupWorkoutSessionRows,
+	rowToParsedLogRow,
+	scheduleDocumentId,
+	workoutSessionDocumentId,
+} from '../store.ts'
 
 describe('Firestore data identifiers', () => {
-	it('creates stable, distinct log document IDs', () => {
+	it('creates stable, distinct workout session document IDs', () => {
 		const first = rowToParsedLogRow([
 			'2026-08-29', '2026-08-29T10:00:00Z', '2026-08-29T11:00:00Z',
 			'A', 'Bench Press', 'bench-press', 1, 'work', 200, 5, 205, 5, 'TRUE',
@@ -17,12 +23,10 @@ describe('Firestore data identifiers', () => {
 
 		expect(first).not.toBeNull()
 		expect(second).not.toBeNull()
-		expect(logDocumentId(first!)).not.toBe(logDocumentId(second!))
-		expect(logDocumentId(first!)).toBe(logDocumentId({ ...first! }))
-		expect(logDocumentId({ ...first!, _migrationSourceRow: 2 }))
-			.not.toBe(logDocumentId({ ...first!, _migrationSourceRow: 3 }))
-		expect(logDocumentId({ ...first!, _documentSequence: 0 }))
-			.not.toBe(logDocumentId({ ...first!, _documentSequence: 1 }))
+		expect(workoutSessionDocumentId(first!)).toBe(workoutSessionDocumentId(second!))
+		expect(workoutSessionDocumentId(first!)).toBe(workoutSessionDocumentId({ ...first! }))
+		expect(workoutSessionDocumentId(first!))
+			.not.toBe(workoutSessionDocumentId({ ...first!, workoutId: 'B' }))
 	})
 
 	it('parses completed flags and numeric set values', () => {
@@ -39,7 +43,7 @@ describe('Firestore data identifiers', () => {
 		})
 	})
 
-	it('restores session exercise order from stored sequence metadata', () => {
+	it('groups and restores ordered exercises and sets', () => {
 		const base = {
 			date: '2026-08-29',
 			startTime: '2026-08-29T10:00:00Z',
@@ -55,13 +59,18 @@ describe('Firestore data identifiers', () => {
 			completed: true,
 		}
 		const rows = [
-			{ ...base, exerciseName: 'Third', _documentSequence: 2 },
-			{ ...base, exerciseName: 'First', _documentSequence: 0 },
-			{ ...base, exerciseName: 'Second', _documentSequence: 1 },
+			{ ...base, exerciseName: 'First', setNumber: 1 },
+			{ ...base, exerciseName: 'First', setNumber: 2 },
+			{ ...base, exerciseName: 'Second', setNumber: 1 },
+			{ ...base, exerciseName: 'First', setNumber: 1, actualWeight: 110 },
 		]
+		const sessions = groupWorkoutSessionRows(rows)
 
-		expect(sortLogRows(rows).map((row) => row.exerciseName))
-			.toEqual(['First', 'Second', 'Third'])
+		expect(sessions).toHaveLength(1)
+		expect(sessions[0].exercises.map((exercise) => exercise.exerciseName))
+			.toEqual(['First', 'Second', 'First'])
+		expect(sessions[0].exercises[0].sets).toHaveLength(2)
+		expect(flattenWorkoutSessions(sessions)).toEqual(rows)
 	})
 
 	it('uses Stronger IDs when available and stable source fields otherwise', () => {

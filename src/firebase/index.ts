@@ -13,7 +13,6 @@ export {
 	writeCardioActivities,
 	writeDefaultCardioActivities,
 	appendLogRows,
-	sortLogRows,
 	readLogZone,
 	updateLogRows,
 	deleteLogSession,

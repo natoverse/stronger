@@ -34,6 +34,8 @@ authentication, and scheduled sync jobs switch backends.
 - [ ] Workout schedule documents preserve the current optional custom `label`.
 - [ ] Workout definitions preserve all weight-basis variants, comments, roles,
       and favorite state.
+- [ ] Workout-log rows are collapsed into one document per workout session,
+      with ordered exercise and set arrays.
 - [ ] Missing optional tabs produce warnings rather than aborting the run.
 - [ ] Missing or empty required exercise/workout tabs abort before any write.
 - [ ] The destination UID must already exist in Firebase Authentication.
@@ -91,6 +93,11 @@ authentication, and scheduled sync jobs switch backends.
   last valid row and emitting a warning; duplicate IDs remain fatal for other
   collections. Workout Schedule entries remain distinct by `strongerId` or by
   their date, workout, and label, so multiple workouts on one day are retained.
+- Workout history follows the same nested-document approach as workout
+  definitions. Rows sharing `(date, workoutId, startTime)` are collapsed into
+  one `workoutSessions` document containing ordered exercise and set arrays.
+  Repeated exercise blocks remain distinct when the lift/name changes or set
+  numbering resets.
 - Only Exercises and Workouts are required. Missing logs, schedules, cardio,
   nutrition, Garmin, Garmin Wellness, Withings, or settings tabs produce
   warnings and are excluded from writes and replacement deletion.

@@ -28,9 +28,29 @@ import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 1
 
-type StoredLogRow = ParsedLogRow & {
-	_migrationSourceRow?: number
-	_documentSequence?: number
+type StoredWorkoutSet = Pick<
+	ParsedLogRow,
+	| 'setNumber'
+	| 'setType'
+	| 'plannedWeight'
+	| 'plannedReps'
+	| 'actualWeight'
+	| 'actualReps'
+	| 'completed'
+>
+
+type StoredWorkoutExercise = {
+	liftId: string
+	exerciseName: string
+	sets: StoredWorkoutSet[]
+}
+
+type StoredWorkoutSession = {
+	date: string
+	startTime: string
+	endTime: string
+	workoutId: string
+	exercises: StoredWorkoutExercise[]
 }
 
 type StoredRecentFood = FoodItem & {
@@ -144,28 +164,84 @@ export function writeCardioActivities(uid: string, activities: CardioActivity[])
 
 export const writeDefaultCardioActivities = writeCardioActivities
 
-export function logDocumentId(row: StoredLogRow): string {
-	return [
-		idPart(row.startTime),
-		idPart(row.liftId || row.exerciseName),
-		idPart(row.exerciseName),
-		row.setNumber,
-		...(row._migrationSourceRow == null ? [] : [`row-${row._migrationSourceRow}`]),
-		...(row._documentSequence == null ? [] : [`sequence-${row._documentSequence}`]),
-	].join('_')
+export function workoutSessionDocumentId(
+	session: Pick<ParsedLogRow, 'date' | 'startTime' | 'workoutId'>,
+): string {
+	return idPart(`${session.date}:${session.startTime}:${session.workoutId}`)
+}
+
+export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSession[] {
+	const sessions = new Map<string, StoredWorkoutSession>()
+	for (const row of rows) {
+		const sessionId = workoutSessionDocumentId(row)
+		if (!sessions.has(sessionId)) {
+			sessions.set(sessionId, {
+				date: row.date,
+				startTime: row.startTime,
+				endTime: row.endTime,
+				workoutId: row.workoutId,
+				exercises: [],
+			})
+		}
+
+		const session = sessions.get(sessionId)!
+		if (row.endTime) session.endTime = row.endTime
+		const previousExercise = session.exercises[session.exercises.length - 1]
+		const previousSet = previousExercise?.sets[previousExercise.sets.length - 1]
+		const sameExercise = previousExercise !== undefined
+			&& previousExercise.liftId === row.liftId
+			&& previousExercise.exerciseName === row.exerciseName
+			&& previousSet !== undefined
+			&& row.setNumber > previousSet.setNumber
+		const exercise = sameExercise
+			? previousExercise
+			: {
+				liftId: row.liftId,
+				exerciseName: row.exerciseName,
+				sets: [],
+			}
+		if (!sameExercise) session.exercises.push(exercise)
+		exercise.sets.push({
+			setNumber: row.setNumber,
+			setType: row.setType,
+			plannedWeight: row.plannedWeight,
+			plannedReps: row.plannedReps,
+			actualWeight: row.actualWeight,
+			actualReps: row.actualReps,
+			completed: row.completed,
+		})
+	}
+	return [...sessions.values()]
+}
+
+export function flattenWorkoutSessions(sessions: StoredWorkoutSession[]): ParsedLogRow[] {
+	return [...sessions]
+		.sort((left, right) =>
+			`${left.date}|${left.startTime}`.localeCompare(`${right.date}|${right.startTime}`))
+		.flatMap((session) =>
+			session.exercises.flatMap((exercise) =>
+				exercise.sets.map((set) => ({
+					date: session.date,
+					startTime: session.startTime,
+					endTime: session.endTime,
+					workoutId: session.workoutId,
+					exerciseName: exercise.exerciseName,
+					liftId: exercise.liftId,
+					...set,
+				}))))
 }
 
 export async function appendLogRows(uid: string, rows: (string | number | boolean)[][]): Promise<void> {
-	const parsed: StoredLogRow[] = rows
-		.flatMap((row, index) => {
-			const value = rowToParsedLogRow(row)
-			return value ? [{ ...value, _documentSequence: index }] : []
-		})
-	for (let start = 0; start < parsed.length; start += 400) {
+	const parsed = rows.flatMap((row) => {
+		const value = rowToParsedLogRow(row)
+		return value ? [value] : []
+	})
+	const sessions = groupWorkoutSessionRows(parsed)
+	for (let start = 0; start < sessions.length; start += 400) {
 		const batch = writeBatch(firestore)
-		for (const row of parsed.slice(start, start + 400)) {
-			batch.set(doc(userCollection(uid, 'workoutSessions'), logDocumentId(row)), {
-				...row,
+		for (const session of sessions.slice(start, start + 400)) {
+			batch.set(doc(userCollection(uid, 'workoutSessions'), workoutSessionDocumentId(session)), {
+				...session,
 				updatedAt: new Date().toISOString(),
 			})
 		}
@@ -200,20 +276,8 @@ export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLog
 	}
 }
 
-export function sortLogRows(rows: ParsedLogRow[]): ParsedLogRow[] {
-	return rows.sort((left, right) => {
-			const a = left as StoredLogRow
-			const b = right as StoredLogRow
-			const sessionOrder = a.startTime.localeCompare(b.startTime)
-			if (sessionOrder !== 0) return sessionOrder
-			const aOrder = a._migrationSourceRow ?? a._documentSequence ?? Number.MAX_SAFE_INTEGER
-			const bOrder = b._migrationSourceRow ?? b._documentSequence ?? Number.MAX_SAFE_INTEGER
-			return aOrder - bOrder
-		})
-}
-
 export function readLogZone(uid: string): Promise<ParsedLogRow[]> {
-	return readCollection<StoredLogRow>(uid, 'workoutSessions').then(sortLogRows)
+	return readCollection<StoredWorkoutSession>(uid, 'workoutSessions').then(flattenWorkoutSessions)
 }
 
 export async function updateLogRows(
@@ -223,31 +287,22 @@ export async function updateLogRows(
 	sessionStartTime: string,
 	updatedRows: ParsedLogRow[],
 ): Promise<void> {
-	const snapshot = await getDocs(userCollection(uid, 'workoutSessions'))
-	const matches = snapshot.docs.filter((item) => {
-		const row = item.data() as ParsedLogRow
-		return row.date === sessionDate
-			&& row.workoutId === sessionWorkoutId
-			&& row.startTime === sessionStartTime
-	})
-	const sequencedRows: StoredLogRow[] = updatedRows.map((row, index) => ({
-		...row,
-		_documentSequence: index,
-	}))
-	const desiredIds = new Set(sequencedRows.map(logDocumentId))
-	const staleMatches = matches.filter((item) => !desiredIds.has(item.id))
-	if (staleMatches.length + sequencedRows.length > 500) {
-		throw new Error('Workout session is too large to update atomically.')
-	}
+	const sessions = groupWorkoutSessionRows(updatedRows)
+	if (sessions.length !== 1) throw new Error('Updated rows must describe exactly one workout session.')
 
+	const session = sessions[0]
+	const originalId = workoutSessionDocumentId({
+		date: sessionDate,
+		workoutId: sessionWorkoutId,
+		startTime: sessionStartTime,
+	})
+	const updatedId = workoutSessionDocumentId(session)
 	const batch = writeBatch(firestore)
-	for (const item of staleMatches) batch.delete(item.ref)
-	for (const row of sequencedRows) {
-		batch.set(doc(userCollection(uid, 'workoutSessions'), logDocumentId(row)), {
-			...row,
-			updatedAt: new Date().toISOString(),
-		})
-	}
+	if (originalId !== updatedId) batch.delete(doc(userCollection(uid, 'workoutSessions'), originalId))
+	batch.set(doc(userCollection(uid, 'workoutSessions'), updatedId), {
+		...session,
+		updatedAt: new Date().toISOString(),
+	})
 	await batch.commit()
 }
 
@@ -257,16 +312,14 @@ export async function deleteLogSession(
 	sessionWorkoutId: string,
 	sessionStartTime: string,
 ): Promise<void> {
-	const snapshot = await getDocs(userCollection(uid, 'workoutSessions'))
-	const matches = snapshot.docs.filter((item) => {
-		const row = item.data() as ParsedLogRow
-		return row.date === sessionDate && row.workoutId === sessionWorkoutId && row.startTime === sessionStartTime
-	})
-	for (let start = 0; start < matches.length; start += 400) {
-		const batch = writeBatch(firestore)
-		for (const item of matches.slice(start, start + 400)) batch.delete(item.ref)
-		await batch.commit()
-	}
+	await deleteDoc(doc(
+		userCollection(uid, 'workoutSessions'),
+		workoutSessionDocumentId({
+			date: sessionDate,
+			workoutId: sessionWorkoutId,
+			startTime: sessionStartTime,
+		}),
+	))
 }
 
 export function readFlags(uid: string): Promise<DayFlagEntry[]> {
