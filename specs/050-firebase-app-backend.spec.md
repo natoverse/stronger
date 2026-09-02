@@ -30,8 +30,8 @@ The application remains a client-side React app hosted on GitHub Pages.
   panel and an expired Calendar token does not sign the user out of Stronger.
 - [ ] Existing two-way Calendar synchronization and `strongerId` matching are
   preserved.
-- [ ] Garmin activities, Garmin wellness, and Withings scheduled syncs mirror
-  their completed sheet updates into the corresponding Firestore collections.
+- [ ] Garmin activities and Garmin wellness scheduled syncs mirror their
+  completed sheet updates into the corresponding Firestore collections.
 - [ ] Firebase configuration is supplied through public `VITE_FIREBASE_*`
   environment variables; no service-account credential is shipped to the app.
 - [ ] Firestore rules and repository behavior have automated tests.
@@ -39,7 +39,8 @@ The application remains a client-side React app hosted on GitHub Pages.
       active route, then prefetches every remaining collection concurrently.
 - [ ] Priority reads for yearly bucket collections fetch only the current
       calendar year; all other years load in the immediate background batch.
-- [ ] Schedule and day-flag cold loads fetch 60 days beginning today.
+- [ ] Schedule and day-flag cold loads fetch 60 days beginning on the first of
+      the current month.
 - [ ] Both future-calendar expansion controls fetch the next 30-day window;
       loading previous days fetches the preceding 30-day window.
 
@@ -88,9 +89,9 @@ secret. Administrative sync credentials remain restricted to GitHub Actions.
 ## Rollout
 
 The migration action in spec 049 runs before this backend switch. Existing
-Sheets remain the ingestion ledger and backup during stabilization. Garmin,
-Garmin Wellness, and Withings workflows mirror only their own completed
-collections into Firestore after each successful sync.
+Sheets remain the ingestion ledger and backup during stabilization. Garmin and
+Garmin Wellness workflows mirror only their own completed collections into
+Firestore after each successful sync.
 
 ## Iteration Decisions
 
@@ -118,13 +119,28 @@ collections into Firestore after each successful sync.
   Garmin wellness, and Withings measurements. The immediate deferred batch
   reads every other year while unrelated datasets prefetch concurrently.
 - Schedule and day flags use document-ID range queries instead of full
-  collection reads. The initial window is 60 days beginning today. "Show next
-  month" and "Load more days" share one action that expands both calendar
-  presentations and fetches the next 30 days; previous-day loading fetches 30
-  days backward.
+  collection reads. The initial window is 60 days beginning on the first of
+  the current month so the default month view includes past schedule and flag
+  data. "Show next month" and "Load more days" share one action that expands
+  both calendar presentations and fetches the next 30 days; previous-day
+  loading fetches 30 days backward.
 - Schedule and day-flag mutations write only affected date documents. This
   prevents partially loaded client state from deleting dates outside the
   loaded windows.
 - Calendar mutations are serialized and hydrate their affected Firestore date
   range before applying changes. Bulk planning, clearing, and Calendar sync
   therefore preserve entries that were not part of the cold-start window.
+- Every yearly bucket dataset loads historical years in the immediate deferred
+  batch, regardless of the entry route. Navigating after startup therefore
+  cannot leave history-backed views permanently limited to the current year.
+- Initial signed-out authentication preserves deep links and workout drafts.
+  Full state reset runs only after an authenticated user disconnects.
+- The monthly calendar initially renders only the current month. Its 60-day
+  data window therefore covers every visible day; each forward control loads
+  30 more days before appending another complete month.
+- Clearing scheduled workouts requests Calendar authorization before deleting
+  linked and orphaned Stronger events, and reports authorization failures
+  instead of silently leaving events behind.
+- Scheduled Withings mirroring is deferred to separate workflow migration
+  work. The one-time migration still imports existing Withings measurements,
+  and the Firebase UI continues to read the migrated yearly buckets.

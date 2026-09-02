@@ -182,7 +182,7 @@ Firebase login does not replace the separate Google Calendar authorization.
 ## 7. Configure the administrative service account
 
 The browser application does not use a service-account key. The migration and
-scheduled Garmin/Withings Firestore mirrors do.
+scheduled Garmin Firestore mirrors do.
 
 1. Open **Project settings -> Service accounts -> Firebase Admin SDK**.
 2. Select **Generate new private key**.
@@ -247,9 +247,8 @@ provisioning from the maintainer.
 
 ## 9. Scheduled health synchronization
 
-The Garmin, Garmin Wellness, and Withings workflows continue to update their
-Google Sheet tabs, then mirror only their owned collections into Firestore.
-They require:
+The Garmin and Garmin Wellness workflows continue to update their Google Sheet
+tabs, then mirror only their owned collections into Firestore. They require:
 
 - Their existing provider credentials.
 - `GOOGLE_SERVICE_ACCOUNT_KEY`.
@@ -258,7 +257,8 @@ They require:
 - `FIREBASE_USER_ID`.
 
 Missing Garmin or Withings tabs do not affect the core workout application or
-the one-time migration.
+the one-time migration. The Withings workflow continues to write only to
+Google Sheets; migrating its scheduled Firestore mirror is separate work.
 
 ## One-time Google Sheets migration
 

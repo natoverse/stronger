@@ -5,6 +5,7 @@ import {
 	addDateDays,
 	buildFirebaseLoadQueue,
 	initialDateWindow,
+	initialFutureDayCount,
 	runFirebaseLoadQueue,
 } from '../load-plan.ts'
 
@@ -17,6 +18,9 @@ describe('Firebase route load plan', () => {
 			{ dataset: 'settings', scope: 'all' },
 		])
 		expect(queue.deferred[0]).toEqual({ dataset: 'garminActivities', scope: 'otherYears' })
+		expect(queue.deferred).toContainEqual({ dataset: 'workoutSessions', scope: 'otherYears' })
+		expect(queue.deferred).toContainEqual({ dataset: 'garminWellness', scope: 'otherYears' })
+		expect(queue.deferred).toContainEqual({ dataset: 'withingsMeasurements', scope: 'otherYears' })
 		expect(queue.deferred).not.toContainEqual({ dataset: 'garminActivities', scope: 'all' })
 		expect(queue.deferred).not.toContainEqual({ dataset: 'settings', scope: 'all' })
 	})
@@ -44,13 +48,14 @@ describe('Firebase route load plan', () => {
 			.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
 	})
 
-	it('uses a 60-day initial window and 30-day increments', () => {
+	it('uses a month-aligned 60-day initial window and 30-day increments', () => {
 		expect(INITIAL_DATE_WINDOW_DAYS).toBe(60)
 		expect(DATE_WINDOW_INCREMENT_DAYS).toBe(30)
 		expect(initialDateWindow('2026-09-02')).toEqual({
-			startDate: '2026-09-02',
-			endDate: '2026-11-01',
+			startDate: '2026-09-01',
+			endDate: '2026-10-31',
 		})
+		expect(initialFutureDayCount('2026-09-02')).toBe(59)
 		expect(addDateDays('2026-12-15', DATE_WINDOW_INCREMENT_DAYS)).toBe('2027-01-14')
 	})
 

@@ -6,7 +6,7 @@ import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
-import { DATE_WINDOW_INCREMENT_DAYS, INITIAL_DATE_WINDOW_DAYS } from '../firebase/load-plan.js';
+import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
@@ -495,13 +495,13 @@ export function CalendarView({
 	const [sessionMutationError, setSessionMutationError] = useState<string | null>(null);
 	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
 	const [labelDraft, setLabelDraft] = useState('');
-	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0, 1]);
+	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
 	const [loadingDateWindow, setLoadingDateWindow] = useState(false);
 	const [dateWindowError, setDateWindowError] = useState<string | null>(null);
 	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
-	const [futureDayCount, setFutureDayCount] = useState(INITIAL_DATE_WINDOW_DAYS);
+	const [futureDayCount, setFutureDayCount] = useState(() => initialFutureDayCount());
 	const futureDays = useMemo(() => generateFutureDays(futureDayCount), [futureDayCount]);
 
 	// Build a map of date → workoutIds for fast lookup

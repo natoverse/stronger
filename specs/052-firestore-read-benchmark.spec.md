@@ -78,8 +78,8 @@ the migrated Firestore documents.
   measurement targets only the current calendar-year document, matching the
   staged UI load; the Sheets baseline retains its existing full-range read.
 - The shared plan also identifies date-window datasets and defines a 60-day
-  initial window with 30-day increments. The benchmark times only that initial
-  schedule/day-flag window.
+  initial window anchored to the first of the current month, with 30-day
+  increments. The benchmark times only that initial schedule/day-flag window.
 - Route names, labels, dataset ordering, and default benchmark tabs come
   directly from `lib/firebase-load-plan.json`; the benchmark does not maintain
   a second route map.

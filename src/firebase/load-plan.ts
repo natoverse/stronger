@@ -46,10 +46,23 @@ export function addDateDays(date: string, count: number): string {
 }
 
 export function initialDateWindow(startDate = localDateString(new Date())) {
+	const monthStart = loadPlan.initialDateWindowAnchor === 'monthStart'
+		? `${startDate.slice(0, 7)}-01`
+		: startDate
 	return {
-		startDate,
-		endDate: addDateDays(startDate, INITIAL_DATE_WINDOW_DAYS),
+		startDate: monthStart,
+		endDate: addDateDays(monthStart, INITIAL_DATE_WINDOW_DAYS),
 	}
+}
+
+export function initialFutureDayCount(today = localDateString(new Date())): number {
+	const { endDate } = initialDateWindow(today)
+	const [startYear, startMonth, startDay] = today.split('-').map(Number)
+	const [endYear, endMonth, endDay] = endDate.split('-').map(Number)
+	return Math.round((
+		Date.UTC(endYear, endMonth - 1, endDay)
+		- Date.UTC(startYear, startMonth - 1, startDay)
+	) / 86_400_000)
 }
 
 function request(dataset: FirebaseDataset, scope: FirebaseLoadScope = 'all'): FirebaseLoadRequest {
@@ -68,10 +81,14 @@ export function buildFirebaseLoadQueue(view: Route['view']): FirebaseLoadQueue {
 	const otherYears = routeDatasets
 		.filter((dataset) => yearBucketDatasets.has(dataset))
 		.map((dataset) => request(dataset, 'otherYears'))
+	const remainingOtherYears = datasetOrder
+		.filter((dataset) => yearBucketDatasets.has(dataset) && !selected.has(dataset))
+		.map((dataset) => request(dataset, 'otherYears'))
 	return {
 		priority,
 		deferred: [
 			...otherYears,
+			...remainingOtherYears,
 			...datasetOrder
 				.filter((dataset) => !selected.has(dataset))
 				.map((dataset) => request(dataset, scopeForColdLoad(dataset))),

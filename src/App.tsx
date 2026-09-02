@@ -8,7 +8,7 @@ import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initia
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import type { LiftGoal } from './google/index.js';
 import { signOutOfStronger } from './firebase/index.js';
-import { syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
+import { authorizeCalendar, syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -136,7 +136,6 @@ function AppContent() {
       calendarWindowLoadRef.current = Promise.resolve();
       calendarMutationRef.current = Promise.resolve();
       setSettingsLoaded(false);
-      setPriorityLoadPending(false);
     },
     [],
   );
@@ -182,6 +181,7 @@ function AppContent() {
   );
 
   const handleDisconnected = useCallback(() => {
+    if (!connectedUserRef.current) return;
     connectedUserRef.current = null;
     clearDraft();
     setSheetConnected(false);
@@ -817,6 +817,16 @@ function AppContent() {
     (options: ClearOptions): Promise<ClearResult> => queueCalendarMutation(async () => {
       const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
       const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
+      const calendarId = shouldClearSchedule ? loadCalendarId() : null;
+      let calendarAuthorized = false;
+      if (calendarId) {
+        try {
+          await authorizeCalendar();
+          calendarAuthorized = true;
+        } catch (err) {
+          result.errors.push(`Could not authorize Google Calendar cleanup: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
 
       // Compute date range
       const [sy, sm, sd] = startDate.split('-').map(Number);
@@ -872,9 +882,8 @@ function AppContent() {
         });
 
         // Try to delete Google Calendar events for cleared entries
-        const calendarId = loadCalendarId();
         const deletedEventIds = new Set<string>();
-        if (calendarId) {
+        if (calendarId && calendarAuthorized) {
           const gapi = window.gapi;
           if (gapi) {
             // Delete events we have direct references to
@@ -919,6 +928,8 @@ function AppContent() {
               const msg = err instanceof Error ? err.message : String(err);
               result.errors.push(`Failed to list calendar events for orphan cleanup: ${msg}`);
             }
+          } else {
+            result.errors.push('Google Calendar client did not initialize for cleanup.');
           }
         }
 

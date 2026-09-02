@@ -118,8 +118,11 @@
 
 ## Iteration: 60-day windowed loading
 
-- The monthly view opens with the current and next month, while the detailed
-  day list opens with 60 days beginning today.
+- The monthly view opens with the current month, while the detailed day list
+  extends from today through the end of the loaded window.
+- The initial 60-day data window begins on the first of the current month so
+  past dates shown in the default monthly calendar include schedule and flag
+  data.
 - "Show next month" and "Load more days" perform the same action: both add one
   month to the monthly view, add 30 detailed days, and request the next 30 days
   of schedule and day-flag data.

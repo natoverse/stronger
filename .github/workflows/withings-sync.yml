@@ -1,4 +1,4 @@
-name: Withings Sync (Withings → Firestore)
+name: Withings Sync (Withings → Google Sheets)
 
 on:
   schedule:
@@ -17,10 +17,6 @@ on:
 
 permissions:
   contents: read
-
-concurrency:
-  group: firebase-writes
-  cancel-in-progress: false
 
 jobs:
   sync:
@@ -44,14 +40,3 @@ jobs:
         # Scheduled runs always overwrite the rolling window so recent rows are
         # refreshed (fixes partial mid-day rows and picks up edited weigh-ins).
         run: node scripts/withings-sync.mjs ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
-
-      - name: Mirror Withings measurements to Firestore
-        env:
-          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
-          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
-          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
-          FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
-          DRY_RUN: 'false'
-          REPLACE_EXISTING: 'true'
-          MIGRATION_COLLECTIONS: withingsMeasurements
-        run: node scripts/firebase-migrate.mjs
