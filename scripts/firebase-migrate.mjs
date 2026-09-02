@@ -250,8 +250,17 @@ export function groupWorkoutSessions(rows) {
 	return [...sessions.values()]
 }
 
-export function scheduleDocumentId(entry) {
-	return idPart(entry.strongerId || `${entry.date}:${entry.workoutId}:${entry.label ?? ''}`)
+export function scheduleDayDocumentId(day) {
+	return day.date
+}
+
+export function groupScheduleDays(entries) {
+	const days = new Map()
+	for (const { date: entryDate, ...event } of entries) {
+		if (!days.has(entryDate)) days.set(entryDate, { date: entryDate, events: [] })
+		days.get(entryDate).events.push(event)
+	}
+	return [...days.values()]
 }
 
 export function parseExerciseRow(row) {
@@ -649,7 +658,11 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 			dayFlags: planDocuments('Day flags', values.dayFlags, (item) => item.date, 'keep-last'),
 		}),
 		...(values.schedule == null ? {} : {
-			schedule: planDocuments('Workout schedule', values.schedule, scheduleDocumentId),
+			schedule: planDocuments(
+				'Workout schedule days',
+				groupScheduleDays(values.schedule),
+				scheduleDayDocumentId,
+			),
 		}),
 		...(values.cardioActivities == null ? {} : {
 			cardioActivities: planDocuments('Cardio', values.cardioActivities, (item) => idPart(item.id)),

@@ -3,11 +3,12 @@ import test from 'node:test'
 import {
 	buildMigrationPlan,
 	decodeWeightBasis,
+	groupScheduleDays,
 	groupWorkoutSessions,
 	parseExerciseRow,
 	parseScheduleRow,
 	readSheetData,
-	scheduleDocumentId,
+	scheduleDayDocumentId,
 	workoutSessionDocumentId,
 } from './firebase-migrate.mjs'
 
@@ -46,18 +47,24 @@ test('workout weight bases match the application model', () => {
 	})
 })
 
-test('schedule parser and id retain custom labels', () => {
+test('schedule rows collapse into one document per day', () => {
 	const entry = parseScheduleRow(['2026-09-01', 'hiking', '', '', "Angel's Rest Trail"])
 	assert.deepEqual(entry, {
 		date: '2026-09-01',
 		workoutId: 'hiking',
 		label: "Angel's Rest Trail",
 	})
-	assert.match(scheduleDocumentId(entry), /Angel's%20Rest%20Trail/)
-	assert.notEqual(
-		scheduleDocumentId(entry),
-		scheduleDocumentId({ ...entry, workoutId: 'strength-a' }),
-	)
+	const days = groupScheduleDays([
+		entry,
+		{ date: '2026-09-01', workoutId: 'strength-a', strongerId: 'stronger-1' },
+		{ date: '2026-09-02', workoutId: 'strength-b' },
+	])
+	assert.equal(days.length, 2)
+	assert.equal(scheduleDayDocumentId(days[0]), '2026-09-01')
+	assert.deepEqual(days[0].events, [
+		{ workoutId: 'hiking', label: "Angel's Rest Trail" },
+		{ workoutId: 'strength-a', strongerId: 'stronger-1' },
+	])
 })
 
 test('workout session ids are deterministic and distinguish sessions', () => {
@@ -136,7 +143,8 @@ test('migration plan groups workout rows and reports invalid rows', () => {
 	assert.equal(plan.workouts[0].data.templates[0].name, 'Bench Press')
 	assert.equal(plan.workouts[0].data.templates[0].sets.length, 2)
 	assert.equal(plan.workouts[0].data.favorite, true)
-	assert.equal(plan.schedule[0].data.label, 'Heavy day')
+	assert.equal(plan.schedule[0].id, '2026-09-01')
+	assert.equal(plan.schedule[0].data.events[0].label, 'Heavy day')
 	assert.deepEqual(plan.settings[0].data.values, { roundWarmupPlateMath: 'true' })
 	assert.ok(warnings.some((warning) => warning.includes('Workouts: skipped 1 invalid row')))
 })
