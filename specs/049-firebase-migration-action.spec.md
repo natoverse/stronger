@@ -59,10 +59,6 @@ authentication, and scheduled sync jobs switch backends.
 - `dayFlags`
 - `schedule`
 - `cardioActivities`
-- `mealItems`
-- `mealLog`
-- `favoriteFoods`
-- `recentFoods`
 - `garminActivities`
 - `garminWellness`
 - `withingsMeasurements`
@@ -98,8 +94,11 @@ authentication, and scheduled sync jobs switch backends.
   `calendarEventId`, and `strongerId`; the date is stored once at the document
   level.
 - Only Exercises and Workouts are required. Missing logs, schedules, cardio,
-  nutrition, Garmin, Garmin Wellness, Withings, or settings tabs produce
-  warnings and are excluded from writes and replacement deletion.
+  Garmin, Garmin Wellness, Withings, or settings tabs produce warnings and are
+  excluded from writes and replacement deletion.
+- Nutrition collections (`mealItems`, `mealLog`, `favoriteFoods`, and
+  `recentFoods`) are not migrated. Nutrition tracking starts fresh after the
+  Firebase application backend is enabled.
 - The deprecated Strava sheet is not read or migrated. Runtime activity views
   consume Garmin data; legacy `StravaActivity` names remain only as shared
   model and chart terminology.

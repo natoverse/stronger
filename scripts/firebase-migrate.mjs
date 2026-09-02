@@ -26,10 +26,6 @@ const TABS = {
 	dayFlags: { title: 'Stronger - Schedule', range: 'A2:G10000' },
 	schedule: { title: 'Stronger - Workout Schedule', range: 'A2:E10000' },
 	cardio: { title: 'Stronger - Cardio', range: 'A:B' },
-	mealItems: { title: 'Stronger - Meal Items', range: 'A:J' },
-	mealLog: { title: 'Stronger - Meal Log', range: 'A2:K' },
-	favoriteFoods: { title: 'Stronger - Meal Favorites', range: 'A:J' },
-	recentFoods: { title: 'Stronger - Meal Recents', range: 'A:J' },
 	garmin: { title: 'Stronger - Garmin', range: 'A2:Q' },
 	garminWellness: { title: 'Stronger - Garmin Wellness', range: 'A2:AN' },
 	withings: { title: 'Stronger - Withings', range: 'A2:K' },
@@ -435,63 +431,6 @@ function parseCardioRow(row) {
 	return id && name ? { id, name } : null
 }
 
-const MEAL_CATEGORIES = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
-
-function parseMealValues(row, offset) {
-	const name = text(row[offset])
-	const category = text(row[offset + 1])
-	const macros = row.slice(offset + 2, offset + 7).map(sheetNonNegative)
-	if (!name || !MEAL_CATEGORIES.includes(category) || macros.length !== 5 || macros.some((value) => value == null)) return null
-	const [calories, fat, carbs, fiber, protein] = macros
-	return { name, category, calories, fat, carbs, fiber, protein }
-}
-
-function parseMealItemRow(row) {
-	const id = text(row[0])
-	const values = parseMealValues(row, 1)
-	if (!id || !values) return null
-	return {
-		id,
-		...values,
-		standardDrinks: nonNegative(row[8], 0),
-		favorite: text(row[9]).toLowerCase() === 'true',
-	}
-}
-
-function parseMealLogRow(row) {
-	const parsedDate = date(row[0])
-	const id = text(row[1])
-	const values = parseMealValues(row, 2)
-	if (!parsedDate || !id || !values) return null
-	return {
-		date: parsedDate,
-		id,
-		...values,
-		quantity: positive(row[9], 1),
-		standardDrinks: nonNegative(row[10], 0),
-	}
-}
-
-function parseFoodRow(row) {
-	const code = text(row[0])
-	const name = text(row[1])
-	const macros = row.slice(4, 9).map(sheetNonNegative)
-	if (!code || !name || macros.length !== 5 || macros.some((value) => value == null)) return null
-	const [calories, fat, carbs, fiber, protein] = macros
-	return {
-		code,
-		name,
-		brand: text(row[2]),
-		servingLabel: text(row[3]),
-		calories,
-		fat,
-		carbs,
-		fiber,
-		protein,
-		standardDrinks: nonNegative(row[9], 0),
-	}
-}
-
 function normalizeGarminType(value) {
 	const key = text(value).toLowerCase()
 	if (key === 'strength_training') return 'Weight Training'
@@ -627,10 +566,6 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		dayFlags: optionalRows('dayFlags', parseDayFlagRow, 'Day flags'),
 		schedule: optionalRows('schedule', parseScheduleRow, 'Workout schedule'),
 		cardioActivities: optionalRows('cardio', parseCardioRow, 'Cardio', true),
-		mealItems: optionalRows('mealItems', parseMealItemRow, 'Meal items', true),
-		mealLog: optionalRows('mealLog', parseMealLogRow, 'Meal log'),
-		favoriteFoods: optionalRows('favoriteFoods', parseFoodRow, 'Favorite foods', true),
-		recentFoods: optionalRows('recentFoods', parseFoodRow, 'Recent foods', true),
 		garminActivities: optionalRows('garmin', parseGarminRow, 'Garmin'),
 		garminWellness: optionalRows('garminWellness', parseGarminWellnessRow, 'Garmin wellness'),
 		withingsMeasurements: optionalRows('withings', parseWithingsRow, 'Withings'),
@@ -666,18 +601,6 @@ export function buildMigrationPlan(rows, initialWarnings = []) {
 		}),
 		...(values.cardioActivities == null ? {} : {
 			cardioActivities: planDocuments('Cardio', values.cardioActivities, (item) => idPart(item.id)),
-		}),
-		...(values.mealItems == null ? {} : {
-			mealItems: planDocuments('Meal items', values.mealItems, (item) => idPart(item.id)),
-		}),
-		...(values.mealLog == null ? {} : {
-			mealLog: planDocuments('Meal log', values.mealLog, (item) => idPart(item.id)),
-		}),
-		...(values.favoriteFoods == null ? {} : {
-			favoriteFoods: planDocuments('Favorite foods', values.favoriteFoods, (item) => idPart(item.code)),
-		}),
-		...(values.recentFoods == null ? {} : {
-			recentFoods: planDocuments('Recent foods', values.recentFoods, (item) => idPart(item.code)),
 		}),
 		...(values.garminActivities == null ? {} : {
 			garminActivities: planDocuments('Garmin', values.garminActivities, (item) => idPart(item.stravaId)),

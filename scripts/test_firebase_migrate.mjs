@@ -197,6 +197,10 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 	const { plan } = buildMigrationPlan(rows)
 	assert.equal(plan.workoutSessions[0].data.exercises[0].sets[0].actualWeight, 0)
 	assert.equal('stravaActivities' in plan, false)
+	assert.equal('mealItems' in plan, false)
+	assert.equal('mealLog' in plan, false)
+	assert.equal('favoriteFoods' in plan, false)
+	assert.equal('recentFoods' in plan, false)
 })
 
 test('missing optional tabs are excluded instead of cleared', () => {
@@ -313,7 +317,7 @@ test('sheet reader skips every optional tab when only workout tabs exist', async
 
 		assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
 		assert.ok(warnings.some((warning) => warning.includes('Stronger - Garmin is missing')))
-		assert.ok(warnings.some((warning) => warning.includes('Stronger - Meal Log is missing')))
+		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Meal Log')))
 		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Strava')))
 	} finally {
 		globalThis.fetch = originalFetch
