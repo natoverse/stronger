@@ -111,10 +111,19 @@
 
 - Selecting a month day loads detailed cards through the final day of that month before scrolling to the selected card.
 
-## Iteration: three-month schedule default
+## Iteration: three-month schedule default (superseded)
 
 - The monthly calendar initially shows the current month and the following two months.
 - The detailed day list initially loads the next 90 days, matching the three-month planning horizon.
+
+## Iteration: 60-day windowed loading
+
+- The monthly view opens with the current and next month, while the detailed
+  day list opens with 60 days beginning today.
+- "Show next month" and "Load more days" perform the same action: both add one
+  month to the monthly view, add 30 detailed days, and request the next 30 days
+  of schedule and day-flag data.
+- "Load previous days" adds and requests 30 days at a time.
 
 ## Iteration: scheduled workout names
 

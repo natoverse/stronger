@@ -9,6 +9,7 @@ import {
 	groupScheduleEntries,
 	groupWorkoutSessionRows,
 	groupYearBuckets,
+	mergeDateWindowEntries,
 	mergeYearScopedEntries,
 	mergeWorkoutSessionRows,
 	rowToParsedLogRow,
@@ -72,6 +73,26 @@ describe('Firestore data identifiers', () => {
 			{ date: '2025-12-31', value: 'new-prior' },
 			{ date: '2026-01-01', value: 'current' },
 			{ date: '2027-01-01', value: 'new-future' },
+		])
+	})
+
+	it('merges only the loaded calendar date window', () => {
+		const existing = [
+			{ date: '2026-09-01', value: 'before' },
+			{ date: '2026-09-15', value: 'stale' },
+			{ date: '2026-11-01', value: 'after' },
+		]
+		const loaded = [
+			{ date: '2026-09-20', value: 'fresh' },
+		]
+
+		expect(mergeDateWindowEntries(existing, loaded, {
+			startDate: '2026-09-02',
+			endDate: '2026-11-01',
+		})).toEqual([
+			{ date: '2026-09-01', value: 'before' },
+			{ date: '2026-09-20', value: 'fresh' },
+			{ date: '2026-11-01', value: 'after' },
 		])
 	})
 

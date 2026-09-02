@@ -32,6 +32,10 @@ import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 2
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
+export type DateWindow = {
+	startDate: string
+	endDate: string
+}
 
 type DatedEntry = {
 	date: string
@@ -195,6 +199,32 @@ async function readCollection<T>(uid: string, name: CollectionName): Promise<T[]
 	return snapshot.docs.map((item) => clean<T>(item))
 }
 
+async function readDateWindowCollection<T>(
+	uid: string,
+	name: CollectionName,
+	window: DateWindow,
+): Promise<T[]> {
+	const collectionRef = userCollection(uid, name)
+	const snapshot = await getDocs(query(
+		collectionRef,
+		where(documentId(), '>=', window.startDate),
+		where(documentId(), '<', window.endDate),
+	))
+	return snapshot.docs.map((item) => clean<T>(item))
+}
+
+export function mergeDateWindowEntries<T extends { date: string }>(
+	existing: T[],
+	loaded: T[],
+	window?: DateWindow,
+): T[] {
+	if (!window) return loaded
+	return [
+		...existing.filter((entry) => entry.date < window.startDate || entry.date >= window.endDate),
+		...loaded,
+	].sort((left, right) => left.date.localeCompare(right.date))
+}
+
 async function replaceCollection<T>(
 	uid: string,
 	name: CollectionName,
@@ -213,6 +243,32 @@ async function replaceCollection<T>(
 		operations.push((batch) => batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() }))
 	})
 
+	for (let start = 0; start < operations.length; start += 400) {
+		const batch = writeBatch(firestore)
+		for (const operation of operations.slice(start, start + 400)) operation(batch)
+		await batch.commit()
+	}
+}
+
+async function writeDateScopedCollection<T>(
+	uid: string,
+	name: CollectionName,
+	values: T[],
+	dates: Iterable<string>,
+	getId: (value: T) => string,
+): Promise<void> {
+	const byId = new Map(values.map((value) => [getId(value), value]))
+	const operations = [...new Set(dates)].map((date) => {
+		const ref = doc(userCollection(uid, name), date)
+		const value = byId.get(date)
+		return (batch: ReturnType<typeof writeBatch>) => {
+			if (value) {
+				batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() })
+			} else {
+				batch.delete(ref)
+			}
+		}
+	})
 	for (let start = 0; start < operations.length; start += 400) {
 		const batch = writeBatch(firestore)
 		for (const operation of operations.slice(start, start + 400)) operation(batch)
@@ -492,12 +548,22 @@ export async function deleteLogSession(
 	})
 }
 
-export function readFlags(uid: string): Promise<DayFlagEntry[]> {
-	return readCollection<DayFlagEntry>(uid, 'dayFlags')
+export function readFlags(uid: string, window?: DateWindow): Promise<DayFlagEntry[]> {
+	return window
+		? readDateWindowCollection<DayFlagEntry>(uid, 'dayFlags', window)
+		: readCollection<DayFlagEntry>(uid, 'dayFlags')
 }
 
 export function writeFlags(uid: string, flags: DayFlagEntry[]): Promise<void> {
 	return replaceCollection(uid, 'dayFlags', flags, (entry) => entry.date)
+}
+
+export function writeFlagDates(
+	uid: string,
+	flags: DayFlagEntry[],
+	dates: Iterable<string>,
+): Promise<void> {
+	return writeDateScopedCollection(uid, 'dayFlags', flags, dates, (entry) => entry.date)
 }
 
 export function scheduleDayDocumentId(day: Pick<WorkoutScheduleEntry, 'date'>): string {
@@ -519,8 +585,11 @@ export function flattenScheduleDays(days: StoredScheduleDay[]): WorkoutScheduleE
 		.flatMap((day) => day.events.map((event) => ({ date: day.date, ...event })))
 }
 
-export function readWorkoutSchedule(uid: string): Promise<WorkoutScheduleEntry[]> {
-	return readCollection<StoredScheduleDay>(uid, 'schedule').then(flattenScheduleDays)
+export function readWorkoutSchedule(uid: string, window?: DateWindow): Promise<WorkoutScheduleEntry[]> {
+	const pending = window
+		? readDateWindowCollection<StoredScheduleDay>(uid, 'schedule', window)
+		: readCollection<StoredScheduleDay>(uid, 'schedule')
+	return pending.then(flattenScheduleDays)
 }
 
 export function writeWorkoutSchedule(uid: string, entries: WorkoutScheduleEntry[]): Promise<void> {
@@ -528,6 +597,20 @@ export function writeWorkoutSchedule(uid: string, entries: WorkoutScheduleEntry[
 		uid,
 		'schedule',
 		groupScheduleEntries(entries),
+		scheduleDayDocumentId,
+	)
+}
+
+export function writeWorkoutScheduleDates(
+	uid: string,
+	entries: WorkoutScheduleEntry[],
+	dates: Iterable<string>,
+): Promise<void> {
+	return writeDateScopedCollection(
+		uid,
+		'schedule',
+		groupScheduleEntries(entries),
+		dates,
 		scheduleDayDocumentId,
 	)
 }

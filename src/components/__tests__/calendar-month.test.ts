@@ -110,13 +110,13 @@ describe('CalendarView month schedule', () => {
 			.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 		const followingMonthLabel = new Date(now.getFullYear(), now.getMonth() + 2, 1)
 			.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-		const visibleDays = [0, 1, 2].reduce(
+		const visibleDays = [0, 1].reduce(
 			(total, offset) => total + new Date(now.getFullYear(), now.getMonth() + offset + 1, 0).getDate(),
 			0,
 		);
 		expect(markup).toContain(monthLabel);
 		expect(markup).toContain(nextMonthLabel);
-		expect(markup).toContain(followingMonthLabel);
+		expect(markup).not.toContain(followingMonthLabel);
 		expect(markup).toContain('calendar-month-tag-strength');
 		expect(markup).toContain('calendar-month-tag-cardio');
 		expect(markup).toContain('calendar-month-tag-rest');
@@ -155,7 +155,7 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('Show next month');
 		expect(markup).not.toContain(`Remove ${monthLabel}`);
 		expect(markup).toContain(`Remove ${nextMonthLabel}`);
-		expect(markup).toContain(`Remove ${followingMonthLabel}`);
+		expect(markup).not.toContain(`Remove ${followingMonthLabel}`);
 	});
 
 	it('uses definition names when a scheduled workout is unavailable for execution', () => {

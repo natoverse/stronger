@@ -39,6 +39,9 @@ The application remains a client-side React app hosted on GitHub Pages.
       active route, then prefetches every remaining collection concurrently.
 - [ ] Priority reads for yearly bucket collections fetch only the current
       calendar year; all other years load in the immediate background batch.
+- [ ] Schedule and day-flag cold loads fetch 60 days beginning today.
+- [ ] Both future-calendar expansion controls fetch the next 30-day window;
+      loading previous days fetches the preceding 30-day window.
 
 ## Firestore Schema
 
@@ -114,3 +117,14 @@ collections into Firestore after each successful sync.
   only the current-year document for workout sessions, Garmin activities,
   Garmin wellness, and Withings measurements. The immediate deferred batch
   reads every other year while unrelated datasets prefetch concurrently.
+- Schedule and day flags use document-ID range queries instead of full
+  collection reads. The initial window is 60 days beginning today. "Show next
+  month" and "Load more days" share one action that expands both calendar
+  presentations and fetches the next 30 days; previous-day loading fetches 30
+  days backward.
+- Schedule and day-flag mutations write only affected date documents. This
+  prevents partially loaded client state from deleting dates outside the
+  loaded windows.
+- Calendar mutations are serialized and hydrate their affected Firestore date
+  range before applying changes. Bulk planning, clearing, and Calendar sync
+  therefore preserve entries that were not part of the cold-start window.
