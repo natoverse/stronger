@@ -356,9 +356,10 @@ logical Firestore records separately from physical bucket documents.
 1. Run the migration first, so Firestore holds a current snapshot.
 2. Open **Actions -> Benchmark Sheets vs Firestore reads -> Run workflow**.
 3. Optionally change **iterations** (1-20, default 3) or pass a comma-separated
-   **tabs** list such as `calendar,garmin-activities,nutrition` to narrow the
+   **tabs** list such as `calendar,garmin-activities` to narrow the
    comparison. Leaving it blank runs every default benchmark route from the
-   shared load plan.
+   shared load plan. Nutrition is intentionally excluded from benchmark routes
+   until its Firebase rollout begins.
 4. Read the markdown table in the job summary. Each tab has separate Sheets and
    Firestore cold-load rows, followed by per-dataset diagnostic medians. Sheets
    ranges that include row 1 exclude their header from logical record counts.
