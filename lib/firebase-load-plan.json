@@ -15,6 +15,12 @@
     "favoriteFoods",
     "recentFoods"
   ],
+  "yearBucketDatasets": [
+    "workoutSessions",
+    "garminActivities",
+    "garminWellness",
+    "withingsMeasurements"
+  ],
   "routes": {
     "list": ["exercises", "workouts", "cardioActivities", "schedule", "workoutSessions", "settings"],
     "workout": ["exercises", "workouts", "workoutSessions", "settings"],

@@ -24,6 +24,8 @@ the migrated Firestore documents.
       fast.
 - [x] Each selected tab uses exactly the ordered dataset list in the shared
       load plan.
+- [x] Firestore cold loads fetch only the current-year document for yearly
+      bucket datasets; older years are excluded from cold-load timing.
 - [x] All Sheets reads required by a tab run concurrently in one timed
       `Promise.all` batch, followed by a separately timed concurrent Firestore
       batch containing the identical logical datasets.
@@ -70,6 +72,9 @@ the migrated Firestore documents.
   and `events` for daily schedule documents. Reports show logical records and
   physical documents separately so reduced round trips remain visible without
   making record counts misleading.
+- The shared plan identifies yearly bucket datasets. Their Firestore cold-load
+  measurement targets only the current calendar-year document, matching the
+  staged UI load; the Sheets baseline retains its existing full-range read.
 - Route names, labels, dataset ordering, and default benchmark tabs come
   directly from `lib/firebase-load-plan.json`; the benchmark does not maintain
   a second route map.
@@ -91,3 +96,7 @@ the migrated Firestore documents.
   benchmark action cannot select or request it.
 - The per-tab summary uses one row per tab rather than separate backend rows,
   making direct latency and request-shape comparisons easier to scan.
+- Yearly workout, Garmin activity, Garmin wellness, and Withings collections
+  now benchmark only the current-year document during cold start. The report
+  calls out that Sheets still reads its full range, so record-count differences
+  are intentional rather than a schema mismatch.

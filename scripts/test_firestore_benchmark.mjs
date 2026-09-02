@@ -5,6 +5,7 @@ import {
 	LOAD_PLAN,
 	countFirestoreRecords,
 	countSheetRecords,
+	firestoreReadScope,
 	getRouteDatasets,
 	median,
 	parseIterations,
@@ -33,7 +34,22 @@ test('dataset catalog covers the shared load plan', () => {
 	assert.equal(DATASETS.workoutSessions.entryField, 'entries')
 	assert.equal(DATASETS.schedule.entryField, 'events')
 	assert.equal(DATASETS.garminWellness.entryField, 'entries')
+	assert.deepEqual(LOAD_PLAN.yearBucketDatasets, [
+		'workoutSessions',
+		'garminActivities',
+		'garminWellness',
+		'withingsMeasurements',
+	])
 	assert.equal(LOAD_PLAN.benchmarkRoutes.includes('nutrition'), false)
+})
+
+test('cold loads target only the current document for yearly datasets', () => {
+	assert.equal(firestoreReadScope('workoutSessions'), 'currentYear')
+	assert.equal(firestoreReadScope('garminActivities'), 'currentYear')
+	assert.equal(firestoreReadScope('garminWellness'), 'currentYear')
+	assert.equal(firestoreReadScope('withingsMeasurements'), 'currentYear')
+	assert.equal(firestoreReadScope('schedule'), 'all')
+	assert.equal(firestoreReadScope('exercises'), 'all')
 })
 
 test('Garmin activities and calendar use the exact shared route datasets', () => {
@@ -185,6 +201,10 @@ test('report renders one comparison row for every tab', () => {
 	})
 
 	assert.match(output, /3 iterations/)
+	assert.match(
+		output,
+		new RegExp(`Firestore cold loads read only the ${new Date().getFullYear()} document for yearly datasets`),
+	)
 	assert.match(output, /\| Tab \| Sheets cold load \| Firestore cold load \| Sheets records \| Firestore documents \|/)
 	assert.match(output, /\| Calendar \| 400 ms \| 100 ms \| 20 \| 2 \|/)
 	assert.doesNotMatch(output, /\| Calendar \| Sheets \|/)

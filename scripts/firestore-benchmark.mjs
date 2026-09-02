@@ -19,6 +19,7 @@ const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 const FIRESTORE_API_BASE = 'https://firestore.googleapis.com/v1'
 const FIRESTORE_PAGE_SIZE = 300
 const AUTH_SCHEME = 'Bearer'
+const CURRENT_YEAR = String(new Date().getFullYear())
 
 export const LOAD_PLAN = JSON.parse(
 	readFileSync(new URL('../lib/firebase-load-plan.json', import.meta.url), 'utf8'),
@@ -44,6 +45,10 @@ export const DATASETS = {
 function validateLoadPlan() {
 	const missing = LOAD_PLAN.datasetOrder.filter((name) => !(name in DATASETS))
 	if (missing.length) throw new Error(`Load plan contains undefined dataset(s): ${missing.join(', ')}`)
+	const undefinedYearBuckets = LOAD_PLAN.yearBucketDatasets.filter((name) => !(name in DATASETS))
+	if (undefinedYearBuckets.length) {
+		throw new Error(`Load plan contains undefined yearly dataset(s): ${undefinedYearBuckets.join(', ')}`)
+	}
 	for (const [route, datasets] of Object.entries(LOAD_PLAN.routes)) {
 		const undefinedDatasets = datasets.filter((name) => !(name in DATASETS))
 		if (undefinedDatasets.length) {
@@ -127,6 +132,8 @@ export function renderReport({ tabs, datasets, iterations }) {
 	const lines = [
 		`# Sheets vs Firestore cold-load benchmark (${iterations} iteration${iterations === 1 ? '' : 's'})`,
 		'',
+		`Firestore cold loads read only the ${CURRENT_YEAR} document for yearly datasets; Sheets retains its current full-range read.`,
+		'',
 		'| Tab | Sheets cold load | Firestore cold load | Sheets records | Firestore documents |',
 		'| --- | --- | --- | --- | --- |',
 	]
@@ -208,6 +215,25 @@ async function readFirestoreCollection(projectId, token, uid, collection, entryF
 		pageToken = data.nextPageToken ?? ''
 	} while (pageToken)
 	return { count, documents, bytes }
+}
+
+async function readFirestoreDocument(projectId, token, uid, collection, documentId, entryField) {
+	const url = `${FIRESTORE_API_BASE}/projects/${projectId}/databases/(default)/documents`
+		+ `/users/${encodeURIComponent(uid)}/${collection}/${encodeURIComponent(documentId)}`
+	const response = await fetch(url, { headers: authHeaders(token) })
+	const body = await response.text()
+	if (response.status === 404) return { count: 0, documents: 0, bytes: body.length }
+	if (!response.ok) throw new Error(`Firestore request failed (${response.status})`)
+	const document = JSON.parse(body)
+	return {
+		count: countFirestoreRecords([document], entryField),
+		documents: 1,
+		bytes: body.length,
+	}
+}
+
+export function firestoreReadScope(name) {
+	return LOAD_PLAN.yearBucketDatasets.includes(name) ? 'currentYear' : 'all'
 }
 
 async function sample(operation) {
@@ -302,13 +328,25 @@ async function main() {
 		iterations,
 		routes,
 		readSheets: (name) => readSheetRange(spreadsheetId, sheetsToken, DATASETS[name]),
-		readFirestore: (name) => readFirestoreCollection(
-			firebaseServiceAccount.project_id,
-			firestoreToken,
-			uid,
-			DATASETS[name].collection,
-			DATASETS[name].entryField,
-		),
+		readFirestore: (name) => {
+			const dataset = DATASETS[name]
+			return firestoreReadScope(name) === 'currentYear'
+				? readFirestoreDocument(
+					firebaseServiceAccount.project_id,
+					firestoreToken,
+					uid,
+					dataset.collection,
+					CURRENT_YEAR,
+					dataset.entryField,
+				)
+				: readFirestoreCollection(
+					firebaseServiceAccount.project_id,
+					firestoreToken,
+					uid,
+					dataset.collection,
+					dataset.entryField,
+				)
+		},
 	})
 
 	const output = renderReport(report)
