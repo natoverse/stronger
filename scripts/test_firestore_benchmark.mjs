@@ -14,7 +14,7 @@ import {
 	summarize,
 } from './firestore-benchmark.mjs'
 
-test('dataset catalog covers the shared load plan and nutrition sheets', () => {
+test('dataset catalog covers the shared load plan', () => {
 	assert.deepEqual(Object.keys(DATASETS), LOAD_PLAN.datasetOrder)
 	assert.deepEqual(DATASETS.mealItems, {
 		label: 'Meal items',
@@ -33,6 +33,7 @@ test('dataset catalog covers the shared load plan and nutrition sheets', () => {
 	assert.equal(DATASETS.workoutSessions.entryField, 'entries')
 	assert.equal(DATASETS.schedule.entryField, 'events')
 	assert.equal(DATASETS.garminWellness.entryField, 'entries')
+	assert.equal(LOAD_PLAN.benchmarkRoutes.includes('nutrition'), false)
 })
 
 test('Garmin activities and calendar use the exact shared route datasets', () => {

@@ -15,8 +15,8 @@ the migrated Firestore documents.
 ## Acceptance Criteria
 
 - [x] A `workflow_dispatch` workflow runs the comparison on demand.
-- [x] Every dataset in the shared load plan, including nutrition, is read from
-      both backends using the same ranges/collections the app uses.
+- [x] Every dataset required by a selected benchmark route is read from both
+      backends using the same ranges/collections the app uses.
 - [x] Firestore collection reads follow pagination so large collections are
       fully retrieved.
 - [x] The number of timed iterations is configurable and clamped to 1-20.
@@ -85,3 +85,6 @@ the migrated Firestore documents.
 - Sheets ranges beginning at row 1 now declare `headerRows: 1`. Reports subtract
   that metadata from returned value rows, including the header-only case, so
   both backend count columns describe logical data records.
+- Nutrition is excluded from `benchmarkRoutes` while its Firebase rollout is
+  deferred. Its route definition remains in the shared plan for the UI, but the
+  benchmark action cannot select or request it.
