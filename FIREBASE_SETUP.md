@@ -339,6 +339,29 @@ warning. Multiple Workout Schedule entries on the same date remain distinct.
 The migration does not modify the source spreadsheet, other users, or Firebase
 Authentication records.
 
+## Compare Sheets and Firestore read latency
+
+The **Benchmark Sheets vs Firestore reads** workflow
+(`scripts/firestore-benchmark.mjs`) replays the reads the application performs
+when it loads — exercises, workouts, workout log, day flags, workout schedule,
+cardio, Garmin activities, Garmin wellness, Withings, and settings — against
+both backends and prints their response times side by side. It is read-only and
+uses the same four migration secrets.
+
+1. Run the migration first, so Firestore holds a current snapshot.
+2. Open **Actions -> Benchmark Sheets vs Firestore reads -> Run workflow**.
+3. Optionally change **iterations** (1-20, default 3) or pass a comma-separated
+   **datasets** list such as `workouts,schedule` to narrow the comparison.
+4. Read the markdown table in the job summary: per-dataset median times, the
+   Sheets/Firestore speedup ratio, retrieved row and document counts, and a
+   final full-load row that totals every dataset for each backend.
+
+Both backends are timed back to back within an iteration, and access tokens are
+acquired before timing starts, so the numbers reflect data retrieval rather
+than authentication. A dataset that fails on one backend — for example a
+collection that was never migrated — is reported in its row without stopping
+the run.
+
 ## Troubleshooting
 
 | Error or symptom | Resolution |
