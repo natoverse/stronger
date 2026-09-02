@@ -23,8 +23,8 @@ the Firebase transition.
    not required.
 3. Record the **Project ID** under
    **Project settings -> General -> Your project**.
-4. Under **Your apps**, add a web application and record its Firebase
-   configuration object.
+4. Register a Firebase web app as described in
+   [Configure the Firebase web application](#6-configure-the-firebase-web-application).
 
 An independent OSS deployment should create its own Firebase project. Only
 explicitly approved friends-and-family forks use the shared project and web
@@ -131,6 +131,30 @@ Select the shared Firebase project when `firebase use --add` prompts. Do not
 deploy the Firebase-backed UI until its rules have been deployed.
 
 ## 6. Configure the Firebase web application
+
+The web configuration is shown for a registered web app in the Firebase
+console:
+
+1. Open the Firebase project.
+2. Select the gear beside **Project Overview**, then **Project settings**.
+3. Stay on the **General** tab and scroll to **Your apps**.
+4. If no web app exists, select the **Web** (`</>`) icon, enter a nickname such
+   as `Stronger`, and select **Register app**. Firebase Hosting is not required
+   because Stronger deploys to GitHub Pages.
+5. Select the registered web app's nickname.
+6. Under **SDK setup and configuration**, select **Config**.
+7. Copy the values from the displayed `firebaseConfig` object:
+
+```js
+const firebaseConfig = {
+  apiKey: "...",
+  authDomain: "...",
+  projectId: "...",
+  storageBucket: "...",
+  messagingSenderId: "...",
+  appId: "...",
+};
+```
 
 Map the Firebase web configuration object to local environment variables and
 GitHub Actions repository secrets:

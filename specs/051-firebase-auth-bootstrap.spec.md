@@ -48,3 +48,6 @@ identity and must not read, write, or initialize Cloud Firestore.
   bootstrap becomes available.
 - Bootstrap, authorized-domain, and per-fork configuration instructions live
   in the canonical `FIREBASE_SETUP.md` runtime guide.
+- The guide identifies the Firebase console's
+  **Project settings -> General -> Your apps -> SDK setup and configuration ->
+  Config** pane as the source of the six `VITE_FIREBASE_*` values.
