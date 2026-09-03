@@ -30,6 +30,7 @@ const TABS = {
 	garminWellness: { title: 'Stronger - Garmin Wellness', range: 'A2:AN' },
 	withings: { title: 'Stronger - Withings', range: 'A2:K' },
 	settings: { title: 'Stronger - Settings', range: 'A:B' },
+	infra: { title: 'Stronger - Infra', range: 'A:B' },
 }
 
 const COLLECTION_TABS = {
@@ -43,6 +44,7 @@ const COLLECTION_TABS = {
 	garminWellness: ['garminWellness'],
 	withingsMeasurements: ['withings'],
 	settings: ['settings'],
+	syncState: ['infra'],
 }
 
 const GARMIN_WELLNESS_FIELDS = [
@@ -627,6 +629,16 @@ export function buildMigrationPlan(
 		const value = text(row[1])
 		if (key && value) settings.set(key, value)
 	}
+	const infra = new Map()
+	for (const row of rows.infra?.slice(1) ?? []) {
+		const key = text(row[0])
+		const value = text(row[1])
+		if (key && value) infra.set(key, value)
+	}
+	const withingsRefreshToken = infra.get('withings_refresh_token')
+	if (requested.has('syncState') && rows.infra != null && !withingsRefreshToken) {
+		warnings.push('Infra: no withings_refresh_token value was found.')
+	}
 	const planDocuments = (label, source, getId, duplicatePolicy = 'error') =>
 		documents(source, getId, { label, duplicatePolicy, warnings })
 
@@ -688,11 +700,17 @@ export function buildMigrationPlan(
 		...(!requested.has('settings') || rows.settings == null ? {} : {
 			settings: [{ id: 'app', data: { values: Object.fromEntries(settings) } }],
 		}),
+		...(!requested.has('syncState') || !withingsRefreshToken ? {} : {
+			syncState: [{
+				id: 'withings',
+				data: { withingsRefreshToken },
+			}],
+		}),
 	}
 	return { plan, warnings }
 }
 
-function firestoreValue(value) {
+export function firestoreValue(value) {
 	if (value === null) return { nullValue: null }
 	if (typeof value === 'boolean') return { booleanValue: value }
 	if (typeof value === 'number') {
@@ -714,7 +732,7 @@ function firestoreValue(value) {
 	throw new Error(`Unsupported Firestore value type: ${typeof value}`)
 }
 
-function firestoreFields(value) {
+export function firestoreFields(value) {
 	return Object.fromEntries(
 		Object.entries(value)
 			.filter(([, child]) => child !== undefined)
@@ -727,6 +745,9 @@ function databasePath(projectId) {
 }
 
 function documentName(projectId, uid, collection, id) {
+	if (collection === 'syncState') {
+		return `${databasePath(projectId)}/syncState/${uid}`
+	}
 	return `${databasePath(projectId)}/users/${uid}/${collection}/${id}`
 }
 
@@ -741,6 +762,15 @@ async function commitWrites(projectId, token, writes) {
 }
 
 async function listCollectionDocumentNames(projectId, token, uid, collection) {
+	if (collection === 'syncState') {
+		const name = documentName(projectId, uid, collection, uid)
+		const response = await fetch(`${FIRESTORE_API_BASE}/${name}`, {
+			headers: { Authorization: `Bearer ${token}` },
+		})
+		if (response.status === 404) return []
+		if (!response.ok) throw new Error(`Request failed (${response.status}) ${name}: ${await response.text()}`)
+		return [name]
+	}
 	const names = []
 	let pageToken = ''
 	do {

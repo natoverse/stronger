@@ -1,24 +1,21 @@
 /**
- * Withings Sync — Withings → Google Sheets pipeline.
+ * Withings Sync — Withings → Firestore pipeline.
  *
- * Fetches body-composition measurements from the Withings API and appends
- * new daily rows to the "Stronger - Withings" tab in a Google Sheet. Uses a
- * service account for Sheets access and a Withings refresh token for API auth.
+ * Fetches body-composition measurements from the Withings API and merges them
+ * into yearly Firestore bucket documents.
  *
  * Unlike Strava, Withings ROTATES its refresh token on every refresh: each
  * call invalidates the previous token (it dies 8h later) and returns a new
- * one. A stateless GitHub Actions cron reading a fixed secret would therefore
- * work once and then break. To survive, we persist the current refresh token
- * in a "Stronger - Infra" tab in the same spreadsheet — read it at the start
- * of each run, write the rotated token back at the end. The WITHINGS_REFRESH_TOKEN
- * secret is only the initial seed (used when the Infra tab has no token yet).
+ * one. The current refresh token is persisted in an administrator-only
+ * /syncState/{uid} Firestore document. WITHINGS_REFRESH_TOKEN is only the
+ * initial seed used when Firestore has no stored token.
  *
  * Environment variables (all required):
  *   WITHINGS_CLIENT_ID         – Withings API application client ID
  *   WITHINGS_CLIENT_SECRET     – Withings API application client secret
- *   WITHINGS_REFRESH_TOKEN     – seed refresh token (only used on first run)
- *   GOOGLE_SERVICE_ACCOUNT_KEY – JSON key for the Google service account
- *   SPREADSHEET_ID             – Google Sheets spreadsheet ID
+ *   WITHINGS_REFRESH_TOKEN     – seed refresh token (required only on first run)
+ *   FIREBASE_SERVICE_ACCOUNT_KEY – Firebase administrative service account
+ *   FIREBASE_USER_ID             – destination UID below /users/{uid}
  *
  * Usage:
  *   node scripts/withings-sync.mjs [--backfill] [--overwrite]
@@ -27,22 +24,20 @@
  *   --backfill   One-time import of full history since BACKFILL_START
  *                (2021-01-01) instead of the rolling 60-day window. Implies
  *                --overwrite.
- *   --overwrite  Upsert mode: rewrite existing rows (matched by grpId) in place
- *                instead of skipping them, so edited weigh-ins and partial
- *                mid-day rows are refreshed. New groups are still appended.
+ *   --overwrite  Replace matching grpIds inside yearly bucket documents.
  */
+
+import { pathToFileURL } from 'node:url'
+import {
+	createFirestoreClient,
+	mergeYearBucketEntries,
+	readSyncState,
+	writeSyncState,
+} from './firestore-sync.mjs'
 
 const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2'
 const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure'
-const SHEETS_API_BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
-
-const TAB_NAME = 'Stronger - Withings'
-const HEADER = ['date', 'grpId', 'weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate', 'visceralFat']
-const COLUMN_COUNT = HEADER.length // 11 → columns A:K
-
-// Infra tab: internal key/value store for rotating credentials.
-const INFRA_TAB_NAME = 'Stronger - Infra'
-const INFRA_TOKEN_KEY = 'withings_refresh_token'
+const REFRESH_TOKEN_FIELD = 'withingsRefreshToken'
 
 // Withings meastype codes → our column keys. See:
 // https://developer.withings.com/developer-guide/v3/data-api/all-available-health-data/
@@ -74,7 +69,7 @@ const BACKFILL_START = Math.floor(Date.UTC(2021, 0, 1) / 1000)
 // Withings OAuth2 (rotating refresh token)
 // ---------------------------------------------------------------------------
 
-async function refreshAccessToken(clientId, clientSecret, refreshToken) {
+export async function refreshAccessToken(clientId, clientSecret, refreshToken) {
 	const res = await fetch(WITHINGS_TOKEN_URL, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -105,7 +100,7 @@ async function refreshAccessToken(clientId, clientSecret, refreshToken) {
 // Withings Measurements
 // ---------------------------------------------------------------------------
 
-async function fetchMeasurements(accessToken, startdate) {
+export async function fetchMeasurements(accessToken, startdate) {
 	const res = await fetch(WITHINGS_MEASURE_URL, {
 		method: 'POST',
 		headers: {
@@ -136,11 +131,10 @@ function decodeMeasure(measure) {
 }
 
 /**
- * Convert one measuregrp into a sheet row, or null if it has none of the
- * metrics we track. Each group is a single weigh-in event with a unix `date`
- * and a `grpid` used for deduplication.
+ * Convert one measuregrp into the Firestore model. Each group is a single
+ * weigh-in event with a unix `date` and a `grpid` used for deduplication.
  */
-function groupToRow(grp) {
+export function groupToMeasurement(grp) {
 	const grpId = grp.grpid != null ? String(grp.grpid) : ''
 	if (!grpId || grp.date == null) return null
 
@@ -150,280 +144,29 @@ function groupToRow(grp) {
 		byType.set(m.type, decodeMeasure(m))
 	}
 
-	// Keep only groups that carry at least one tracked metric.
-	const hasAny = METRIC_KEYS.some((k) => byType.has(MEASTYPE[k]))
-	if (!hasAny) return null
+	const weight = byType.get(MEASTYPE.weight)
+	if (!Number.isFinite(weight) || weight <= 0) return null
 
 	const date = new Date(grp.date * 1000)
 	const dateStr = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
 
-	const cell = (key) => {
+	const metric = (key) => {
 		const v = byType.get(MEASTYPE[key])
-		return v == null ? '' : String(Math.round(v * 100) / 100)
+		return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) / 100 : null
 	}
 
-	return [dateStr, grpId, ...METRIC_KEYS.map(cell)]
-}
-
-// ---------------------------------------------------------------------------
-// Google Sheets (service account via REST)
-// ---------------------------------------------------------------------------
-
-async function getGoogleAccessToken(serviceAccountKey) {
-	// Build a JWT and exchange it for an access token.
-	// We use the Web Crypto API (available in Node 20+) to sign the JWT.
-	const key = typeof serviceAccountKey === 'string'
-		? JSON.parse(serviceAccountKey)
-		: serviceAccountKey
-
-	const now = Math.floor(Date.now() / 1000)
-	const header = { alg: 'RS256', typ: 'JWT' }
-	const payload = {
-		iss: key.client_email,
-		scope: 'https://www.googleapis.com/auth/spreadsheets',
-		aud: 'https://oauth2.googleapis.com/token',
-		iat: now,
-		exp: now + 3600,
-	}
-
-	const enc = new TextEncoder()
-	const b64url = (buf) =>
-		Buffer.from(buf).toString('base64url')
-
-	const headerB64 = b64url(enc.encode(JSON.stringify(header)))
-	const payloadB64 = b64url(enc.encode(JSON.stringify(payload)))
-	const unsignedToken = `${headerB64}.${payloadB64}`
-
-	// Import the PEM private key
-	const pemBody = key.private_key
-		.replace(/-----BEGIN PRIVATE KEY-----/, '')
-		.replace(/-----END PRIVATE KEY-----/, '')
-		.replace(/\s/g, '')
-	const binaryKey = Buffer.from(pemBody, 'base64')
-	const cryptoKey = await crypto.subtle.importKey(
-		'pkcs8',
-		binaryKey,
-		{ name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-		false,
-		['sign'],
-	)
-	const signature = await crypto.subtle.sign(
-		'RSASSA-PKCS1-v1_5',
-		cryptoKey,
-		enc.encode(unsignedToken),
-	)
-	const jwt = `${unsignedToken}.${b64url(new Uint8Array(signature))}`
-
-	const res = await fetch('https://oauth2.googleapis.com/token', {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-		body: new URLSearchParams({
-			grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-			assertion: jwt,
-		}),
-	})
-	if (!res.ok) {
-		const text = await res.text()
-		throw new Error(`Google token exchange failed (${res.status}): ${text}`)
-	}
-	const data = await res.json()
-	return data.access_token
-}
-
-async function listSheetTitles(spreadsheetId, googleToken) {
-	const metaRes = await fetch(
-		`${SHEETS_API_BASE}/${spreadsheetId}?fields=sheets.properties.title`,
-		{ headers: { Authorization: `Bearer ${googleToken}` } },
-	)
-	if (!metaRes.ok) {
-		const text = await metaRes.text()
-		throw new Error(`Sheets metadata fetch failed (${metaRes.status}): ${text}`)
-	}
-	const meta = await metaRes.json()
-	return (meta.sheets ?? []).map((s) => s.properties?.title).filter(Boolean)
-}
-
-async function addSheet(spreadsheetId, googleToken, title) {
-	const createRes = await fetch(
-		`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`,
-		{
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${googleToken}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({
-				requests: [{ addSheet: { properties: { title } } }],
-			}),
-		},
-	)
-	if (!createRes.ok) {
-		const text = await createRes.text()
-		throw new Error(`Tab creation failed for "${title}" (${createRes.status}): ${text}`)
-	}
-}
-
-async function writeRange(spreadsheetId, googleToken, range, values) {
-	const encoded = encodeURIComponent(range)
-	const res = await fetch(
-		`${SHEETS_API_BASE}/${spreadsheetId}/values/${encoded}?valueInputOption=RAW`,
-		{
-			method: 'PUT',
-			headers: {
-				Authorization: `Bearer ${googleToken}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({ values }),
-		},
-	)
-	if (!res.ok) {
-		const text = await res.text()
-		throw new Error(`Range write failed (${res.status}): ${text}`)
-	}
-}
-
-async function readRange(spreadsheetId, googleToken, range) {
-	const encoded = encodeURIComponent(range)
-	const res = await fetch(
-		`${SHEETS_API_BASE}/${spreadsheetId}/values/${encoded}`,
-		{ headers: { Authorization: `Bearer ${googleToken}` } },
-	)
-	if (!res.ok) {
-		const text = await res.text()
-		throw new Error(`Range read failed (${res.status}): ${text}`)
-	}
-	const data = await res.json()
-	return data.values ?? []
-}
-
-async function ensureWithingsTab(spreadsheetId, googleToken, existingTitles) {
-	if (existingTitles.includes(TAB_NAME)) return
-	await addSheet(spreadsheetId, googleToken, TAB_NAME)
-	const colLetter = String.fromCharCode(64 + COLUMN_COUNT)
-	await writeRange(spreadsheetId, googleToken, `'${TAB_NAME}'!A1:${colLetter}1`, [HEADER])
-	console.log(`Created "${TAB_NAME}" tab with header row.`)
-}
-
-async function ensureInfraTab(spreadsheetId, googleToken, existingTitles) {
-	if (existingTitles.includes(INFRA_TAB_NAME)) return
-	await addSheet(spreadsheetId, googleToken, INFRA_TAB_NAME)
-	await writeRange(spreadsheetId, googleToken, `'${INFRA_TAB_NAME}'!A1:B1`, [['key', 'value']])
-	console.log(`Created "${INFRA_TAB_NAME}" tab.`)
-}
-
-/** Read a value from the Infra key/value tab, or null if absent. */
-async function readInfraValue(spreadsheetId, googleToken, wantKey) {
-	const rows = await readRange(spreadsheetId, googleToken, `'${INFRA_TAB_NAME}'!A2:B`)
-	for (const row of rows) {
-		if ((row[0] ?? '').trim() === wantKey) return (row[1] ?? '').trim() || null
-	}
-	return null
-}
-
-/** Upsert a value in the Infra key/value tab. */
-async function writeInfraValue(spreadsheetId, googleToken, wantKey, value) {
-	const rows = await readRange(spreadsheetId, googleToken, `'${INFRA_TAB_NAME}'!A2:B`)
-	let rowIndex = -1
-	for (let i = 0; i < rows.length; i++) {
-		if ((rows[i][0] ?? '').trim() === wantKey) {
-			rowIndex = i
-			break
-		}
-	}
-	if (rowIndex >= 0) {
-		// Overwrite existing row (row 2 is the first data row).
-		await writeRange(spreadsheetId, googleToken, `'${INFRA_TAB_NAME}'!A${rowIndex + 2}:B${rowIndex + 2}`, [[wantKey, value]])
-	} else {
-		// Append after the last existing data row.
-		const nextRow = rows.length + 2
-		await writeRange(spreadsheetId, googleToken, `'${INFRA_TAB_NAME}'!A${nextRow}:B${nextRow}`, [[wantKey, value]])
-	}
-}
-
-async function readExistingGroupIds(spreadsheetId, googleToken) {
-	// grpId is column B, starting from row 2.
-	const rows = await readRange(spreadsheetId, googleToken, `'${TAB_NAME}'!B2:B`)
-	const ids = new Set()
-	for (const row of rows) {
-		if (row[0]) ids.add(row[0].trim())
-	}
-	return ids
-}
-
-/**
- * Read a map of grpId → 1-based sheet row number for existing data rows.
- * The header is row 1, so the first data row is row 2. If the sheet already
- * holds duplicate grpIds, the first occurrence wins.
- */
-async function readExistingGroupRows(spreadsheetId, googleToken) {
-	const rows = await readRange(spreadsheetId, googleToken, `'${TAB_NAME}'!B2:B`)
-	const map = new Map()
-	rows.forEach((row, offset) => {
-		const key = (row[0] ?? '').trim()
-		if (key && !map.has(key)) map.set(key, offset + 2)
-	})
-	return map
-}
-
-/**
- * Split rows into { updates, appends } for an upsert. `existingRows` maps a
- * row key to its 1-based sheet row number. `updates` is a list of
- * `{ rowNumber, row }` for keys already present; `appends` holds the rest.
- */
-function partitionRows(rows, existingRows, keyIndex = 1) {
-	const updates = []
-	const appends = []
-	for (const row of rows) {
-		const key = row[keyIndex]
-		if (existingRows.has(key)) updates.push({ rowNumber: existingRows.get(key), row })
-		else appends.push(row)
-	}
-	return { updates, appends }
-}
-
-/** Rewrite specific rows in place via values:batchUpdate. */
-async function batchUpdateRows(spreadsheetId, googleToken, updates) {
-	if (updates.length === 0) return
-	const colLetter = String.fromCharCode(64 + COLUMN_COUNT)
-	const data = updates.map(({ rowNumber, row }) => ({
-		range: `'${TAB_NAME}'!A${rowNumber}:${colLetter}${rowNumber}`,
-		values: [row],
-	}))
-	const res = await fetch(
-		`${SHEETS_API_BASE}/${spreadsheetId}/values:batchUpdate`,
-		{
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${googleToken}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({ valueInputOption: 'RAW', data }),
-		},
-	)
-	if (!res.ok) {
-		const text = await res.text()
-		throw new Error(`Batch update rows failed (${res.status}): ${text}`)
-	}
-}
-
-async function appendRows(spreadsheetId, googleToken, rows) {
-	if (rows.length === 0) return
-	const colLetter = String.fromCharCode(64 + COLUMN_COUNT)
-	const range = encodeURIComponent(`'${TAB_NAME}'!A:${colLetter}`)
-	const res = await fetch(
-		`${SHEETS_API_BASE}/${spreadsheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-		{
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${googleToken}`,
-				'Content-Type': 'application/json',
-			},
-			body: JSON.stringify({ values: rows }),
-		},
-	)
-	if (!res.ok) {
-		const text = await res.text()
-		throw new Error(`Append rows failed (${res.status}): ${text}`)
+	return {
+		date: dateStr,
+		grpId,
+		weight: metric('weight'),
+		fatMass: metric('fatMass'),
+		fatRatio: metric('fatRatio'),
+		muscleMass: metric('muscleMass'),
+		boneMass: metric('boneMass'),
+		hydration: metric('hydration'),
+		fatFreeMass: metric('fatFreeMass'),
+		heartRate: metric('heartRate'),
+		visceralFat: metric('visceralFat'),
 	}
 }
 
@@ -436,36 +179,29 @@ async function main() {
 		WITHINGS_CLIENT_ID,
 		WITHINGS_CLIENT_SECRET,
 		WITHINGS_REFRESH_TOKEN,
-		GOOGLE_SERVICE_ACCOUNT_KEY,
-		SPREADSHEET_ID,
+		FIREBASE_SERVICE_ACCOUNT_KEY,
+		FIREBASE_USER_ID,
 	} = process.env
 
-	if (!WITHINGS_CLIENT_ID || !WITHINGS_CLIENT_SECRET || !WITHINGS_REFRESH_TOKEN) {
-		throw new Error('Missing Withings environment variables (WITHINGS_CLIENT_ID, WITHINGS_CLIENT_SECRET, WITHINGS_REFRESH_TOKEN)')
-	}
-	if (!GOOGLE_SERVICE_ACCOUNT_KEY) {
-		throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_KEY environment variable')
-	}
-	if (!SPREADSHEET_ID) {
-		throw new Error('Missing SPREADSHEET_ID environment variable')
+	if (!WITHINGS_CLIENT_ID || !WITHINGS_CLIENT_SECRET) {
+		throw new Error('Missing Withings environment variables (WITHINGS_CLIENT_ID, WITHINGS_CLIENT_SECRET)')
 	}
 
-	// 1. Authenticate with Google Sheets (needed early to read the stored token).
-	console.log('Authenticating with Google Sheets...')
-	const googleToken = await getGoogleAccessToken(GOOGLE_SERVICE_ACCOUNT_KEY)
+	// 1. Authenticate with Firestore and resolve the current rotating token.
+	console.log('Authenticating with Firestore...')
+	const firestore = await createFirestoreClient(
+		FIREBASE_SERVICE_ACCOUNT_KEY,
+		FIREBASE_USER_ID,
+	)
 
-	// 2. Ensure both tabs exist.
-	const titles = await listSheetTitles(SPREADSHEET_ID, googleToken)
-	await ensureInfraTab(SPREADSHEET_ID, googleToken, titles)
-	await ensureWithingsTab(SPREADSHEET_ID, googleToken, titles)
-
-	// 3. Resolve the refresh token: prefer the rotated one stored in the sheet,
-	//    falling back to the seed secret on the very first run.
-	const storedToken = await readInfraValue(SPREADSHEET_ID, googleToken, INFRA_TOKEN_KEY)
+	const storedToken = await readSyncState(firestore, REFRESH_TOKEN_FIELD)
 	const refreshToken = storedToken ?? WITHINGS_REFRESH_TOKEN
+	if (!refreshToken) {
+		throw new Error('Missing WITHINGS_REFRESH_TOKEN and no token exists in Firestore sync state')
+	}
 	console.log(storedToken ? 'Using stored Withings refresh token.' : 'Using seed Withings refresh token (first run).')
 
-	// 4. Refresh the Withings access token and immediately persist the rotated
+	// 2. Refresh the Withings access token and immediately persist the rotated
 	//    refresh token, so a later failure in this run never strands us with a
 	//    dead token.
 	console.log('Refreshing Withings access token...')
@@ -474,10 +210,10 @@ async function main() {
 		WITHINGS_CLIENT_SECRET,
 		refreshToken,
 	)
-	await writeInfraValue(SPREADSHEET_ID, googleToken, INFRA_TOKEN_KEY, rotatedToken)
-	console.log('Persisted rotated refresh token to Infra tab.')
+	await writeSyncState(firestore, { [REFRESH_TOKEN_FIELD]: rotatedToken })
+	console.log('Persisted rotated refresh token to Firestore sync state.')
 
-	// 5. Fetch measurements. Normally a rolling 60-day window (ample overlap for
+	// 3. Fetch measurements. Normally a rolling 60-day window (ample overlap for
 	//    idempotency); with --backfill, everything since BACKFILL_START instead,
 	//    for a one-time import of full history. Dedup by grpId makes both safe.
 	const backfill = process.argv.includes('--backfill')
@@ -494,49 +230,29 @@ async function main() {
 	const groups = await fetchMeasurements(accessToken, startdate)
 	console.log(`Fetched ${groups.length} measurement groups from Withings.`)
 
-	// 6. Convert groups to rows (oldest first for readability).
-	const rows = groups.map(groupToRow).filter((row) => row !== null)
-	rows.reverse()
-
-	if (overwrite) {
-		// Upsert mode: rewrite existing rows (matched by grpId) in place and
-		// append the rest. Refreshes edited weigh-ins and partial mid-day rows.
-		const existingRows = await readExistingGroupRows(SPREADSHEET_ID, googleToken)
-		console.log(`Found ${existingRows.size} existing measurements in sheet.`)
-		const { updates, appends } = partitionRows(rows, existingRows) // key = row[1] (grpId)
-
-		if (updates.length === 0 && appends.length === 0) {
-			console.log('No measurements to sync.')
-			return
-		}
-		if (updates.length > 0) {
-			console.log(`Updating ${updates.length} existing measurements...`)
-			await batchUpdateRows(SPREADSHEET_ID, googleToken, updates)
-		}
-		if (appends.length > 0) {
-			console.log(`Appending ${appends.length} new measurements...`)
-			await appendRows(SPREADSHEET_ID, googleToken, appends)
-		}
-		console.log(`Done — updated ${updates.length}, appended ${appends.length} measurements.`)
+	// 4. Convert groups to the migrated Firestore model.
+	const measurements = groups
+		.map(groupToMeasurement)
+		.filter((measurement) => measurement !== null)
+		.reverse()
+	if (measurements.length === 0) {
+		console.log('No valid measurements to sync.')
 		return
 	}
 
-	// Append-only mode: skip groups whose grpId is already in the sheet.
-	const existingIds = await readExistingGroupIds(SPREADSHEET_ID, googleToken)
-	console.log(`Found ${existingIds.size} existing measurements in sheet.`)
-	const newRows = rows.filter((row) => !existingIds.has(row[1])) // row[1] = grpId
-
-	if (newRows.length === 0) {
-		console.log('No new measurements to sync.')
-		return
-	}
-
-	console.log(`Appending ${newRows.length} new measurements...`)
-	await appendRows(SPREADSHEET_ID, googleToken, newRows)
-	console.log(`Done — synced ${newRows.length} new measurements.`)
+	const result = await mergeYearBucketEntries(
+		firestore,
+		'withingsMeasurements',
+		measurements,
+		'grpId',
+		overwrite,
+	)
+	console.log(`Done — added ${result.added}, updated ${result.updated} Withings measurements in Firestore.`)
 }
 
-main().catch((err) => {
-	console.error('Withings sync failed:', err.message)
-	process.exit(1)
-})
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+	main().catch((err) => {
+		console.error('Withings sync failed:', err.message)
+		process.exit(1)
+	})
+}

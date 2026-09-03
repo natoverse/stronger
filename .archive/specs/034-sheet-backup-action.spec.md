@@ -37,3 +37,11 @@ The source and backup spreadsheet IDs are supplied as environment variables (`SO
 
 - The backup is a value-only copy over the open-ended range `A:ZZ`, consistent with the previous in-app implementation.
 - Runs at 07:00 UTC, after the 06:00 Garmin sync, to avoid overlapping quota bursts.
+
+## Retirement
+
+The scheduled Sheet backup workflow, script, tests, and setup guide were
+removed during the Firebase backend cutover. Firestore is now the application
+source of truth and scheduled health workflows write directly to it, so a
+daily value-only copy of the legacy spreadsheet would no longer protect
+current application data.

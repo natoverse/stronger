@@ -256,6 +256,23 @@ test('migration buckets every high-cardinality history by year', () => {
 	}
 })
 
+test('migration moves the rotating Withings token to admin-only sync state', () => {
+	const { plan } = buildMigrationPlan(
+		{
+			infra: [
+				['key', 'value'],
+				['withings_refresh_token', 'rotated-token'],
+			],
+		},
+		[],
+		['syncState'],
+	)
+	assert.deepEqual(plan.syncState, [{
+		id: 'withings',
+		data: { withingsRefreshToken: 'rotated-token' },
+	}])
+})
+
 test('missing optional tabs are excluded instead of cleared', () => {
 	const rows = {
 		exercises: [

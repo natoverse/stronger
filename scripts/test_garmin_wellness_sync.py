@@ -61,36 +61,20 @@ def test_fetch_hrv_leaves_missing_baseline_range_blank():
     assert row["hrvBaselineMax"] == ""
 
 
-def test_ensure_tab_updates_header_for_existing_sheet():
-    class Response:
-        ok = True
-        status_code = 200
-        text = ""
-
-        def __init__(self, data=None):
-            self._data = data or {}
-
-        def json(self):
-            return self._data
-
-    class FakeSession:
-        def __init__(self):
-            self.header_write = None
-
-        def get(self, _url, headers):
-            assert "Authorization" in headers
-            return Response({"sheets": [{"properties": {"title": garmin_wellness_sync.TAB_NAME}}]})
-
-        def put(self, url, headers, json):
-            self.header_write = (url, headers, json)
-            return Response()
-
-    session = FakeSession()
-    garmin_wellness_sync.ensure_tab(session, "sheet-id", "token")
-
-    url, _, payload = session.header_write
-    assert "A1%3AAN1" in url
-    assert payload == {"values": [garmin_wellness_sync.HEADER]}
+def test_wellness_row_to_entry_matches_firestore_schema():
+    row = [""] * len(garmin_wellness_sync.HEADER)
+    row[0] = "2026-08-15"
+    row[1] = "48"
+    row[2] = "BALANCED"
+    row[12] = "MAINTAINING_2"
+    row[15] = "8000"
+    entry = garmin_wellness_sync.wellness_row_to_entry(row)
+    assert entry["date"] == "2026-08-15"
+    assert entry["hrvWeeklyAvg"] == 48
+    assert entry["hrvStatus"] == "BALANCED"
+    assert entry["trainingStatus"] == "MAINTAINING"
+    assert entry["steps"] == 8000
+    assert entry["sleepScore"] is None
 
 
 def test_fetch_training_status_prefers_human_readable_fields():
@@ -341,24 +325,6 @@ def test_stress_ignores_no_data_sentinel():
     assert garmin_wellness_sync._stress(None) == ""
     assert garmin_wellness_sync._stress(0) == "0"
     assert garmin_wellness_sync._stress(62.4) == "62"
-
-
-def test_column_letter_supports_columns_past_z():
-    assert garmin_wellness_sync._column_letter(26) == "Z"
-    assert garmin_wellness_sync._column_letter(27) == "AA"
-    assert garmin_wellness_sync._column_letter(29) == "AC"
-
-
-def test_partition_rows_keys_on_date_column():
-    existing = {"2026-01-01": 2, "2026-01-03": 4}
-    rows = [
-        ["2026-01-01", "a"],   # existing -> update row 2
-        ["2026-01-02", "b"],   # new -> append
-        ["2026-01-03", "c"],   # existing -> update row 4
-    ]
-    updates, appends = garmin_wellness_sync.partition_rows(rows, existing)
-    assert updates == [(2, ["2026-01-01", "a"]), (4, ["2026-01-03", "c"])]
-    assert appends == [["2026-01-02", "b"]]
 
 
 def _run():
