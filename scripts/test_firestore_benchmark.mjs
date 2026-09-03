@@ -43,6 +43,7 @@ test('dataset catalog covers the shared load plan', () => {
 	])
 	assert.deepEqual(LOAD_PLAN.dateWindowDatasets, ['schedule', 'dayFlags'])
 	assert.equal(LOAD_PLAN.initialDateWindowDays, 60)
+	assert.equal(LOAD_PLAN.initialDateWindowAnchor, 'monthStart')
 	assert.equal(LOAD_PLAN.dateWindowIncrementDays, 30)
 	assert.equal(LOAD_PLAN.benchmarkRoutes.includes('nutrition'), false)
 })

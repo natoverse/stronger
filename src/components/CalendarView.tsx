@@ -6,6 +6,7 @@ import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
+import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
@@ -23,16 +24,18 @@ interface CalendarViewProps {
 		sessionWorkoutId: string,
 		sessionStartTime: string,
 		updatedRows: ParsedLogRow[],
-	) => void;
+	) => Promise<void>;
 	onDeleteSession: (
 		sessionDate: string,
 		sessionWorkoutId: string,
 		sessionStartTime: string,
-	) => void;
+	) => Promise<void>;
 	onBulkSchedule: (entries: WorkoutScheduleEntry[]) => void;
-	onUpdateFlags: (date: string, flags: DayFlags) => void;
+	onUpdateFlags: (date: string, key: keyof DayFlags) => void;
 	onSyncCalendar: (calendarId: string) => Promise<CalendarSyncResult>;
 	onClearSchedule: (options: ClearOptions) => Promise<ClearResult>;
+	onLoadMoreDays?: () => Promise<void>;
+	onLoadPreviousDays?: () => Promise<void>;
 }
 
 export type CalendarPanel = 'plan' | 'sync' | 'monthly';
@@ -320,17 +323,6 @@ export function getDayLocation(flags?: DayFlags): LocationFlag {
 	return location;
 }
 
-function toggleDayLocation(flags: DayFlags, selected: LocationFlag): DayFlags {
-	const active = getDayLocation(flags) === selected;
-	return {
-		...flags,
-		home: false,
-		elsewhere: false,
-		travel: false,
-		[selected]: !active,
-	};
-}
-
 const DAY_FLAG_OPTIONS: [keyof DayFlags, string, typeof House][] = [
 	['home', 'Home', House],
 	['elsewhere', 'Elsewhere', Palmtree],
@@ -348,7 +340,7 @@ export function SessionDetail({
 }: {
 	session: LogSession;
 	workoutNames: Map<string, string>;
-	onSave: (updatedRows: ParsedLogRow[]) => void;
+	onSave: (updatedRows: ParsedLogRow[]) => Promise<void>;
 	onClose: () => void;
 }) {
 	const [editRows, setEditRows] = useState<ParsedLogRow[]>(() =>
@@ -356,6 +348,7 @@ export function SessionDetail({
 	);
 	const [saving, setSaving] = useState(false);
 	const [dirty, setDirty] = useState(false);
+	const [saveError, setSaveError] = useState<string | null>(null);
 
 	const { display } = formatDate(session.key.date);
 	const name = workoutNames.get(session.key.workoutId) ?? session.workoutName;
@@ -371,11 +364,15 @@ export function SessionDetail({
 
 	const handleSave = useCallback(async () => {
 		setSaving(true);
-		onSave(editRows);
-		// Brief delay for visual feedback
-		await new Promise((r) => setTimeout(r, 300));
-		setSaving(false);
-		setDirty(false);
+		setSaveError(null);
+		try {
+			await onSave(editRows);
+			setDirty(false);
+		} catch (error) {
+			setSaveError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setSaving(false);
+		}
 	}, [editRows, onSave]);
 
 	// Group rows by exercise
@@ -408,6 +405,7 @@ export function SessionDetail({
 					{saving ? <Check size={18} /> : <Save size={18} />}
 				</button>
 			</div>
+			{saveError && <p className="auth-error">{saveError}</p>}
 
 			<div className="session-detail-exercises">
 				{exerciseOrder.map((eName) => {
@@ -486,19 +484,24 @@ export function CalendarView({
 	onUpdateFlags,
 	onSyncCalendar,
 	onClearSchedule,
+	onLoadMoreDays,
+	onLoadPreviousDays,
 }: CalendarViewProps) {
 	const [addingForDate, setAddingForDate] = useState<string | null>(null);
 	const [activePanel, setActivePanel] = useState<CalendarPanel | null>('monthly');
 	const [pastDays, setPastDays] = useState<string[]>([]);
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
+	const [sessionMutationError, setSessionMutationError] = useState<string | null>(null);
 	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
 	const [labelDraft, setLabelDraft] = useState('');
-	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0, 1, 2]);
+	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
+	const [loadingDateWindow, setLoadingDateWindow] = useState(false);
+	const [dateWindowError, setDateWindowError] = useState<string | null>(null);
 	const dayCardRefs = useRef(new Map<string, HTMLDivElement>());
 
-	const [futureDayCount, setFutureDayCount] = useState(90);
+	const [futureDayCount, setFutureDayCount] = useState(() => initialFutureDayCount());
 	const futureDays = useMemo(() => generateFutureDays(futureDayCount), [futureDayCount]);
 
 	// Build a map of date → workoutIds for fast lookup
@@ -618,18 +621,39 @@ export function CalendarView({
 		[addingForDate, onAssign],
 	);
 
-	// Load the preceding week above the currently visible schedule cards.
-	const handleLoadPreviousDays = useCallback(() => {
-		setPastDays((prev) => {
-			const oldest = prev[prev.length - 1] ?? todayStr();
-			return [...prev, ...generatePastDays(oldest, 7)];
-		});
-	}, []);
+	// Load the preceding month above the currently visible schedule cards.
+	const handleLoadPreviousDays = useCallback(async () => {
+		if (loadingDateWindow) return;
+		setLoadingDateWindow(true);
+		try {
+			await onLoadPreviousDays?.();
+			setDateWindowError(null);
+			setPastDays((prev) => {
+				const oldest = prev[prev.length - 1] ?? todayStr();
+				return [...prev, ...generatePastDays(oldest, DATE_WINDOW_INCREMENT_DAYS)];
+			});
+		} catch {
+			setDateWindowError('Could not load more calendar days. Try again.');
+		} finally {
+			setLoadingDateWindow(false);
+		}
+	}, [loadingDateWindow, onLoadPreviousDays]);
 
-	// Load more future days
-	const handleLoadMoreFuture = useCallback(() => {
-		setFutureDayCount((prev) => prev + 30);
-	}, []);
+	// Keep month and list expansion on the same 30-day data window.
+	const handleLoadMoreFuture = useCallback(async () => {
+		if (loadingDateWindow) return;
+		setLoadingDateWindow(true);
+		try {
+			await onLoadMoreDays?.();
+			setDateWindowError(null);
+			setFutureDayCount((prev) => prev + DATE_WINDOW_INCREMENT_DAYS);
+			setVisibleMonthOffsets((offsets) => [...offsets, Math.max(...offsets) + 1]);
+		} catch {
+			setDateWindowError('Could not load more calendar days. Try again.');
+		} finally {
+			setLoadingDateWindow(false);
+		}
+	}, [loadingDateWindow, onLoadMoreDays]);
 
 	// Build day infos for both past and future
 	const allDays = useMemo(() => {
@@ -657,9 +681,9 @@ export function CalendarView({
 	}, []);
 
 	const handleSaveSession = useCallback(
-		(updatedRows: ParsedLogRow[]) => {
+		async (updatedRows: ParsedLogRow[]) => {
 			if (!activeSession) return;
-			onUpdateLogRows(
+			await onUpdateLogRows(
 				activeSession.key.date,
 				activeSession.key.workoutId,
 				activeSession.key.startTime,
@@ -678,9 +702,14 @@ export function CalendarView({
 	[]);
 
 	const handleDeleteSession = useCallback(
-		(session: LogSession) => {
-			onDeleteSession(session.key.date, session.key.workoutId, session.key.startTime);
-			setConfirmDeleteKey(null);
+		async (session: LogSession) => {
+			setSessionMutationError(null);
+			try {
+				await onDeleteSession(session.key.date, session.key.workoutId, session.key.startTime);
+				setConfirmDeleteKey(null);
+			} catch (error) {
+				setSessionMutationError(error instanceof Error ? error.message : String(error));
+			}
 		},
 		[onDeleteSession],
 	);
@@ -699,6 +728,7 @@ export function CalendarView({
 
 	return (
 		<div className="calendar-view">
+			{sessionMutationError && <p className="auth-error">{sessionMutationError}</p>}
 			<div className={`calendar-fixed-section${activePanel === 'plan' ? ' calendar-fixed-section-plan' : ''}`}>
 				<div className="calendar-toolbar">
 					<button
@@ -827,7 +857,8 @@ export function CalendarView({
 				<div className="calendar-load-more">
 					<button
 						className="calendar-load-more-btn"
-						onClick={() => setVisibleMonthOffsets((offsets) => [...offsets, Math.max(...offsets) + 1])}
+						onClick={handleLoadMoreFuture}
+						disabled={loadingDateWindow}
 					>
 						Show next month
 					</button>
@@ -837,8 +868,13 @@ export function CalendarView({
 			</div>
 
 			<div className="calendar-days-scroll">
+				{dateWindowError && <p className="auth-error" role="alert">{dateWindowError}</p>}
 				<div className="calendar-load-more">
-					<button className="calendar-load-more-btn" onClick={handleLoadPreviousDays}>
+					<button
+						className="calendar-load-more-btn"
+						onClick={handleLoadPreviousDays}
+						disabled={loadingDateWindow}
+					>
 						Load previous days
 					</button>
 				</div>
@@ -885,12 +921,7 @@ export function CalendarView({
 											<button
 												key={key}
 												className={`calendar-flag-toggle calendar-flag-${key}${active ? ' calendar-flag-active' : ''}`}
-												onClick={() => onUpdateFlags(
-													dayInfo.date,
-													isLocation
-														? toggleDayLocation(currentFlags, key as LocationFlag)
-														: { ...currentFlags, [key]: !active },
-												)}
+												onClick={() => onUpdateFlags(dayInfo.date, key)}
 												aria-label={`Toggle ${key}`}
 											>
 												<Icon size={18} />
@@ -1185,7 +1216,11 @@ export function CalendarView({
 
 				{/* Load more future days */}
 				<div className="calendar-load-more">
-					<button className="calendar-load-more-btn" onClick={handleLoadMoreFuture}>
+					<button
+						className="calendar-load-more-btn"
+						onClick={handleLoadMoreFuture}
+						disabled={loadingDateWindow}
+					>
 						Load more days
 					</button>
 				</div>

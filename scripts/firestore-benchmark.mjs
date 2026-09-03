@@ -25,7 +25,10 @@ const CURRENT_DATE = localDateString(new Date())
 export const LOAD_PLAN = JSON.parse(
 	readFileSync(new URL('../lib/firebase-load-plan.json', import.meta.url), 'utf8'),
 )
-const INITIAL_WINDOW_END = addDays(CURRENT_DATE, LOAD_PLAN.initialDateWindowDays)
+const INITIAL_WINDOW_START = LOAD_PLAN.initialDateWindowAnchor === 'monthStart'
+	? `${CURRENT_DATE.slice(0, 7)}-01`
+	: CURRENT_DATE
+const INITIAL_WINDOW_END = addDays(INITIAL_WINDOW_START, LOAD_PLAN.initialDateWindowDays)
 
 export const DATASETS = {
 	exercises: { label: 'Exercises', tab: 'Stronger - Exercises', range: 'A:J', headerRows: 1, collection: 'exercises' },
@@ -147,7 +150,7 @@ export function renderReport({ tabs, datasets, iterations }) {
 	const lines = [
 		`# Sheets vs Firestore cold-load benchmark (${iterations} iteration${iterations === 1 ? '' : 's'})`,
 		'',
-		`Firestore cold loads read only the ${CURRENT_YEAR} document for yearly datasets and ${CURRENT_DATE} through ${addDays(INITIAL_WINDOW_END, -1)} for schedule data; Sheets retains its current full-range read.`,
+		`Firestore cold loads read only the ${CURRENT_YEAR} document for yearly datasets and ${INITIAL_WINDOW_START} through ${addDays(INITIAL_WINDOW_END, -1)} for schedule data; Sheets retains its current full-range read.`,
 		'',
 		'| Tab | Sheets cold load | Firestore cold load | Sheets records | Firestore documents |',
 		'| --- | --- | --- | --- | --- |',
@@ -417,7 +420,7 @@ async function main() {
 					firestoreToken,
 					uid,
 					dataset.collection,
-					CURRENT_DATE,
+					INITIAL_WINDOW_START,
 					INITIAL_WINDOW_END,
 					dataset.entryField,
 				)

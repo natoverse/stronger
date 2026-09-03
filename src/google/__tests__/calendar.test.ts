@@ -240,4 +240,17 @@ describe('syncScheduleWithCalendar - custom labels', () => {
 		expect(update).not.toHaveBeenCalled()
 		expect(result.updated).toBe(0)
 	})
+
+	it('rethrows expired authorization so the UI can reconnect', async () => {
+		const authError = { status: 401, message: 'Invalid Credentials' }
+		const list = vi.fn().mockRejectedValue(authError)
+		mockGapi({ list })
+
+		const schedule: WorkoutScheduleEntry[] = [
+			{ date: '2026-05-01', workoutId: 'cardio:hike' },
+		]
+
+		await expect(syncScheduleWithCalendar('primary', schedule, resolveWorkoutName))
+			.rejects.toBe(authError)
+	})
 })

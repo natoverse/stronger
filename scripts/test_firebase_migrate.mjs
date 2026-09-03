@@ -301,6 +301,30 @@ test('missing optional tabs are excluded instead of cleared', () => {
 	assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
 })
 
+test('collection-scoped plans do not require unrelated tabs', () => {
+	const rows = {
+		exercises: null,
+		workouts: null,
+		logs: null,
+		dayFlags: null,
+		schedule: null,
+		cardio: null,
+		mealItems: null,
+		mealLog: null,
+		favoriteFoods: null,
+		recentFoods: null,
+		strava: null,
+		garmin: [['2026-09-01', '42', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170']],
+		garminWellness: null,
+		withings: null,
+		settings: null,
+	}
+	const { plan } = buildMigrationPlan(rows, [], ['garminActivities'])
+	assert.deepEqual(Object.keys(plan), ['garminActivities'])
+	assert.equal(plan.garminActivities[0].id, '2026')
+	assert.equal(plan.garminActivities[0].data.entries[0].stravaId, '42')
+})
+
 test('date-keyed collections keep the last row for duplicate dates', () => {
 	const rows = {
 		exercises: [
