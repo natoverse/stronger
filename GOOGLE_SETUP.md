@@ -1,6 +1,8 @@
-# Google OAuth Setup
+# Google Calendar OAuth setup
 
-Stronger uses Google OAuth to read and write a Google Sheet on your behalf, and optionally push workout events to Google Calendar. You need to create a Google Cloud project with the Sheets and Calendar APIs enabled and an OAuth 2.0 client ID.
+Stronger uses Firebase Authentication and Firestore for normal application
+access. This separate Google OAuth client is used only when a user explicitly
+runs Google Calendar synchronization.
 
 ## 1. Create a Google Cloud project
 
@@ -9,13 +11,11 @@ Stronger uses Google OAuth to read and write a Google Sheet on your behalf, and 
 3. Name it something like `Stronger` and click **Create**.
 4. Make sure the new project is selected in the project selector.
 
-## 2. Enable the Google Sheets API and Google Calendar API
+## 2. Enable the Google Calendar API
 
 1. In the left sidebar go to **APIs & Services → Library** (or visit [the API library](https://console.cloud.google.com/apis/library)).
-2. Search for **Google Sheets API** and click on it.
+2. Search for **Google Calendar API** and click on it.
 3. Click **Enable**.
-4. Go back to the API library, search for **Google Calendar API** and click on it.
-5. Click **Enable**.
 
 ## 3. Configure the OAuth consent screen
 
@@ -28,8 +28,9 @@ Stronger uses Google OAuth to read and write a Google Sheet on your behalf, and 
 4. Click **Save and Continue**.
 5. On the **Scopes** step, click **Add or Remove Scopes** and add:
    ```
-   https://www.googleapis.com/auth/spreadsheets
-   https://www.googleapis.com/auth/calendar
+   https://www.googleapis.com/auth/calendar.events
+   https://www.googleapis.com/auth/calendar.calendarlist.readonly
+   https://www.googleapis.com/auth/userinfo.email
    ```
    Then click **Update** and **Save and Continue**.
 6. On the **Test users** step, click **Add Users** and add the Google account(s) you'll sign in with. While the app is in "Testing" mode only these accounts can authenticate.
@@ -70,12 +71,6 @@ deployment workflow passes it to the Vite build:
     VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
 ```
 
-## 6. Create your Google Sheet
-
-1. Go to [Google Sheets](https://sheets.google.com) and create a new spreadsheet (or use an existing one).
-2. The app will automatically create a tab named **Stronger** the first time it connects.
-3. Copy the spreadsheet URL — you'll paste it into the app after signing in.
-
 ## Troubleshooting
 
 | Problem | Fix |
@@ -83,5 +78,5 @@ deployment workflow passes it to the Vite build:
 | "Google OAuth client ID is not configured" | The `VITE_GOOGLE_CLIENT_ID` repository secret is missing or empty. Add it and rerun the GitHub Pages deployment. |
 | Sign-in popup closes immediately / `idpiframe_initialization_failed` | The current origin is not in your client's **Authorized JavaScript origins**. Double-check scheme, host, and port. |
 | "Access blocked: This app's request is invalid" (error 400) | The OAuth consent screen may not be configured, or the origin is wrong. |
-| "The caller does not have permission" when connecting a sheet | The Google account you signed in with doesn't have access to the spreadsheet. Share the sheet with that account. |
+| Calendar authorization expires | Press **Sync with Calendar** once. Stronger requests a new Calendar token and continues without affecting the Firebase session. |
 | Only specific people can sign in | The app is in "Testing" mode. Add their email to the test users list in the OAuth consent screen, or publish the app. |

@@ -4,16 +4,17 @@ export {
 	loadGapi,
 	loadGis,
 	initGapiClient,
-	signIn,
 	signOut,
 	hasToken,
 	hydrateStoredAccessToken,
 	clearAuth,
+	disconnectCalendar,
 	isAuthError,
 	isSignInCanceledError,
 	describeSheetError,
 	withAuthRetry,
 	authorizeCalendar,
+	prepareCalendarAuthorization,
 } from './auth.ts'
 export {
 	verifySheetAccess,

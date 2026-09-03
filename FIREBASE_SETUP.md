@@ -7,6 +7,13 @@ Firestore. Each user signs in with Google and owns a separate
 Google OAuth remains separately configured for Calendar access. Scheduled
 Garmin and Withings jobs write directly to Firestore.
 
+Firebase Authentication persists the application session using the browser's
+long-term storage and automatically refreshes its one-hour ID tokens. Stronger
+does not impose a 30-day timeout: the session remains until explicit sign-out,
+Firebase revocation or account changes, or browser storage removal. Google
+Calendar access tokens are separate and are requested only when the user runs
+Calendar synchronization.
+
 > **OSS and trusted-forks security model:** public forks do not inherit
 > repository secrets and have no access to the shared Firebase project by
 > default. The project maintainer manually adds the Firebase configuration and

@@ -17,7 +17,7 @@ The application remains a client-side React app hosted on GitHub Pages.
 ## Acceptance Criteria
 
 - [ ] Firebase Authentication is the application login and persists sessions
-  across reloads.
+  across reloads and browser restarts without a fixed one-hour limit.
 - [ ] Firestore is the source of truth for exercises, workout definitions,
   workout logs, schedule data, nutrition data, settings, and imported health
   data.
@@ -28,6 +28,9 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] The web app contains no Google Sheets migration controls.
 - [ ] Google Calendar authorization is requested only from a calendar sync
   panel and an expired Calendar token does not sign the user out of Stronger.
+- [ ] One Sync button restores or requests Calendar authorization, selects a
+  valid writable calendar, and runs synchronization without a connect-then-sync
+  click sequence.
 - [ ] Existing two-way Calendar synchronization and `strongerId` matching are
   preserved.
 - [ ] Garmin activities and Garmin wellness scheduled syncs mirror their
@@ -144,3 +147,19 @@ Firestore after each successful sync.
 - Scheduled Withings mirroring is deferred to separate workflow migration
   work. The one-time migration still imports existing Withings measurements,
   and the Firebase UI continues to read the migrated yearly buckets.
+- Firebase Authentication initializes with IndexedDB, local-storage, and
+  session-storage persistence fallbacks. Firebase rotates its one-hour ID token
+  automatically through the long-lived refresh token; the application session
+  remains until explicit sign-out, revocation, account changes, or browser
+  storage removal rather than using a custom 30-day timeout.
+- Google Calendar authorization is a separate, incremental OAuth flow. Opening
+  the Calendar view prepares the Google SDK without requesting authorization;
+  pressing the single Sync button restores an unexpired Calendar token or
+  requests a new one, validates the saved calendar against the current account,
+  and performs the sync in the same action.
+- Calendar OAuth tokens and account hints are cleared whenever the Firebase
+  user signs out, changes, or reaches the app without a persisted Firebase
+  session, preventing one Stronger user from inheriting another user's Google
+  Calendar destination.
+- Calendar access requests only event read/write and calendar-list read scopes;
+  Firebase startup requests no Calendar or Sheets API scopes.

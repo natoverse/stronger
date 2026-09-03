@@ -8,7 +8,7 @@ import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initia
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import type { LiftGoal } from './google/index.js';
 import { signOutOfStronger } from './firebase/index.js';
-import { authorizeCalendar, syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
+import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -123,6 +123,7 @@ function AppContent() {
   const handleConnected = useCallback(
     (userId: string) => {
       if (connectedUserRef.current === userId) return;
+      if (connectedUserRef.current) disconnectCalendar();
       connectedUserRef.current = userId;
       setSpreadsheetId(userId);
       setSheetConnected(true);
@@ -181,6 +182,7 @@ function AppContent() {
   );
 
   const handleDisconnected = useCallback(() => {
+    disconnectCalendar();
     if (!connectedUserRef.current) return;
     connectedUserRef.current = null;
     clearDraft();

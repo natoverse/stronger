@@ -93,10 +93,13 @@ export function GoogleAuth({
 		return (
 			<div className="auth-screen">
 				<h1 className="app-title">Stronger</h1>
-				<p className="subtitle">Sign in to your Stronger account</p>
+				<p className="subtitle">
+					Sign in once to keep Stronger connected on this device.
+					Google Calendar connects separately only when you sync.
+				</p>
 				{error && <p className="auth-error">{error}</p>}
 				<button className="btn-google" onClick={handleSignIn} disabled={signInPending}>
-					{signInPending ? 'Signing in…' : 'Sign in with Google'}
+					{signInPending ? 'Signing in…' : 'Sign in to Stronger'}
 				</button>
 			</div>
 		)

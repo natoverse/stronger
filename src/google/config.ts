@@ -11,8 +11,11 @@ export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 /** OAuth scope – read/write access to Google Sheets. */
 export const SHEETS_SCOPE = 'https://www.googleapis.com/auth/spreadsheets'
 
-/** OAuth scope – full access to Google Calendar (list calendars + manage events). */
-export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar'
+/** OAuth scopes required to list calendars and manage their events. */
+export const CALENDAR_SCOPE = [
+	'https://www.googleapis.com/auth/calendar.events',
+	'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+].join(' ')
 
 /** Sheets API discovery document URL for gapi client initialization. */
 export const SHEETS_DISCOVERY_DOC =

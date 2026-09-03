@@ -1,5 +1,13 @@
-import { getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
+import { FirebaseError, getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app'
+import {
+	browserLocalPersistence,
+	browserPopupRedirectResolver,
+	browserSessionPersistence,
+	getAuth,
+	GoogleAuthProvider,
+	indexedDBLocalPersistence,
+	initializeAuth,
+} from 'firebase/auth'
 import { getFirestore, initializeFirestore } from 'firebase/firestore'
 
 const firebaseConfig: FirebaseOptions = {
@@ -17,7 +25,23 @@ export function isFirebaseConfigured(): boolean {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 
-export const firebaseAuth = getAuth(app)
+export const firebaseAuth = (() => {
+	try {
+		return initializeAuth(app, {
+			persistence: [
+				indexedDBLocalPersistence,
+				browserLocalPersistence,
+				browserSessionPersistence,
+			],
+			popupRedirectResolver: browserPopupRedirectResolver,
+		})
+	} catch (error) {
+		if (error instanceof FirebaseError && error.code === 'auth/already-initialized') {
+			return getAuth(app)
+		}
+		throw error
+	}
+})()
 export const googleAuthProvider = new GoogleAuthProvider()
 
 export const firestore = (() => {

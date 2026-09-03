@@ -1,7 +1,14 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { CalendarListEntry } from '../google/index.js';
 import type { CalendarSyncResult } from '../google/index.js';
-import { authorizeCalendar, clearAuth, listWritableCalendars, saveCalendarId, loadCalendarId } from '../google/index.js';
+import {
+  authorizeCalendar,
+  clearAuth,
+  listWritableCalendars,
+  loadCalendarId,
+  prepareCalendarAuthorization,
+  saveCalendarId,
+} from '../google/index.js';
 import { RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface CalendarSyncProps {
@@ -16,37 +23,43 @@ function errorStatus(error: unknown): number | undefined {
   return value.status ?? value.result?.error?.code;
 }
 
+export function selectWritableCalendar(
+  calendars: CalendarListEntry[],
+  preferredId: string | null,
+): CalendarListEntry | undefined {
+  return (
+    calendars.find((calendar) => calendar.id === preferredId)
+    ?? calendars.find((calendar) => calendar.primary)
+    ?? calendars[0]
+  );
+}
+
 export function CalendarSync({ onSync }: CalendarSyncProps) {
   const [calendars, setCalendars] = useState<CalendarListEntry[]>([]);
-  const [selectedCalendarId, setSelectedCalendarId] = useState('');
-  const [loadingCalendars, setLoadingCalendars] = useState(false);
-  const [authorized, setAuthorized] = useState(false);
-  const [calendarError, setCalendarError] = useState<string | null>(null);
+  const [selectedCalendarId, setSelectedCalendarId] = useState(() => loadCalendarId() ?? '');
+  const [authorizationReady, setAuthorizationReady] = useState(false);
+  const [preparationError, setPreparationError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncResult, setSyncResult] = useState<CalendarSyncResult | null>(null);
 
-  const loadCalendars = useCallback(async () => {
-    setLoadingCalendars(true);
-    setCalendarError(null);
-    try {
-        await authorizeCalendar();
-        const cals = await listWritableCalendars();
-        setCalendars(cals);
-        const saved = loadCalendarId();
-        const savedCal = saved ? cals.find((c) => c.id === saved) : null;
-        const primary = cals.find((c) => c.primary);
-        setSelectedCalendarId(savedCal?.id ?? primary?.id ?? cals[0]?.id ?? '');
-        setAuthorized(true);
-        setLoadingCalendars(false);
-    } catch (err) {
-        clearAuth();
-        setAuthorized(false);
-        setCalendarError(err instanceof Error ? err.message : String(err));
-        setLoadingCalendars(false);
-    }
+  useEffect(() => {
+    let active = true;
+    void prepareCalendarAuthorization()
+      .then(() => {
+        if (!active) return;
+        setAuthorizationReady(true);
+        setPreparationError(null);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setPreparationError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const canSync = selectedCalendarId && syncStatus !== 'syncing';
+  const canSync = authorizationReady && syncStatus !== 'syncing';
 
   const handleSync = useCallback(async () => {
     if (!canSync) return;
@@ -55,15 +68,24 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
     setSyncResult(null);
 
     try {
-      const result = await onSync(selectedCalendarId);
+      await authorizeCalendar();
+      const writableCalendars = await listWritableCalendars();
+      setCalendars(writableCalendars);
+
+      const preferredId = selectedCalendarId || loadCalendarId();
+      const targetCalendar = selectWritableCalendar(writableCalendars, preferredId);
+      if (!targetCalendar?.id) {
+        throw new Error('No writable Google Calendars are available.');
+      }
+
+      setSelectedCalendarId(targetCalendar.id);
+      saveCalendarId(targetCalendar.id);
+      const result = await onSync(targetCalendar.id);
       setSyncResult(result);
       setSyncStatus(result.errors.length > 0 ? 'error' : 'success');
     } catch (err) {
       if (errorStatus(err) === 401) {
         clearAuth();
-        setAuthorized(false);
-        setCalendars([]);
-        setSelectedCalendarId('');
       }
       setSyncResult({
         created: 0,
@@ -103,50 +125,30 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
         </p>
       </div>
 
-      {!authorized && (
-        <button className="calendar-push-btn" onClick={() => void loadCalendars()} disabled={loadingCalendars}>
-          {loadingCalendars ? <><Loader size={16} className="spin" /> Connecting…</> : 'Connect Google Calendar'}
-        </button>
-      )}
-
       {/* Calendar picker */}
-      {authorized && <div className="calendar-push-section">
+      {calendars.length > 0 && <div className="calendar-push-section">
         <label className="calendar-push-label" htmlFor="sync-calendar">
           Target calendar
         </label>
-        {loadingCalendars ? (
-          <div className="calendar-push-loading">
-            <Loader size={16} className="spin" /> Loading calendars…
-          </div>
-        ) : calendarError ? (
-          <div className="calendar-push-error">
-            <AlertCircle size={16} /> {calendarError}
-          </div>
-        ) : calendars.length === 0 ? (
-          <div className="calendar-push-error">
-            <AlertCircle size={16} /> No writable calendars found
-          </div>
-        ) : (
-          <select
-            id="sync-calendar"
-            className="calendar-push-select"
-            value={selectedCalendarId}
-            onChange={(e) => {
-              setSelectedCalendarId(e.target.value);
-              saveCalendarId(e.target.value);
-            }}
-          >
-            {calendars.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.summary}{c.primary ? ' (primary)' : ''}
-              </option>
-            ))}
-          </select>
-        )}
+        <select
+          id="sync-calendar"
+          className="calendar-push-select"
+          value={selectedCalendarId}
+          onChange={(e) => {
+            setSelectedCalendarId(e.target.value);
+            saveCalendarId(e.target.value);
+          }}
+        >
+          {calendars.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.summary}{c.primary ? ' (primary)' : ''}
+            </option>
+          ))}
+        </select>
       </div>}
 
       {/* Sync button */}
-      {authorized && <button
+      <button
         className="calendar-push-btn"
         onClick={handleSync}
         disabled={!canSync}
@@ -155,12 +157,22 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
           <>
             <Loader size={16} className="spin" /> Syncing…
           </>
+        ) : !authorizationReady ? (
+          <>
+            <Loader size={16} className="spin" /> Preparing Calendar…
+          </>
         ) : (
           <>
             <RefreshCw size={16} /> Sync with Calendar
           </>
         )}
-      </button>}
+      </button>
+
+      {preparationError && (
+        <div className="calendar-push-error">
+          <AlertCircle size={16} /> {preparationError}
+        </div>
+      )}
 
       {/* Result feedback */}
       {syncResult && syncStatus === 'success' && (

@@ -1,9 +1,9 @@
 /**
  * Google OAuth authentication via Google Identity Services (GIS).
  *
- * Access tokens for the Sheets and Calendar APIs are obtained from the
- * GIS OAuth2 token client after an explicit user click. Tokens are reused
- * until Google expires them, then the sign-in button is shown again.
+ * Access tokens for the Calendar API are obtained from the GIS OAuth2 token
+ * client after an explicit user click. Valid tokens are reused until Google
+ * expires them; Firebase Authentication remains independent.
  *
  * The signed-in account email is persisted in a cookie and used as a
  * `login_hint` so Google can select the previous account.
@@ -11,7 +11,7 @@
  * gapi is still loaded for the Sheets and Calendar REST APIs.
  */
 
-import { GOOGLE_CLIENT_ID, SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC, SHEETS_SCOPE, CALENDAR_SCOPE } from './config.ts'
+import { GOOGLE_CLIENT_ID, CALENDAR_DISCOVERY_DOC, CALENDAR_SCOPE } from './config.ts'
 import {
 	saveAccessToken,
 	loadAccessToken,
@@ -22,6 +22,7 @@ import {
 	saveUserEmail,
 	loadUserEmail,
 	clearUserEmail,
+	clearCalendarId,
 } from './storage.ts'
 import type { TokenClient, TokenResponse, TokenRequestOverrides } from './types.ts'
 
@@ -103,8 +104,28 @@ export async function initGapiClient(): Promise<void> {
 	if (!gapi) throw new Error('gapi not loaded')
 
 	await new Promise<void>((resolve) => gapi.load('client', resolve))
-	await gapi.client.init({ discoveryDocs: [SHEETS_DISCOVERY_DOC, CALENDAR_DISCOVERY_DOC] })
+	await gapi.client.init({ discoveryDocs: [CALENDAR_DISCOVERY_DOC] })
 	gapiInited = true
+}
+
+let calendarApiReady = false
+let calendarApiPreparation: Promise<void> | null = null
+
+/** Load Calendar SDK dependencies before an interactive authorization click. */
+export function prepareCalendarAuthorization(): Promise<void> {
+	if (calendarApiReady) return Promise.resolve()
+	if (calendarApiPreparation) return calendarApiPreparation
+
+	calendarApiPreparation = Promise.all([loadGapi(), loadGis()])
+		.then(() => initGapiClient())
+		.then(() => {
+			calendarApiReady = true
+		})
+		.catch((error) => {
+			calendarApiPreparation = null
+			throw error
+		})
+	return calendarApiPreparation
 }
 
 /* ------------------------------------------------------------------ */
@@ -125,7 +146,7 @@ export function isSignInCanceledError(err: unknown): boolean {
 function createTokenClient(
 	callback: (resp: TokenResponse) => void,
 	errorCallback: (message: string, canceled: boolean) => void,
-	scope = `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+	scope: string,
 ): TokenClient {
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
@@ -148,7 +169,7 @@ function createTokenClient(
  * Request an access token from a user gesture. A fresh client keeps each
  * click's callbacks self-contained.
  */
-function requestToken(loginHint?: string, scope?: string): Promise<TokenResponse> {
+function requestToken(scope: string, loginHint?: string): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
 		let settled = false
 		const timer = setTimeout(() => {
@@ -212,55 +233,36 @@ async function fetchAndStoreEmail(accessToken: string): Promise<void> {
 	}
 }
 
-/* ------------------------------------------------------------------ */
-/*  Sign-in / sign-out                                                 */
-/* ------------------------------------------------------------------ */
+let pendingCalendarAuthorization: Promise<string> | null = null
 
 /**
- * In-flight sign-in promise. Used to deduplicate concurrent attempts
- * so only one token request is issued at a time.
+ * Ensure Google Calendar access independently from Stronger login.
+ * SDK preparation must finish before this user-driven call so GIS can open
+ * its dialog without a popup-blocking retry.
  */
-let pendingSignIn: Promise<string> | null = null
-
-/**
- * Interactive sign-in. Requests an access token, allowing GIS to show
- * consent or account selection when necessary. Must be called from a
- * user gesture so any popup GIS opens is not blocked.
- *
- * Concurrent callers share a single in-flight request.
- */
-export function signIn(): Promise<string> {
-	if (pendingSignIn) return pendingSignIn
-
-	pendingSignIn = (async () => {
-		if (!window.gapi?.client) {
-			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
-		}
-
-		const loginHint = loadUserEmail() ?? undefined
-		const resp = await requestToken(loginHint)
-		const accessToken = applyTokenResponse(resp)
-		await fetchAndStoreEmail(accessToken)
-		return accessToken
-	})().finally(() => {
-		pendingSignIn = null
-	})
-
-	return pendingSignIn
-}
-
-async function authorizeScope(scope: string): Promise<string> {
-	await Promise.all([loadGapi(), loadGis()])
-	await initGapiClient()
-	const response = await requestToken(loadUserEmail() ?? undefined, scope)
-	const accessToken = response.access_token as string
-	window.gapi?.client.setToken({ access_token: accessToken })
-	return accessToken
-}
-
-/** Request Google Calendar access independently from Stronger application login. */
 export function authorizeCalendar(): Promise<string> {
-	return authorizeScope(`${CALENDAR_SCOPE} ${EMAIL_SCOPE}`)
+	if (!calendarApiReady) {
+		return Promise.reject(new Error('Google Calendar is still preparing. Please try again.'))
+	}
+
+	if (hydrateStoredAccessToken()) {
+		return Promise.resolve(loadAccessToken() as string)
+	}
+	if (pendingCalendarAuthorization) return pendingCalendarAuthorization
+
+	pendingCalendarAuthorization = requestToken(
+		`${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+		loadUserEmail() ?? undefined,
+	)
+		.then(async (response) => {
+			const accessToken = applyTokenResponse(response)
+			await fetchAndStoreEmail(accessToken)
+			return accessToken
+		})
+		.finally(() => {
+			pendingCalendarAuthorization = null
+		})
+	return pendingCalendarAuthorization
 }
 
 /**
@@ -274,6 +276,13 @@ export async function signOut(): Promise<void> {
 	if (token && window.google?.accounts?.oauth2?.revoke) {
 		window.google.accounts.oauth2.revoke(token)
 	}
+}
+
+/** Clear browser-local Calendar identity when the Stronger user signs out. */
+export function disconnectCalendar(): void {
+	clearAuth()
+	clearUserEmail()
+	clearCalendarId()
 }
 
 /** Check whether gapi currently holds an access token. */
@@ -300,7 +309,7 @@ export function hydrateStoredAccessToken(): boolean {
 	const accessToken = loadAccessToken()
 	if (!accessToken) return false
 	const expiry = loadAccessTokenExpiry()
-	if (expiry !== null && Date.now() >= expiry - TOKEN_EXPIRY_SKEW_MS) {
+	if (expiry === null || Date.now() >= expiry - TOKEN_EXPIRY_SKEW_MS) {
 		clearAuth()
 		return false
 	}
