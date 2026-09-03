@@ -1,5 +1,5 @@
 export { extractSheetId } from './url.ts'
-export { saveSheetId, loadSheetId, clearSheetId, saveCalendarId, loadCalendarId, clearCalendarId } from './storage.ts'
+export { saveSheetId, loadSheetId, clearSheetId } from './storage.ts'
 export {
 	loadGapi,
 	loadGis,

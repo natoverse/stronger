@@ -5,14 +5,13 @@ import {
   authorizeCalendar,
   clearAuth,
   listWritableCalendars,
-  loadCalendarId,
   prepareCalendarAuthorization,
-  saveCalendarId,
 } from '../google/index.js';
 import { RefreshCw, Loader, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface CalendarSyncProps {
   onSync: (calendarId: string) => Promise<CalendarSyncResult>;
+  configuredCalendarId: string | null;
 }
 
 type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
@@ -27,16 +26,18 @@ export function selectWritableCalendar(
   calendars: CalendarListEntry[],
   preferredId: string | null,
 ): CalendarListEntry | undefined {
-  return (
-    calendars.find((calendar) => calendar.id === preferredId)
-    ?? calendars.find((calendar) => calendar.primary)
-    ?? calendars[0]
-  );
+  return preferredId
+    ? calendars.find((calendar) => calendar.id === preferredId)
+    : undefined;
 }
 
-export function CalendarSync({ onSync }: CalendarSyncProps) {
+export function CalendarSync({ onSync, configuredCalendarId }: CalendarSyncProps) {
   const [calendars, setCalendars] = useState<CalendarListEntry[]>([]);
-  const [selectedCalendarId, setSelectedCalendarId] = useState(() => loadCalendarId() ?? '');
+  const [selectedCalendarId, setSelectedCalendarId] = useState(
+    () => configuredCalendarId ?? '',
+  );
+  const [calendarListLoaded, setCalendarListLoaded] = useState(false);
+  const [loadingCalendars, setLoadingCalendars] = useState(false);
   const [authorizationReady, setAuthorizationReady] = useState(false);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -59,7 +60,44 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
     };
   }, []);
 
-  const canSync = authorizationReady && syncStatus !== 'syncing';
+  useEffect(() => {
+    if (configuredCalendarId) setSelectedCalendarId(configuredCalendarId);
+  }, [configuredCalendarId]);
+
+  const loadCalendars = useCallback(async () => {
+    if (!authorizationReady || loadingCalendars) return;
+    setLoadingCalendars(true);
+    setSyncResult(null);
+    try {
+      await authorizeCalendar();
+      const writableCalendars = await listWritableCalendars();
+      setCalendars(writableCalendars);
+      setCalendarListLoaded(true);
+      setSyncStatus('idle');
+      const selected = selectWritableCalendar(writableCalendars, configuredCalendarId);
+      setSelectedCalendarId(selected?.id ?? '');
+      if (writableCalendars.length === 0) {
+        throw new Error('No writable Google Calendars are available.');
+      }
+    } catch (err) {
+      if (errorStatus(err) === 401) clearAuth();
+      setCalendarListLoaded(false);
+      setSyncResult({
+        created: 0,
+        updated: 0,
+        deleted: 0,
+        pulledCreations: 0,
+        pulledDateChanges: 0,
+        pulledDeletions: 0,
+        errors: [err instanceof Error ? err.message : String(err)],
+      });
+      setSyncStatus('error');
+    } finally {
+      setLoadingCalendars(false);
+    }
+  }, [authorizationReady, configuredCalendarId, loadingCalendars]);
+
+  const canSync = calendarListLoaded && Boolean(selectedCalendarId) && syncStatus !== 'syncing';
 
   const handleSync = useCallback(async () => {
     if (!canSync) return;
@@ -68,24 +106,14 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
     setSyncResult(null);
 
     try {
-      await authorizeCalendar();
-      const writableCalendars = await listWritableCalendars();
-      setCalendars(writableCalendars);
-
-      const preferredId = selectedCalendarId || loadCalendarId();
-      const targetCalendar = selectWritableCalendar(writableCalendars, preferredId);
-      if (!targetCalendar?.id) {
-        throw new Error('No writable Google Calendars are available.');
-      }
-
-      setSelectedCalendarId(targetCalendar.id);
-      saveCalendarId(targetCalendar.id);
-      const result = await onSync(targetCalendar.id);
+      const result = await onSync(selectedCalendarId);
       setSyncResult(result);
       setSyncStatus(result.errors.length > 0 ? 'error' : 'success');
     } catch (err) {
       if (errorStatus(err) === 401) {
         clearAuth();
+        setCalendarListLoaded(false);
+        setCalendars([]);
       }
       setSyncResult({
         created: 0,
@@ -126,7 +154,7 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
       </div>
 
       {/* Calendar picker */}
-      {calendars.length > 0 && <div className="calendar-push-section">
+      {calendarListLoaded && calendars.length > 0 && <div className="calendar-push-section">
         <label className="calendar-push-label" htmlFor="sync-calendar">
           Target calendar
         </label>
@@ -136,9 +164,9 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
           value={selectedCalendarId}
           onChange={(e) => {
             setSelectedCalendarId(e.target.value);
-            saveCalendarId(e.target.value);
           }}
         >
+          <option value="">Choose a calendar…</option>
           {calendars.map((c) => (
             <option key={c.id} value={c.id}>
               {c.summary}{c.primary ? ' (primary)' : ''}
@@ -148,25 +176,37 @@ export function CalendarSync({ onSync }: CalendarSyncProps) {
       </div>}
 
       {/* Sync button */}
-      <button
-        className="calendar-push-btn"
-        onClick={handleSync}
-        disabled={!canSync}
-      >
-        {syncStatus === 'syncing' ? (
+      {!calendarListLoaded ? (
+        <button
+          className="calendar-push-btn"
+          onClick={() => void loadCalendars()}
+          disabled={!authorizationReady || loadingCalendars}
+        >
+          {loadingCalendars ? (
+            <><Loader size={16} className="spin" /> Connecting…</>
+          ) : !authorizationReady ? (
+            <><Loader size={16} className="spin" /> Preparing Calendar…</>
+          ) : (
+            'Connect Google Calendar'
+          )}
+        </button>
+      ) : (
+        <button
+          className="calendar-push-btn"
+          onClick={handleSync}
+          disabled={!canSync}
+        >
+          {syncStatus === 'syncing' ? (
           <>
             <Loader size={16} className="spin" /> Syncing…
           </>
-        ) : !authorizationReady ? (
-          <>
-            <Loader size={16} className="spin" /> Preparing Calendar…
-          </>
-        ) : (
-          <>
-            <RefreshCw size={16} /> Sync with Calendar
-          </>
-        )}
-      </button>
+          ) : (
+            <>
+              <RefreshCw size={16} /> Sync with Calendar
+            </>
+          )}
+        </button>
+      )}
 
       {preparationError && (
         <div className="calendar-push-error">

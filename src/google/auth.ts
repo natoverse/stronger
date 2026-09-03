@@ -22,7 +22,6 @@ import {
 	saveUserEmail,
 	loadUserEmail,
 	clearUserEmail,
-	clearCalendarId,
 } from './storage.ts'
 import type { TokenClient, TokenResponse, TokenRequestOverrides } from './types.ts'
 
@@ -282,7 +281,6 @@ export async function signOut(): Promise<void> {
 export function disconnectCalendar(): void {
 	clearAuth()
 	clearUserEmail()
-	clearCalendarId()
 }
 
 /** Check whether gapi currently holds an access token. */

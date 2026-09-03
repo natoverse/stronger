@@ -19,30 +19,6 @@ export function clearSheetId(): void {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Calendar ID persistence (cookie-based)                             */
-/* ------------------------------------------------------------------ */
-
-const CALENDAR_ID_COOKIE = 'stronger_calendar_id'
-
-/** Cookie lifetime for the calendar ID: 1 year in seconds. */
-const CALENDAR_ID_MAX_AGE = 365 * 24 * 60 * 60
-
-/** Persist the selected Google Calendar ID in a long-lived cookie. */
-export function saveCalendarId(id: string): void {
-	setCookie(CALENDAR_ID_COOKIE, id, CALENDAR_ID_MAX_AGE)
-}
-
-/** Read the stored calendar ID, or `null` if not set. */
-export function loadCalendarId(): string | null {
-	return getCookie(CALENDAR_ID_COOKIE)
-}
-
-/** Remove the stored calendar ID. */
-export function clearCalendarId(): void {
-	deleteCookie(CALENDAR_ID_COOKIE)
-}
-
-/* ------------------------------------------------------------------ */
 /*  Access token persistence (cookie-based)                            */
 /* ------------------------------------------------------------------ */
 

@@ -8,7 +8,7 @@ import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initia
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import type { LiftGoal } from './google/index.js';
 import { signOutOfStronger } from './firebase/index.js';
-import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
+import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, generateStrongerId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -43,6 +43,8 @@ import { GarminWellnessView } from './components/GarminWellnessView.js';
 import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
 import { DateRangeSelector } from './components/DateRangeSelector.js';
 import './App.css';
+
+const CALENDAR_SYNC_ID_SETTING = 'calendar.syncCalendarId';
 
 function AppContent() {
   const { route, navigateTo, replaceTo } = useHashRouter();
@@ -81,6 +83,7 @@ function AppContent() {
     endTime: string;
   } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [calendarSyncId, setCalendarSyncId] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
@@ -125,6 +128,7 @@ function AppContent() {
       if (connectedUserRef.current === userId) return;
       if (connectedUserRef.current) disconnectCalendar();
       connectedUserRef.current = userId;
+      setCalendarSyncId(null);
       setSpreadsheetId(userId);
       setSheetConnected(true);
       setNeedsSetup(false);
@@ -207,6 +211,7 @@ function AppContent() {
     setMealFavorites([]);
     setMealRecents([]);
     setMealLog([]);
+    setCalendarSyncId(null);
     logScopesLoadedRef.current.clear();
     dataLoadsRef.current.clear();
     loadQueueUserRef.current = null;
@@ -459,6 +464,7 @@ function AppContent() {
         const parsed = appSettingsFromMap(settings);
         roundWarmupPlateMathRef.current = parsed.roundWarmupPlateMath;
         setAppSettings(parsed);
+        setCalendarSyncId(settings.get(CALENDAR_SYNC_ID_SETTING)?.trim() || null);
       });
     } catch {
       // Silently ignore — settings data is optional
@@ -752,6 +758,12 @@ function AppContent() {
     (calendarId: string): Promise<CalendarSyncResult> => queueCalendarMutation(async () => {
       const syncUserId = spreadsheetId;
       if (!syncUserId) throw new Error('Not connected to Firebase.');
+      if (calendarSyncId && calendarSyncId !== calendarId) {
+        throw new Error(
+          'This Stronger account is linked to a different Google Calendar. '
+          + 'Select the configured calendar before syncing.',
+        );
+      }
       const persistedSchedule = await withAuthRetry(() => readWorkoutSchedule(syncUserId));
       if (connectedUserRef.current !== syncUserId) {
         throw new Error('Firebase user changed during calendar sync.');
@@ -793,14 +805,20 @@ function AppContent() {
         setWorkoutSchedule(scheduleWithIds);
       }
 
-      const { updatedSchedule, result } = await withAuthRetry(() => syncScheduleWithCalendar(
+      const hasLinkedEntries = scheduleWithIds.some((entry) => Boolean(entry.calendarEventId));
+      const { updatedSchedule, result, calendarVerified } = await withAuthRetry(() => syncScheduleWithCalendar(
         calendarId,
         scheduleWithIds,
         resolveWorkoutName,
         resolveWorkoutId,
+        {
+          allowRemoteDeletions: calendarSyncId === calendarId,
+          requireLinkedMatch: !calendarSyncId && hasLinkedEntries,
+        },
       ));
 
       if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
+      if (!calendarVerified) return result;
       await withAuthRetry(() => writeWorkoutScheduleDates(
         syncUserId,
         updatedSchedule,
@@ -809,17 +827,25 @@ function AppContent() {
           ...updatedSchedule.map((entry) => entry.date),
         ]),
       ));
+      if (!calendarSyncId) {
+        const latestSettings = await withAuthRetry(() => readSettings(syncUserId));
+        latestSettings.set(CALENDAR_SYNC_ID_SETTING, calendarId);
+        await withAuthRetry(() => writeSettings(syncUserId, latestSettings));
+        if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
+        settingsRef.current = latestSettings;
+        setCalendarSyncId(calendarId);
+      }
       setWorkoutSchedule(updatedSchedule);
       return result;
     }),
-    [queueCalendarMutation, workouts, cardioActivities, spreadsheetId],
+    [queueCalendarMutation, workouts, cardioActivities, spreadsheetId, calendarSyncId],
   );
 
   const handleClearSchedule = useCallback(
     (options: ClearOptions): Promise<ClearResult> => queueCalendarMutation(async () => {
       const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
       const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
-      const calendarId = shouldClearSchedule ? loadCalendarId() : null;
+      const calendarId = shouldClearSchedule ? calendarSyncId : null;
       let calendarAuthorized = false;
       if (calendarId) {
         try {
@@ -957,7 +983,7 @@ function AppContent() {
 
       return result;
     }),
-    [queueCalendarMutation, spreadsheetId],
+    [queueCalendarMutation, spreadsheetId, calendarSyncId],
   );
 
   const handleUpdateLogRows = useCallback(
@@ -1726,6 +1752,7 @@ function AppContent() {
           onBulkSchedule={handleBulkSchedule}
           onUpdateFlags={handleUpdateFlags}
           onSyncCalendar={handleSyncCalendar}
+          calendarSyncId={calendarSyncId}
           onClearSchedule={handleClearSchedule}
           onLoadMoreDays={() => loadCalendarWindow('future')}
           onLoadPreviousDays={() => loadCalendarWindow('past')}

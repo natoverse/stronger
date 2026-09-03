@@ -52,3 +52,11 @@ If an event is deleted from Google Calendar, the corresponding entry is removed 
 - Flag-only rows (no workoutId) are excluded from sync entirely since they have no corresponding calendar event.
 - The CalendarSync UI is a separate component from CalendarPush, shown via a "Sync" toolbar button. Both panels collapse each other when opened (mutual exclusion).
 - The existing one-way push functionality (CalendarPush) is preserved alongside the new two-way sync.
+
+## Iteration: verified Firebase calendar binding
+
+- Calendar authorization and calendar selection complete before synchronization begins.
+- The selected calendar is persisted in the Firebase settings document and reused across devices and sessions.
+- Missing event IDs are accepted as remote deletions only when syncing against the previously verified calendar.
+- A first sync with legacy event links must find at least one linked event before binding the selected calendar.
+- Stronger-tagged Calendar events can rebuild an empty Firebase schedule, including custom-titled strength events whose descriptions retain their workout deep links.

@@ -34,6 +34,7 @@ interface CalendarViewProps {
 	onBulkSchedule: (entries: WorkoutScheduleEntry[]) => void;
 	onUpdateFlags: (date: string, key: keyof DayFlags) => void;
 	onSyncCalendar: (calendarId: string) => Promise<CalendarSyncResult>;
+	calendarSyncId?: string | null;
 	onClearSchedule: (options: ClearOptions) => Promise<ClearResult>;
 	onLoadMoreDays?: () => Promise<void>;
 	onLoadPreviousDays?: () => Promise<void>;
@@ -484,6 +485,7 @@ export function CalendarView({
 	onBulkSchedule,
 	onUpdateFlags,
 	onSyncCalendar,
+	calendarSyncId = null,
 	onClearSchedule,
 	onLoadMoreDays,
 	onLoadPreviousDays,
@@ -767,6 +769,7 @@ export function CalendarView({
 				{activePanel === 'sync' && (
 					<CalendarSync
 						onSync={onSyncCalendar}
+						configuredCalendarId={calendarSyncId}
 					/>
 				)}
 				{activePanel === 'monthly' && (

@@ -10,15 +10,16 @@ const calendars: CalendarListEntry[] = [
 ];
 
 describe('CalendarSync authorization', () => {
-	it('uses the saved calendar, then primary, then the first writable calendar', () => {
+	it('selects only an explicitly configured writable calendar', () => {
 		expect(selectWritableCalendar(calendars, 'shared')?.id).toBe('shared');
-		expect(selectWritableCalendar(calendars, 'missing')?.id).toBe('primary');
-		expect(selectWritableCalendar([{ ...calendars[0], primary: false }], null)?.id).toBe('shared');
+		expect(selectWritableCalendar(calendars, 'missing')).toBeUndefined();
+		expect(selectWritableCalendar([{ ...calendars[0], primary: false }], null)).toBeUndefined();
 		expect(selectWritableCalendar([], null)).toBeUndefined();
 	});
 
-	it('renders one combined authorization and sync action', () => {
+	it('requires calendar discovery before synchronization', () => {
 		const markup = renderToStaticMarkup(createElement(CalendarSync, {
+			configuredCalendarId: null,
 			onSync: async () => ({
 				created: 0,
 				updated: 0,
@@ -31,7 +32,7 @@ describe('CalendarSync authorization', () => {
 		}));
 
 		expect(markup).toContain('Preparing Calendar');
-		expect(markup).not.toContain('Connect Google Calendar');
+		expect(markup).not.toContain('Sync with Calendar</button>');
 		expect(markup.match(/calendar-push-btn/g)).toHaveLength(1);
 	});
 });

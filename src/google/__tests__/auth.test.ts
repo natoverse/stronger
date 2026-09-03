@@ -158,21 +158,19 @@ describe('Google authentication', () => {
 		expect(window.gapi?.client.setToken).toHaveBeenCalledWith({ access_token: 'stored-token' })
 	})
 
-	it('clears Calendar identity without revoking consent', async () => {
+	it('clears Calendar authorization without revoking consent', async () => {
 		window.google = mockGoogle(mockTokenClient)
 		const auth = await loadAuth()
 		const storage = await import('../storage.ts')
 		storage.saveAccessToken('stored-token')
 		storage.saveAccessTokenExpiry(Date.now() + 60 * 60 * 1000)
 		storage.saveUserEmail('lifter@example.com')
-		storage.saveCalendarId('calendar-id')
 
 		auth.disconnectCalendar()
 
 		expect(storage.loadAccessToken()).toBeNull()
 		expect(storage.loadAccessTokenExpiry()).toBeNull()
 		expect(storage.loadUserEmail()).toBeNull()
-		expect(storage.loadCalendarId()).toBeNull()
 		expect(window.google.accounts.oauth2.revoke).not.toHaveBeenCalled()
 	})
 })

@@ -115,6 +115,8 @@ export interface GapiClient {
 				timeMax?: string
 				singleEvents?: boolean
 				maxResults?: number
+				q?: string
+				pageToken?: string
 			}) => Promise<CalendarEventsListResponse>
 		}
 	}
@@ -196,6 +198,7 @@ export interface CalendarEventResponse {
 export interface CalendarEventsListResponse {
 	result: {
 		items?: CalendarEventItem[]
+		nextPageToken?: string
 	}
 }
 

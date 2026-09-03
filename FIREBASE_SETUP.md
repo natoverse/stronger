@@ -14,6 +14,11 @@ Firebase revocation or account changes, or browser storage removal. Google
 Calendar access tokens are separate and are requested only when the user runs
 Calendar synchronization.
 
+After the user authorizes Calendar access, Stronger lists writable calendars
+and requires an explicit selection before the first sync. The verified
+selection is stored as `calendar.syncCalendarId` in `settings/app`; subsequent
+sessions preselect that calendar after authorization.
+
 > **OSS and trusted-forks security model:** public forks do not inherit
 > repository secrets and have no access to the shared Firebase project by
 > default. The project maintainer manually adds the Firebase configuration and

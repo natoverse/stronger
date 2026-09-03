@@ -28,9 +28,11 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] The web app contains no Google Sheets migration controls.
 - [ ] Google Calendar authorization is requested only from a calendar sync
   panel and an expired Calendar token does not sign the user out of Stronger.
-- [ ] One Sync button restores or requests Calendar authorization, selects a
-  valid writable calendar, and runs synchronization without a connect-then-sync
-  click sequence.
+- [ ] Calendar authorization loads writable calendars without synchronizing;
+  the user explicitly selects a calendar before the first sync.
+- [ ] The verified calendar selection is stored in Firebase and reused on
+  later sessions.
+- [ ] Selecting the wrong calendar cannot delete Firestore schedule entries.
 - [ ] Existing two-way Calendar synchronization and `strongerId` matching are
   preserved.
 - [ ] Garmin activities and Garmin wellness scheduled syncs mirror their
@@ -153,13 +155,24 @@ Firestore after each successful sync.
   remains until explicit sign-out, revocation, account changes, or browser
   storage removal rather than using a custom 30-day timeout.
 - Google Calendar authorization is a separate, incremental OAuth flow. Opening
-  the Calendar view prepares the Google SDK without requesting authorization;
-  pressing the single Sync button restores an unexpired Calendar token or
-  requests a new one, validates the saved calendar against the current account,
-  and performs the sync in the same action.
+  the Calendar view prepares the Google SDK without requesting authorization.
+  Connecting restores or requests Calendar access and loads the writable
+  calendar list, but never starts synchronization. The user selects a calendar
+  and starts sync separately.
 - Calendar OAuth tokens and account hints are cleared whenever the Firebase
   user signs out, changes, or reaches the app without a persisted Firebase
   session, preventing one Stronger user from inheriting another user's Google
   Calendar destination.
 - Calendar access requests only event read/write and calendar-list read scopes;
   Firebase startup requests no Calendar or Sheets API scopes.
+- The selected calendar is persisted as `calendar.syncCalendarId` in the
+  Firebase settings document after the first verified sync. An unverified
+  browser cookie cannot preselect a calendar.
+- A first sync against legacy linked entries must match at least one existing
+  event before the calendar is trusted. Missing event IDs are treated as
+  deletions only on subsequent syncs against that verified calendar, preventing
+  an accidental primary-calendar selection from erasing the Firebase schedule.
+- Calendar discovery covers a recovery window even when the Firebase schedule
+  is empty. Unmatched events carrying a Stronger ID are pulled back into
+  Firestore, using the workout ID embedded in their deep link when the event
+  title is a custom label.

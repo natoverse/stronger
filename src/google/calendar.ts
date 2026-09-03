@@ -58,6 +58,18 @@ export function extractStrongerId(description: string | undefined): string | und
 	return id || undefined
 }
 
+/** Extract a workout ID from a Stronger deep link in an event description. */
+export function extractWorkoutId(description: string | undefined): string | undefined {
+	if (!description) return undefined
+	const match = description.match(/#\/workout\/([^\s?#]+)/)
+	if (!match) return undefined
+	try {
+		return decodeURIComponent(match[1])
+	} catch {
+		return match[1]
+	}
+}
+
 /**
  * Returns true if a calendar event was created by Stronger.
  * Checks for a [stronger:...] ID tag or a deep link in the description.
@@ -129,17 +141,38 @@ export async function listEventsInRange(
 	startDate: string,
 	endDate: string,
 ): Promise<CalendarEventItem[]> {
+	return listCalendarEvents(calendarId, {
+		timeMin: `${startDate}T00:00:00Z`,
+		timeMax: `${endDate}T00:00:00Z`,
+	})
+}
+
+async function listCalendarEvents(
+	calendarId: string,
+	filters: { timeMin?: string; timeMax?: string; q?: string },
+): Promise<CalendarEventItem[]> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
 
-	const response = await gapi.client.calendar.events.list({
-		calendarId,
-		timeMin: `${startDate}T00:00:00Z`,
-		timeMax: `${endDate}T00:00:00Z`,
-		singleEvents: true,
-		maxResults: 2500,
-	})
-	return response.result.items ?? []
+	const events: CalendarEventItem[] = []
+	let pageToken: string | undefined
+	do {
+		const response = await gapi.client.calendar.events.list({
+			calendarId,
+			...filters,
+			singleEvents: true,
+			maxResults: 2500,
+			pageToken,
+		})
+		events.push(...(response.result.items ?? []))
+		pageToken = response.result.nextPageToken
+	} while (pageToken)
+	return events
+}
+
+/** Find every event carrying a Stronger linkage tag, regardless of date. */
+async function listLinkedStrongerEvents(calendarId: string): Promise<CalendarEventItem[]> {
+	return listCalendarEvents(calendarId, { q: 'stronger' })
 }
 
 /**
@@ -392,6 +425,15 @@ export type WorkoutNameResolver = (workoutId: string) => string | null
 /** Resolves a workout name back to a workoutId. Returns null for unknown names. */
 export type WorkoutIdResolver = (name: string) => string | null
 
+export interface CalendarSyncOptions {
+	/** Only trust missing event IDs as deletions for a previously verified calendar. */
+	allowRemoteDeletions?: boolean
+	/** Require at least one existing linked event before accepting a legacy calendar binding. */
+	requireLinkedMatch?: boolean
+	/** Stable date override for tests. */
+	referenceDate?: string
+}
+
 function isCalendarAuthError(error: unknown): boolean {
 	if (!error || typeof error !== 'object') return false
 	const value = error as { status?: number; result?: { error?: { code?: number } } }
@@ -448,7 +490,12 @@ export async function syncScheduleWithCalendar(
 	schedule: WorkoutScheduleEntry[],
 	resolveWorkoutName: WorkoutNameResolver,
 	resolveWorkoutId?: WorkoutIdResolver,
-): Promise<{ updatedSchedule: WorkoutScheduleEntry[]; result: CalendarSyncResult }> {
+	options: CalendarSyncOptions = {},
+): Promise<{
+	updatedSchedule: WorkoutScheduleEntry[]
+	result: CalendarSyncResult
+	calendarVerified: boolean
+}> {
 	const gapi = window.gapi
 	if (!gapi) throw new Error('gapi not loaded')
 
@@ -477,16 +524,12 @@ export async function syncScheduleWithCalendar(
 		e.strongerId ? e : { ...e, strongerId: generateStrongerId() },
 	)
 
-	// Compute date range for the calendar query
+	// Compute the normal reconciliation range. Stronger-tagged events are also
+	// queried separately without date bounds for full recovery.
 	const allDates = [...syncableWithIds, ...blanked].map((e) => e.date).sort()
-	if (allDates.length === 0) {
-		return { updatedSchedule: schedule, result }
-	}
-
-	// Extend range: 30 days back to catch moved events, 90 days forward to
-	// discover events planned further in advance (e.g., multi-month schedules).
-	const firstDate = allDates[0]
-	const lastDate = allDates[allDates.length - 1]
+	const referenceDate = options.referenceDate ?? formatDateISO(new Date())
+	const firstDate = allDates[0] ?? referenceDate
+	const lastDate = allDates[allDates.length - 1] ?? referenceDate
 	const [fy, fm, fd] = firstDate.split('-').map(Number)
 	const [ly, lm, ld] = lastDate.split('-').map(Number)
 	const rangeStart = new Date(fy, fm - 1, fd - 30)
@@ -496,13 +539,23 @@ export async function syncScheduleWithCalendar(
 
 	// Fetch all calendar events in the range
 	let calendarEvents: CalendarEventItem[]
+	let windowEventIds: Set<string>
 	try {
-		calendarEvents = await listEventsInRange(calendarId, startStr, endStr)
+		const [windowEvents, linkedEvents] = await Promise.all([
+			listEventsInRange(calendarId, startStr, endStr),
+			listLinkedStrongerEvents(calendarId),
+		])
+		windowEventIds = new Set(windowEvents.flatMap((event) => event.id ? [event.id] : []))
+		const eventsById = new Map<string, CalendarEventItem>()
+		for (const event of [...windowEvents, ...linkedEvents]) {
+			eventsById.set(event.id ?? `${getEventDate(event)}|${event.summary}`, event)
+		}
+		calendarEvents = [...eventsById.values()]
 	} catch (err) {
 		if (isCalendarAuthError(err)) throw err
 		const msg = err instanceof Error ? err.message : String(err)
 		result.errors.push(`Failed to list calendar events: ${msg}`)
-		return { updatedSchedule: schedule, result }
+		return { updatedSchedule: schedule, result, calendarVerified: false }
 	}
 
 	// Filter out cancelled events
@@ -510,6 +563,19 @@ export async function syncScheduleWithCalendar(
 
 	const eventMap = buildEventMap(calendarEvents)
 	const strongerIdToEvent = buildStrongerIdToEventMap(calendarEvents)
+	const linkedEntries = [...syncableWithIds, ...blanked]
+		.filter((entry) => entry.calendarEventId)
+	const matchedLinkedEntries = linkedEntries.filter((entry) => (
+		(entry.strongerId && strongerIdToEvent.has(entry.strongerId))
+		|| (entry.calendarEventId && eventMap.has(entry.calendarEventId))
+	))
+	if (options.requireLinkedMatch && linkedEntries.length > 0 && matchedLinkedEntries.length === 0) {
+		result.errors.push(
+			'This calendar does not contain the events already linked to Stronger. '
+			+ 'Choose the calendar previously used for synchronization.',
+		)
+		return { updatedSchedule: schedule, result, calendarVerified: false }
+	}
 
 	// Track which calendar event IDs we've accounted for (to detect orphans)
 	const accountedEventIds = new Set<string>()
@@ -519,6 +585,7 @@ export async function syncScheduleWithCalendar(
 	for (const entry of blanked) {
 		if (entry.calendarEventId) {
 			const calEvent = eventMap.get(entry.calendarEventId)
+			let deleteConfirmed = !calEvent
 			if (calEvent) {
 				try {
 					await gapi.client.calendar.events.delete({
@@ -526,6 +593,7 @@ export async function syncScheduleWithCalendar(
 						eventId: entry.calendarEventId,
 					})
 					result.deleted++
+					deleteConfirmed = true
 				} catch (err) {
 					if (isCalendarAuthError(err)) throw err
 					const msg = err instanceof Error ? err.message : String(err)
@@ -533,8 +601,9 @@ export async function syncScheduleWithCalendar(
 				}
 			}
 			if (entry.calendarEventId) accountedEventIds.add(entry.calendarEventId)
-			// Clear calendar linkage since the event is gone
-			updatedBlanked.push({ ...entry, calendarEventId: undefined, strongerId: undefined })
+			updatedBlanked.push(deleteConfirmed
+				? { ...entry, calendarEventId: undefined, strongerId: undefined }
+				: entry)
 		} else {
 			updatedBlanked.push(entry)
 		}
@@ -602,10 +671,13 @@ export async function syncScheduleWithCalendar(
 			}
 			if (titleStale) result.updated++
 		} else if (entry.calendarEventId) {
-			// Had a calendarEventId but event no longer exists → deleted from Google
-			result.pulledDeletions++
-			// Remove the entry (don't add to updatedSyncable)
-			continue
+			if (options.allowRemoteDeletions) {
+				// A verified calendar no longer has this linked event.
+				result.pulledDeletions++
+				continue
+			}
+			// First sync against an unverified calendar must never delete local data.
+			updatedSyncable.push(entry)
 		} else {
 			// New entry — push to Google Calendar
 			const name = resolveWorkoutName(entry.workoutId)
@@ -651,14 +723,23 @@ export async function syncScheduleWithCalendar(
 			if (!calEvent.id || accountedEventIds.has(calEvent.id)) continue
 
 			const sid = extractStrongerId(calEvent.description)
-			if (sid) continue // Has a strongerId — already handled or belongs to another sheet
 
 			const calDate = getEventDate(calEvent)
 			const summary = calEvent.summary
 			if (!calDate || !summary) continue
 
-			// Try to resolve the event name to a workoutId
-			const workoutId = resolveWorkoutId(summary)
+			const descriptionName = calEvent.description?.split('\n')[0]?.trim()
+			const workoutId = sid
+				? (
+					extractWorkoutId(calEvent.description)
+					?? (descriptionName ? resolveWorkoutId(descriptionName) : null)
+					?? resolveWorkoutId(summary)
+				)
+				: (
+					calEvent.id && windowEventIds.has(calEvent.id)
+						? resolveWorkoutId(summary)
+						: null
+				)
 			if (!workoutId) continue // Not a recognized workout name, skip
 
 			// Check if we already have this workout on this date (dedup)
@@ -668,34 +749,40 @@ export async function syncScheduleWithCalendar(
 			if (isDupe) continue
 
 			// Create a new schedule entry and stamp the event with a strongerId
-			const newSid = generateStrongerId()
+			const newSid = sid ?? generateStrongerId()
 			const newEntry: WorkoutScheduleEntry = {
 				date: calDate,
 				workoutId,
 				calendarEventId: calEvent.id,
 				strongerId: newSid,
 			}
+			const canonicalName = resolveWorkoutName(workoutId)
+			if (canonicalName && canonicalName !== summary) {
+				newEntry.label = summary
+			}
 
-			// Update the Google Calendar event description to include the strongerId
-			try {
-				const updatedDescription = embedStrongerId(
-					calEvent.description ?? summary,
-					newSid,
-				)
-				await gapi.client.calendar.events.update({
-					calendarId,
-					eventId: calEvent.id,
-					resource: {
-						summary,
-						description: updatedDescription,
-						start: { date: calDate },
-						end: { date: calDate },
-					},
-				})
-			} catch (err) {
-				if (isCalendarAuthError(err)) throw err
-				const msg = err instanceof Error ? err.message : String(err)
-				result.errors.push(`Update event ${calEvent.id} with strongerId: ${msg}`)
+			if (!sid) {
+				// Stamp manually created matching events for future stable linkage.
+				try {
+					const updatedDescription = embedStrongerId(
+						calEvent.description ?? summary,
+						newSid,
+					)
+					await gapi.client.calendar.events.update({
+						calendarId,
+						eventId: calEvent.id,
+						resource: {
+							summary,
+							description: updatedDescription,
+							start: { date: calDate },
+							end: { date: calDate },
+						},
+					})
+				} catch (err) {
+					if (isCalendarAuthError(err)) throw err
+					const msg = err instanceof Error ? err.message : String(err)
+					result.errors.push(`Update event ${calEvent.id} with strongerId: ${msg}`)
+				}
 			}
 
 			updatedSyncable.push(newEntry)
@@ -725,5 +812,5 @@ export async function syncScheduleWithCalendar(
 	// Reassemble: inactive + blanked + synced
 	const updatedSchedule = [...inactive, ...updatedBlanked, ...dedupedSyncable]
 
-	return { updatedSchedule, result }
+	return { updatedSchedule, result, calendarVerified: true }
 }
