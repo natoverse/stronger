@@ -1,8 +1,5 @@
-import { lazy, Suspense } from 'react';
 import { Sliders, LogOut } from 'lucide-react';
 import type { AppSettings, AppBooleanSettingKey, AppNumericSettingKey } from '../model/index.js';
-
-const FirebaseMigrationIdentity = lazy(() => import('./FirebaseMigrationIdentity.js'));
 
 interface Props {
   onSignOut: () => void;
@@ -12,7 +9,6 @@ interface Props {
 }
 
 export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onAppNumericSettingChange }: Props) {
-
   return (
     <div className="settings-view">
       <h2 className="settings-title">Settings</h2>
@@ -366,18 +362,13 @@ export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onApp
 
       </div>
 
-      <Suspense fallback={<div className="settings-section settings-section-firebase">Loading Firebase identity...</div>}>
-        <FirebaseMigrationIdentity />
-      </Suspense>
-
       <div className="settings-section settings-section-disconnect">
         <h3 className="settings-section-title">
           <LogOut size={18} />
           Sign Out
         </h3>
         <p className="settings-disconnect-description">
-          Sign out and disconnect from the current Google Sheet.
-          Your data in the sheet will not be deleted.
+          Sign out of Stronger. Your Firebase data will not be deleted.
         </p>
         <button className="btn-danger" onClick={() => {
           if (window.confirm('Sign out of Stronger? You can sign back in later.')) {

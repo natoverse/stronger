@@ -26,6 +26,7 @@
     "dayFlags"
   ],
   "initialDateWindowDays": 60,
+  "initialDateWindowAnchor": "monthStart",
   "dateWindowIncrementDays": 30,
   "routes": {
     "list": ["exercises", "workouts", "cardioActivities", "schedule", "workoutSessions", "settings"],

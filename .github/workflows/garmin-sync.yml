@@ -1,4 +1,4 @@
-name: Garmin Sync (Garmin Connect → Google Sheets)
+name: Garmin Sync (Garmin Connect → Firestore)
 
 on:
   schedule:
@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: firebase-writes
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -29,6 +33,11 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
@@ -40,3 +49,14 @@ jobs:
         # Scheduled runs always overwrite the rolling window so recent rows are
         # refreshed (fixes partial mid-day rows and picks up edited activities).
         run: python scripts/garmin-sync.py ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
+
+      - name: Mirror Garmin activities to Firestore
+        env:
+          GOOGLE_SERVICE_ACCOUNT_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
+          DRY_RUN: 'false'
+          REPLACE_EXISTING: 'true'
+          MIGRATION_COLLECTIONS: garminActivities
+        run: node scripts/firebase-migrate.mjs

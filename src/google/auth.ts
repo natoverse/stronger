@@ -125,13 +125,14 @@ export function isSignInCanceledError(err: unknown): boolean {
 function createTokenClient(
 	callback: (resp: TokenResponse) => void,
 	errorCallback: (message: string, canceled: boolean) => void,
+	scope = `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
 ): TokenClient {
 	const google = window.google
 	if (!google) throw new Error('Google Identity Services not loaded. Call loadGis() first.')
 	if (!GOOGLE_CLIENT_ID) throw new Error('Google OAuth client ID is not configured. Set VITE_GOOGLE_CLIENT_ID.')
 	return google.accounts.oauth2.initTokenClient({
 		client_id: GOOGLE_CLIENT_ID,
-		scope: `${SHEETS_SCOPE} ${CALENDAR_SCOPE} ${EMAIL_SCOPE}`,
+		scope,
 		callback,
 		error_callback: (err) => {
 			if (err?.type === 'popup_failed_to_open') {
@@ -147,7 +148,7 @@ function createTokenClient(
  * Request an access token from a user gesture. A fresh client keeps each
  * click's callbacks self-contained.
  */
-function requestToken(loginHint?: string): Promise<TokenResponse> {
+function requestToken(loginHint?: string, scope?: string): Promise<TokenResponse> {
 	return new Promise((resolve, reject) => {
 		let settled = false
 		const timer = setTimeout(() => {
@@ -173,6 +174,7 @@ function requestToken(loginHint?: string): Promise<TokenResponse> {
 				clearTimeout(timer)
 				reject(canceled ? new SignInCanceledError() : new Error(message))
 			},
+			scope,
 		)
 
 		const overrides: TokenRequestOverrides = { prompt: '' }
@@ -234,6 +236,7 @@ export function signIn(): Promise<string> {
 		if (!window.gapi?.client) {
 			throw new Error('gapi client is not loaded. Call loadGapi() and initGapiClient() before signing in.')
 		}
+
 		const loginHint = loadUserEmail() ?? undefined
 		const resp = await requestToken(loginHint)
 		const accessToken = applyTokenResponse(resp)
@@ -244,6 +247,20 @@ export function signIn(): Promise<string> {
 	})
 
 	return pendingSignIn
+}
+
+async function authorizeScope(scope: string): Promise<string> {
+	await Promise.all([loadGapi(), loadGis()])
+	await initGapiClient()
+	const response = await requestToken(loadUserEmail() ?? undefined, scope)
+	const accessToken = response.access_token as string
+	window.gapi?.client.setToken({ access_token: accessToken })
+	return accessToken
+}
+
+/** Request Google Calendar access independently from Stronger application login. */
+export function authorizeCalendar(): Promise<string> {
+	return authorizeScope(`${CALENDAR_SCOPE} ${EMAIL_SCOPE}`)
 }
 
 /**

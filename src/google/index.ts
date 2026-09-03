@@ -13,6 +13,7 @@ export {
 	isSignInCanceledError,
 	describeSheetError,
 	withAuthRetry,
+	authorizeCalendar,
 } from './auth.ts'
 export {
 	verifySheetAccess,

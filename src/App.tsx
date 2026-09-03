@@ -1,10 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealLogEntry, MealItem, FoodItem, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
-import { appendLogRows, buildLogRow, readLogZone, findPreviousWorkoutSets, writeConfigValues, writeDefaultConfig, verifyScheduleTab, createScheduleTab, readFlags, writeFlags, verifyWorkoutScheduleTab, createWorkoutScheduleTab, readWorkoutSchedule, writeWorkoutSchedule, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, verifyMealFavoritesTab, createMealFavoritesTab, verifyMealRecentsTab, createMealRecentsTab, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, verifyGarminTab, verifyGarminWellnessTab, readGarminWellnessEntries, readWithingsMeasurements, verifyWithingsTab, createWithingsTab, verifySettingsTab, createSettingsTab, readSettings, writeSettings, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
+import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
+import type { DateWindow, YearBucketReadScope } from './firebase/index.js';
+import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
+import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import type { LiftGoal } from './google/index.js';
-import { signOut } from './google/index.js';
-import { syncScheduleWithCalendar, generateStrongerId, withAuthRetry, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
+import { signOutOfStronger } from './firebase/index.js';
+import { authorizeCalendar, syncScheduleWithCalendar, generateStrongerId, loadCalendarId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
@@ -78,71 +82,92 @@ function AppContent() {
   } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const settingsRef = useRef(new Map<string, string>());
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
-  // Lazy-loading flags: track whether secondary data has been fetched
-  const flagsLoadedRef = useRef(false);
-  const workoutScheduleLoadedRef = useRef(false);
-  const logLoadedRef = useRef(false);
-  const settingsLoadedRef = useRef(false);
-  const garminLoadedRef = useRef(false);
-  const wellnessLoadedRef = useRef(false);
-  const withingsLoadedRef = useRef(false);
-  const nutritionLoadedRef = useRef(false);
+  const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>());
+  const dataLoadsRef = useRef(new Map<string, Promise<void>>());
+  const loadQueueUserRef = useRef<string | null>(null);
+  const calendarWindowRef = useRef(initialDateWindow());
+  const calendarWindowLoadRef = useRef(Promise.resolve());
+  const calendarMutationRef = useRef<Promise<unknown>>(Promise.resolve());
+  const connectedUserRef = useRef<string | null>(null);
+  const sessionMutationRef = useRef(new Map<string, Promise<void>>());
+
+  const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
+    const previous = sessionMutationRef.current.get(key) ?? Promise.resolve();
+    let queued: Promise<void>;
+    queued = previous
+      .catch(() => undefined)
+      .then(mutation)
+      .finally(() => {
+        if (sessionMutationRef.current.get(key) === queued) {
+          sessionMutationRef.current.delete(key);
+        }
+      });
+    sessionMutationRef.current.set(key, queued);
+    return queued;
+  }, []);
+
+  const queueCalendarMutation = useCallback(<T,>(mutation: () => Promise<T>): Promise<T> => {
+    const queued = calendarMutationRef.current
+      .catch(() => undefined)
+      .then(mutation);
+    calendarMutationRef.current = queued;
+    return queued;
+  }, []);
 
   const handleConnected = useCallback(
-    (loadedWorkouts: Workout[], loadedConfigs: LiftConfig[], sheetId: string, defs: WorkoutDefinition[], cardio: CardioActivity[]) => {
-      setWorkouts(loadedWorkouts);
-      setConfigs(loadedConfigs);
-      setDefinitions(defs);
-      setSpreadsheetId(sheetId);
+    (userId: string) => {
+      if (connectedUserRef.current === userId) return;
+      connectedUserRef.current = userId;
+      setSpreadsheetId(userId);
       setSheetConnected(true);
       setNeedsSetup(false);
-      setCardioActivities(cardio);
-      // Reset lazy-loading flags for new connection
-      flagsLoadedRef.current = false;
-      workoutScheduleLoadedRef.current = false;
-      logLoadedRef.current = false;
-      settingsLoadedRef.current = false;
+      setDataLoadError(null);
+      setPriorityLoadPending(true);
+      logScopesLoadedRef.current.clear();
+      dataLoadsRef.current.clear();
+      loadQueueUserRef.current = null;
+      calendarWindowRef.current = initialDateWindow();
+      calendarWindowLoadRef.current = Promise.resolve();
+      calendarMutationRef.current = Promise.resolve();
       setSettingsLoaded(false);
-      garminLoadedRef.current = false;
-      wellnessLoadedRef.current = false;
-      withingsLoadedRef.current = false;
-      nutritionLoadedRef.current = false;
     },
     [],
   );
 
-  const handleNeedsSetup = useCallback((sheetId: string) => {
-    setSpreadsheetId(sheetId);
-    setSheetConnected(true);
-    setNeedsSetup(true);
-  }, []);
-
   const handleSetupConfirm = useCallback(
     async (configs: LiftConfig[]) => {
       if (!spreadsheetId) return;
+      const setupUserId = spreadsheetId;
 
       // Write the user's configs to the sheet (writeDefaultConfig writes
       // the header row too, which is needed for a fresh config zone).
-      await writeDefaultConfig(spreadsheetId, configs);
+      await writeDefaultConfig(setupUserId, configs);
+      if (connectedUserRef.current !== setupUserId) return;
       setConfigs(configs);
 
       // Read or write default workout definitions
       const liftNames = new Map(configs.map((c) => [c.id, c.name]));
-      let defs = await readWorkoutDefs(spreadsheetId, liftNames);
+      let defs = await readWorkoutDefs(setupUserId, liftNames);
+      if (connectedUserRef.current !== setupUserId) return;
       if (!defs) {
-        await writeDefaultWorkoutDefs(spreadsheetId, workoutDefinitions);
+        await writeDefaultWorkoutDefs(setupUserId, workoutDefinitions);
+        if (connectedUserRef.current !== setupUserId) return;
         defs = workoutDefinitions;
       }
       setDefinitions(defs);
 
       // Read or seed default cardio activities
-      let cardio = await readCardioActivities(spreadsheetId);
+      let cardio = await readCardioActivities(setupUserId);
+      if (connectedUserRef.current !== setupUserId) return;
       if (!cardio) {
-        await writeDefaultCardioActivities(spreadsheetId, defaultCardioActivities);
+        await writeDefaultCardioActivities(setupUserId, defaultCardioActivities);
+        if (connectedUserRef.current !== setupUserId) return;
         cardio = [...defaultCardioActivities];
       }
       setCardioActivities(cardio);
@@ -150,11 +175,15 @@ function AppContent() {
       const builtWorkouts = buildWorkoutsFromConfigs(configs, defs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current });
       setWorkouts(builtWorkouts);
       setNeedsSetup(false);
+      setDataLoadError(null);
     },
     [spreadsheetId],
   );
 
   const handleDisconnected = useCallback(() => {
+    if (!connectedUserRef.current) return;
+    connectedUserRef.current = null;
+    clearDraft();
     setSheetConnected(false);
     setActiveWorkout(null);
     setPreviousSets(null);
@@ -176,38 +205,40 @@ function AppContent() {
     setMealFavorites([]);
     setMealRecents([]);
     setMealLog([]);
-    // Reset lazy-loading flags
-    flagsLoadedRef.current = false;
-    workoutScheduleLoadedRef.current = false;
-    logLoadedRef.current = false;
-    settingsLoadedRef.current = false;
+    logScopesLoadedRef.current.clear();
+    dataLoadsRef.current.clear();
+    loadQueueUserRef.current = null;
+    calendarWindowRef.current = initialDateWindow();
+    calendarWindowLoadRef.current = Promise.resolve();
+    calendarMutationRef.current = Promise.resolve();
     setSettingsLoaded(false);
-    garminLoadedRef.current = false;
-    wellnessLoadedRef.current = false;
-    withingsLoadedRef.current = false;
-    nutritionLoadedRef.current = false;
     replaceTo({ view: 'list' });
   }, [replaceTo]);
 
   const handleSignOut = useCallback(async () => {
-    await signOut();
+    await signOutOfStronger();
     handleDisconnected();
   }, [handleDisconnected]);
 
   const loadPreviousSets = useCallback(
     async (sheetId: string, workoutId: string) => {
       try {
+        if (connectedUserRef.current !== sheetId) return;
         // If log data is already loaded, use it directly
-        if (logLoadedRef.current && logRows.length > 0) {
+        const loadedScopes = logScopesLoadedRef.current;
+        if (loadedScopes.has('all')
+          || (loadedScopes.has('currentYear') && loadedScopes.has('otherYears'))) {
           const prev = findPreviousWorkoutSets(logRows, workoutId);
+          if (connectedUserRef.current !== sheetId) return;
           setPreviousSets(prev);
           return;
         }
-        // Otherwise fetch from sheet
+        // Otherwise fetch the complete Firestore history before starting.
         await withAuthRetry(async () => {
           const rows = await readLogZone(sheetId);
+          if (connectedUserRef.current !== sheetId) return;
           setLogRows(rows);
-          logLoadedRef.current = true;
+          logScopesLoadedRef.current.add('all');
           const prev = findPreviousWorkoutSets(rows, workoutId);
           setPreviousSets(prev);
         });
@@ -283,8 +314,9 @@ function AppContent() {
           results,
           startTime,
           endTime,
-        ).then(() => {
-          void loadLogData(sid);
+        ).then((savedRows) => {
+          if (connectedUserRef.current !== sid) return;
+          setLogRows((existing) => mergeWorkoutSessionRows(existing, savedRows));
         });
       }
 
@@ -329,43 +361,84 @@ function AppContent() {
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
+  const loadExercisesData = useCallback(async (userId: string) => {
+    const loaded = await readConfigZone(userId);
+    if (connectedUserRef.current !== userId) return;
+    if (!loaded) {
+      setNeedsSetup(true);
+      return;
+    }
+    setConfigs(loaded);
+    setNeedsSetup(false);
+  }, []);
+
+  const loadWorkoutDefinitionsData = useCallback(async (userId: string) => {
+    let loaded = await readWorkoutDefs(userId);
+    if (connectedUserRef.current !== userId) return;
+    if (!loaded) {
+      loaded = workoutDefinitions;
+      await writeDefaultWorkoutDefs(userId, loaded);
+      if (connectedUserRef.current !== userId) return;
+    }
+    setDefinitions(loaded);
+  }, []);
+
+  const loadCardioActivitiesData = useCallback(async (userId: string) => {
+    let loaded = await readCardioActivities(userId);
+    if (connectedUserRef.current !== userId) return;
+    if (!loaded) {
+      loaded = defaultCardioActivities;
+      await writeDefaultCardioActivities(userId, loaded);
+      if (connectedUserRef.current !== userId) return;
+    }
+    setCardioActivities(loaded);
+  }, []);
+
   // Schedule handlers
-  const loadFlagsData = useCallback(async (sheetId: string) => {
+  const loadFlagsData = useCallback(async (
+    sheetId: string,
+    window?: DateWindow,
+    required = false,
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const flagsTabExists = await verifyScheduleTab(sheetId);
-        if (!flagsTabExists) {
-          await createScheduleTab(sheetId);
-        }
-        const flags = await readFlags(sheetId);
-        setDayFlags(flags);
+        const flags = await readFlags(sheetId, window);
+        if (connectedUserRef.current !== sheetId) return;
+        setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
       });
-    } catch {
+    } catch (error) {
+      if (window && required) throw error;
       // Silently ignore — flags data is optional
     }
   }, []);
 
-  const loadWorkoutScheduleData = useCallback(async (sheetId: string) => {
+  const loadWorkoutScheduleData = useCallback(async (
+    sheetId: string,
+    window?: DateWindow,
+    required = false,
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const wsTabExists = await verifyWorkoutScheduleTab(sheetId);
-        if (!wsTabExists) {
-          await createWorkoutScheduleTab(sheetId);
-        }
-        const schedule = await readWorkoutSchedule(sheetId);
-        setWorkoutSchedule(schedule);
+        const schedule = await readWorkoutSchedule(sheetId, window);
+        if (connectedUserRef.current !== sheetId) return;
+        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
       });
-    } catch {
+    } catch (error) {
+      if (window && required) throw error;
       // Silently ignore — schedule data is optional
     }
   }, []);
 
-  const loadLogData = useCallback(async (sheetId: string) => {
+  const loadLogData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const rows = await readLogZone(sheetId);
-        setLogRows(rows);
-        logLoadedRef.current = true;
+        const rows = await readLogZone(sheetId, scope);
+        if (connectedUserRef.current !== sheetId) return;
+        setLogRows((existing) => mergeYearScopedEntries(existing, rows, scope));
+        logScopesLoadedRef.current.add(scope);
       });
     } catch {
       // Silently ignore — log data is optional for calendar history
@@ -375,11 +448,8 @@ function AppContent() {
   const loadSettingsData = useCallback(async (sheetId: string) => {
     try {
       await withAuthRetry(async () => {
-        const settingsTabExists = await verifySettingsTab(sheetId);
-        if (!settingsTabExists) {
-          await createSettingsTab(sheetId);
-        }
         const settings = await readSettings(sheetId);
+        if (connectedUserRef.current !== sheetId) return;
         settingsRef.current = settings;
         setStravaGoals(goalsFromSettings(settings));
         setWithingsGoals(bodyGoalsFromSettings(settings));
@@ -391,190 +461,279 @@ function AppContent() {
     } catch {
       // Silently ignore — settings data is optional
     } finally {
-      setSettingsLoaded(true);
+      if (connectedUserRef.current === sheetId) setSettingsLoaded(true);
     }
   }, []);
 
-  const loadGarminData = useCallback(async (sheetId: string) => {
+  const loadGarminData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyGarminTab(sheetId);
-        if (!tabExists) {
-          // The Garmin tab is created by the sync script, not the app.
-          setGarminActivities([]);
-          return;
-        }
-        const activities = await readGarminActivities(sheetId);
-        setGarminActivities(activities);
+        const activities = await readGarminActivities(sheetId, scope);
+        if (connectedUserRef.current !== sheetId) return;
+        setGarminActivities((existing) => mergeYearScopedEntries(existing, activities, scope));
       });
     } catch {
       // Silently ignore — Garmin data is optional
     }
   }, []);
 
-  const loadWellnessData = useCallback(async (sheetId: string) => {
+  const loadWellnessData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyGarminWellnessTab(sheetId);
-        if (!tabExists) {
-          setWellnessEntries([]);
-          return;
-        }
-        const entries = await readGarminWellnessEntries(sheetId);
-        setWellnessEntries(entries);
+        const entries = await readGarminWellnessEntries(sheetId, scope);
+        if (connectedUserRef.current !== sheetId) return;
+        setWellnessEntries((existing) => mergeYearScopedEntries(existing, entries, scope));
       });
     } catch {
       // Silently ignore — wellness data is optional
     }
   }, []);
 
-  const loadWithingsData = useCallback(async (sheetId: string) => {
+  const loadWithingsData = useCallback(async (
+    sheetId: string,
+    scope: YearBucketReadScope = 'all',
+  ) => {
     try {
       await withAuthRetry(async () => {
-        const tabExists = await verifyWithingsTab(sheetId);
-        if (!tabExists) {
-          await createWithingsTab(sheetId);
-        }
-        const measurements = await readWithingsMeasurements(sheetId);
-        setWithingsMeasurements(measurements);
+        const measurements = await readWithingsMeasurements(sheetId, scope);
+        if (connectedUserRef.current !== sheetId) return;
+        setWithingsMeasurements((existing) => mergeYearScopedEntries(existing, measurements, scope));
       });
     } catch {
       // Silently ignore — Withings data is optional
     }
   }, []);
 
-  const loadNutritionData = useCallback(async (sheetId: string) => {
+  const loadMealFavoritesData = useCallback(async (sheetId: string) => {
     try {
-      await withAuthRetry(async () => {
-        if (!await verifyMealFavoritesTab(sheetId)) await createMealFavoritesTab(sheetId);
-        if (!await verifyMealRecentsTab(sheetId)) await createMealRecentsTab(sheetId);
-        const [favorites, recents, entries, items] = await Promise.all([
-          readMealFavorites(sheetId),
-          readMealRecents(sheetId),
-          readMealLog(sheetId),
-          readMealItems(sheetId).catch(() => [] as MealItem[]),
-        ]);
-        setMealFavorites(favorites);
-        setMealRecents(recents);
-        setMealItems(items);
-        setMealLog(entries);
-      });
+      const favorites = await readMealFavorites(sheetId);
+      if (connectedUserRef.current === sheetId) setMealFavorites(favorites);
     } catch {
-      // Nutrition is optional if the sheet cannot be read.
+      // Nutrition is optional.
     }
   }, []);
 
+  const loadMealRecentsData = useCallback(async (sheetId: string) => {
+    try {
+      const recents = await readMealRecents(sheetId);
+      if (connectedUserRef.current === sheetId) setMealRecents(recents);
+    } catch {
+      // Nutrition is optional.
+    }
+  }, []);
+
+  const loadMealLogData = useCallback(async (sheetId: string) => {
+    try {
+      const entries = await readMealLog(sheetId);
+      if (connectedUserRef.current === sheetId) setMealLog(entries);
+    } catch {
+      // Nutrition is optional.
+    }
+  }, []);
+
+  const loadMealItemsData = useCallback(async (sheetId: string) => {
+    try {
+      const items = await readMealItems(sheetId);
+      if (connectedUserRef.current === sheetId) setMealItems(items);
+    } catch {
+      // Nutrition is optional.
+    }
+  }, []);
+
+  const loadCalendarWindow = useCallback((direction: 'future' | 'past'): Promise<void> => {
+    const userId = spreadsheetId;
+    if (!userId) return Promise.resolve();
+    const pending = calendarWindowLoadRef.current.then(async () => {
+      const current = calendarWindowRef.current;
+      const window = direction === 'future'
+        ? {
+            startDate: current.endDate,
+            endDate: addDateDays(current.endDate, DATE_WINDOW_INCREMENT_DAYS),
+          }
+        : {
+            startDate: addDateDays(current.startDate, -DATE_WINDOW_INCREMENT_DAYS),
+            endDate: current.startDate,
+          };
+      const [schedule, flags] = await Promise.all([
+        readWorkoutSchedule(userId, window),
+        readFlags(userId, window),
+      ]);
+      if (connectedUserRef.current !== userId) return;
+      setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
+      setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
+      calendarWindowRef.current = direction === 'future'
+        ? { ...current, endDate: window.endDate }
+        : { ...current, startDate: window.startDate };
+    });
+    calendarWindowLoadRef.current = pending.catch(() => undefined);
+    return pending;
+  }, [spreadsheetId]);
+
   const handleScheduleAssign = useCallback(
     (date: string, workoutId: string) => {
-      const updated = [...workoutSchedule, { date, workoutId, strongerId: generateStrongerId() }];
-      setWorkoutSchedule(updated);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updated));
-      }
+      const userId = spreadsheetId;
+      void queueCalendarMutation(async () => {
+        const window = { startDate: date, endDate: addDateDays(date, 1) };
+        const persisted = userId
+          ? await withAuthRetry(() => readWorkoutSchedule(userId, window))
+          : [];
+        if (userId && connectedUserRef.current !== userId) return;
+        const updatedDate = [...persisted, { date, workoutId, strongerId: generateStrongerId() }];
+        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
+        if (userId) {
+          await withAuthRetry(() => writeWorkoutScheduleDates(userId, updatedDate, [date]));
+        }
+      });
     },
-    [workoutSchedule, spreadsheetId],
+    [queueCalendarMutation, spreadsheetId],
   );
 
   const handleBulkSchedule = useCallback(
     (entries: WorkoutScheduleEntry[]) => {
-      // Separate rest signals from actual additions
-      const datesToRest = new Set(
-        entries.filter((e) => e.workoutId === '__rest__').map((e) => e.date),
-      );
-      const toAdd = entries.filter((e) => e.workoutId !== '__rest__');
-
-      // For rest dates: blank out workoutIds instead of deleting rows
-      // (preserves calendarEventIds and strongerIds for sync cleanup)
-      let updated = workoutSchedule.map((e) => {
-        if (datesToRest.has(e.date) && e.workoutId) {
-          return { ...e, workoutId: '' };
-        }
-        return e;
-      });
-
-      // Add new entries with strongerIds, deduplicating (skip if same date+workoutId already exists)
-      for (const entry of toAdd) {
-        const exists = updated.some(
-          (e) => e.date === entry.date && e.workoutId === entry.workoutId,
+      const userId = spreadsheetId;
+      void queueCalendarMutation(async () => {
+        const changedDates = [...new Set(entries.map((entry) => entry.date))].sort();
+        if (changedDates.length === 0) return;
+        const window = {
+          startDate: changedDates[0],
+          endDate: addDateDays(changedDates[changedDates.length - 1], 1),
+        };
+        const persisted = userId
+          ? await withAuthRetry(() => readWorkoutSchedule(userId, window))
+          : [];
+        if (userId && connectedUserRef.current !== userId) return;
+        const datesToRest = new Set(
+          entries.filter((entry) => entry.workoutId === '__rest__').map((entry) => entry.date),
         );
-        if (!exists) {
-          updated.push({ ...entry, strongerId: entry.strongerId ?? generateStrongerId() });
+        const toAdd = entries.filter((entry) => entry.workoutId !== '__rest__');
+        let updatedRange = persisted.map((entry) => {
+          if (datesToRest.has(entry.date) && entry.workoutId) {
+            return { ...entry, workoutId: '' };
+          }
+          return entry;
+        });
+        for (const entry of toAdd) {
+          const exists = updatedRange.some(
+            (current) => current.date === entry.date && current.workoutId === entry.workoutId,
+          );
+          if (!exists) {
+            updatedRange.push({ ...entry, strongerId: entry.strongerId ?? generateStrongerId() });
+          }
         }
-      }
-
-      setWorkoutSchedule(updated);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updated));
-      }
+        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedRange, window));
+        if (userId) {
+          await withAuthRetry(() => writeWorkoutScheduleDates(userId, updatedRange, changedDates));
+        }
+      });
     },
-    [workoutSchedule, spreadsheetId],
+    [queueCalendarMutation, spreadsheetId],
   );
 
   const handleScheduleRemove = useCallback(
     (date: string, workoutId: string) => {
-      // Blank out the workoutId instead of deleting the row.
-      // This preserves calendarEventId and strongerId for calendar sync cleanup.
-      let blanked = false;
-      const updated = workoutSchedule.map((e) => {
-        if (!blanked && e.date === date && e.workoutId === workoutId) {
-          blanked = true;
-          return { ...e, workoutId: '' };
+      const userId = spreadsheetId;
+      void queueCalendarMutation(async () => {
+        const window = { startDate: date, endDate: addDateDays(date, 1) };
+        const persisted = userId
+          ? await withAuthRetry(() => readWorkoutSchedule(userId, window))
+          : [];
+        if (userId && connectedUserRef.current !== userId) return;
+        let blanked = false;
+        const updatedDate = persisted.map((entry) => {
+          if (!blanked && entry.workoutId === workoutId) {
+            blanked = true;
+            return { ...entry, workoutId: '' };
+          }
+          return entry;
+        });
+        if (!blanked) return;
+        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
+        if (userId) {
+          await withAuthRetry(() => writeWorkoutScheduleDates(userId, updatedDate, [date]));
         }
-        return e;
       });
-      setWorkoutSchedule(updated);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updated));
-      }
     },
-    [workoutSchedule, spreadsheetId],
+    [queueCalendarMutation, spreadsheetId],
   );
 
   const handleUpdateLabel = useCallback(
     (date: string, workoutId: string, label: string) => {
       const trimmed = label.trim();
-      let updated = false;
-      const nextSchedule = workoutSchedule.map((e) => {
-        if (!updated && e.date === date && e.workoutId === workoutId) {
-          updated = true;
-          return { ...e, ...(trimmed ? { label: trimmed } : { label: undefined }) };
+      const userId = spreadsheetId;
+      void queueCalendarMutation(async () => {
+        const window = { startDate: date, endDate: addDateDays(date, 1) };
+        const persisted = userId
+          ? await withAuthRetry(() => readWorkoutSchedule(userId, window))
+          : [];
+        if (userId && connectedUserRef.current !== userId) return;
+        let updated = false;
+        const updatedDate = persisted.map((entry) => {
+          if (!updated && entry.workoutId === workoutId) {
+            updated = true;
+            return { ...entry, ...(trimmed ? { label: trimmed } : { label: undefined }) };
+          }
+          return entry;
+        });
+        if (!updated) return;
+        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
+        if (userId) {
+          await withAuthRetry(() => writeWorkoutScheduleDates(userId, updatedDate, [date]));
         }
-        return e;
       });
-      if (!updated) return;
-      setWorkoutSchedule(nextSchedule);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, nextSchedule));
-      }
     },
-    [workoutSchedule, spreadsheetId],
+    [queueCalendarMutation, spreadsheetId],
   );
 
   const handleUpdateFlags = useCallback(
-    (date: string, flags: DayFlags) => {
-      const hasFlags = flags.home || flags.elsewhere || flags.travel || flags.visitors || flags.alcohol || flags.blocked;
-      const flagIdx = dayFlags.findIndex((e) => e.date === date);
-      let updated: DayFlagEntry[];
-      if (flagIdx >= 0) {
-        if (hasFlags) {
-          updated = dayFlags.map((e, i) =>
-            i === flagIdx ? { ...e, flags } : e,
-          );
+    (date: string, key: keyof DayFlags) => {
+      const userId = spreadsheetId;
+      void queueCalendarMutation(async () => {
+        const window = { startDate: date, endDate: addDateDays(date, 1) };
+        const persisted = userId
+          ? await withAuthRetry(() => readFlags(userId, window))
+          : [];
+        if (userId && connectedUserRef.current !== userId) return;
+        const currentFlags = persisted[0]?.flags ?? {
+          home: false,
+          elsewhere: false,
+          travel: false,
+          visitors: false,
+          alcohol: false,
+          blocked: false,
+        };
+        const locationKeys: Array<keyof DayFlags> = ['home', 'elsewhere', 'travel'];
+        let flags: DayFlags;
+        if (locationKeys.includes(key)) {
+          const currentLocation = currentFlags.travel
+            ? 'travel'
+            : currentFlags.elsewhere
+              ? 'elsewhere'
+              : 'home';
+          flags = {
+            ...currentFlags,
+            home: false,
+            elsewhere: false,
+            travel: false,
+            [key]: currentLocation !== key,
+          };
         } else {
-          // Remove the flag entry entirely (no flags left)
-          updated = dayFlags.filter((_, i) => i !== flagIdx);
+          flags = { ...currentFlags, [key]: !currentFlags[key] };
         }
-      } else if (hasFlags) {
-        updated = [...dayFlags, { date, flags }];
-      } else {
-        return; // Nothing to do
-      }
-      setDayFlags(updated);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeFlags(spreadsheetId, updated));
-      }
+        const hasFlags = Object.values(flags).some(Boolean);
+        const updatedDate = hasFlags ? [{ date, flags }] : [];
+        setDayFlags((existing) => mergeDateWindowEntries(existing, updatedDate, window));
+        if (userId) {
+          await withAuthRetry(() => writeFlagDates(userId, updatedDate, [date]));
+        }
+      });
     },
-    [dayFlags, spreadsheetId],
+    [queueCalendarMutation, spreadsheetId],
   );
 
   const handleCalendarOpenWorkout = useCallback(
@@ -588,7 +747,13 @@ function AppContent() {
   );
 
   const handleSyncCalendar = useCallback(
-    async (calendarId: string): Promise<CalendarSyncResult> => {
+    (calendarId: string): Promise<CalendarSyncResult> => queueCalendarMutation(async () => {
+      const syncUserId = spreadsheetId;
+      if (!syncUserId) throw new Error('Not connected to Firebase.');
+      const persistedSchedule = await withAuthRetry(() => readWorkoutSchedule(syncUserId));
+      if (connectedUserRef.current !== syncUserId) {
+        throw new Error('Firebase user changed during calendar sync.');
+      }
       const resolveWorkoutName = (workoutId: string): string | null => {
         if (workoutId === REST_ID) return 'Rest';
         if (workoutId.startsWith('cardio:')) {
@@ -611,26 +776,57 @@ function AppContent() {
         return null;
       };
 
+      const scheduleWithIds = persistedSchedule.map((entry) =>
+        entry.workoutId && !entry.strongerId
+          ? { ...entry, strongerId: generateStrongerId() }
+          : entry,
+      );
+      if (scheduleWithIds.some((entry, index) => entry !== persistedSchedule[index])) {
+        await withAuthRetry(() => writeWorkoutScheduleDates(
+          syncUserId,
+          scheduleWithIds,
+          new Set(scheduleWithIds.map((entry) => entry.date)),
+        ));
+        if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
+        setWorkoutSchedule(scheduleWithIds);
+      }
+
       const { updatedSchedule, result } = await withAuthRetry(() => syncScheduleWithCalendar(
         calendarId,
-        workoutSchedule,
+        scheduleWithIds,
         resolveWorkoutName,
         resolveWorkoutId,
       ));
 
+      if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
+      await withAuthRetry(() => writeWorkoutScheduleDates(
+        syncUserId,
+        updatedSchedule,
+        new Set([
+          ...scheduleWithIds.map((entry) => entry.date),
+          ...updatedSchedule.map((entry) => entry.date),
+        ]),
+      ));
       setWorkoutSchedule(updatedSchedule);
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, updatedSchedule));
-      }
       return result;
-    },
-    [workoutSchedule, workouts, cardioActivities, spreadsheetId],
+    }),
+    [queueCalendarMutation, workouts, cardioActivities, spreadsheetId],
   );
 
   const handleClearSchedule = useCallback(
-    async (options: ClearOptions): Promise<ClearResult> => {
+    (options: ClearOptions): Promise<ClearResult> => queueCalendarMutation(async () => {
       const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
       const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
+      const calendarId = shouldClearSchedule ? loadCalendarId() : null;
+      let calendarAuthorized = false;
+      if (calendarId) {
+        try {
+          await authorizeCalendar();
+          calendarAuthorized = true;
+        } catch (err) {
+          result.errors.push(`Could not authorize Google Calendar cleanup: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
 
       // Compute date range
       const [sy, sm, sd] = startDate.split('-').map(Number);
@@ -644,16 +840,27 @@ function AppContent() {
       // End date for calendar API queries (one day past the range)
       const rangeEnd = new Date(sy, sm - 1, sd + weeks * 7);
       const endDate = `${rangeEnd.getFullYear()}-${String(rangeEnd.getMonth() + 1).padStart(2, '0')}-${String(rangeEnd.getDate()).padStart(2, '0')}`;
-
+      const dateWindow = { startDate, endDate };
+      const [persistedFlags, persistedSchedule] = await Promise.all([
+        shouldClearFlags && spreadsheetId
+          ? withAuthRetry(() => readFlags(spreadsheetId, dateWindow))
+          : Promise.resolve([]),
+        shouldClearSchedule && spreadsheetId
+          ? withAuthRetry(() => readWorkoutSchedule(spreadsheetId, dateWindow))
+          : Promise.resolve([]),
+      ]);
+      if (spreadsheetId && connectedUserRef.current !== spreadsheetId) {
+        throw new Error('Firebase user changed while clearing the calendar.');
+      }
       // Clear flags
       if (shouldClearFlags) {
-        const before = dayFlags.length;
-        const updatedFlags = dayFlags.filter((e) => !dateSet.has(e.date));
+        const before = persistedFlags.length;
+        const updatedFlags = persistedFlags.filter((e) => !dateSet.has(e.date));
         result.flagsCleared = before - updatedFlags.length;
-        setDayFlags(updatedFlags);
+        setDayFlags((existing) => mergeDateWindowEntries(existing, updatedFlags, dateWindow));
         if (spreadsheetId) {
           try {
-            await withAuthRetry(() => writeFlags(spreadsheetId, updatedFlags));
+            await withAuthRetry(() => writeFlagDates(spreadsheetId, updatedFlags, dateSet));
           } catch (err) {
             result.errors.push(`Failed to write flags: ${err instanceof Error ? err.message : String(err)}`);
           }
@@ -663,11 +870,11 @@ function AppContent() {
       // Clear workout schedule
       if (shouldClearSchedule) {
         // Collect entries in the date range that have workoutIds
-        const entriesToClear = workoutSchedule.filter((e) => dateSet.has(e.date) && e.workoutId);
+        const entriesToClear = persistedSchedule.filter((e) => dateSet.has(e.date) && e.workoutId);
         result.scheduleCleared = entriesToClear.length;
 
         // Blank out workoutIds (preserves calendarEventId/strongerId for cleanup)
-        const updatedSchedule = workoutSchedule.map((e) => {
+        const updatedSchedule = persistedSchedule.map((e) => {
           if (dateSet.has(e.date) && e.workoutId) {
             return { ...e, workoutId: '' };
           }
@@ -675,12 +882,11 @@ function AppContent() {
         });
 
         // Try to delete Google Calendar events for cleared entries
-        const calendarId = loadCalendarId();
-        if (calendarId) {
+        const deletedEventIds = new Set<string>();
+        if (calendarId && calendarAuthorized) {
           const gapi = window.gapi;
           if (gapi) {
             // Delete events we have direct references to
-            const deletedEventIds = new Set<string>();
             for (const entry of entriesToClear) {
               if (entry.calendarEventId) {
                 try {
@@ -722,6 +928,8 @@ function AppContent() {
               const msg = err instanceof Error ? err.message : String(err);
               result.errors.push(`Failed to list calendar events for orphan cleanup: ${msg}`);
             }
+          } else {
+            result.errors.push('Google Calendar client did not initialize for cleanup.');
           }
         }
 
@@ -730,15 +938,15 @@ function AppContent() {
         const finalSchedule = updatedSchedule.filter((e) => {
           if (!dateSet.has(e.date)) return true; // keep entries outside range
           if (e.workoutId) return true; // keep entries with workoutIds
-          // In range + blanked: only keep if calendarEventId and we didn't delete it
-          if (e.calendarEventId && !calendarId) return true; // keep for future sync
+          // Retain linkage unless the referenced event was confirmed deleted.
+          if (e.calendarEventId && !deletedEventIds.has(e.calendarEventId)) return true;
           return false;
         });
 
-        setWorkoutSchedule(finalSchedule);
+        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, finalSchedule, dateWindow));
         if (spreadsheetId) {
           try {
-            await withAuthRetry(() => writeWorkoutSchedule(spreadsheetId, finalSchedule));
+            await withAuthRetry(() => writeWorkoutScheduleDates(spreadsheetId, finalSchedule, dateSet));
           } catch (err) {
             result.errors.push(`Failed to write schedule: ${err instanceof Error ? err.message : String(err)}`);
           }
@@ -746,13 +954,18 @@ function AppContent() {
       }
 
       return result;
-    },
-    [workoutSchedule, dayFlags, spreadsheetId],
+    }),
+    [queueCalendarMutation, spreadsheetId],
   );
 
   const handleUpdateLogRows = useCallback(
-    (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string, updatedRows: ParsedLogRow[]) => {
-      // Update local state
+    async (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string, updatedRows: ParsedLogRow[]) => {
+      const userId = spreadsheetId;
+      if (!userId) throw new Error('Not connected to Firebase.');
+      const sessionKey = `${sessionDate}|${sessionWorkoutId}|${sessionStartTime}`;
+      await queueSessionMutation(sessionKey, () =>
+        withAuthRetry(() => updateLogRows(userId, sessionDate, sessionWorkoutId, sessionStartTime, updatedRows)));
+      if (connectedUserRef.current !== userId) return;
       setLogRows((prev) => {
         const next = [...prev];
         for (const updated of updatedRows) {
@@ -770,29 +983,26 @@ function AppContent() {
         }
         return next;
       });
-      // Fire-and-forget: write to sheet
-      if (spreadsheetId) {
-        void withAuthRetry(() => updateLogRows(spreadsheetId, sessionDate, sessionWorkoutId, sessionStartTime, updatedRows));
-      }
     },
-    [spreadsheetId],
+    [queueSessionMutation, spreadsheetId],
   );
 
   const handleDeleteSession = useCallback(
-    (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string) => {
-      // Remove matching rows from local state
+    async (sessionDate: string, sessionWorkoutId: string, sessionStartTime: string) => {
+      const userId = spreadsheetId;
+      if (!userId) throw new Error('Not connected to Firebase.');
+      const sessionKey = `${sessionDate}|${sessionWorkoutId}|${sessionStartTime}`;
+      await queueSessionMutation(sessionKey, () =>
+        withAuthRetry(() => deleteLogSession(userId, sessionDate, sessionWorkoutId, sessionStartTime)));
+      if (connectedUserRef.current !== userId) return;
       setLogRows((prev) =>
         prev.filter(
           (r) =>
             !(r.date === sessionDate && r.workoutId === sessionWorkoutId && r.startTime === sessionStartTime),
         ),
       );
-      // Fire-and-forget: delete from sheet
-      if (spreadsheetId) {
-        void withAuthRetry(() => deleteLogSession(spreadsheetId, sessionDate, sessionWorkoutId, sessionStartTime));
-      }
     },
-    [spreadsheetId],
+    [queueSessionMutation, spreadsheetId],
   );
 
   const handleViewSession = useCallback((session: LogSession) => {
@@ -800,10 +1010,10 @@ function AppContent() {
   }, []);
 
   const handleViewSessionSave = useCallback(
-    (updatedRows: ParsedLogRow[]) => {
+    async (updatedRows: ParsedLogRow[]) => {
       if (!viewingSession) return;
       const { date, workoutId, startTime } = viewingSession.key;
-      handleUpdateLogRows(date, workoutId, startTime, updatedRows);
+      await handleUpdateLogRows(date, workoutId, startTime, updatedRows);
     },
     [viewingSession, handleUpdateLogRows],
   );
@@ -1183,37 +1393,81 @@ function AppContent() {
     }
   }, [route, activeWorkout, progressionProposals]);
 
-  // Load workout schedule on home (list) or calendar view
-  useEffect(() => {
-    if ((route.view === 'list' || route.view === 'calendar') && spreadsheetId && !workoutScheduleLoadedRef.current) {
-      workoutScheduleLoadedRef.current = true;
-      void loadWorkoutScheduleData(spreadsheetId);
+  const executeDatasetLoad = useCallback((
+    request: FirebaseLoadRequest,
+    userId: string,
+    phase: 'priority' | 'deferred',
+  ): Promise<void> => {
+    const { dataset, scope } = request;
+    const window = scope === 'initialWindow' ? calendarWindowRef.current : undefined;
+    const yearScope: YearBucketReadScope = scope === 'initialWindow' ? 'all' : scope;
+    switch (dataset) {
+      case 'exercises': return loadExercisesData(userId);
+      case 'workouts': return loadWorkoutDefinitionsData(userId);
+      case 'cardioActivities': return loadCardioActivitiesData(userId);
+      case 'schedule': return loadWorkoutScheduleData(userId, window, phase === 'priority');
+      case 'dayFlags': return loadFlagsData(userId, window, phase === 'priority');
+      case 'workoutSessions': return loadLogData(userId, yearScope);
+      case 'settings': return loadSettingsData(userId);
+      case 'garminActivities': return loadGarminData(userId, yearScope);
+      case 'garminWellness': return loadWellnessData(userId, yearScope);
+      case 'withingsMeasurements': return loadWithingsData(userId, yearScope);
+      case 'mealItems': return loadMealItemsData(userId);
+      case 'mealLog': return loadMealLogData(userId);
+      case 'favoriteFoods': return loadMealFavoritesData(userId);
+      case 'recentFoods': return loadMealRecentsData(userId);
     }
-  }, [route.view, spreadsheetId, loadWorkoutScheduleData]);
+  }, [
+    loadCardioActivitiesData,
+    loadExercisesData,
+    loadFlagsData,
+    loadGarminData,
+    loadLogData,
+    loadMealFavoritesData,
+    loadMealItemsData,
+    loadMealLogData,
+    loadMealRecentsData,
+    loadSettingsData,
+    loadWellnessData,
+    loadWithingsData,
+    loadWorkoutDefinitionsData,
+    loadWorkoutScheduleData,
+  ]);
 
-  // Load day flags when calendar view is first visited
-  useEffect(() => {
-    if (route.view === 'calendar' && spreadsheetId && !flagsLoadedRef.current) {
-      flagsLoadedRef.current = true;
-      void loadFlagsData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadFlagsData]);
+  const loadDataset = useCallback((
+    request: FirebaseLoadRequest,
+    userId: string,
+    phase: 'priority' | 'deferred',
+  ): Promise<void> => {
+    const key = `${request.dataset}:${request.scope}`;
+    const existing = dataLoadsRef.current.get(key);
+    if (existing) return existing;
+    const pending = executeDatasetLoad(request, userId, phase).catch((error) => {
+      dataLoadsRef.current.delete(key);
+      throw error;
+    });
+    dataLoadsRef.current.set(key, pending);
+    return pending;
+  }, [executeDatasetLoad]);
 
-  // Lazy-load log data when calendar or progress view is first visited
   useEffect(() => {
-    if ((route.view === 'calendar' || route.view === 'progress') && spreadsheetId && !logLoadedRef.current) {
-      logLoadedRef.current = true;
-      void loadLogData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadLogData]);
-
-  // Load settings once after connecting (used across multiple views, including toolbar tab visibility).
-  useEffect(() => {
-    if (spreadsheetId && !settingsLoadedRef.current) {
-      settingsLoadedRef.current = true;
-      void loadSettingsData(spreadsheetId);
-    }
-  }, [spreadsheetId, loadSettingsData]);
+    if (!spreadsheetId || loadQueueUserRef.current === spreadsheetId) return;
+    loadQueueUserRef.current = spreadsheetId;
+    const userId = spreadsheetId;
+    const queue = buildFirebaseLoadQueue(route.view);
+    void runFirebaseLoadQueue(
+      queue,
+      (request, phase) => loadDataset(request, userId, phase),
+      async () => {
+        if (connectedUserRef.current === userId) setPriorityLoadPending(false);
+        await ensureUser(userId);
+      },
+    ).catch((reason) => {
+      if (connectedUserRef.current !== userId) return;
+      setPriorityLoadPending(false);
+      setDataLoadError(reason instanceof Error ? reason.message : String(reason));
+    });
+  }, [loadDataset, route.view, spreadsheetId]);
 
   // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {
@@ -1233,48 +1487,28 @@ function AppContent() {
     replaceTo,
   ]);
 
-  // Lazy-load Garmin activities when the combined activities/wellness view or activity log is first visited.
-  useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'garmin-activities') && spreadsheetId && !garminLoadedRef.current) {
-      garminLoadedRef.current = true;
-      void loadGarminData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadGarminData]);
-
-  // Lazy-load Garmin wellness data when the combined activities/wellness view or
-  // nutrition view (which overlays Garmin calories on its calorie chart) is first visited.
-  useEffect(() => {
-    if ((route.view === 'garmin' || route.view === 'nutrition') && spreadsheetId && !wellnessLoadedRef.current) {
-      wellnessLoadedRef.current = true;
-      void loadWellnessData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadWellnessData]);
-
-  // Lazy-load Withings measurements when the progress or withings view is first visited.
-  // (Body-composition goals arrive via the settings read in loadSettingsData.)
-  useEffect(() => {
-    if ((route.view === 'progress' || route.view === 'withings') && spreadsheetId && !withingsLoadedRef.current) {
-      withingsLoadedRef.current = true;
-      void loadWithingsData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadWithingsData]);
-
-  useEffect(() => {
-    if (route.view === 'nutrition' && spreadsheetId && !nutritionLoadedRef.current) {
-      nutritionLoadedRef.current = true;
-      void loadNutritionData(spreadsheetId);
-    }
-  }, [route.view, spreadsheetId, loadNutritionData]);
-
   // Gate: require auth + sheet connection before showing workouts
   if (!sheetConnected) {
     return (
       <GoogleAuth
         onConnected={handleConnected}
         onDisconnected={handleDisconnected}
-        onNeedsSetup={handleNeedsSetup}
       />
     );
+  }
+
+  if (dataLoadError) {
+    return (
+      <div className="auth-screen">
+        <p className="auth-error">{dataLoadError}</p>
+        <button className="btn-primary" onClick={() => window.location.reload()}>Retry</button>
+        <button className="btn-link" onClick={() => void handleSignOut()}>Sign out</button>
+      </div>
+    );
+  }
+
+  if (priorityLoadPending) {
+    return <div className="auth-screen"><p className="auth-status">Loading…</p></div>;
   }
 
   // Show setup page for first-time users (empty config zone)
@@ -1491,6 +1725,8 @@ function AppContent() {
           onUpdateFlags={handleUpdateFlags}
           onSyncCalendar={handleSyncCalendar}
           onClearSchedule={handleClearSchedule}
+          onLoadMoreDays={() => loadCalendarWindow('future')}
+          onLoadPreviousDays={() => loadCalendarWindow('past')}
         />
       </>
     );
@@ -1816,7 +2052,7 @@ async function logWorkoutResults(
   results: SetResult[][],
   startTime: string,
   endTime: string,
-): Promise<void> {
+): Promise<ParsedLogRow[]> {
   const now = new Date(endTime);
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const ctx = { date, startTime, endTime, workoutId: workout.id };
@@ -1849,5 +2085,5 @@ async function logWorkoutResults(
     }
   }
 
-  await withAuthRetry(() => appendLogRows(sheetId, rows));
+  return withAuthRetry(() => appendLogRows(sheetId, rows));
 }

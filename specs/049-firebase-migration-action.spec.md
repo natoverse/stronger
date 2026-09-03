@@ -79,6 +79,13 @@ authentication, and scheduled sync jobs switch backends.
 - The existing Google Sheets UI exposes an Authentication-only bootstrap in
   Settings so users can create and copy their final Firebase UID before any
   Firestore migration or application-backend switch.
+- The same script accepts an internal `MIGRATION_COLLECTIONS` filter so
+  scheduled health syncs can mirror only `garminActivities`,
+  `garminWellness`, or `withingsMeasurements` after updating their sheet tabs.
+- Collection-scoped runs do not read, validate, write, or delete unrelated
+  collections.
+- Scheduled mirrors use collection-specific migration status IDs so concurrent
+  health workflows do not overwrite the one-time migration record.
 - Historical Day Flags and Garmin Wellness tabs can contain repeated dates.
   Migration collapses those one-document-per-day collections by keeping the
   last valid row and emitting a warning; duplicate IDs remain fatal for other
