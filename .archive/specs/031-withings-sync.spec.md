@@ -59,3 +59,11 @@ The one-time authorization requests only the `user.metrics` scope — read acces
 - **Column layout**: `date`, `grpId`, `weight`, `fatMass`, `fatRatio`, `muscleMass`, `boneMass`, `hydration`. Weight is the one required field; body-composition columns are blank when a scale doesn't measure them.
 - **Service account**: same as the Strava sync — reuse `GOOGLE_SERVICE_ACCOUNT_KEY` and `SPREADSHEET_ID`.
 - **Cron offset**: runs at 06:30 UTC, 30 minutes after the Strava sync, to avoid two jobs racing on the same spreadsheet.
+
+## Iteration decisions
+
+- The Firestore migration must preserve the original one-time OAuth setup
+  instructions. `WITHINGS_SYNC_SETUP.md` documents creating a Public API
+  integration, authorizing the read-only `user.metrics` scope, exchanging the
+  short-lived authorization code, and saving the returned refresh token as the
+  initial `WITHINGS_REFRESH_TOKEN` seed.
