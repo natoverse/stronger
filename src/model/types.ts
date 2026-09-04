@@ -248,6 +248,17 @@ export const FLAG_SENTINEL = '__flags__';
 export const REST_ID = 'rest';
 
 /**
+ * Sentinel workoutId used to schedule a Blocker: a plannable item marking a
+ * day (or part of it) as unavailable for a firm personal commitment. Unlike
+ * the {@link DayFlags.blocked} flag, a Blocker is a visible schedule item
+ * with its own customizable label, sorted first in the day's item list.
+ * Blocker entries never sync to Google Calendar — they exist purely to give
+ * Stronger context when planning workouts around a commitment already on the
+ * user's personal calendar.
+ */
+export const BLOCKER_ID = 'blocker';
+
+/**
  * @deprecated Use {@link WorkoutScheduleEntry} and {@link DayFlagEntry} separately.
  * Legacy combined schedule entry type.
  */

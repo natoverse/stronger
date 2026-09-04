@@ -481,4 +481,26 @@ describe('syncScheduleWithCalendar - custom labels', () => {
 
 		expect(updatedSchedule).toEqual([])
 	})
+
+	it('never pushes, pulls, or reconciles Blocker entries against Google Calendar', async () => {
+		const insert = vi.fn().mockResolvedValue({ result: { id: 'evt-should-not-exist' } })
+		const list = vi.fn().mockResolvedValue({ result: { items: [] } })
+		mockGapi({ insert, list })
+
+		const schedule: WorkoutScheduleEntry[] = [
+			{ date: '2026-09-10', workoutId: 'blocker', label: 'Dentist appointment' },
+		]
+
+		const { updatedSchedule, result } = await syncScheduleWithCalendar(
+			'primary',
+			schedule,
+			resolveWorkoutName,
+			undefined,
+			{ referenceDate: '2026-09-03' },
+		)
+
+		expect(insert).not.toHaveBeenCalled()
+		expect(result.created).toBe(0)
+		expect(updatedSchedule).toEqual(schedule)
+	})
 })
