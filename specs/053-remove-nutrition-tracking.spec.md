@@ -18,3 +18,8 @@ Remove nutrition tracking from Stronger so the app remains focused on training, 
 - No nutrition data is loaded or written.
 - Nutrition-specific production code, styles, and tests are removed.
 - Existing non-nutrition behavior continues to pass tests and build successfully.
+
+## Iteration: Garmin calorie chart cleanup
+
+- Garmin active and resting calorie data remains part of wellness tracking.
+- The Garmin calorie chart no longer accepts, scales, displays, or includes a legend entry for the removed nutrition calorie goal.

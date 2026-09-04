@@ -1366,27 +1366,19 @@ function WellnessStatusBarChart({ buckets }: { buckets: WellnessStatusBucket[] }
 }
 
 /* ------------------------------------------------------------------ */
-/*  WellnessStackedCaloriesChart — active + BMR stacked bar + goal    */
+/*  WellnessStackedCaloriesChart — active + BMR stacked bar           */
 /* ------------------------------------------------------------------ */
 
 interface StackedCaloriesChartProps {
   buckets: StackedCaloriesBucket[];
   summaryLabel: string;
-  /** Scaled goal line value (kcal). 0 = no line. */
-  goalKcal: number;
-  aggregation: WellnessAggregation;
 }
 
-function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggregation }: StackedCaloriesChartProps) {
+function WellnessStackedCaloriesChart({ buckets, summaryLabel }: StackedCaloriesChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
-  // Month uses ×30 as an approximation (same convention as goalColor in wellness.ts).
-  const scaledGoal = goalKcal > 0
-    ? goalKcal * (aggregation === 'week' ? 7 : aggregation === 'month' ? 30 : 1)
-    : 0;
-
-  const maxStackValue = Math.max(...buckets.map((b) => (b.active ?? 0) + (b.bmr ?? 0)), scaledGoal, 0.001);
+  const maxStackValue = Math.max(...buckets.map((b) => (b.active ?? 0) + (b.bmr ?? 0)), 0.001);
 
   const barWidth = PLOT_W / n;
   const barGap = Math.max(1, barWidth * 0.15);
@@ -1413,7 +1405,6 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
   const legendItems: LegendItem[] = [
     { label: 'Active', color: BLUE },
     { label: 'Resting (BMR)', color: ORANGE },
-    ...(scaledGoal > 0 ? [{ label: 'Goal', color: YELLOW }] : []),
   ];
 
   const activeBucket = activeIndex !== null ? buckets[activeIndex] : null;
@@ -1508,17 +1499,6 @@ function WellnessStackedCaloriesChart({ buckets, summaryLabel, goalKcal, aggrega
               </g>
             );
           })}
-
-          {/* Goal line */}
-          {scaledGoal > 0 && (
-            <line
-              x1={CHART_PADDING.left}
-              y1={yBar(scaledGoal)}
-              x2={VIEW_BOX_W - CHART_PADDING.right}
-              y2={yBar(scaledGoal)}
-              className="strava-goal-line"
-            />
-          )}
 
           {/* Crosshair */}
           {activeIndex !== null && (
@@ -1905,7 +1885,6 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
             : caloriesData.summary;
           return latestVal !== null ? `${Math.round(latestVal)} kcal` : '';
         })()}
-        aggregation={aggregation}
       />
     </div>
   );
