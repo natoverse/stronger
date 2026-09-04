@@ -4163,13 +4163,13 @@ body {
 }
 
 .activity-card-link {
-	color: var(--color-primary);
+	color: inherit;
 	text-decoration: none;
 }
 
-.activity-card-link:hover,
 .activity-card-link:focus-visible {
-	text-decoration: underline;
+	outline: 2px solid var(--color-primary);
+	outline-offset: 2px;
 }
 
 .activity-card-date {
