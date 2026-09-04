@@ -51,6 +51,20 @@ describe('CalendarView month schedule', () => {
 		]);
 	});
 
+	it('orders blocker before cardio, strength, and rest', () => {
+		expect(orderScheduledWorkouts([
+			'strength-a',
+			'rest',
+			'cardio:run',
+			'blocker',
+		])).toEqual([
+			'blocker',
+			'cardio:run',
+			'strength-a',
+			'rest',
+		]);
+	});
+
 	it('renders up to three color-coded workout tags and day status icons in the current month', () => {
 		const now = new Date();
 		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -195,5 +209,47 @@ describe('CalendarView month schedule', () => {
 
 		expect(markup).toContain('>Strength A</span>');
 		expect(markup).not.toContain('>workout-a</span>');
+	});
+
+	it('renders a scheduled Blocker as a red, labelable day-list item and month tag', () => {
+		const now = new Date();
+		const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+		const today = `${monthPrefix}-${String(now.getDate()).padStart(2, '0')}`;
+		const markup = renderToStaticMarkup(createElement(CalendarView, {
+			workouts: [],
+			cardioActivities: [],
+			workoutSchedule: [{ date: today, workoutId: 'blocker' }],
+			dayFlags: [],
+			logRows: [],
+			onAssign: () => undefined,
+			onRemove: () => undefined,
+			onUpdateLabel: () => undefined,
+			onOpenWorkout: () => undefined,
+			onUpdateLogRows: async () => undefined,
+			onDeleteSession: async () => undefined,
+			onBulkSchedule: () => undefined,
+			onUpdateFlags: () => undefined,
+			onSyncCalendar: async () => ({
+				created: 0,
+				updated: 0,
+				deleted: 0,
+				pulledCreations: 0,
+				pulledDateChanges: 0,
+				pulledDeletions: 0,
+				errors: [],
+			}),
+			onClearSchedule: async () => ({
+				flagsCleared: 0,
+				scheduleCleared: 0,
+				calendarEventsDeleted: 0,
+				errors: [],
+			}),
+		}));
+
+		expect(markup).toContain('calendar-month-tag-blocker');
+		expect(markup).toContain('calendar-workout-link-blocker');
+		expect(markup).toContain('>Blocker</span>');
+		expect(markup).toContain('lucide-ban');
+		expect(markup).toContain('calendar-label-edit-btn');
 	});
 });

@@ -8,7 +8,7 @@
 
 import type { CalendarListEntry, CalendarEventResource, CalendarEventItem } from './types.ts'
 import type { WorkoutScheduleEntry } from '../model/types.ts'
-import { REST_ID } from '../model/types.ts'
+import { REST_ID, BLOCKER_ID } from '../model/types.ts'
 
 /** Returns true for schedule entries that have no in-app workout to deep-link to (cardio, rest). */
 function hasNoDeepLink(workoutId: string): boolean {
@@ -510,13 +510,15 @@ export async function syncScheduleWithCalendar(
 	}
 
 	// --- Classify schedule entries ---
-	// Syncable: has a real workoutId
-	const syncable = schedule.filter((e) => e.workoutId)
+	// Syncable: has a real workoutId, excluding Blocker entries (never synced)
+	const syncable = schedule.filter((e) => e.workoutId && e.workoutId !== BLOCKER_ID)
 	// Blanked: had a calendar event but workout was removed
 	const blanked = schedule.filter((e) => !e.workoutId && e.calendarEventId)
-	// Inactive: no workoutId, no calendarEventId (orphan/empty rows)
+	// Inactive: no workoutId, no calendarEventId (orphan/empty rows), or a
+	// Blocker entry — Blockers are a local-only planning aid and are passed
+	// through untouched rather than created/updated/deleted in Google Calendar.
 	const inactive = schedule.filter(
-		(e) => !e.workoutId && !e.calendarEventId,
+		(e) => (!e.workoutId && !e.calendarEventId) || e.workoutId === BLOCKER_ID,
 	)
 
 	// Assign strongerIds to any syncable entries that don't have one yet

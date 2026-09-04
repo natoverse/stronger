@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
-import { REST_ID } from '../model/index.js';
+import { REST_ID, BLOCKER_ID } from '../model/index.js';
 import { CheckCircle, CalendarCheck } from 'lucide-react';
 import { CalendarClear } from './CalendarClear.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
@@ -94,6 +94,7 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
                 <option value="">—</option>
                 <option value="__rest__">— Clear —</option>
                 <option value={REST_ID}>Rest</option>
+                <option value={BLOCKER_ID}>Blocker</option>
                 <optgroup label="Strength">
                   {workouts.map((w) => (
                     <option key={w.id} value={w.id}>

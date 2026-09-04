@@ -1348,7 +1348,7 @@ body {
 }
 
 .calendar-month-tag-strength {
-	background: var(--color-accent);
+	background: var(--color-work);
 }
 
 .calendar-month-tag-cardio {
@@ -1357,6 +1357,10 @@ body {
 
 .calendar-month-tag-rest {
 	background: #777;
+}
+
+.calendar-month-tag-blocker {
+	background: var(--color-danger);
 }
 
 .calendar-month-section .calendar-load-more {
@@ -1680,12 +1684,23 @@ body {
 	color: var(--color-text-muted);
 }
 
+.calendar-picker-item-blocker {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	color: var(--color-danger);
+}
+
 .calendar-workout-link-cardio {
 	color: var(--color-text);
 }
 
 .calendar-workout-link-rest {
 	color: var(--color-text-muted);
+}
+
+.calendar-workout-link-blocker {
+	color: var(--color-danger);
 }
 
 /* Day header actions (flags + add button) */

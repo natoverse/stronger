@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
-import { REST_ID } from '../model/index.js';
+import { REST_ID, BLOCKER_ID } from '../model/index.js';
 import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
 import { prepareCalendarAuthorization } from '../google/index.js';
 import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Moon, Pencil } from 'lucide-react';
@@ -308,6 +308,7 @@ function MonthLocationIcon({ location }: { location: LocationFlag }) {
 }
 
 function scheduledWorkoutRank(workoutId: string): number {
+	if (workoutId === BLOCKER_ID) return -1;
 	if (workoutId.startsWith('cardio:')) return 0;
 	if (workoutId === REST_ID) return 2;
 	return 1;
@@ -557,6 +558,7 @@ export function CalendarView({
 			map.set(`cardio:${c.id}`, c.name);
 		}
 		map.set(REST_ID, 'Rest');
+		map.set(BLOCKER_ID, 'Blocker');
 		return map;
 	}, [workouts, workoutDefinitions, cardioActivities]);
 	const displayWorkoutName = useCallback(
@@ -841,11 +843,13 @@ export function CalendarView({
 												{scheduled.slice(0, 3).map((workoutId, tagIndex) => (
 													<span
 														className={`calendar-month-tag calendar-month-tag-${
-															workoutId === REST_ID
-																? 'rest'
-																: workoutId.startsWith('cardio:')
-																	? 'cardio'
-																	: 'strength'
+															workoutId === BLOCKER_ID
+																? 'blocker'
+																: workoutId === REST_ID
+																	? 'rest'
+																	: workoutId.startsWith('cardio:')
+																		? 'cardio'
+																		: 'strength'
 														}`}
 														key={`${workoutId}-${tagIndex}`}
 														title={displayWorkoutName(workoutId)}
@@ -954,11 +958,12 @@ export function CalendarView({
 									{scheduledWorkouts.map((wid, idx) => {
 										const isCardio = wid.startsWith('cardio:');
 										const isRest = wid === REST_ID;
+										const isBlocker = wid === BLOCKER_ID;
 										const hasLog = loggedWorkoutIds.has(wid);
 										const session = sessionByWorkoutId.get(wid);
 										const deleteKey = session ? sessionKeyStr(session) : null;
 										const isConfirming = deleteKey !== null && confirmDeleteKey === deleteKey;
-										const Icon = isRest ? Moon : isCardio ? HeartPulse : Dumbbell;
+										const Icon = isRest ? Moon : isBlocker ? Ban : isCardio ? HeartPulse : Dumbbell;
 										const workoutName = displayWorkoutName(wid);
 										const customLabel = dayInfo.labels?.[wid];
 										const displayName = customLabel || workoutName;
@@ -1009,6 +1014,35 @@ export function CalendarView({
 															{displayName}
 														</span>
 													</span>
+													{!isPast && (
+														<button
+															className="calendar-remove-btn"
+															onClick={() => onRemove(dayInfo.date, wid)}
+															aria-label={`Remove ${workoutName}`}
+														>
+															<X size={14} />
+														</button>
+													)}
+												</div>
+											);
+										}
+
+										if (isBlocker) {
+											return (
+												<div key={`sched-${wid}-${idx}`} className="calendar-workout-item">
+													<span className="calendar-workout-link calendar-workout-link-blocker">
+														<Icon size={14} />
+														<span className="calendar-workout-name">
+															{displayName}
+														</span>
+													</span>
+													<button
+														className="calendar-label-edit-btn"
+														onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '')}
+														aria-label={`Edit label for ${workoutName}`}
+													>
+														<Pencil size={14} />
+													</button>
 													{!isPast && (
 														<button
 															className="calendar-remove-btn"
@@ -1179,6 +1213,13 @@ export function CalendarView({
 										</button>
 									</div>
 									<div className="calendar-picker-list">
+										<button
+											className="calendar-picker-item calendar-picker-item-blocker"
+											onClick={() => handleAssign(BLOCKER_ID)}
+										>
+											<Ban size={14} />
+											Blocker
+										</button>
 										<button
 											className="calendar-picker-item calendar-picker-item-rest"
 											onClick={() => handleAssign(REST_ID)}
