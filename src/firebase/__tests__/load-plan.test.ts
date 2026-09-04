@@ -38,7 +38,7 @@ describe('Firebase route load plan', () => {
 			{ dataset: 'settings', scope: 'all' },
 		])
 		expect(queue.deferred[0]).toEqual({ dataset: 'workoutSessions', scope: 'otherYears' })
-		expect(new Set([...queue.priority, ...queue.deferred].map(({ dataset }) => dataset)).size).toBe(14)
+		expect(new Set([...queue.priority, ...queue.deferred].map(({ dataset }) => dataset)).size).toBe(10)
 	})
 
 	it('loads workout history for home-screen completion state', () => {
