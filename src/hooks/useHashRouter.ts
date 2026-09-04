@@ -78,9 +78,12 @@ export function routeToHash(route: Route): string {
 export function getSettingsRouteRedirect(
   route: Route,
   settingsLoaded: boolean,
-  visibility: { showGarminTab: boolean },
+  visibility: { showGarminTab: boolean; showCalendarTab: boolean },
 ): Route | null {
   if (!settingsLoaded) return null;
+  if (route.view === 'calendar' && !visibility.showCalendarTab) {
+    return { view: 'list' };
+  }
   if (route.view === 'wellness') {
     return visibility.showGarminTab ? { view: 'garmin' } : { view: 'list' };
   }

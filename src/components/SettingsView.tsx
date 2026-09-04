@@ -79,6 +79,20 @@ export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onApp
 
         <label className="settings-toggle-row">
           <span className="settings-toggle-label">
+            <span className="settings-toggle-name">Calendar</span>
+            <span className="settings-toggle-description">Show the Calendar tab in the toolbar</span>
+          </span>
+          <input
+            type="checkbox"
+            className="settings-toggle-input"
+            checked={appSettings.showCalendarTab}
+            onChange={(e) => onAppSettingChange('showCalendarTab', e.target.checked)}
+          />
+          <span className="settings-toggle-switch" />
+        </label>
+
+        <label className="settings-toggle-row">
+          <span className="settings-toggle-label">
             <span className="settings-toggle-name">Garmin</span>
             <span className="settings-toggle-description">Show the Activities & Wellness tab in the toolbar</span>
           </span>

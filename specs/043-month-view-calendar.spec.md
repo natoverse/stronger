@@ -132,3 +132,10 @@
 
 - Scheduled strength workouts resolve display names from the persisted workout definitions, even when a workout cannot be computed for execution.
 - Workout IDs remain the fallback only for legacy schedule entries that have no matching definition.
+
+## Iteration: optional calendar tab
+
+- Settings includes a Calendar toggle under Optional Tabs.
+- The Calendar tab is shown by default.
+- Disabling the toggle persists the preference and hides the Calendar toolbar tab.
+- Direct calendar routes return to the workout list while the tab is disabled.

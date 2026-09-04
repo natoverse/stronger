@@ -357,6 +357,8 @@ export interface AppSettings {
 	roundWarmupPlateMath: boolean;
 	/** Whether to show the Garmin activities/wellness tab in the toolbar. */
 	showGarminTab: boolean;
+	/** Whether to show the calendar tab in the toolbar. */
+	showCalendarTab: boolean;
 	/** Percent threshold for filtering Withings "dip" points when Skip Dips is enabled. */
 	withingsDipThresholdPercent: number;
 	/** Percent drop threshold for filtering progress-chart dips when Skip Dips is enabled. */
@@ -381,6 +383,7 @@ export type AppBooleanSettingKey =
 	| 'keepScreenOn'
 	| 'roundWarmupPlateMath'
 	| 'showGarminTab'
+	| 'showCalendarTab'
 	| 'skipProgressDips'
 	| 'skipBodyCompDips';
 export type AppNumericSettingKey =

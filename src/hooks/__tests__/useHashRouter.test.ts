@@ -233,22 +233,25 @@ describe('routeToHash', () => {
 
 describe('getSettingsRouteRedirect', () => {
   it('preserves settings-dependent routes while settings load', () => {
-    const visibility = { showGarminTab: false };
+    const visibility = { showGarminTab: false, showCalendarTab: false };
 
+    expect(getSettingsRouteRedirect({ view: 'calendar' }, false, visibility)).toBeNull();
     expect(getSettingsRouteRedirect({ view: 'garmin' }, false, visibility)).toBeNull();
     expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, false, visibility)).toBeNull();
   });
 
   it('allows enabled routes after settings load', () => {
-    const visibility = { showGarminTab: true };
+    const visibility = { showGarminTab: true, showCalendarTab: true };
 
+    expect(getSettingsRouteRedirect({ view: 'calendar' }, true, visibility)).toBeNull();
     expect(getSettingsRouteRedirect({ view: 'garmin' }, true, visibility)).toBeNull();
     expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, true, visibility)).toBeNull();
   });
 
   it('redirects disabled routes after settings load', () => {
-    const visibility = { showGarminTab: false };
+    const visibility = { showGarminTab: false, showCalendarTab: false };
 
+    expect(getSettingsRouteRedirect({ view: 'calendar' }, true, visibility)).toEqual({ view: 'list' });
     expect(getSettingsRouteRedirect({ view: 'garmin' }, true, visibility)).toEqual({ view: 'list' });
     expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, true, visibility)).toEqual({ view: 'list' });
   });

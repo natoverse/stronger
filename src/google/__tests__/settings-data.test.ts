@@ -167,6 +167,7 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			['app.showSetComments', 'false'],
 			['app.keepScreenOn', 'true'],
 			['app.showGarminTab', 'true'],
+			['app.showCalendarTab', 'false'],
 			['app.skipProgressDips', 'false'],
 			['app.skipBodyCompDips', 'false'],
 			['app.withingsDipThresholdPercent', '2.5'],
@@ -179,6 +180,7 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			keepScreenOn: true,
 			roundWarmupPlateMath: false,
 			showGarminTab: true,
+			showCalendarTab: false,
 			skipProgressDips: false,
 			skipBodyCompDips: false,
 			withingsDipThresholdPercent: 2.5,
@@ -211,6 +213,7 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			keepScreenOn: false,
 			roundWarmupPlateMath: false,
 			showGarminTab: true,
+			showCalendarTab: false,
 			skipProgressDips: false,
 			skipBodyCompDips: true,
 			withingsDipThresholdPercent: 3,
@@ -226,6 +229,7 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		expect(settings.get('app.showSetComments')).toBe('true')
 		expect(settings.get('app.keepScreenOn')).toBe('false')
 		expect(settings.get('app.showGarminTab')).toBe('true')
+		expect(settings.get('app.showCalendarTab')).toBe('false')
 		expect(settings.get('app.skipProgressDips')).toBe('false')
 		expect(settings.get('app.skipBodyCompDips')).toBe('true')
 		expect(settings.get('app.withingsDipThresholdPercent')).toBe('3')
