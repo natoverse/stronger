@@ -66,3 +66,7 @@ On first connect (tab doesn't exist or is empty), the app creates the tab and wr
 - The `workoutName` column is intentionally denormalized (repeated on every row for the same workout). This makes the sheet human-readable without requiring a separate lookup tab.
 - `crossReference:<liftId>` and `fixed:<number>` weight basis variants exist in the type system but aren't used by the current four workouts. They should still round-trip correctly through serialization for future use.
 - Creating a new tab requires the `spreadsheets.batchUpdate` API (addSheet request), which is already used by the app. Reading/writing cell values uses the Values API, same as the config zone.
+
+## Iteration log
+
+- Startup no longer auto-seeds default workout definitions when the workout tab has no readable definitions. Instead, the app shows an explicit user prompt to import default workouts, so missing/failed loads do not trigger automatic overwrites.

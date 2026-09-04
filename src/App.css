@@ -779,6 +779,14 @@ body {
 	text-align: left;
 }
 
+.workout-import-defaults-prompt {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	align-items: flex-start;
+	padding: 0.75rem 0.25rem 0;
+}
+
 .btn-google {
 	padding: 0.875rem 2rem;
 	font-size: 1rem;

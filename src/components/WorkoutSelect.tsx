@@ -12,6 +12,11 @@ interface WorkoutSelectProps {
 	missingLiftIds?: string[];
 	workoutSchedule?: WorkoutScheduleEntry[];
 	logRows?: ParsedLogRow[];
+	showDefaultWorkoutImportPrompt?: boolean;
+	defaultWorkoutImportError?: string | null;
+	onImportDefaultWorkouts?: () => void;
+	onShowDefaultWorkoutImportPrompt?: () => void;
+	onDismissDefaultWorkoutImportPrompt?: () => void;
 	onSelect: (workout: Workout) => void;
 	onViewSession?: (session: LogSession) => void;
 	onEdit?: (workoutId: string) => void;
@@ -122,7 +127,27 @@ function todayDateString(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRows, onSelect, onViewSession, onEdit, onDuplicate, onShare, onDelete, onNew, onToggleFavorite, cardioActivities, onCardioSave }: WorkoutSelectProps) {
+export function WorkoutSelect({
+	workouts,
+	missingLiftIds,
+	workoutSchedule,
+	logRows,
+	showDefaultWorkoutImportPrompt,
+	defaultWorkoutImportError,
+	onImportDefaultWorkouts,
+	onShowDefaultWorkoutImportPrompt,
+	onDismissDefaultWorkoutImportPrompt,
+	onSelect,
+	onViewSession,
+	onEdit,
+	onDuplicate,
+	onShare,
+	onDelete,
+	onNew,
+	onToggleFavorite,
+	cardioActivities,
+	onCardioSave,
+}: WorkoutSelectProps) {
 	const { favorites, others } = useMemo(() => {
 		const favorites: Workout[] = [];
 		const others: Workout[] = [];
@@ -188,6 +213,8 @@ export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRo
 	};
 
 	const [moreOpen, setMoreOpen] = useState(false);
+	const canImportDefaultWorkouts = !!showDefaultWorkoutImportPrompt && !!onImportDefaultWorkouts;
+	const canOfferImportDefaultWorkouts = !!onShowDefaultWorkoutImportPrompt && !!onImportDefaultWorkouts;
 
 	return (
 		<div className="workout-select">
@@ -208,10 +235,39 @@ export function WorkoutSelect({ workouts, missingLiftIds, workoutSchedule, logRo
 				</div>
 			)}
 			{workouts.length === 0 ? (
-				<p className="auth-error">
-					No workouts available. Check that your sheet has valid lift
-					configurations with numeric values for all weight fields.
-				</p>
+				<div>
+					{!canImportDefaultWorkouts && (
+						<p className="auth-error">
+							{canOfferImportDefaultWorkouts
+								? 'No workouts available. You can import the default workouts or check your sheet data.'
+								: 'No workouts available. Check that your sheet has valid lift configurations with numeric values for all weight fields.'}
+						</p>
+					)}
+					{!canImportDefaultWorkouts && canOfferImportDefaultWorkouts && (
+						<button className="btn-link" onClick={onShowDefaultWorkoutImportPrompt}>
+							Show default workout import
+						</button>
+					)}
+					{canImportDefaultWorkouts && (
+						<div className="workout-import-defaults-prompt">
+							<p>No workouts were found in your sheet. Import the default starter workouts?</p>
+							<button className="btn-primary" onClick={onImportDefaultWorkouts}>
+								Import default workouts
+							</button>
+							{defaultWorkoutImportError && (
+								<p className="auth-error">{defaultWorkoutImportError}</p>
+							)}
+							{onDismissDefaultWorkoutImportPrompt && (
+								<button
+									className="btn-link"
+									onClick={onDismissDefaultWorkoutImportPrompt}
+								>
+									Not now
+								</button>
+							)}
+						</div>
+					)}
+				</div>
 			) : (
 				<div className="workout-list">
 					{favorites.map((w) => (
