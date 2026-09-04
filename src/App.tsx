@@ -82,6 +82,7 @@ function AppContent() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
+  const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const settingsRef = useRef(new Map<string, string>());
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
@@ -129,6 +130,7 @@ function AppContent() {
       setNeedsSetup(false);
       setDataLoadError(null);
       setPriorityLoadPending(true);
+      setShowDefaultWorkoutImportPrompt(false);
       logScopesLoadedRef.current.clear();
       dataLoadsRef.current.clear();
       loadQueueUserRef.current = null;
@@ -156,9 +158,10 @@ function AppContent() {
       let defs = await readWorkoutDefs(setupUserId, liftNames);
       if (connectedUserRef.current !== setupUserId) return;
       if (!defs) {
-        await writeDefaultWorkoutDefs(setupUserId, workoutDefinitions);
-        if (connectedUserRef.current !== setupUserId) return;
-        defs = workoutDefinitions;
+        defs = [];
+        setShowDefaultWorkoutImportPrompt(true);
+      } else {
+        setShowDefaultWorkoutImportPrompt(false);
       }
       setDefinitions(defs);
 
@@ -198,6 +201,7 @@ function AppContent() {
     setDayFlags([]);
     setLogRows([]);
     setNeedsSetup(false);
+    setShowDefaultWorkoutImportPrompt(false);
     setCardioActivities([]);
     setGarminActivities([]);
     setWellnessEntries([]);
@@ -375,11 +379,26 @@ function AppContent() {
     let loaded = await readWorkoutDefs(userId);
     if (connectedUserRef.current !== userId) return;
     if (!loaded) {
-      loaded = workoutDefinitions;
-      await writeDefaultWorkoutDefs(userId, loaded);
-      if (connectedUserRef.current !== userId) return;
+      loaded = [];
+      setShowDefaultWorkoutImportPrompt(true);
+    } else {
+      setShowDefaultWorkoutImportPrompt(false);
     }
     setDefinitions(loaded);
+  }, []);
+
+  const handleImportDefaultWorkouts = useCallback(async () => {
+    if (!spreadsheetId) return;
+    const userId = spreadsheetId;
+    await withAuthRetry(() => writeDefaultWorkoutDefs(userId, workoutDefinitions));
+    if (connectedUserRef.current !== userId) return;
+    setDefinitions(workoutDefinitions);
+    setWorkouts(buildWorkoutsFromConfigs(configs, workoutDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
+    setShowDefaultWorkoutImportPrompt(false);
+  }, [spreadsheetId, configs]);
+
+  const handleDismissDefaultWorkoutImportPrompt = useCallback(() => {
+    setShowDefaultWorkoutImportPrompt(false);
   }, []);
 
   const loadCardioActivitiesData = useCallback(async (userId: string) => {
@@ -1894,6 +1913,9 @@ function AppContent() {
         missingLiftIds={missingLiftIds}
         workoutSchedule={workoutSchedule}
         logRows={logRows}
+        showDefaultWorkoutImportPrompt={showDefaultWorkoutImportPrompt}
+        onImportDefaultWorkouts={handleImportDefaultWorkouts}
+        onDismissDefaultWorkoutImportPrompt={handleDismissDefaultWorkoutImportPrompt}
         onSelect={handleSelectWorkout}
         onViewSession={handleViewSession}
         onEdit={handleEditWorkout}
