@@ -45,5 +45,6 @@ or the weekly planner, and given a custom label (e.g. "Dentist appointment").
 - Month-view tags now use the same custom label override as the detailed day
   list, so labeled strength/cardio/blocker entries display user-provided text
   instead of fallback workout names.
-- Strength month tags now use orange (`--color-warmup`) instead of green so
-  they remain visually distinct from cardio's blue tags.
+- Strength month tags now use a dedicated orange token
+  (`--color-month-tag-strength`) instead of green so they remain visually
+  distinct from cardio's blue tags.

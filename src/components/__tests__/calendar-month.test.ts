@@ -73,7 +73,7 @@ describe('CalendarView month schedule', () => {
 			cardioActivities: [{ id: 'run', name: 'Run' }],
 			workoutSchedule: [
 				{ date: `${monthPrefix}-15`, workoutId: 'workout-a', label: 'Custom Strength' },
-				{ date: `${monthPrefix}-15`, workoutId: 'cardio:run', label: 'Morning Run' },
+				{ date: `${monthPrefix}-15`, workoutId: 'cardio:run', label: 'Cardio Label' },
 				{ date: `${monthPrefix}-15`, workoutId: 'hidden-workout' },
 				{ date: `${monthPrefix}-16`, workoutId: 'rest' },
 				{ date: `${monthPrefix}-17`, workoutId: 'cardio:unknown' },
@@ -135,8 +135,8 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-tag-cardio');
 		expect(markup).toContain('calendar-month-tag-rest');
 		expect(markup).toContain('>Custom Strength</span>');
-		expect(markup).toContain('>Morning Run</span>');
-		expect(markup.indexOf('>Morning Run</span>')).toBeLessThan(markup.indexOf('>Custom Strength</span>'));
+		expect(markup).toContain('>Cardio Label</span>');
+		expect(markup.indexOf('>Cardio Label</span>')).toBeLessThan(markup.indexOf('>Custom Strength</span>'));
 		expect(markup).not.toContain('>Strength A</span>');
 		expect(markup).not.toContain('>Run</span>');
 		expect(markup).toContain('>Rest</span>');
