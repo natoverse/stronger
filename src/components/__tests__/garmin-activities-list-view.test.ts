@@ -3,6 +3,7 @@ import {
   formatDistance,
   formatDuration,
   formatElevation,
+  garminActivityUrl,
   getDisplayedActivities,
 } from '../GarminActivitiesListView.js';
 import type { StravaActivity } from '../../model/strava.js';
@@ -61,5 +62,17 @@ describe('Garmin activity card formatting', () => {
   it('formats elevation with a single quotation mark', () => {
     expect(formatElevation(30.48)).toBe('100‘');
     expect(formatElevation(0)).toBe('');
+  });
+
+  it('builds a Garmin Connect link from the activity id', () => {
+    expect(garminActivityUrl('24229675607')).toBe(
+      'https://connect.garmin.com/app/activity/24229675607',
+    );
+  });
+
+  it('returns null when the activity id is missing or not numeric', () => {
+    expect(garminActivityUrl(undefined)).toBeNull();
+    expect(garminActivityUrl('')).toBeNull();
+    expect(garminActivityUrl('javascript:alert(1)')).toBeNull();
   });
 });
