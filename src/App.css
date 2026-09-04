@@ -4167,6 +4167,11 @@ body {
 	text-decoration: none;
 }
 
+.activity-card-link:focus-visible {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 2px;
+}
+
 .activity-card-date {
 	font-size: 0.78rem;
 	color: var(--color-text-muted);
