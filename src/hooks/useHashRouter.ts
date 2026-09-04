@@ -13,8 +13,7 @@ export type Route =
   | { view: 'garmin' }
   | { view: 'garmin-activities' }
   | { view: 'wellness' }
-  | { view: 'withings' }
-  | { view: 'nutrition' };
+  | { view: 'withings' };
 
 /**
  * Parse the current `window.location.hash` into a Route.
@@ -41,7 +40,6 @@ export function parseHash(hash: string = window.location.hash): Route {
   if (stripped === 'garmin-activities') return { view: 'garmin-activities' };
   if (stripped === 'wellness') return { view: 'wellness' };
   if (stripped === 'withings') return { view: 'withings' };
-  if (stripped === 'nutrition') return { view: 'nutrition' };
 
   if (stripped === 'edit/new') return { view: 'editor' };
   const editMatch = stripped.match(/^edit\/([^/]+)$/);
@@ -73,7 +71,6 @@ export function routeToHash(route: Route): string {
   if (route.view === 'garmin-activities') return '/garmin-activities';
   if (route.view === 'wellness') return '/wellness';
   if (route.view === 'withings') return '/withings';
-  if (route.view === 'nutrition') return '/nutrition';
   if (route.view === 'exerciseEditor') return route.exerciseId ? `/exercise/${encodeURIComponent(route.exerciseId)}` : '/exercise/new';
   return '/';
 }
@@ -81,7 +78,7 @@ export function routeToHash(route: Route): string {
 export function getSettingsRouteRedirect(
   route: Route,
   settingsLoaded: boolean,
-  visibility: { showGarminTab: boolean; showNutritionTab: boolean },
+  visibility: { showGarminTab: boolean },
 ): Route | null {
   if (!settingsLoaded) return null;
   if (route.view === 'wellness') {
@@ -91,9 +88,6 @@ export function getSettingsRouteRedirect(
     (route.view === 'garmin' || route.view === 'garmin-activities')
     && !visibility.showGarminTab
   ) {
-    return { view: 'list' };
-  }
-  if (route.view === 'nutrition' && !visibility.showNutritionTab) {
     return { view: 'list' };
   }
   return null;

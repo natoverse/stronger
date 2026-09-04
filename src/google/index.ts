@@ -68,29 +68,6 @@ export {
 	readCardioActivities,
 	writeDefaultCardioActivities,
 	writeCardioActivities,
-	mealItemToRow,
-	parseMealItemRow,
-	mealLogEntryToRow,
-	parseMealLogRow,
-	foodItemToRow,
-	parseFoodItemRow,
-	verifyMealLogTab,
-	createMealLogTab,
-	verifyMealFavoritesTab,
-	createMealFavoritesTab,
-	verifyMealRecentsTab,
-	createMealRecentsTab,
-	readMealLog,
-	appendMealLogEntry,
-	deleteMealLogEntry,
-	updateMealLogEntry,
-	updateMealLogEntryCategory,
-	readMealFavorites,
-	writeMealFavorites,
-	readMealRecents,
-	writeMealRecents,
-	readMealItems,
-	writeMealItems,
 	stravaActivityToRow,
 	parseStravaRow,
 	verifyStravaTab,
@@ -130,7 +107,7 @@ export {
 export type { SheetInfo, LogContext, ParsedLogRow, LiftGoal } from './sheets.ts'
 export type { CalendarListEntry } from './types.ts'
 export { GOOGLE_CLIENT_ID } from './config.ts'
-export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
+export { WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
 export {
 	listWritableCalendars,
 	listEventsInRange,

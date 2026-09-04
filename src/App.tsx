@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealLogEntry, MealItem, FoodItem, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
+import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
-import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readMealLog, appendMealLogEntry, deleteMealLogEntry, updateMealLogEntry, updateMealLogEntryCategory, readMealFavorites, writeMealFavorites, readMealRecents, writeMealRecents, readMealItems, writeMealItems, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
+import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
 import type { DateWindow, YearBucketReadScope } from './firebase/index.js';
 import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
@@ -38,7 +38,6 @@ import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { toDisplayUnit } from './model/withings.js';
 import { WithingsView } from './components/WithingsView.js';
-import { NutritionView } from './components/NutritionView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
 import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
 import { DateRangeSelector } from './components/DateRangeSelector.js';
@@ -63,10 +62,6 @@ function AppContent() {
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
   const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>([]);
-  const [mealFavorites, setMealFavorites] = useState<FoodItem[]>([]);
-  const [mealRecents, setMealRecents] = useState<FoodItem[]>([]);
-  const [mealItems, setMealItems] = useState<MealItem[]>([]);
-  const [mealLog, setMealLog] = useState<MealLogEntry[]>([]);
   const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
   const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
   const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>([]);
@@ -208,9 +203,6 @@ function AppContent() {
     setWellnessEntries([]);
     setWithingsMeasurements([]);
     setWithingsGoals([]);
-    setMealFavorites([]);
-    setMealRecents([]);
-    setMealLog([]);
     setCalendarSyncId(null);
     logScopesLoadedRef.current.clear();
     dataLoadsRef.current.clear();
@@ -515,42 +507,6 @@ function AppContent() {
       });
     } catch {
       // Silently ignore — Withings data is optional
-    }
-  }, []);
-
-  const loadMealFavoritesData = useCallback(async (sheetId: string) => {
-    try {
-      const favorites = await readMealFavorites(sheetId);
-      if (connectedUserRef.current === sheetId) setMealFavorites(favorites);
-    } catch {
-      // Nutrition is optional.
-    }
-  }, []);
-
-  const loadMealRecentsData = useCallback(async (sheetId: string) => {
-    try {
-      const recents = await readMealRecents(sheetId);
-      if (connectedUserRef.current === sheetId) setMealRecents(recents);
-    } catch {
-      // Nutrition is optional.
-    }
-  }, []);
-
-  const loadMealLogData = useCallback(async (sheetId: string) => {
-    try {
-      const entries = await readMealLog(sheetId);
-      if (connectedUserRef.current === sheetId) setMealLog(entries);
-    } catch {
-      // Nutrition is optional.
-    }
-  }, []);
-
-  const loadMealItemsData = useCallback(async (sheetId: string) => {
-    try {
-      const items = await readMealItems(sheetId);
-      if (connectedUserRef.current === sheetId) setMealItems(items);
-    } catch {
-      // Nutrition is optional.
     }
   }, []);
 
@@ -1086,57 +1042,6 @@ function AppContent() {
     navigateTo({ view: 'withings' });
   }, [navigateTo]);
 
-  const handleOpenNutrition = useCallback(() => {
-    navigateTo({ view: 'nutrition' });
-  }, [navigateTo]);
-
-  const handleSaveMealFavorites = useCallback((favorites: FoodItem[]) => {
-    setMealFavorites(favorites);
-    if (spreadsheetId) void withAuthRetry(() => writeMealFavorites(spreadsheetId, favorites));
-  }, [spreadsheetId]);
-
-  const handleSaveMealItems = useCallback((items: MealItem[]) => {
-    setMealItems(items);
-    if (spreadsheetId) void withAuthRetry(() => writeMealItems(spreadsheetId, items));
-  }, [spreadsheetId]);
-
-  const handleSaveMealRecents = useCallback((recents: FoodItem[]) => {
-    setMealRecents(recents);
-    if (spreadsheetId) void withAuthRetry(() => writeMealRecents(spreadsheetId, recents));
-  }, [spreadsheetId]);
-
-  const handleLogMealEntry = useCallback((entry: MealLogEntry) => {
-    // Merge into an existing identical food (same day, meal, name, and macros)
-    // by summing servings, so duplicates collapse into a single log row.
-    const match = mealLog.find((e) =>
-      e.date === entry.date && e.category === entry.category && e.name === entry.name &&
-      e.calories === entry.calories && e.fat === entry.fat && e.carbs === entry.carbs &&
-      e.fiber === entry.fiber && e.protein === entry.protein);
-    if (match) {
-      const quantity = Math.round((match.quantity + entry.quantity) * 100) / 100;
-      setMealLog((previous) => previous.map((e) => (e.id === match.id ? { ...e, quantity } : e)));
-      if (spreadsheetId) void withAuthRetry(() => updateMealLogEntry(spreadsheetId, match.id, quantity));
-      return;
-    }
-    setMealLog((previous) => [...previous, entry]);
-    if (spreadsheetId) void withAuthRetry(() => appendMealLogEntry(spreadsheetId, entry));
-  }, [spreadsheetId, mealLog]);
-
-  const handleAdjustMealEntry = useCallback((id: string, quantity: number) => {
-    setMealLog((previous) => previous.map((entry) => (entry.id === id ? { ...entry, quantity } : entry)));
-    if (spreadsheetId) void withAuthRetry(() => updateMealLogEntry(spreadsheetId, id, quantity));
-  }, [spreadsheetId]);
-
-  const handleDeleteMealEntry = useCallback((id: string) => {
-    setMealLog((previous) => previous.filter((entry) => entry.id !== id));
-    if (spreadsheetId) void withAuthRetry(() => deleteMealLogEntry(spreadsheetId, id));
-  }, [spreadsheetId]);
-
-  const handleChangeMealEntryCategory = useCallback((ids: string[], category: MealCategory) => {
-    setMealLog((previous) => previous.map((entry) => (ids.includes(entry.id) ? { ...entry, category } : entry)));
-    if (spreadsheetId) void withAuthRetry(() => updateMealLogEntryCategory(spreadsheetId, ids, category));
-  }, [spreadsheetId]);
-
   const handleWithingsGoalChange = useCallback((metric: WithingsMetric, value: number | null) => {
     setWithingsGoals((prev) => {
       const updated = prev.filter((g) => g.metric !== metric);
@@ -1440,10 +1345,6 @@ function AppContent() {
       case 'garminActivities': return loadGarminData(userId, yearScope);
       case 'garminWellness': return loadWellnessData(userId, yearScope);
       case 'withingsMeasurements': return loadWithingsData(userId, yearScope);
-      case 'mealItems': return loadMealItemsData(userId);
-      case 'mealLog': return loadMealLogData(userId);
-      case 'favoriteFoods': return loadMealFavoritesData(userId);
-      case 'recentFoods': return loadMealRecentsData(userId);
     }
   }, [
     loadCardioActivitiesData,
@@ -1451,10 +1352,6 @@ function AppContent() {
     loadFlagsData,
     loadGarminData,
     loadLogData,
-    loadMealFavoritesData,
-    loadMealItemsData,
-    loadMealLogData,
-    loadMealRecentsData,
     loadSettingsData,
     loadWellnessData,
     loadWithingsData,
@@ -1511,7 +1408,6 @@ function AppContent() {
     route.view,
     settingsLoaded,
     appSettings.showGarminTab,
-    appSettings.showNutritionTab,
     replaceTo,
   ]);
 
@@ -1552,7 +1448,6 @@ function AppContent() {
   const onOpenWellness = appSettings.showGarminTab ? handleOpenWellness : undefined;
   const onOpenGarminActivities = appSettings.showGarminTab ? handleOpenGarminActivities : undefined;
   const onOpenWithings = undefined;
-  const onOpenNutrition = appSettings.showNutritionTab ? handleOpenNutrition : undefined;
 
   if (route.view === 'import') {
     const shared = decodeSharedWorkout(route.data);
@@ -1572,7 +1467,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <section className="workout-import" aria-labelledby="workout-import-title">
@@ -1648,7 +1542,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseEditor
@@ -1675,7 +1568,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <ExerciseLibrary
@@ -1704,7 +1596,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <WorkoutEditor
@@ -1733,7 +1624,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <CalendarView
@@ -1775,7 +1665,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
@@ -1838,7 +1727,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
@@ -1864,7 +1752,6 @@ function AppContent() {
             floorsGoal={appSettings.garminDailyFloorsGoal}
             sleepHoursGoal={appSettings.garminDailySleepHoursGoal}
             weeklyIntensityMinGoal={appSettings.garminWeeklyIntensityMinGoal}
-            dailyCalorieGoal={appSettings.dailyCalorieGoal}
             embedded
           />
         </div>
@@ -1886,7 +1773,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
@@ -1925,45 +1811,6 @@ function AppContent() {
     return null;
   }
 
-  if (route.view === 'nutrition') {
-    return (
-      <>
-        <GoogleAuth
-          onConnected={handleConnected}
-          onDisconnected={handleDisconnected}
-          onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
-          onOpenExercises={handleOpenExercises}
-          onOpenProgress={handleOpenProgress}
-          onOpenGarmin={onOpenGarmin}
-          onOpenWellness={onOpenWellness}
-          onOpenGarminActivities={onOpenGarminActivities}
-          onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
-          onOpenSettings={handleOpenSettings}
-        />
-        <NutritionView
-          favorites={mealFavorites}
-          recents={mealRecents}
-          mealItems={mealItems}
-          entries={mealLog}
-          wellnessEntries={wellnessEntries}
-          dailyCalorieGoal={appSettings.dailyCalorieGoal}
-          dailyProteinGoalGrams={appSettings.dailyProteinGoalGrams}
-          dailyFiberGoalGrams={appSettings.dailyFiberGoalGrams}
-          drinksPerDayGoal={appSettings.drinksPerDayGoal}
-          onFavoritesChange={handleSaveMealFavorites}
-          onMealItemsChange={handleSaveMealItems}
-          onRecentsChange={handleSaveMealRecents}
-          onLogEntry={handleLogMealEntry}
-          onAdjustEntry={handleAdjustMealEntry}
-          onDeleteEntry={handleDeleteMealEntry}
-          onChangeCategoryEntry={handleChangeMealEntryCategory}
-        />
-      </>
-    );
-  }
-
   if (route.view === 'settings' && spreadsheetId) {
     return (
       <>
@@ -1978,7 +1825,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <SettingsView
@@ -2014,7 +1860,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
           onOpenWithings={onOpenWithings}
-          onOpenNutrition={onOpenNutrition}
           onOpenSettings={handleOpenSettings}
         />
         <SessionDetail
@@ -2040,7 +1885,6 @@ function AppContent() {
           onOpenWellness={onOpenWellness}
           onOpenGarminActivities={onOpenGarminActivities}
         onOpenWithings={onOpenWithings}
-        onOpenNutrition={onOpenNutrition}
         onOpenSettings={handleOpenSettings}
       />
       <WorkoutSelect

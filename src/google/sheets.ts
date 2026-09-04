@@ -5,8 +5,8 @@
  * and provides read/write operations for the config and log zones.
  */
 
-import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, MEAL_ITEMS_TAB_NAME, MEAL_LOG_TAB_NAME, MEAL_FAVORITES_TAB_NAME, MEAL_RECENTS_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
-import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, MealCategory, MealItem, MealLogEntry, FoodItem, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
+import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
+import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -1752,288 +1752,6 @@ export async function writeCardioActivities(
 }
 
 /* ------------------------------------------------------------------ */
-/*  Meal tabs                                                           */
-/* ------------------------------------------------------------------ */
-
-const MEAL_LOG_HEADER_RANGE = `'${MEAL_LOG_TAB_NAME}'!A1:K1`
-const MEAL_LOG_APPEND_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K2`
-const MEAL_LOG_READ_RANGE = `'${MEAL_LOG_TAB_NAME}'!A2:K`
-const MEAL_ITEMS_HEADER = ['id', 'name', 'category', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks', 'favorite']
-const MEAL_ITEMS_RANGE = `'${MEAL_ITEMS_TAB_NAME}'!A:J`
-const MEAL_LOG_HEADER = ['date', ...MEAL_ITEMS_HEADER, 'quantity', 'standardDrinks']
-const MEAL_CATEGORIES: MealCategory[] = ['Breakfast', 'Lunch', 'Dinner', 'Snacks', 'Drinks']
-
-/* Open Food Facts foods (favorites + recents) share one 10-column schema. */
-const FOOD_ITEM_HEADER = ['code', 'name', 'brand', 'servingLabel', 'calories', 'fat', 'carbs', 'fiber', 'protein', 'standardDrinks']
-const MEAL_FAVORITES_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A:J`
-const MEAL_FAVORITES_HEADER_RANGE = `'${MEAL_FAVORITES_TAB_NAME}'!A1:J1`
-const MEAL_RECENTS_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A:J`
-const MEAL_RECENTS_HEADER_RANGE = `'${MEAL_RECENTS_TAB_NAME}'!A1:J1`
-
-export function mealItemToRow(item: MealItem): (string | number)[] {
-	return [item.id, item.name, item.category, item.calories, item.fat, item.carbs, item.fiber, item.protein, item.standardDrinks, item.favorite ? 'true' : 'false']
-}
-
-/** Parse a non-negative drink count, defaulting to 0 for missing or invalid values. */
-function parseDrinks(raw: string | undefined): number {
-	const value = Number((raw ?? '').trim())
-	return Number.isFinite(value) && value >= 0 ? value : 0
-}
-
-function parseMealValues(row: string[], offset: number): Omit<MealItem, 'id' | 'standardDrinks'> | null {
-	const name = (row[offset] ?? '').trim()
-	const category = (row[offset + 1] ?? '').trim() as MealCategory
-	const macroValues = row.slice(offset + 2, offset + 7).map(Number)
-	if (!name || !MEAL_CATEGORIES.includes(category) || macroValues.length !== 5) return null
-	if (macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
-	const [calories, fat, carbs, fiber, protein] = macroValues
-	return { name, category, calories, fat, carbs, fiber, protein }
-}
-
-/** Parse a serving quantity, defaulting to 1 for missing or invalid values. */
-function parseQuantity(raw: string | undefined): number {
-	const value = Number((raw ?? '').trim())
-	return Number.isFinite(value) && value > 0 ? value : 1
-}
-
-/** Parse a non-negative number, returning 0 for missing, invalid, or negative values. */
-function parseNonNegativeNumber(raw: string | undefined): number {
-	const value = Number((raw ?? '').trim())
-	return Number.isFinite(value) && value >= 0 ? value : 0
-}
-
-export function parseMealItemRow(row: string[]): MealItem | null {
-	const id = (row[0] ?? '').trim()
-	const values = parseMealValues(row, 1)
-	if (!id || !values) return null
-	const standardDrinks = parseDrinks(row[8])
-	const favorite = (row[9] ?? '').trim() === 'true'
-	return { id, ...values, standardDrinks, favorite }
-}
-
-export async function readMealItems(spreadsheetId: string): Promise<MealItem[]> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_ITEMS_RANGE })
-	const rows = response.result.values ?? []
-	return rows.slice(1).map(parseMealItemRow).filter((item): item is MealItem => item !== null)
-}
-
-export async function writeMealItems(spreadsheetId: string, items: MealItem[]): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId, range: MEAL_ITEMS_RANGE })
-	await gapi.client.sheets.spreadsheets.values.update({
-		spreadsheetId, range: MEAL_ITEMS_RANGE, valueInputOption: 'RAW',
-		resource: { values: [MEAL_ITEMS_HEADER, ...items.map(mealItemToRow)] },
-	})
-}
-
-export function mealLogEntryToRow(entry: MealLogEntry): (string | number)[] {
-	return [entry.date, entry.id, entry.name, entry.category, entry.calories, entry.fat, entry.carbs, entry.fiber, entry.protein, entry.quantity, entry.standardDrinks]
-}
-
-export function parseMealLogRow(row: string[]): MealLogEntry | null {
-	const date = (row[0] ?? '').trim()
-	const id = (row[1] ?? '').trim()
-	const values = parseMealValues(row, 2)
-	if (!date || !id || !values) return null
-	return { date, id, ...values, quantity: parseQuantity(row[9]), standardDrinks: parseNonNegativeNumber(row[10]) }
-}
-
-export function foodItemToRow(food: FoodItem): (string | number)[] {
-	return [food.code, food.name, food.brand, food.servingLabel, food.calories, food.fat, food.carbs, food.fiber, food.protein, food.standardDrinks]
-}
-
-export function parseFoodItemRow(row: string[]): FoodItem | null {
-	const code = (row[0] ?? '').trim()
-	const name = (row[1] ?? '').trim()
-	if (!code || !name) return null
-	// Macros occupy columns E–I (indices 4–8); a short row yields fewer than 5
-	// values and is rejected below so the destructuring never sees undefined.
-	const macroValues = row.slice(4, 9).map(Number)
-	if (macroValues.length !== 5 || macroValues.some((value) => !Number.isFinite(value) || value < 0)) return null
-	const [calories, fat, carbs, fiber, protein] = macroValues
-	return {
-		code,
-		name,
-		brand: (row[2] ?? '').trim(),
-		servingLabel: (row[3] ?? '').trim(),
-		calories, fat, carbs, fiber, protein,
-		standardDrinks: parseNonNegativeNumber(row[9]),
-	}
-}
-
-async function verifyTab(spreadsheetId: string, tabName: string): Promise<boolean> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.get({ spreadsheetId })
-	return (response.result.sheets ?? []).some((sheet) => sheet.properties.title === tabName)
-}
-
-async function createTab(spreadsheetId: string, tabName: string, header: string[], headerRange: string): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	await gapi.client.sheets.spreadsheets.batchUpdate({
-		spreadsheetId,
-		resource: { requests: [{ addSheet: { properties: { title: tabName } } }] },
-	})
-	await gapi.client.sheets.spreadsheets.values.update({
-		spreadsheetId, range: headerRange, valueInputOption: 'RAW', resource: { values: [header] },
-	})
-}
-
-export function verifyMealLogTab(spreadsheetId: string): Promise<boolean> {
-	return verifyTab(spreadsheetId, MEAL_LOG_TAB_NAME)
-}
-
-export function createMealLogTab(spreadsheetId: string): Promise<void> {
-	return createTab(spreadsheetId, MEAL_LOG_TAB_NAME, MEAL_LOG_HEADER, MEAL_LOG_HEADER_RANGE)
-}
-
-export function verifyMealFavoritesTab(spreadsheetId: string): Promise<boolean> {
-	return verifyTab(spreadsheetId, MEAL_FAVORITES_TAB_NAME)
-}
-
-export function createMealFavoritesTab(spreadsheetId: string): Promise<void> {
-	return createTab(spreadsheetId, MEAL_FAVORITES_TAB_NAME, FOOD_ITEM_HEADER, MEAL_FAVORITES_HEADER_RANGE)
-}
-
-export function verifyMealRecentsTab(spreadsheetId: string): Promise<boolean> {
-	return verifyTab(spreadsheetId, MEAL_RECENTS_TAB_NAME)
-}
-
-export function createMealRecentsTab(spreadsheetId: string): Promise<void> {
-	return createTab(spreadsheetId, MEAL_RECENTS_TAB_NAME, FOOD_ITEM_HEADER, MEAL_RECENTS_HEADER_RANGE)
-}
-
-async function readFoodItems(spreadsheetId: string, range: string): Promise<FoodItem[]> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range })
-	return (response.result.values ?? []).slice(1).map(parseFoodItemRow).filter((food): food is FoodItem => food !== null)
-}
-
-async function writeFoodItems(spreadsheetId: string, range: string, foods: FoodItem[]): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	await gapi.client.sheets.spreadsheets.values.clear({ spreadsheetId, range })
-	await gapi.client.sheets.spreadsheets.values.update({
-		spreadsheetId, range, valueInputOption: 'RAW',
-		resource: { values: [FOOD_ITEM_HEADER, ...foods.map(foodItemToRow)] },
-	})
-}
-
-export function readMealFavorites(spreadsheetId: string): Promise<FoodItem[]> {
-	return readFoodItems(spreadsheetId, MEAL_FAVORITES_RANGE)
-}
-
-export function writeMealFavorites(spreadsheetId: string, foods: FoodItem[]): Promise<void> {
-	return writeFoodItems(spreadsheetId, MEAL_FAVORITES_RANGE, foods)
-}
-
-export function readMealRecents(spreadsheetId: string): Promise<FoodItem[]> {
-	return readFoodItems(spreadsheetId, MEAL_RECENTS_RANGE)
-}
-
-export function writeMealRecents(spreadsheetId: string, foods: FoodItem[]): Promise<void> {
-	return writeFoodItems(spreadsheetId, MEAL_RECENTS_RANGE, foods)
-}
-
-export async function readMealLog(spreadsheetId: string): Promise<MealLogEntry[]> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
-	return (response.result.values ?? []).map(parseMealLogRow).filter((entry): entry is MealLogEntry => entry !== null)
-}
-
-export async function appendMealLogEntry(spreadsheetId: string, entry: MealLogEntry): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	await gapi.client.sheets.spreadsheets.values.append({
-		spreadsheetId, range: MEAL_LOG_APPEND_RANGE, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-		resource: { values: [mealLogEntryToRow(entry)] },
-	})
-}
-
-/**
- * Delete a single logged meal entry by its id. Finds the meal log tab's
- * numeric sheetId, reads all raw rows to locate the matching row(s), then
- * issues a batchUpdate with deleteDimension requests (processed in reverse
- * order to keep indices stable).
- */
-export async function deleteMealLogEntry(spreadsheetId: string, id: string): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const metaResponse = await gapi.client.sheets.spreadsheets.get({ spreadsheetId })
-	const logSheet = (metaResponse.result.sheets ?? []).find((s) => s.properties.title === MEAL_LOG_TAB_NAME)
-	if (!logSheet) return
-	const sheetId = logSheet.properties.sheetId
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
-	const rawRows = response.result.values
-	if (!rawRows || rawRows.length === 0) return
-	const requests = rawRows
-		.map((raw, index) => ({ raw, index }))
-		.filter(({ raw }) => (raw[1] ?? '').trim() === id)
-		.map(({ index }) => index)
-		.sort((a, b) => b - a)
-		.map((rawIdx) => ({
-			// Sheet row = rawIdx + 2 (header is row 1); deleteDimension is 0-indexed.
-			deleteDimension: { range: { sheetId, dimension: 'ROWS' as const, startIndex: rawIdx + 1, endIndex: rawIdx + 2 } },
-		}))
-	if (requests.length === 0) return
-	await gapi.client.sheets.spreadsheets.batchUpdate({ spreadsheetId, resource: { requests } })
-}
-
-/**
- * Update the servings quantity of a single logged meal entry by its id.
- * Reads all rows to locate the matching row, then writes the new quantity to
- * that row's quantity cell (column J). No-op when the id is not found.
- */
-export async function updateMealLogEntry(spreadsheetId: string, id: string, quantity: number): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
-	const rawRows = response.result.values
-	if (!rawRows || rawRows.length === 0) return
-	const rawIdx = rawRows.findIndex((raw) => (raw[1] ?? '').trim() === id)
-	if (rawIdx === -1) return
-	// Sheet row = rawIdx + 2 (header is row 1); quantity lives in column J.
-	await gapi.client.sheets.spreadsheets.values.update({
-		spreadsheetId, range: `'${MEAL_LOG_TAB_NAME}'!J${rawIdx + 2}`, valueInputOption: 'RAW',
-		resource: { values: [[quantity]] },
-	})
-}
-
-/**
- * Update the category of one or more logged meal entries by their ids.
- * Reads all rows once to locate matching rows, then writes the new category
- * to each matching row's category cell (column D) in a single batchUpdate.
- * No-op when none of the ids are found.
- */
-export async function updateMealLogEntryCategory(spreadsheetId: string, ids: string[], category: MealCategory): Promise<void> {
-	const gapi = window.gapi
-	if (!gapi) throw new Error('gapi not loaded')
-	const response = await gapi.client.sheets.spreadsheets.values.get({ spreadsheetId, range: MEAL_LOG_READ_RANGE })
-	const rawRows = response.result.values
-	if (!rawRows || rawRows.length === 0) return
-	const idSet = new Set(ids)
-	const data = rawRows
-		.map((raw, rawIdx) => ({ raw, rawIdx }))
-		.filter(({ raw }) => idSet.has((raw[1] ?? '').trim()))
-		.map(({ rawIdx }) => ({
-			// Sheet row = rawIdx + 2 (header is row 1); category lives in column D.
-			range: `'${MEAL_LOG_TAB_NAME}'!D${rawIdx + 2}`,
-			values: [[category]],
-		}))
-	if (data.length === 0) return
-	await gapi.client.sheets.spreadsheets.values.batchUpdate({
-		spreadsheetId,
-		resource: { valueInputOption: 'RAW', data },
-	})
-}
-
-/* ------------------------------------------------------------------ */
 /*  Strava tab – constants                                             */
 /* ------------------------------------------------------------------ */
 
@@ -2776,15 +2494,10 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	keepScreenOn: true,
 	roundWarmupPlateMath: false,
 	showGarminTab: false,
-	showNutritionTab: false,
 	withingsDipThresholdPercent: 2,
 	progressDipThresholdPercent: 10,
 	skipProgressDips: true,
 	skipBodyCompDips: true,
-	dailyCalorieGoal: 0,
-	dailyProteinGoalGrams: 0,
-	dailyFiberGoalGrams: 0,
-	drinksPerDayGoal: 0,
 	garminDailyStepsGoal: 0,
 	garminDailyFloorsGoal: 0,
 	garminDailySleepHoursGoal: 0,
@@ -2801,7 +2514,6 @@ const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 	'app.keepScreenOn': 'keepScreenOn',
 	'app.roundWarmupPlateMath': 'roundWarmupPlateMath',
 	'app.showGarminTab': 'showGarminTab',
-	'app.showNutritionTab': 'showNutritionTab',
 	'app.skipProgressDips': 'skipProgressDips',
 	'app.skipBodyCompDips': 'skipBodyCompDips',
 }
@@ -2809,10 +2521,6 @@ const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 const APP_SETTING_NUMBER_KEYS: Record<string, { field: AppNumericSettingKey; min: number; max: number }> = {
 	'app.withingsDipThresholdPercent': { field: 'withingsDipThresholdPercent', min: 0.1, max: 100 },
 	'app.progressDipThresholdPercent': { field: 'progressDipThresholdPercent', min: 0.1, max: 100 },
-	'app.dailyCalorieGoal': { field: 'dailyCalorieGoal', min: 0, max: 20000 },
-	'app.dailyProteinGoalGrams': { field: 'dailyProteinGoalGrams', min: 0, max: 1000 },
-	'app.dailyFiberGoalGrams': { field: 'dailyFiberGoalGrams', min: 0, max: 1000 },
-	'app.drinksPerDayGoal': { field: 'drinksPerDayGoal', min: 0, max: 100 },
 	'app.garminDailyStepsGoal': { field: 'garminDailyStepsGoal', min: 0, max: 100000 },
 	'app.garminDailyFloorsGoal': { field: 'garminDailyFloorsGoal', min: 0, max: 500 },
 	'app.garminDailySleepHoursGoal': { field: 'garminDailySleepHoursGoal', min: 0, max: 24 },

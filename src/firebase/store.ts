@@ -1,6 +1,5 @@
 import {
 	collection,
-	deleteDoc,
 	doc,
 	documentId,
 	getDocs,
@@ -16,12 +15,8 @@ import {
 import type {
 	CardioActivity,
 	DayFlagEntry,
-	FoodItem,
 	GarminWellnessEntry,
 	LiftConfig,
-	MealCategory,
-	MealItem,
-	MealLogEntry,
 	WithingsMeasurement,
 	WorkoutScheduleEntry,
 } from '../model/index.ts'
@@ -78,10 +73,6 @@ type StoredScheduleDay = {
 	events: Omit<WorkoutScheduleEntry, 'date'>[]
 }
 
-type StoredRecentFood = FoodItem & {
-	_recentOrder?: number
-}
-
 type CollectionName =
 	| 'exercises'
 	| 'workouts'
@@ -89,10 +80,6 @@ type CollectionName =
 	| 'dayFlags'
 	| 'schedule'
 	| 'cardioActivities'
-	| 'mealItems'
-	| 'mealLog'
-	| 'favoriteFoods'
-	| 'recentFoods'
 	| 'garminActivities'
 	| 'garminWellness'
 	| 'withingsMeasurements'
@@ -632,76 +619,6 @@ export async function writeSettings(uid: string, settings: Map<string, string>):
 	})
 }
 
-export function readMealItems(uid: string): Promise<MealItem[]> {
-	return readCollection<MealItem>(uid, 'mealItems')
-}
-
-export function writeMealItems(uid: string, items: MealItem[]): Promise<void> {
-	return replaceCollection(uid, 'mealItems', items, (item) => idPart(item.id))
-}
-
-export function readMealFavorites(uid: string): Promise<FoodItem[]> {
-	return readCollection<FoodItem>(uid, 'favoriteFoods')
-}
-
-export function writeMealFavorites(uid: string, items: FoodItem[]): Promise<void> {
-	return replaceCollection(uid, 'favoriteFoods', items, (item) => idPart(item.code))
-}
-
-export function readMealRecents(uid: string): Promise<FoodItem[]> {
-	return readCollection<StoredRecentFood>(uid, 'recentFoods').then((items) =>
-		items.sort((a, b) => (a._recentOrder ?? Number.MAX_SAFE_INTEGER) - (b._recentOrder ?? Number.MAX_SAFE_INTEGER)),
-	)
-}
-
-export function writeMealRecents(uid: string, items: FoodItem[]): Promise<void> {
-	const stored: StoredRecentFood[] = items.map((item, index) => ({ ...item, _recentOrder: index }))
-	return replaceCollection(uid, 'recentFoods', stored, (item) => idPart(item.code))
-}
-
-export function readMealLog(uid: string): Promise<MealLogEntry[]> {
-	return readCollection<MealLogEntry>(uid, 'mealLog')
-}
-
-export function writeMealLog(uid: string, entries: MealLogEntry[]): Promise<void> {
-	return replaceCollection(uid, 'mealLog', entries, (entry) => idPart(entry.id))
-}
-
-export async function appendMealLogEntry(uid: string, entry: MealLogEntry): Promise<void> {
-	await setDoc(doc(userCollection(uid, 'mealLog'), idPart(entry.id)), {
-		...entry,
-		updatedAt: new Date().toISOString(),
-	})
-}
-
-export async function deleteMealLogEntry(uid: string, id: string): Promise<void> {
-	await deleteDoc(doc(userCollection(uid, 'mealLog'), idPart(id)))
-}
-
-export async function updateMealLogEntry(uid: string, id: string, quantity: number): Promise<void> {
-	await setDoc(doc(userCollection(uid, 'mealLog'), idPart(id)), {
-		quantity,
-		updatedAt: new Date().toISOString(),
-	}, { merge: true })
-}
-
-export async function updateMealLogEntryCategory(
-	uid: string,
-	ids: string[],
-	category: MealCategory,
-): Promise<void> {
-	for (let start = 0; start < ids.length; start += 400) {
-		const batch = writeBatch(firestore)
-		for (const id of ids.slice(start, start + 400)) {
-			batch.set(doc(userCollection(uid, 'mealLog'), idPart(id)), {
-				category,
-				updatedAt: new Date().toISOString(),
-			}, { merge: true })
-		}
-		await batch.commit()
-	}
-}
-
 export function readGarminActivities(
 	uid: string,
 	scope: YearBucketReadScope = 'all',
@@ -737,16 +654,12 @@ export function writeWithingsMeasurements(uid: string, items: WithingsMeasuremen
 
 export const verifyScheduleTab = async (_uid?: string) => true
 export const verifyWorkoutScheduleTab = async (_uid?: string) => true
-export const verifyMealFavoritesTab = async (_uid?: string) => true
-export const verifyMealRecentsTab = async (_uid?: string) => true
 export const verifyGarminTab = async (_uid?: string) => true
 export const verifyGarminWellnessTab = async (_uid?: string) => true
 export const verifyWithingsTab = async (_uid?: string) => true
 export const verifySettingsTab = async (_uid?: string) => true
 export const createScheduleTab = async (_uid?: string) => undefined
 export const createWorkoutScheduleTab = async (_uid?: string) => undefined
-export const createMealFavoritesTab = async (_uid?: string) => undefined
-export const createMealRecentsTab = async (_uid?: string) => undefined
 export const createWithingsTab = async (_uid?: string) => undefined
 export const createSettingsTab = async (_uid?: string) => undefined
 

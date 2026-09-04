@@ -41,10 +41,6 @@ export const DATASETS = {
 	garminActivities: { label: 'Garmin activities', tab: 'Stronger - Garmin', range: 'A2:Q', collection: 'garminActivities', entryField: 'entries' },
 	garminWellness: { label: 'Garmin wellness', tab: 'Stronger - Garmin Wellness', range: 'A2:AN', collection: 'garminWellness', entryField: 'entries' },
 	withingsMeasurements: { label: 'Withings', tab: 'Stronger - Withings', range: 'A2:K', collection: 'withingsMeasurements', entryField: 'entries' },
-	mealItems: { label: 'Meal items', tab: 'Stronger - Meal Items', range: 'A:J', headerRows: 1, collection: 'mealItems' },
-	mealLog: { label: 'Meal log', tab: 'Stronger - Meal Log', range: 'A2:K', collection: 'mealLog' },
-	favoriteFoods: { label: 'Favorite foods', tab: 'Stronger - Meal Favorites', range: 'A:J', headerRows: 1, collection: 'favoriteFoods' },
-	recentFoods: { label: 'Recent foods', tab: 'Stronger - Meal Recents', range: 'A:J', headerRows: 1, collection: 'recentFoods' },
 }
 
 function validateLoadPlan() {

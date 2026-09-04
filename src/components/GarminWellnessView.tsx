@@ -1564,11 +1564,9 @@ interface Props {
   sleepHoursGoal?: number;
   /** Weekly intensity minutes goal (0 = no goal). Auto-synced from Garmin. */
   weeklyIntensityMinGoal?: number;
-  /** Daily calorie goal (0 = no goal line). From app settings. */
-  dailyCalorieGoal?: number;
 }
 
-export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, sleepHoursGoal = 0, weeklyIntensityMinGoal = 0, dailyCalorieGoal = 0 }: Props) {
+export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, sleepHoursGoal = 0, weeklyIntensityMinGoal = 0 }: Props) {
   const today = useMemo(() => new Date(), []);
 
   // Build chart data
@@ -1907,7 +1905,6 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
             : caloriesData.summary;
           return latestVal !== null ? `${Math.round(latestVal)} kcal` : '';
         })()}
-        goalKcal={dailyCalorieGoal}
         aggregation={aggregation}
       />
     </div>

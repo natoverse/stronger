@@ -12,10 +12,6 @@ export type FirebaseDataset =
 	| 'garminActivities'
 	| 'garminWellness'
 	| 'withingsMeasurements'
-	| 'mealItems'
-	| 'mealLog'
-	| 'favoriteFoods'
-	| 'recentFoods'
 
 export type FirebaseLoadScope = 'all' | 'currentYear' | 'otherYears' | 'initialWindow'
 

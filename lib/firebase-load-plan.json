@@ -9,11 +9,7 @@
     "settings",
     "garminActivities",
     "garminWellness",
-    "withingsMeasurements",
-    "mealItems",
-    "mealLog",
-    "favoriteFoods",
-    "recentFoods"
+    "withingsMeasurements"
   ],
   "yearBucketDatasets": [
     "workoutSessions",
@@ -41,8 +37,7 @@
     "garmin": ["garminWellness", "settings"],
     "garmin-activities": ["garminActivities", "settings"],
     "wellness": ["garminWellness", "settings"],
-    "withings": ["workoutSessions", "withingsMeasurements", "exercises", "settings"],
-    "nutrition": ["favoriteFoods", "recentFoods", "mealLog", "mealItems", "garminWellness", "settings"]
+    "withings": ["workoutSessions", "withingsMeasurements", "exercises", "settings"]
   },
   "benchmarkRoutes": [
     "list",
@@ -60,7 +55,6 @@
     "progress": "Progress",
     "garmin": "Garmin wellness",
     "garmin-activities": "Garmin activities",
-    "nutrition": "Nutrition",
     "settings": "Settings"
   }
 }

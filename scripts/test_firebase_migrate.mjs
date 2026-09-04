@@ -133,10 +133,6 @@ test('migration plan groups workout rows and reports invalid rows', () => {
 		dayFlags: [],
 		schedule: [['2026-09-01', 'A', '', 'stronger-1', 'Heavy day']],
 		cardio: [],
-		mealItems: [],
-		mealLog: [],
-		favoriteFoods: [],
-		recentFoods: [],
 		strava: [],
 		garmin: [],
 		garminWellness: [],
@@ -162,10 +158,6 @@ test('migration plan rejects empty required tabs', () => {
 		dayFlags: [],
 		schedule: [],
 		cardio: [],
-		mealItems: [],
-		mealLog: [],
-		favoriteFoods: [],
-		recentFoods: [],
 		strava: [],
 		garmin: [],
 		garminWellness: [],
@@ -189,10 +181,6 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 		dayFlags: [],
 		schedule: [],
 		cardio: [],
-		mealItems: [],
-		mealLog: [],
-		favoriteFoods: [],
-		recentFoods: [],
 		strava: [['2026-09-01', '1', 'Run', 'Run', '', '', '', '', '', '']],
 		garmin: [],
 		garminWellness: [],
@@ -204,10 +192,6 @@ test('blank sheet numeric cells follow current parser defaults', () => {
 	assert.equal(plan.workoutSessions[0].data.count, 1)
 	assert.equal(plan.workoutSessions[0].data.entries[0].exercises[0].sets[0].actualWeight, 0)
 	assert.equal('stravaActivities' in plan, false)
-	assert.equal('mealItems' in plan, false)
-	assert.equal('mealLog' in plan, false)
-	assert.equal('favoriteFoods' in plan, false)
-	assert.equal('recentFoods' in plan, false)
 })
 
 test('migration buckets every high-cardinality history by year', () => {
@@ -287,10 +271,6 @@ test('missing optional tabs are excluded instead of cleared', () => {
 		dayFlags: null,
 		schedule: null,
 		cardio: null,
-		mealItems: null,
-		mealLog: null,
-		favoriteFoods: null,
-		recentFoods: null,
 		strava: null,
 		garmin: null,
 		garminWellness: null,
@@ -309,10 +289,6 @@ test('collection-scoped plans do not require unrelated tabs', () => {
 		dayFlags: null,
 		schedule: null,
 		cardio: null,
-		mealItems: null,
-		mealLog: null,
-		favoriteFoods: null,
-		recentFoods: null,
 		strava: null,
 		garmin: [['2026-09-01', '42', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170']],
 		garminWellness: null,
@@ -342,10 +318,6 @@ test('date-keyed collections keep the last row for duplicate dates', () => {
 		],
 		schedule: [],
 		cardio: [],
-		mealItems: [],
-		mealLog: [],
-		favoriteFoods: [],
-		recentFoods: [],
 		strava: [],
 		garmin: [],
 		garminWellness: [
@@ -413,7 +385,6 @@ test('sheet reader skips every optional tab when only workout tabs exist', async
 
 		assert.deepEqual(Object.keys(plan), ['exercises', 'workouts'])
 		assert.ok(warnings.some((warning) => warning.includes('Stronger - Garmin is missing')))
-		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Meal Log')))
 		assert.ok(!warnings.some((warning) => warning.includes('Stronger - Strava')))
 	} finally {
 		globalThis.fetch = originalFetch

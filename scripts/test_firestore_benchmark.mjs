@@ -18,18 +18,6 @@ import {
 
 test('dataset catalog covers the shared load plan', () => {
 	assert.deepEqual(Object.keys(DATASETS), LOAD_PLAN.datasetOrder)
-	assert.deepEqual(DATASETS.mealItems, {
-		label: 'Meal items',
-		tab: 'Stronger - Meal Items',
-		range: 'A:J',
-		headerRows: 1,
-		collection: 'mealItems',
-	})
-	assert.equal(DATASETS.mealLog.range, 'A2:K')
-	assert.equal(DATASETS.mealLog.headerRows, undefined)
-	assert.equal(DATASETS.favoriteFoods.collection, 'favoriteFoods')
-	assert.equal(DATASETS.favoriteFoods.headerRows, 1)
-	assert.equal(DATASETS.recentFoods.tab, 'Stronger - Meal Recents')
 	assert.equal(DATASETS.exercises.headerRows, 1)
 	assert.equal(DATASETS.schedule.headerRows, undefined)
 	assert.equal(DATASETS.workoutSessions.entryField, 'entries')
@@ -45,7 +33,6 @@ test('dataset catalog covers the shared load plan', () => {
 	assert.equal(LOAD_PLAN.initialDateWindowDays, 60)
 	assert.equal(LOAD_PLAN.initialDateWindowAnchor, 'monthStart')
 	assert.equal(LOAD_PLAN.dateWindowIncrementDays, 30)
-	assert.equal(LOAD_PLAN.benchmarkRoutes.includes('nutrition'), false)
 })
 
 test('cold loads target current buckets and the initial schedule window', () => {

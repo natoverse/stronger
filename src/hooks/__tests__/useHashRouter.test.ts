@@ -107,10 +107,6 @@ describe('parseHash', () => {
     expect(parseHash('#settings')).toEqual({ view: 'settings' });
   });
 
-  it('parses the nutrition route', () => {
-    expect(parseHash('#/nutrition')).toEqual({ view: 'nutrition' });
-  });
-
   it('parses the exercise editor new route', () => {
     expect(parseHash('#/exercise/new')).toEqual({ view: 'exerciseEditor' });
   });
@@ -193,10 +189,6 @@ describe('routeToHash', () => {
     expect(routeToHash({ view: 'settings' })).toBe('/settings');
   });
 
-  it('returns /nutrition for nutrition route', () => {
-    expect(routeToHash({ view: 'nutrition' })).toBe('/nutrition');
-  });
-
   it('returns /exercise/new for exercise editor route without exerciseId', () => {
     expect(routeToHash({ view: 'exerciseEditor' })).toBe('/exercise/new');
   });
@@ -229,7 +221,6 @@ describe('routeToHash', () => {
       { view: 'garmin-activities' },
       { view: 'wellness' },
       { view: 'withings' },
-      { view: 'nutrition' },
       { view: 'exerciseEditor' },
       { view: 'exerciseEditor', exerciseId: 'bench' },
     ];
@@ -242,26 +233,23 @@ describe('routeToHash', () => {
 
 describe('getSettingsRouteRedirect', () => {
   it('preserves settings-dependent routes while settings load', () => {
-    const visibility = { showGarminTab: false, showNutritionTab: false };
+    const visibility = { showGarminTab: false };
 
     expect(getSettingsRouteRedirect({ view: 'garmin' }, false, visibility)).toBeNull();
     expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, false, visibility)).toBeNull();
-    expect(getSettingsRouteRedirect({ view: 'nutrition' }, false, visibility)).toBeNull();
   });
 
   it('allows enabled routes after settings load', () => {
-    const visibility = { showGarminTab: true, showNutritionTab: true };
+    const visibility = { showGarminTab: true };
 
     expect(getSettingsRouteRedirect({ view: 'garmin' }, true, visibility)).toBeNull();
     expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, true, visibility)).toBeNull();
-    expect(getSettingsRouteRedirect({ view: 'nutrition' }, true, visibility)).toBeNull();
   });
 
   it('redirects disabled routes after settings load', () => {
-    const visibility = { showGarminTab: false, showNutritionTab: false };
+    const visibility = { showGarminTab: false };
 
     expect(getSettingsRouteRedirect({ view: 'garmin' }, true, visibility)).toEqual({ view: 'list' });
     expect(getSettingsRouteRedirect({ view: 'garmin-activities' }, true, visibility)).toEqual({ view: 'list' });
-    expect(getSettingsRouteRedirect({ view: 'nutrition' }, true, visibility)).toEqual({ view: 'list' });
   });
 });
