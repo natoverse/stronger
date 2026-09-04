@@ -1407,6 +1407,7 @@ function AppContent() {
   }, [
     route.view,
     settingsLoaded,
+    appSettings.showCalendarTab,
     appSettings.showGarminTab,
     replaceTo,
   ]);
@@ -1444,6 +1445,7 @@ function AppContent() {
     );
   }
 
+  const onOpenCalendar = appSettings.showCalendarTab ? handleOpenCalendar : undefined;
   const onOpenGarmin = appSettings.showGarminTab ? handleOpenGarmin : undefined;
   const onOpenWellness = appSettings.showGarminTab ? handleOpenWellness : undefined;
   const onOpenGarminActivities = appSettings.showGarminTab ? handleOpenGarminActivities : undefined;
@@ -1460,7 +1462,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1535,7 +1537,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1561,7 +1563,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1589,7 +1591,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1617,7 +1619,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1658,7 +1660,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1720,7 +1722,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1766,7 +1768,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1818,7 +1820,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1853,7 +1855,7 @@ function AppContent() {
           onConnected={handleConnected}
           onDisconnected={handleDisconnected}
           onGoToList={handleGoToList}
-          onOpenCalendar={handleOpenCalendar}
+          onOpenCalendar={onOpenCalendar}
           onOpenExercises={handleOpenExercises}
           onOpenProgress={handleOpenProgress}
           onOpenGarmin={onOpenGarmin}
@@ -1878,7 +1880,7 @@ function AppContent() {
         onConnected={handleConnected}
         onDisconnected={handleDisconnected}
         onGoToList={handleGoToList}
-        onOpenCalendar={handleOpenCalendar}
+        onOpenCalendar={onOpenCalendar}
         onOpenExercises={handleOpenExercises}
         onOpenProgress={handleOpenProgress}
         onOpenGarmin={onOpenGarmin}

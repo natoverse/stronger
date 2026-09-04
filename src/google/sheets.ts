@@ -2494,6 +2494,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 	keepScreenOn: true,
 	roundWarmupPlateMath: false,
 	showGarminTab: false,
+	showCalendarTab: true,
 	withingsDipThresholdPercent: 2,
 	progressDipThresholdPercent: 10,
 	skipProgressDips: true,
@@ -2514,6 +2515,7 @@ const APP_SETTING_BOOL_KEYS: Record<string, AppBooleanSettingKey> = {
 	'app.keepScreenOn': 'keepScreenOn',
 	'app.roundWarmupPlateMath': 'roundWarmupPlateMath',
 	'app.showGarminTab': 'showGarminTab',
+	'app.showCalendarTab': 'showCalendarTab',
 	'app.skipProgressDips': 'skipProgressDips',
 	'app.skipBodyCompDips': 'skipBodyCompDips',
 }
