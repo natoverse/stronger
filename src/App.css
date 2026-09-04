@@ -4162,6 +4162,16 @@ body {
 	text-overflow: ellipsis;
 }
 
+.activity-card-link {
+	color: var(--color-primary);
+	text-decoration: none;
+}
+
+.activity-card-link:hover,
+.activity-card-link:focus-visible {
+	text-decoration: underline;
+}
+
 .activity-card-date {
 	font-size: 0.78rem;
 	color: var(--color-text-muted);

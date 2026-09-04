@@ -57,6 +57,17 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+/**
+ * Build the Garmin Connect web URL for an activity id, e.g.
+ * `https://connect.garmin.com/app/activity/24229675607`.
+ * Returns `null` when the id is missing or not a plain numeric Garmin id.
+ */
+export function garminActivityUrl(activityId: string | undefined): string | null {
+  const id = (activityId ?? '').trim();
+  if (!/^\d+$/.test(id)) return null;
+  return `https://connect.garmin.com/app/activity/${id}`;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Type-filter dropdown                                               */
 /* ------------------------------------------------------------------ */
@@ -224,10 +235,23 @@ export function GarminActivitiesListView({ activities, range }: Props) {
             const distStr = formatDistance(a.distance);
             const elevStr = formatElevation(a.elevationGain);
             const elevLossStr = formatElevation(a.elevationLoss ?? 0);
+            const url = garminActivityUrl(a.stravaId);
+            const title = a.name || a.activityType;
             return (
               <div key={`${a.date}-${i}`} className="activity-card">
                 <div className="activity-card-header">
-                  <span className="activity-card-name">{a.name || a.activityType}</span>
+                  {url ? (
+                    <a
+                      className="activity-card-name activity-card-link"
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {title}
+                    </a>
+                  ) : (
+                    <span className="activity-card-name">{title}</span>
+                  )}
                   <span className="activity-card-date">{formatDate(a.date)}</span>
                 </div>
                 <div className="activity-card-meta">

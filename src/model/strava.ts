@@ -14,6 +14,8 @@
 export interface StravaActivity {
   /** ISO date string YYYY-MM-DD */
   date: string;
+  /** Source activity ID (Strava or Garmin). Optional for chart-only data. */
+  stravaId?: string;
   /** Activity type (e.g. "Run", "Ride", "Hike") */
   activityType: string;
   /** Activity name (e.g. "Morning Run"). Set by Garmin/Strava parsers. */
