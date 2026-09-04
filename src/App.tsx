@@ -83,6 +83,7 @@ function AppContent() {
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
+  const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
   const settingsRef = useRef(new Map<string, string>());
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
@@ -131,6 +132,7 @@ function AppContent() {
       setDataLoadError(null);
       setPriorityLoadPending(true);
       setShowDefaultWorkoutImportPrompt(false);
+      setDefaultWorkoutImportError(null);
       logScopesLoadedRef.current.clear();
       dataLoadsRef.current.clear();
       loadQueueUserRef.current = null;
@@ -160,8 +162,10 @@ function AppContent() {
       if (!defs) {
         defs = [];
         setShowDefaultWorkoutImportPrompt(true);
+        setDefaultWorkoutImportError(null);
       } else {
         setShowDefaultWorkoutImportPrompt(false);
+        setDefaultWorkoutImportError(null);
       }
       setDefinitions(defs);
 
@@ -202,6 +206,7 @@ function AppContent() {
     setLogRows([]);
     setNeedsSetup(false);
     setShowDefaultWorkoutImportPrompt(false);
+    setDefaultWorkoutImportError(null);
     setCardioActivities([]);
     setGarminActivities([]);
     setWellnessEntries([]);
@@ -381,24 +386,41 @@ function AppContent() {
     if (!loaded) {
       loaded = [];
       setShowDefaultWorkoutImportPrompt(true);
+      setDefaultWorkoutImportError(null);
     } else {
       setShowDefaultWorkoutImportPrompt(false);
+      setDefaultWorkoutImportError(null);
     }
     setDefinitions(loaded);
   }, []);
 
   const handleImportDefaultWorkouts = useCallback(async () => {
-    if (!spreadsheetId) return;
+    if (!spreadsheetId) {
+      setDefaultWorkoutImportError('Cannot import defaults right now. Reconnect to your sheet and try again.');
+      return;
+    }
     const userId = spreadsheetId;
-    await withAuthRetry(() => writeDefaultWorkoutDefs(userId, workoutDefinitions));
-    if (connectedUserRef.current !== userId) return;
-    setDefinitions(workoutDefinitions);
-    setWorkouts(buildWorkoutsFromConfigs(configs, workoutDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
-    setShowDefaultWorkoutImportPrompt(false);
+    try {
+      await withAuthRetry(() => writeDefaultWorkoutDefs(userId, workoutDefinitions));
+      if (connectedUserRef.current !== userId) return;
+      setDefinitions(workoutDefinitions);
+      setWorkouts(buildWorkoutsFromConfigs(configs, workoutDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
+      setShowDefaultWorkoutImportPrompt(false);
+      setDefaultWorkoutImportError(null);
+    } catch (error) {
+      if (connectedUserRef.current !== userId) return;
+      setDefaultWorkoutImportError(error instanceof Error ? error.message : String(error));
+    }
   }, [spreadsheetId, configs]);
 
   const handleDismissDefaultWorkoutImportPrompt = useCallback(() => {
     setShowDefaultWorkoutImportPrompt(false);
+    setDefaultWorkoutImportError(null);
+  }, []);
+
+  const handleShowDefaultWorkoutImportPrompt = useCallback(() => {
+    setShowDefaultWorkoutImportPrompt(true);
+    setDefaultWorkoutImportError(null);
   }, []);
 
   const loadCardioActivitiesData = useCallback(async (userId: string) => {
@@ -1914,7 +1936,9 @@ function AppContent() {
         workoutSchedule={workoutSchedule}
         logRows={logRows}
         showDefaultWorkoutImportPrompt={showDefaultWorkoutImportPrompt}
+        defaultWorkoutImportError={defaultWorkoutImportError}
         onImportDefaultWorkouts={handleImportDefaultWorkouts}
+        onShowDefaultWorkoutImportPrompt={handleShowDefaultWorkoutImportPrompt}
         onDismissDefaultWorkoutImportPrompt={handleDismissDefaultWorkoutImportPrompt}
         onSelect={handleSelectWorkout}
         onViewSession={handleViewSession}
