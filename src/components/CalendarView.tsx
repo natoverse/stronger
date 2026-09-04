@@ -816,6 +816,7 @@ export function CalendarView({
 										)
 										: [];
 									const flags = date ? flagsMap.get(date) : undefined;
+									const dayLabels = date ? labelsMap.get(date) : undefined;
 									const location = date ? getDayLocation(flags) : null;
 									return date ? (
 										<button
@@ -840,24 +841,27 @@ export function CalendarView({
 												<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											</div>
 											<div className="calendar-month-tags">
-												{scheduled.slice(0, 3).map((workoutId, tagIndex) => (
-													<span
-														className={`calendar-month-tag calendar-month-tag-${
-															workoutId === BLOCKER_ID
-																? 'blocker'
-																: workoutId === REST_ID
-																	? 'rest'
-																	: workoutId.startsWith('cardio:')
-																		? 'cardio'
-																		: 'strength'
-														}`}
-														key={`${workoutId}-${tagIndex}`}
-														title={displayWorkoutName(workoutId)}
-														aria-label={displayWorkoutName(workoutId)}
-													>
-														{displayWorkoutName(workoutId)}
-													</span>
-												))}
+												{scheduled.slice(0, 3).map((workoutId, tagIndex) => {
+													const displayName = dayLabels?.[workoutId] || displayWorkoutName(workoutId);
+													return (
+														<span
+															className={`calendar-month-tag calendar-month-tag-${
+																workoutId === BLOCKER_ID
+																	? 'blocker'
+																	: workoutId === REST_ID
+																		? 'rest'
+																		: workoutId.startsWith('cardio:')
+																			? 'cardio'
+																			: 'strength'
+															}`}
+															key={`${workoutId}-${tagIndex}`}
+															title={displayName}
+															aria-label={displayName}
+														>
+															{displayName}
+														</span>
+													);
+												})}
 											</div>
 										</button>
 									) : <div className="calendar-month-day calendar-month-day-empty" key={`empty-${index}`} />;

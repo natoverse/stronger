@@ -72,8 +72,8 @@ describe('CalendarView month schedule', () => {
 			workouts: [{ id: 'workout-a', name: 'Strength A', exercises: [], favorite: false }],
 			cardioActivities: [{ id: 'run', name: 'Run' }],
 			workoutSchedule: [
-				{ date: `${monthPrefix}-15`, workoutId: 'workout-a' },
-				{ date: `${monthPrefix}-15`, workoutId: 'cardio:run' },
+				{ date: `${monthPrefix}-15`, workoutId: 'workout-a', label: 'Custom Strength' },
+				{ date: `${monthPrefix}-15`, workoutId: 'cardio:run', label: 'Morning Run' },
 				{ date: `${monthPrefix}-15`, workoutId: 'hidden-workout' },
 				{ date: `${monthPrefix}-16`, workoutId: 'rest' },
 				{ date: `${monthPrefix}-17`, workoutId: 'cardio:unknown' },
@@ -134,9 +134,11 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-tag-strength');
 		expect(markup).toContain('calendar-month-tag-cardio');
 		expect(markup).toContain('calendar-month-tag-rest');
-		expect(markup).toContain('>Strength A</span>');
-		expect(markup).toContain('>Run</span>');
-		expect(markup.indexOf('>Run</span>')).toBeLessThan(markup.indexOf('>Strength A</span>'));
+		expect(markup).toContain('>Custom Strength</span>');
+		expect(markup).toContain('>Morning Run</span>');
+		expect(markup.indexOf('>Morning Run</span>')).toBeLessThan(markup.indexOf('>Custom Strength</span>'));
+		expect(markup).not.toContain('>Strength A</span>');
+		expect(markup).not.toContain('>Run</span>');
 		expect(markup).toContain('>Rest</span>');
 		expect(markup).toContain('>unknown</span>');
 		expect(markup).not.toContain('>cardio:unknown</span>');
@@ -218,7 +220,7 @@ describe('CalendarView month schedule', () => {
 		const markup = renderToStaticMarkup(createElement(CalendarView, {
 			workouts: [],
 			cardioActivities: [],
-			workoutSchedule: [{ date: today, workoutId: 'blocker' }],
+			workoutSchedule: [{ date: today, workoutId: 'blocker', label: 'Dentist appointment' }],
 			dayFlags: [],
 			logRows: [],
 			onAssign: () => undefined,
@@ -248,7 +250,8 @@ describe('CalendarView month schedule', () => {
 
 		expect(markup).toContain('calendar-month-tag-blocker');
 		expect(markup).toContain('calendar-workout-link-blocker');
-		expect(markup).toContain('>Blocker</span>');
+		expect(markup).toContain('>Dentist appointment</span>');
+		expect(markup).not.toContain('>Blocker</span>');
 		expect(markup).toContain('lucide-ban');
 		expect(markup).toContain('calendar-label-edit-btn');
 	});
