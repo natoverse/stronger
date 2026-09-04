@@ -39,3 +39,12 @@ or the weekly planner, and given a custom label (e.g. "Dentist appointment").
   "inactive" (alongside empty/orphan rows) and passes them through untouched:
   they are never created, updated, pulled, or deleted as Google Calendar
   events.
+
+## Iteration: month-tag label parity and color contrast
+
+- Month-view tags now use the same custom label override as the detailed day
+  list, so labeled strength/cardio/blocker entries display user-provided text
+  instead of fallback workout names.
+- Strength month tags now use a dedicated orange token
+  (`--color-month-tag-strength`) instead of green so they remain visually
+  distinct from cardio's blue tags.

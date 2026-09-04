@@ -24,6 +24,7 @@
 	--color-surface-alt: #111;
 	--color-weekday: #00e5ff;
 	--color-weekend: #ff2d7b;
+	--color-month-tag-strength: #ffab40;
 	--radius: 12px;
 }
 
@@ -1348,7 +1349,7 @@ body {
 }
 
 .calendar-month-tag-strength {
-	background: var(--color-work);
+	background: var(--color-month-tag-strength);
 }
 
 .calendar-month-tag-cardio {
