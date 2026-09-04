@@ -296,9 +296,7 @@ Workout logs, schedules, cardio definitions, Garmin activities, Garmin
 wellness, Withings, and settings are optional. Missing optional tabs produce
 warnings and are excluded from both writes and replacement deletion.
 
-Nutrition tabs and the deprecated `Stronger - Strava` tab are not read or
-migrated. Nutrition data starts fresh after the Firebase application backend
-is enabled.
+The deprecated `Stronger - Strava` tab is not read or migrated.
 
 Workout sessions, Garmin activities, Garmin wellness, and Withings
 measurements are stored in yearly bucket documents. Each bucket uses the year
@@ -376,8 +374,7 @@ logical Firestore records separately from physical bucket documents.
 3. Optionally change **iterations** (1-20, default 3) or pass a comma-separated
    **tabs** list such as `calendar,garmin-activities` to narrow the
    comparison. Leaving it blank runs every default benchmark route from the
-   shared load plan. Nutrition is intentionally excluded from benchmark routes
-   until its Firebase rollout begins.
+   shared load plan.
 4. Read the markdown table in the job summary. Each tab has one row with Sheets
    cold load, Firestore cold load, Sheets records, and Firestore documents,
    followed by per-dataset diagnostic medians. Sheets ranges that include row 1

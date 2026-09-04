@@ -5,7 +5,7 @@ import {
 	signInToStronger,
 	signOutOfStronger,
 } from '../firebase/index.ts'
-import { Calendar, Dumbbell, HeartPulse, Library, Pizza, Settings, SportShoe, TrendingUp } from 'lucide-react'
+import { Calendar, Dumbbell, HeartPulse, Library, Settings, SportShoe, TrendingUp } from 'lucide-react'
 
 interface Props {
 	onConnected: (userId: string) => void
@@ -17,7 +17,6 @@ interface Props {
 	onOpenWellness?: () => void
 	onOpenGarminActivities?: () => void
 	onOpenWithings?: () => void
-	onOpenNutrition?: () => void
 	onOpenSettings?: () => void
 	onGoToList?: () => void
 }
@@ -34,7 +33,6 @@ export function GoogleAuth({
 	onOpenWellness,
 	onOpenGarminActivities,
 	onOpenWithings,
-	onOpenNutrition,
 	onOpenSettings,
 	onGoToList,
 }: Props) {
@@ -127,7 +125,6 @@ export function GoogleAuth({
 				{onOpenGarminWellness && <button className="btn-toolbar" onClick={onOpenGarminWellness} title="Wellness"><HeartPulse size={20} /></button>}
 				{onOpenGarminActivities && <button className="btn-toolbar" onClick={onOpenGarminActivities} title="Activities"><SportShoe size={20} /></button>}
 				{onOpenWithings && <button className="btn-toolbar" onClick={onOpenWithings} title="Body Composition"><HeartPulse size={20} /></button>}
-				{onOpenNutrition && <button className="btn-toolbar" onClick={onOpenNutrition} title="Nutrition"><Pizza size={20} /></button>}
 				{onOpenSettings && <button className="btn-toolbar" onClick={onOpenSettings} title="Settings"><Settings size={20} /></button>}
 			</div>
 			<a

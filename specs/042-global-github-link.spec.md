@@ -4,7 +4,7 @@
 
 ## What
 
-The existing GitHub repository link moves from the workout selection screen into a shared footer. The footer is rendered after every app view, including authentication, setup, workout, editor, calendar, progress, activity, nutrition, and settings screens.
+The existing GitHub repository link moves from the workout selection screen into a shared footer. The footer is rendered after every app view, including authentication, setup, workout, editor, calendar, progress, activity, and settings screens.
 
 ## Acceptance Criteria
 

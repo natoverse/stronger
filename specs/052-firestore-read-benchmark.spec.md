@@ -89,16 +89,11 @@ the migrated Firestore documents.
 - Benchmark selection changed from individual datasets to user-visible
   routes/tabs because perceived cold-load latency is determined by the slowest
   concurrent request in a route batch, not the sum of serial dataset reads.
-- Added `mealItems`, `mealLog`, `favoriteFoods`, and `recentFoods` definitions
-  so the Nutrition route can execute the exact shared plan.
 - Kept a secondary per-dataset report for diagnosing a slow or missing source,
   while making the per-tab Sheets and Firestore rows the primary output.
 - Sheets ranges beginning at row 1 now declare `headerRows: 1`. Reports subtract
   that metadata from returned value rows, including the header-only case, so
   both backend count columns describe logical data records.
-- Nutrition is excluded from `benchmarkRoutes` while its Firebase rollout is
-  deferred. Its route definition remains in the shared plan for the UI, but the
-  benchmark action cannot select or request it.
 - The per-tab summary uses one row per tab rather than separate backend rows,
   making direct latency and request-shape comparisons easier to scan.
 - Yearly workout, Garmin activity, Garmin wellness, and Withings collections

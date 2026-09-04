@@ -102,9 +102,6 @@ authentication, and scheduled sync jobs switch backends.
 - Only Exercises and Workouts are required. Missing logs, schedules, cardio,
   Garmin, Garmin Wellness, Withings, or settings tabs produce warnings and are
   excluded from writes and replacement deletion.
-- Nutrition collections (`mealItems`, `mealLog`, `favoriteFoods`, and
-  `recentFoods`) are not migrated. Nutrition tracking starts fresh after the
-  Firebase application backend is enabled.
 - Append-only histories use yearly bucket documents for
   `workoutSessions`, `garminActivities`, `garminWellness`, and
   `withingsMeasurements`. Every bucket stores `{ period, count, entries }`;

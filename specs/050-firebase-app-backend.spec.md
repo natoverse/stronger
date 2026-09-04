@@ -19,7 +19,7 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] Firebase Authentication is the application login and persists sessions
   across reloads and browser restarts without a fixed one-hour limit.
 - [ ] Firestore is the source of truth for exercises, workout definitions,
-  workout logs, schedule data, nutrition data, settings, and imported health
+  workout logs, schedule data, settings, and imported health
   data.
 - [ ] Every document is stored below `/users/{uid}` and security rules prevent
   access to another user's records.
@@ -59,10 +59,6 @@ All collections are nested below `/users/{uid}`:
 - `dayFlags/{date}`
 - `schedule/{date}`
 - `cardioActivities/{activityId}`
-- `mealItems/{itemId}`
-- `mealLog/{entryId}`
-- `favoriteFoods/{barcode}`
-- `recentFoods/{barcode}`
 - `garminActivities/{year}`
 - `garminWellness/{year}`
 - `withingsMeasurements/{year}`

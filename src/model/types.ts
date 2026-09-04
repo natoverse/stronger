@@ -273,59 +273,6 @@ export interface CardioActivity {
 }
 
 // ---------------------------------------------------------------------------
-// Meal tracking
-// ---------------------------------------------------------------------------
-
-/** The five meal categories used to organize saved foods and daily entries. */
-export type MealCategory = 'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks' | 'Drinks';
-
-/** A reusable food or drink with its nutrition per serving. */
-export interface MealItem {
-	id: string;
-	name: string;
-	category: MealCategory;
-	calories: number;
-	fat: number;
-	carbs: number;
-	fiber: number;
-	protein: number;
-	/** Number of standard alcoholic drinks per serving. Defaults to 0 for non-alcoholic items. */
-	standardDrinks: number;
-	/** Whether this item is starred as a favorite. Defaults to false. */
-	favorite?: boolean;
-}
-
-/** A food or drink logged for a specific day. */
-export interface MealLogEntry extends MealItem {
-	date: string;
-	/** Number of servings logged. Defaults to 1; fractional values (e.g. 0.5) are allowed. Macros are per serving and scaled by this quantity. */
-	quantity: number;
-	/** Standard drinks per serving (US standard: 1 drink = 14 g pure alcohol). 0 for non-alcoholic items. */
-	standardDrinks: number;
-}
-
-/**
- * A food sourced from the Open Food Facts database, identified by its OFF
- * `code` (barcode). Used for the favorites and recents lists. Macros are
- * per serving; the meal category is chosen at log time, not stored here.
- */
-export interface FoodItem {
-	/** Open Food Facts barcode — the stable identity for the food. */
-	code: string;
-	name: string;
-	brand: string;
-	/** Human-readable serving description (e.g. "30 g"). */
-	servingLabel: string;
-	calories: number;
-	fat: number;
-	carbs: number;
-	fiber: number;
-	protein: number;
-	/** Standard drinks per serving (US standard: 1 drink = 14 g pure alcohol). 0 for non-alcoholic items. */
-	standardDrinks: number;
-}
-
-// ---------------------------------------------------------------------------
 // Strava activity (synced externally via GitHub Actions)
 // ---------------------------------------------------------------------------
 
@@ -410,8 +357,6 @@ export interface AppSettings {
 	roundWarmupPlateMath: boolean;
 	/** Whether to show the Garmin activities/wellness tab in the toolbar. */
 	showGarminTab: boolean;
-	/** Whether to show the nutrition tab in the toolbar. */
-	showNutritionTab: boolean;
 	/** Percent threshold for filtering Withings "dip" points when Skip Dips is enabled. */
 	withingsDipThresholdPercent: number;
 	/** Percent drop threshold for filtering progress-chart dips when Skip Dips is enabled. */
@@ -420,14 +365,6 @@ export interface AppSettings {
 	skipProgressDips: boolean;
 	/** Whether to filter spikes/dips from body-composition charts. */
 	skipBodyCompDips: boolean;
-	/** Daily calorie target used in the nutrition summary (0 disables goal coloring). */
-	dailyCalorieGoal: number;
-	/** Daily protein target in grams used in the nutrition summary (0 disables goal coloring). */
-	dailyProteinGoalGrams: number;
-	/** Daily fiber target in grams used in the nutrition summary (0 disables goal coloring). */
-	dailyFiberGoalGrams: number;
-	/** Daily target for number of standard alcoholic drinks (0 disables goal coloring). */
-	drinksPerDayGoal: number;
 	/** Daily step goal used to color the Garmin steps chart (0 disables goal coloring). Auto-synced from Garmin. */
 	garminDailyStepsGoal: number;
 	/** Daily floors goal used to color the Garmin floors chart (0 disables goal coloring). Auto-synced from Garmin. */
@@ -444,16 +381,11 @@ export type AppBooleanSettingKey =
 	| 'keepScreenOn'
 	| 'roundWarmupPlateMath'
 	| 'showGarminTab'
-	| 'showNutritionTab'
 	| 'skipProgressDips'
 	| 'skipBodyCompDips';
 export type AppNumericSettingKey =
 	| 'withingsDipThresholdPercent'
 	| 'progressDipThresholdPercent'
-	| 'dailyCalorieGoal'
-	| 'dailyProteinGoalGrams'
-	| 'dailyFiberGoalGrams'
-	| 'drinksPerDayGoal'
 	| 'garminDailyStepsGoal'
 	| 'garminDailyFloorsGoal'
 	| 'garminDailySleepHoursGoal'

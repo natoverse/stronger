@@ -91,20 +91,6 @@ export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onApp
           <span className="settings-toggle-switch" />
         </label>
 
-        <label className="settings-toggle-row">
-          <span className="settings-toggle-label">
-            <span className="settings-toggle-name">Nutrition</span>
-            <span className="settings-toggle-description">Show the Nutrition tab in the toolbar</span>
-          </span>
-          <input
-            type="checkbox"
-            className="settings-toggle-input"
-            checked={appSettings.showNutritionTab}
-            onChange={(e) => onAppSettingChange('showNutritionTab', e.target.checked)}
-          />
-          <span className="settings-toggle-switch" />
-        </label>
-
         <div className="settings-subsection-title">Charts</div>
 
         <label className="settings-toggle-row">
@@ -176,96 +162,6 @@ export function SettingsView({ onSignOut, appSettings, onAppSettingChange, onApp
               }}
             />
             <span className="settings-percent-unit">%</span>
-          </div>
-        </div>
-
-        <div className="settings-subsection-title">Nutrition Goals</div>
-
-        <div className="settings-percent-row">
-          <span className="settings-toggle-label">
-            <span className="settings-toggle-name">Daily Calories</span>
-            <span className="settings-toggle-description">Used to color the nutrition summary</span>
-          </span>
-          <div className="settings-percent-input-group">
-            <input
-              type="number"
-              className="settings-percent-input"
-              min={0}
-              max={20000}
-              step={10}
-              value={appSettings.dailyCalorieGoal}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (isFinite(v) && v >= 0 && v <= 20000) onAppNumericSettingChange('dailyCalorieGoal', v);
-              }}
-            />
-            <span className="settings-percent-unit">cal</span>
-          </div>
-        </div>
-
-        <div className="settings-percent-row">
-          <span className="settings-toggle-label">
-            <span className="settings-toggle-name">Daily Protein</span>
-            <span className="settings-toggle-description">Used to color the nutrition summary</span>
-          </span>
-          <div className="settings-percent-input-group">
-            <input
-              type="number"
-              className="settings-percent-input"
-              min={0}
-              max={1000}
-              step={1}
-              value={appSettings.dailyProteinGoalGrams}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (isFinite(v) && v >= 0 && v <= 1000) onAppNumericSettingChange('dailyProteinGoalGrams', v);
-              }}
-            />
-            <span className="settings-percent-unit">g</span>
-          </div>
-        </div>
-
-        <div className="settings-percent-row">
-          <span className="settings-toggle-label">
-            <span className="settings-toggle-name">Daily Fiber</span>
-            <span className="settings-toggle-description">Used to color the nutrition summary</span>
-          </span>
-          <div className="settings-percent-input-group">
-            <input
-              type="number"
-              className="settings-percent-input"
-              min={0}
-              max={1000}
-              step={1}
-              value={appSettings.dailyFiberGoalGrams}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (isFinite(v) && v >= 0 && v <= 1000) onAppNumericSettingChange('dailyFiberGoalGrams', v);
-              }}
-            />
-            <span className="settings-percent-unit">g</span>
-          </div>
-        </div>
-
-        <div className="settings-percent-row">
-          <span className="settings-toggle-label">
-            <span className="settings-toggle-name">Drinks Per Day</span>
-            <span className="settings-toggle-description">Alcoholic drinks target per day (×7 used for weekly bar)</span>
-          </span>
-          <div className="settings-percent-input-group">
-            <input
-              type="number"
-              className="settings-percent-input"
-              min={0}
-              max={100}
-              step={1}
-              value={appSettings.drinksPerDayGoal}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                if (isFinite(v) && v >= 0 && v <= 100) onAppNumericSettingChange('drinksPerDayGoal', v);
-              }}
-            />
-            <span className="settings-percent-unit">drinks</span>
           </div>
         </div>
 

@@ -167,13 +167,10 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			['app.showSetComments', 'false'],
 			['app.keepScreenOn', 'true'],
 			['app.showGarminTab', 'true'],
-			['app.showNutritionTab', 'true'],
 			['app.skipProgressDips', 'false'],
 			['app.skipBodyCompDips', 'false'],
 			['app.withingsDipThresholdPercent', '2.5'],
 			['app.progressDipThresholdPercent', '7.5'],
-			['app.dailyCalorieGoal', '2500'],
-			['app.dailyProteinGoalGrams', '180'],
 			['app.garminDailySleepHoursGoal', '8.5'],
 		])
 		expect(appSettingsFromMap(settings)).toEqual({
@@ -182,15 +179,10 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			keepScreenOn: true,
 			roundWarmupPlateMath: false,
 			showGarminTab: true,
-			showNutritionTab: true,
 			skipProgressDips: false,
 			skipBodyCompDips: false,
 			withingsDipThresholdPercent: 2.5,
 			progressDipThresholdPercent: 7.5,
-			dailyCalorieGoal: 2500,
-			dailyProteinGoalGrams: 180,
-			dailyFiberGoalGrams: 0,
-			drinksPerDayGoal: 0,
 			garminDailyStepsGoal: 0,
 			garminDailyFloorsGoal: 0,
 			garminDailySleepHoursGoal: 8.5,
@@ -202,8 +194,6 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		const settings = new Map<string, string>([
 			['app.withingsDipThresholdPercent', '-1'],
 			['app.progressDipThresholdPercent', '0'],
-			['app.dailyCalorieGoal', '-100'],
-			['app.dailyProteinGoalGrams', '2000'],
 		])
 		expect(appSettingsFromMap(settings)).toEqual(DEFAULT_APP_SETTINGS)
 	})
@@ -221,15 +211,10 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 			keepScreenOn: false,
 			roundWarmupPlateMath: false,
 			showGarminTab: true,
-			showNutritionTab: true,
 			skipProgressDips: false,
 			skipBodyCompDips: true,
 			withingsDipThresholdPercent: 3,
 			progressDipThresholdPercent: 6,
-			dailyCalorieGoal: 2200,
-			dailyProteinGoalGrams: 160,
-			dailyFiberGoalGrams: 0,
-			drinksPerDayGoal: 2,
 			garminDailyStepsGoal: 0,
 			garminDailyFloorsGoal: 0,
 			garminDailySleepHoursGoal: 8,
@@ -241,14 +226,10 @@ describe('appSettingsFromMap / appSettingsToMap', () => {
 		expect(settings.get('app.showSetComments')).toBe('true')
 		expect(settings.get('app.keepScreenOn')).toBe('false')
 		expect(settings.get('app.showGarminTab')).toBe('true')
-		expect(settings.get('app.showNutritionTab')).toBe('true')
 		expect(settings.get('app.skipProgressDips')).toBe('false')
 		expect(settings.get('app.skipBodyCompDips')).toBe('true')
 		expect(settings.get('app.withingsDipThresholdPercent')).toBe('3')
 		expect(settings.get('app.progressDipThresholdPercent')).toBe('6')
-		expect(settings.get('app.dailyCalorieGoal')).toBe('2200')
-		expect(settings.get('app.dailyProteinGoalGrams')).toBe('160')
-		expect(settings.get('app.drinksPerDayGoal')).toBe('2')
 		expect(settings.get('app.garminDailyStepsGoal')).toBe('0')
 		expect(settings.get('app.garminDailyFloorsGoal')).toBe('0')
 		expect(settings.get('app.garminDailySleepHoursGoal')).toBe('8')
