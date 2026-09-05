@@ -26,6 +26,7 @@ import type { ParsedLogRow } from '../google/sheets.ts'
 import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 2
+const BATCH_WRITE_LIMIT = 400
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 export type DateWindow = {
 	startDate: string
@@ -230,14 +231,14 @@ async function replaceCollection<T>(
 		operations.push((batch) => batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() }))
 	})
 
-	for (let start = 0; start < operations.length; start += 400) {
+	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
 		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + 400)) operation(batch)
+		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
 		await batch.commit()
 	}
 }
 
-async function seedCollectionIfEmpty<T>(
+async function seedCollectionRequireEmpty<T>(
 	uid: string,
 	name: CollectionName,
 	values: T[],
@@ -257,9 +258,9 @@ async function seedCollectionIfEmpty<T>(
 		}
 	})
 
-	for (let start = 0; start < operations.length; start += 400) {
+	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
 		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + 400)) operation(batch)
+		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
 		await batch.commit()
 	}
 }
@@ -283,9 +284,9 @@ async function writeDateScopedCollection<T>(
 			}
 		}
 	})
-	for (let start = 0; start < operations.length; start += 400) {
+	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
 		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + 400)) operation(batch)
+		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
 		await batch.commit()
 	}
 }
@@ -322,7 +323,7 @@ export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]):
 }
 
 export function writeDefaultWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
-	return seedCollectionIfEmpty(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
+	return seedCollectionRequireEmpty(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
 }
 
 export function readCardioActivities(uid: string): Promise<CardioActivity[] | null> {

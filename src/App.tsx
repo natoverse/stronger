@@ -1369,6 +1369,12 @@ function AppContent() {
     }
   }, [route, activeWorkout, progressionProposals]);
 
+  useEffect(() => {
+    if (route.view !== 'editor' && duplicateWorkoutDraft) {
+      setDuplicateWorkoutDraft(undefined);
+    }
+  }, [route.view, duplicateWorkoutDraft]);
+
   const executeDatasetLoad = useCallback((
     request: FirebaseLoadRequest,
     userId: string,
