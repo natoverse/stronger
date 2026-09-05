@@ -408,10 +408,9 @@ function AppContent() {
     try {
       await withAuthRetry(() => writeDefaultWorkoutDefs(userId, defaultsToImport));
       if (connectedUserRef.current !== userId) return;
-      const existingIds = new Set(definitionsRef.current.map((definition) => definition.id));
       const updatedDefinitions = [
         ...definitionsRef.current,
-        ...defaultsToImport.filter((definition) => !existingIds.has(definition.id)),
+        ...defaultsToImport,
       ];
       setDefinitions(updatedDefinitions);
       setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
