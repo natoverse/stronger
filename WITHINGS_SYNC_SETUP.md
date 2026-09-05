@@ -46,29 +46,26 @@ and expires in about 30 seconds, so exchange it immediately.
 
 ### 3. Exchange the authorization code
 
-Set the credentials locally, then run the authorization helper immediately
-after copying the code. The redirect URI must exactly match the callback URI
-configured above. The helper follows Withings' current signed-request flow: it
-gets a one-time nonce, signs the token request with HMAC-SHA256, and never sends
-the client secret as a request parameter.
+Run the following command after replacing the four placeholder values. The
+redirect URI must exactly match the callback URI configured above.
 
 ```bash
-export WITHINGS_CLIENT_ID=YOUR_CLIENT_ID
-read -s WITHINGS_CLIENT_SECRET
-printf '\n'
-export WITHINGS_CLIENT_SECRET
-export WITHINGS_AUTHORIZATION_CODE=AUTHORIZATION_CODE
-node scripts/withings-authorize.mjs
-unset WITHINGS_CLIENT_SECRET WITHINGS_AUTHORIZATION_CODE
+curl --request POST https://wbsapi.withings.net/v2/oauth2 \
+  --data action=requesttoken \
+  --data grant_type=authorization_code \
+  --data client_id=YOUR_CLIENT_ID \
+  --data client_secret=YOUR_CLIENT_SECRET \
+  --data code=AUTHORIZATION_CODE \
+  --data redirect_uri=http://localhost
 ```
 
-The helper prints the successful token response body:
+A successful response has `status: 0` and contains tokens under `body`:
 
 ```json
-{"userid":12345,"access_token":"...","refresh_token":"...","scope":"user.metrics"}
+{"status":0,"body":{"access_token":"...","refresh_token":"..."}}
 ```
 
-Copy `refresh_token` into the `WITHINGS_REFRESH_TOKEN` repository secret
+Copy `body.refresh_token` into the `WITHINGS_REFRESH_TOKEN` repository secret
 under **Settings -> Secrets and variables -> Actions**. Do not commit or share
 the response. If the exchange reports an invalid or expired code, repeat the
 authorization step and exchange the new code immediately.
@@ -88,10 +85,6 @@ For an existing Sheets installation, run **Migrate Google Sheet to Firebase**
 with `collections` set to `syncState`. This copies the current
 `withings_refresh_token` from the legacy `Stronger - Infra` tab. If no legacy
 token exists, the first run uses `WITHINGS_REFRESH_TOKEN`.
-
-When reconnecting after generating a fresh token, remember that the sync
-prefers `/syncState/{uid}` over the repository seed secret. Either replace the
-`withingsRefreshToken` field there or remove it before running the workflow.
 
 ## Stored data
 
@@ -113,7 +106,6 @@ window. A manual backfill fetches history since January 1, 2021.
 
 | Symptom | Resolution |
 |---|---|
-| Token refresh reports an invalid refresh token | First migrate `syncState` from the legacy Infra tab. If that token is also invalid, repeat **Get the initial refresh token**, update `WITHINGS_REFRESH_TOKEN`, then remove or replace the stale `withingsRefreshToken` field in `/syncState/{uid}`. |
-| Nonce or signature request fails | Confirm the client ID and newly regenerated client secret match the same Withings application and that the runner clock is accurate. |
+| Token refresh returns 401 or 601 | Repeat **Get the initial refresh token**, update `WITHINGS_REFRESH_TOKEN`, then remove or replace the stale `withingsRefreshToken` field in `/syncState/{uid}`. |
 | Firestore returns `403` | Verify the administrative service account has Cloud Datastore User. |
 | No measurements are written | Withings groups without a positive weight are intentionally skipped to match the application schema. |
