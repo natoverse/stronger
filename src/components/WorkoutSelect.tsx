@@ -180,13 +180,8 @@ export function buildTodaysPlan({
 		}
 	}
 
-	return items
-		.map((item, index) => ({ item, index }))
-		.sort((a, b) =>
-			scheduledWorkoutRank(a.item.workoutId) - scheduledWorkoutRank(b.item.workoutId)
-			|| a.index - b.index,
-		)
-		.map(({ item }) => item);
+	// Array.prototype.sort is stable, so ties keep their schedule order.
+	return items.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId));
 }
 
 const PLAN_ITEM_ICONS = {
@@ -201,7 +196,7 @@ function PlanInfoCard({ kind, name }: { kind: 'cardio' | 'rest' | 'blocker'; nam
 	return (
 		<div className={`workout-card-wrapper plan-info-card plan-info-card-${kind}`}>
 			<div className="workout-card plan-info-card-body">
-				<span className="strength-badge"><Icon size={24} /></span>
+				<span className="strength-badge" aria-hidden="true"><Icon size={24} /></span>
 				<span className="workout-name">{name}</span>
 			</div>
 		</div>
