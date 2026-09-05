@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowLeft, MessageSquare, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowUp, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import type { SetTemplate, WeightBasis, SetType, LiftConfig, ExerciseRole } from '../model/index.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
 
@@ -114,6 +114,23 @@ function defaultSet(): SetTemplate {
 		maxReps: 5,
 		amrap: false,
 	};
+}
+
+/** Move a set to a new position without mutating the original list. */
+export function moveSet(sets: SetTemplate[], fromIndex: number, toIndex: number): SetTemplate[] {
+	if (
+		fromIndex < 0
+		|| fromIndex >= sets.length
+		|| toIndex < 0
+		|| toIndex >= sets.length
+		|| fromIndex === toIndex
+	) {
+		return sets;
+	}
+	const reordered = [...sets];
+	const [set] = reordered.splice(fromIndex, 1);
+	reordered.splice(toIndex, 0, set);
+	return reordered;
 }
 
 /** Convert a WorkoutDefinition to the local editable format. */
@@ -268,6 +285,17 @@ export function WorkoutEditor({
 					sets: ex.sets.filter((_, si) => si !== setIdx),
 				};
 			}),
+		}));
+	}, []);
+
+	const reorderSet = useCallback((exerciseIdx: number, setIdx: number, direction: -1 | 1) => {
+		setWorkout((prev) => ({
+			...prev,
+			exercises: prev.exercises.map((ex, i) =>
+				i === exerciseIdx
+					? { ...ex, sets: moveSet(ex.sets, setIdx, setIdx + direction) }
+					: ex,
+			),
 		}));
 	}, []);
 
@@ -457,6 +485,7 @@ export function WorkoutEditor({
 									<span className="editor-col-reps">Max</span>
 									<span className="editor-col-amrap">AMRAP</span>
 									<span className="editor-col-comment"></span>
+									<span className="editor-col-move"></span>
 									<span className="editor-col-remove"></span>
 								</div>
 								{exercise.sets.map((set, setIdx) => (
@@ -615,6 +644,26 @@ export function WorkoutEditor({
 										>
 											<MessageSquare size={14} />
 										</button>
+										<div className="editor-set-move">
+											<button
+												type="button"
+												className="btn-move-set"
+												aria-label={`Move set ${setIdx + 1} up`}
+												disabled={setIdx === 0}
+												onClick={() => reorderSet(exerciseIdx, setIdx, -1)}
+											>
+												<ArrowUp size={12} />
+											</button>
+											<button
+												type="button"
+												className="btn-move-set"
+												aria-label={`Move set ${setIdx + 1} down`}
+												disabled={setIdx === exercise.sets.length - 1}
+												onClick={() => reorderSet(exerciseIdx, setIdx, 1)}
+											>
+												<ArrowDown size={12} />
+											</button>
+										</div>
 										<button
 											type="button"
 											className="btn-remove-set"
