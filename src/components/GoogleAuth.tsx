@@ -6,6 +6,7 @@ import {
 	signOutOfStronger,
 } from '../firebase/index.ts'
 import { withTimeout } from '../firebase/timeout.ts'
+import { isMockMode } from '../data/mock-data.ts'
 import { Calendar, Dumbbell, HeartPulse, Library, Settings, SportShoe, TrendingUp } from 'lucide-react'
 
 const AUTH_RESTORE_TIMEOUT_MS = 15_000
@@ -42,7 +43,8 @@ export function GoogleAuth({
 	onOpenSettings,
 	onGoToList,
 }: Props) {
-	const [phase, setPhase] = useState<Phase>('loading')
+	const mockMode = isMockMode()
+	const [phase, setPhase] = useState<Phase>(mockMode ? 'connected' : 'loading')
 	const [error, setError] = useState<string | null>(null)
 	const [signInPending, setSignInPending] = useState(false)
 	const authGenerationRef = useRef(0)
@@ -54,6 +56,7 @@ export function GoogleAuth({
 	}, [onConnected])
 
 	useEffect(() => {
+		if (mockMode) return
 		if (!isFirebaseConfigured()) {
 			setError('Firebase is not configured. Set the VITE_FIREBASE_* environment variables.')
 			setPhase('error')
@@ -88,7 +91,7 @@ export function GoogleAuth({
 			authGenerationRef.current += 1
 			unsubscribe()
 		}
-	}, [connect, onDisconnected])
+	}, [connect, mockMode, onDisconnected])
 
 	const handleSignIn = useCallback(async () => {
 		if (signInPending) return

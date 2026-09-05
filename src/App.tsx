@@ -43,10 +43,13 @@ import { WithingsView } from './components/WithingsView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
 import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
 import { DateRangeSelector } from './components/DateRangeSelector.js';
+import { createMockData, isMockMode, MOCK_USER_ID } from './data/mock-data.js';
 import './App.css';
 
 const FIREBASE_LOAD_TIMEOUT_MS = 20_000;
 const CALENDAR_SYNC_ID_SETTING = 'calendar.syncCalendarId';
+const MOCK_MODE = isMockMode();
+const MOCK_DATA = MOCK_MODE ? createMockData() : null;
 
 function firebaseLoadKey(
   request: FirebaseLoadRequest,
@@ -60,48 +63,50 @@ function AppContent() {
   const { route, navigateTo, replaceTo } = useHashRouter();
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [previousSets, setPreviousSets] = useState<PreviousSetData[][] | null>(null);
-  const [sheetConnected, setSheetConnected] = useState(false);
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [sheetConnected, setSheetConnected] = useState(MOCK_MODE);
+  const [workouts, setWorkouts] = useState<Workout[]>(
+    MOCK_DATA ? buildWorkoutsFromConfigs(MOCK_DATA.configs, MOCK_DATA.definitions, { roundWarmupPlateMath: MOCK_DATA.appSettings.roundWarmupPlateMath }) : [],
+  );
   const [startTime, setStartTime] = useState<string | null>(null);
-  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
-  const [configs, setConfigs] = useState<LiftConfig[]>([]);
-  const [definitions, setDefinitions] = useState<WorkoutDefinition[]>([]);
+  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(MOCK_MODE ? MOCK_USER_ID : null);
+  const [configs, setConfigs] = useState<LiftConfig[]>(MOCK_DATA?.configs ?? []);
+  const [definitions, setDefinitions] = useState<WorkoutDefinition[]>(MOCK_DATA?.definitions ?? []);
   const [progressionProposals, setProgressionProposals] = useState<ProgressionProposal[] | null>(null);
-  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>([]);
-  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>([]);
-  const [logRows, setLogRows] = useState<ParsedLogRow[]>([]);
+  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>(MOCK_DATA?.workoutSchedule ?? []);
+  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>(MOCK_DATA?.dayFlags ?? []);
+  const [logRows, setLogRows] = useState<ParsedLogRow[]>(MOCK_DATA?.logRows ?? []);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
-  const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>([]);
-  const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
-  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
-  const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>([]);
+  const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>(MOCK_DATA?.cardioActivities ?? []);
+  const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>(MOCK_DATA?.stravaGoals ?? []);
+  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>(MOCK_DATA?.garminActivities ?? []);
+  const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>(MOCK_DATA?.wellnessEntries ?? []);
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [garminRange, setGarminRange] = useState<StravaTimeRange>('month');
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
-  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
-  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
-  const [liftGoals, setLiftGoals] = useState<LiftGoal[]>([]);
+  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>(MOCK_DATA?.withingsMeasurements ?? []);
+  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>(MOCK_DATA?.withingsGoals ?? []);
+  const [liftGoals, setLiftGoals] = useState<LiftGoal[]>(MOCK_DATA?.liftGoals ?? []);
   const [draftResults, setDraftResults] = useState<SetResult[][] | null>(null);
   const [pendingFinish, setPendingFinish] = useState<{
     workout: Workout;
     results: SetResult[][];
     endTime: string;
   } | null>(null);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [appSettings, setAppSettings] = useState<AppSettings>(MOCK_DATA?.appSettings ?? DEFAULT_APP_SETTINGS);
   const [calendarSyncId, setCalendarSyncId] = useState<string | null>(null);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(MOCK_MODE);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
   const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
-  const settingsRef = useRef(new Map<string, string>());
-  const definitionsRef = useRef<WorkoutDefinition[]>([]);
+  const settingsRef = useRef(new Map<string, string>(MOCK_DATA?.settings));
+  const definitionsRef = useRef<WorkoutDefinition[]>(MOCK_DATA?.definitions ?? []);
   // Ref so callbacks can read the current value without being in their dependency arrays.
-  const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
+  const roundWarmupPlateMathRef = useRef(MOCK_DATA?.appSettings.roundWarmupPlateMath ?? DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
-  const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>());
+  const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>(MOCK_MODE ? ['all'] : []));
   const dataLoadsRef = useRef(new Map<string, Promise<void>>());
   const completedDataLoadsRef = useRef(new Set<string>());
   const loadQueueKeyRef = useRef<string | null>(null);
@@ -109,7 +114,7 @@ function AppContent() {
   const calendarWindowRef = useRef(initialDateWindow());
   const calendarWindowLoadRef = useRef(Promise.resolve());
   const calendarMutationRef = useRef<Promise<unknown>>(Promise.resolve());
-  const connectedUserRef = useRef<string | null>(null);
+  const connectedUserRef = useRef<string | null>(MOCK_MODE ? MOCK_USER_ID : null);
   const connectionGenerationRef = useRef(0);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
 
@@ -1522,6 +1527,7 @@ function AppContent() {
   }, [executeDatasetLoad]);
 
   useEffect(() => {
+    if (MOCK_MODE) return;
     if (!spreadsheetId) return;
     const queueKey = `${spreadsheetId}:${route.view}`;
     if (loadQueueKeyRef.current === queueKey) return;

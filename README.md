@@ -23,6 +23,16 @@ shared project configuration, and one-time migration, see
 - **AI-authored.** Agents implement features from specs. The human role is directing, reviewing, and iterating.
 - **Push to main.** No PR workflow for most changes.
 
+## Mock screenshots
+
+Append `?mock=true` before the hash route to bypass sign-in and load local,
+date-relative fixtures for every data source. For example:
+`http://localhost:5173/stronger/?mock=true#/calendar`.
+
+Run `npm run screenshots` to build the app and capture each primary view with
+Playwright. Pull requests run the same suite and upload the PNGs as a workflow
+artifact.
+
 ## Tech stack
 
 React 19 · TypeScript 5.7 · Vite 6 · Vitest · Google Sheets API · GitHub Pages
