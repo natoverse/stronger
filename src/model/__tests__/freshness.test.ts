@@ -20,6 +20,12 @@ describe('formatShortDate', () => {
   it('returns null for missing or invalid input', () => {
     expect(formatShortDate(null)).toBeNull();
     expect(formatShortDate('not-a-date')).toBeNull();
+    expect(formatShortDate('2026-13-45')).toBeNull();
+    expect(formatShortDate('2026-02-31')).toBeNull();
+  });
+
+  it('omits the period for unabbreviated months', () => {
+    expect(formatShortDate('2026-05-04')).toBe('May 4');
   });
 });
 

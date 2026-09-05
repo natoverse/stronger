@@ -17,14 +17,21 @@ export function latestDateString(dates: (string | undefined | null)[]): string |
   return latest;
 }
 
-/** Formats a YYYY-MM-DD date as "Sep. 4". Returns null for unparseable input. */
+/**
+ * Formats a YYYY-MM-DD date as "Sep. 4". Months that aren't abbreviated (May)
+ * are rendered without the period. Returns null for unparseable input.
+ */
 export function formatShortDate(iso: string | null): string | null {
   if (!iso) return null;
   const [year, month, day] = iso.split('-').map(Number);
   if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
   const d = new Date(year, month - 1, day);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${d.toLocaleDateString('en-US', { month: 'short' })}. ${d.getDate()}`;
+  // Reject dates that rolled over (e.g. Feb 31).
+  if (Number.isNaN(d.getTime()) || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  const short = d.toLocaleDateString('en-US', { month: 'short' });
+  const long = d.toLocaleDateString('en-US', { month: 'long' });
+  return `${short}${short === long ? '' : '.'} ${d.getDate()}`;
 }
 
 /**
