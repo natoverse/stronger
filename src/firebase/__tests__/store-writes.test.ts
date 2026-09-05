@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockState = vi.hoisted(() => ({
 	docsByCollection: new Map<string, Array<{ id: string; ref: { path: string } }>>(),
+	existingDocPaths: new Set<string>(),
 	commits: [] as Array<Array<{ type: string; path: string; data?: object }>>,
 }))
 
@@ -21,7 +22,7 @@ vi.mock('firebase/firestore', () => ({
 	}) => Promise<void>) => {
 		const operations: Array<{ type: string; path: string; data?: object }> = []
 		await update({
-			get: async () => ({ exists: () => false }),
+			get: async (ref) => ({ exists: () => mockState.existingDocPaths.has(ref.path) }),
 			set: (ref, data) => operations.push({ type: 'set', path: ref.path, data }),
 		})
 		if (operations.length > 0) mockState.commits.push(operations)
@@ -55,6 +56,7 @@ const defaultWorkout: WorkoutDefinition = {
 describe('Firestore default seeding writes', () => {
 	beforeEach(() => {
 		mockState.docsByCollection.clear()
+		mockState.existingDocPaths.clear()
 		mockState.commits.length = 0
 	})
 
@@ -77,6 +79,16 @@ describe('Firestore default seeding writes', () => {
 		mockState.docsByCollection.set('firestore/users/user-1/workouts', [
 			{ id: 'custom', ref: { path: 'firestore/users/user-1/workouts/custom' } },
 		])
+
+		await expect(writeDefaultWorkoutDefs('user-1', [defaultWorkout]))
+			.rejects.toThrow('Default workouts can only be imported into an empty workouts library')
+
+		expect(mockState.commits).toEqual([])
+	})
+
+	it('refuses to overwrite a workout document created after the empty check', async () => {
+		mockState.docsByCollection.set('firestore/users/user-1/workouts', [])
+		mockState.existingDocPaths.add('firestore/users/user-1/workouts/A')
 
 		await expect(writeDefaultWorkoutDefs('user-1', [defaultWorkout]))
 			.rejects.toThrow('Default workouts can only be imported into an empty workouts library')

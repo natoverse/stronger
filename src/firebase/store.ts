@@ -28,6 +28,7 @@ import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 2
 const BATCH_WRITE_LIMIT = 400
+const TRANSACTIONAL_SEED_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 export type DateWindow = {
 	startDate: string
@@ -253,18 +254,22 @@ async function seedCollectionRequireEmpty<T>(
 	existingDataDescription: string,
 ): Promise<void> {
 	const collectionRef = userCollection(uid, name)
+	const nonEmptyLibraryError = `Default ${existingDataDescription} can only be imported into an empty ${existingDataDescription} library; existing data was found, so nothing was changed.`
 	const existing = await getDocs(query(collectionRef, limit(1)))
 	if (existing.docs.length > 0) {
-		throw new Error(`Default ${existingDataDescription} can only be imported into an empty ${existingDataDescription} library; existing data was found, so nothing was changed.`)
+		throw new Error(nonEmptyLibraryError)
 	}
 	const refs = values.map((value, index) => ({
 		ref: doc(collectionRef, getId(value, index)),
 		value,
 	}))
+	if (refs.length > TRANSACTIONAL_SEED_LIMIT) {
+		throw new Error(`Default ${existingDataDescription} import is too large to write safely; nothing was changed.`)
+	}
 	await runTransaction(firestore, async (transaction) => {
 		const snapshots = await Promise.all(refs.map(({ ref }) => transaction.get(ref)))
 		if (snapshots.some((snapshot) => snapshot.exists())) {
-			throw new Error(`Default ${existingDataDescription} can only be imported into an empty ${existingDataDescription} library; existing data was found, so nothing was changed.`)
+			throw new Error(nonEmptyLibraryError)
 		}
 		const now = new Date().toISOString()
 		refs.forEach(({ ref, value }) => {

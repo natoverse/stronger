@@ -148,6 +148,15 @@ export function fromEditable(e: EditableWorkout, configs: LiftConfig[], existing
 	};
 }
 
+function initialEditableWorkout(
+	existing?: WorkoutDefinition,
+	initialDefinition?: WorkoutDefinition,
+): EditableWorkout {
+	if (existing) return toEditable(existing);
+	if (initialDefinition) return toEditable(initialDefinition);
+	return { id: '', name: '', exercises: [] };
+}
+
 export function WorkoutEditor({
 	existing,
 	initialDefinition,
@@ -158,15 +167,7 @@ export function WorkoutEditor({
 	onDelete,
 }: WorkoutEditorProps) {
 	const [workout, setWorkout] = useState<EditableWorkout>(() =>
-		existing
-			? toEditable(existing)
-			: initialDefinition
-				? toEditable(initialDefinition)
-			: {
-					id: '',
-					name: '',
-					exercises: [],
-				},
+		initialEditableWorkout(existing, initialDefinition),
 	);
 	const [saving, setSaving] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
@@ -722,4 +723,3 @@ export function WorkoutEditor({
 		</div>
 	);
 }
-
