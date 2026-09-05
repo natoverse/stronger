@@ -34,8 +34,8 @@ import {
 	readSyncState,
 	writeSyncState,
 } from './firestore-sync.mjs'
+import { requestWithingsToken } from './withings-oauth.mjs'
 
-const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2'
 const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure'
 const REFRESH_TOKEN_FIELD = 'withingsRefreshToken'
 
@@ -70,29 +70,13 @@ const BACKFILL_START = Math.floor(Date.UTC(2021, 0, 1) / 1000)
 // ---------------------------------------------------------------------------
 
 export async function refreshAccessToken(clientId, clientSecret, refreshToken) {
-	const res = await fetch(WITHINGS_TOKEN_URL, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-		body: new URLSearchParams({
-			action: 'requesttoken',
-			client_id: clientId,
-			client_secret: clientSecret,
-			grant_type: 'refresh_token',
-			refresh_token: refreshToken,
-		}),
+	const data = await requestWithingsToken(clientId, clientSecret, {
+		grant_type: 'refresh_token',
+		refresh_token: refreshToken,
 	})
-	if (!res.ok) {
-		const text = await res.text()
-		throw new Error(`Withings token refresh failed (${res.status}): ${text}`)
-	}
-	const data = await res.json()
-	// Withings wraps everything in { status, body } — status 0 means success.
-	if (data.status !== 0) {
-		throw new Error(`Withings token refresh returned status ${data.status}: ${JSON.stringify(data)}`)
-	}
 	return {
-		accessToken: data.body.access_token,
-		refreshToken: data.body.refresh_token, // rotated — must be persisted
+		accessToken: data.access_token,
+		refreshToken: data.refresh_token, // rotated — must be persisted
 	}
 }
 

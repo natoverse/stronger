@@ -55,3 +55,17 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
 - `/syncState/{uid}` is outside `/users/{uid}` so browser security rules deny
   access to rotating provider credentials while administrative workflows can
   still maintain them through IAM.
+
+## Iteration Decisions
+
+- On 2026-09-05, Withings OAuth token requests were updated to the provider's
+  signed-request protocol. Both authorization-code exchanges and scheduled
+  refreshes now request a one-time nonce and sign the request with HMAC-SHA256;
+  the client secret is no longer transmitted as a form parameter.
+- A local `scripts/withings-authorize.mjs` helper owns the short-lived
+  authorization-code exchange so setup documentation does not require users to
+  manually construct signatures.
+- Reconnection documentation distinguishes a stale repository seed from the
+  live rotating token. Existing Sheets installations should migrate
+  `withings_refresh_token` from the Infra tab into Firestore `syncState` before
+  performing a new OAuth authorization.
