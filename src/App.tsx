@@ -12,7 +12,7 @@ import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, genera
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
-import { buildWorkoutsFromConfigs, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
+import { buildWorkoutsFromConfigs, createDuplicateWorkoutDraft, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
 import { decodeSharedWorkout, encodeSharedWorkout, getImportedWorkoutName } from './data/workout-sharing.js';
 import type { SharedWorkout } from './data/workout-sharing.js';
 import { WorkoutSelect } from './components/WorkoutSelect.js';
@@ -1170,7 +1170,7 @@ function AppContent() {
       const source = definitions.find((d) => d.id === workoutId);
       if (!source) return;
       const newId = generateStrongerId();
-      const newDef = { ...source, id: newId, name: `${source.name} (Copy)`, favorite: false };
+      const newDef = createDuplicateWorkoutDraft(source, newId);
       setDuplicateWorkoutDraft(newDef);
       navigateTo({ view: 'editor' });
     },

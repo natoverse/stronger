@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	defaultLiftConfigs,
 	buildWorkoutsFromConfigs,
+	createDuplicateWorkoutDraft,
 	workoutDefinitions,
 } from '../sample-workouts.ts';
 
@@ -51,6 +52,22 @@ describe('buildWorkoutsFromConfigs', () => {
 	it('returns empty array when given empty configs', () => {
 		const workouts = buildWorkoutsFromConfigs([]);
 		expect(workouts).toHaveLength(0);
+	});
+
+	it('creates an unsaved duplicate workout draft without mutating definitions', () => {
+		const source = workoutDefinitions[0];
+		const definitions = [...workoutDefinitions];
+
+		const draft = createDuplicateWorkoutDraft(source, 'copy-id');
+
+		expect(draft).toEqual({
+			...source,
+			id: 'copy-id',
+			name: `${source.name} (Copy)`,
+			favorite: false,
+		});
+		expect(definitions).toEqual(workoutDefinitions);
+		expect(definitions).not.toContain(draft);
 	});
 
 	it('gracefully handles partial configs (only bench press + squat)', () => {

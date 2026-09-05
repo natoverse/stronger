@@ -15,7 +15,17 @@ vi.mock('firebase/firestore', () => ({
 	})),
 	limit: vi.fn(),
 	query: vi.fn((ref: { path: string }) => ref),
-	runTransaction: vi.fn(),
+	runTransaction: vi.fn(async (_firestore: unknown, update: (transaction: {
+		get: (ref: { path: string }) => Promise<{ exists: () => boolean }>;
+		set: (ref: { path: string }, data: object) => void;
+	}) => Promise<void>) => {
+		const operations: Array<{ type: string; path: string; data?: object }> = []
+		await update({
+			get: async () => ({ exists: () => false }),
+			set: (ref, data) => operations.push({ type: 'set', path: ref.path, data }),
+		})
+		if (operations.length > 0) mockState.commits.push(operations)
+	}),
 	setDoc: vi.fn(),
 	where: vi.fn(),
 	writeBatch: vi.fn(() => {
@@ -69,7 +79,7 @@ describe('Firestore default seeding writes', () => {
 		])
 
 		await expect(writeDefaultWorkoutDefs('user-1', [defaultWorkout]))
-			.rejects.toThrow('Existing data was found in the workouts library, so nothing was changed')
+			.rejects.toThrow('Default workouts can only be imported into an empty workouts library')
 
 		expect(mockState.commits).toEqual([])
 	})

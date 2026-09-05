@@ -255,17 +255,22 @@ async function seedCollectionRequireEmpty<T>(
 	const collectionRef = userCollection(uid, name)
 	const existing = await getDocs(query(collectionRef, limit(1)))
 	if (existing.docs.length > 0) {
-		throw new Error(`Default ${existingDataDescription} can only be imported into an empty library. Existing data was found in the ${existingDataDescription} library, so nothing was changed.`)
+		throw new Error(`Default ${existingDataDescription} can only be imported into an empty ${existingDataDescription} library; existing data was found, so nothing was changed.`)
 	}
-
-	const operations = values.map((value, index) => {
-		const ref = doc(collectionRef, getId(value, index))
-		return (batch: ReturnType<typeof writeBatch>) => {
-			batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() })
+	const refs = values.map((value, index) => ({
+		ref: doc(collectionRef, getId(value, index)),
+		value,
+	}))
+	await runTransaction(firestore, async (transaction) => {
+		const snapshots = await Promise.all(refs.map(({ ref }) => transaction.get(ref)))
+		if (snapshots.some((snapshot) => snapshot.exists())) {
+			throw new Error(`Default ${existingDataDescription} can only be imported into an empty ${existingDataDescription} library; existing data was found, so nothing was changed.`)
 		}
+		const now = new Date().toISOString()
+		refs.forEach(({ ref, value }) => {
+			transaction.set(ref, { ...value as object, updatedAt: now })
+		})
 	})
-
-	await commitInBatches(operations)
 }
 
 async function writeDateScopedCollection<T>(

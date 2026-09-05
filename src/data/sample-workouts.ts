@@ -39,6 +39,13 @@ export interface WorkoutDefinition {
 
 export const workoutDefinitions: WorkoutDefinition[] = workoutsJson as WorkoutDefinition[];
 
+export function createDuplicateWorkoutDraft(
+	source: WorkoutDefinition,
+	id: string,
+): WorkoutDefinition {
+	return { ...source, id, name: `${source.name} (Copy)`, favorite: false };
+}
+
 // ---------------------------------------------------------------------------
 // Computed workouts (ready for display)
 // ---------------------------------------------------------------------------
