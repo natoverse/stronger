@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { nameToId, toEditable, fromEditable } from '../WorkoutEditor.js';
+import { nameToId, toEditable, fromEditable, moveSet } from '../WorkoutEditor.js';
 import type { EditableWorkout } from '../WorkoutEditor.js';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
-import type { LiftConfig } from '../../model/types.js';
+import type { LiftConfig, SetTemplate } from '../../model/types.js';
 
 /* ------------------------------------------------------------------ */
 /*  nameToId – kebab-case slug generation                              */
@@ -31,6 +31,33 @@ describe('nameToId', () => {
 
 	it('preserves digits', () => {
 		expect(nameToId('Phase 2 Workout')).toBe('phase-2-workout');
+	});
+});
+
+describe('moveSet', () => {
+	const sets = [
+		{ setType: 'warmup', percentage: 0.5, weightBasis: { kind: 'topSet' }, minReps: 5, maxReps: 5, amrap: false },
+		{ setType: 'work', percentage: 1, weightBasis: { kind: 'topSet' }, minReps: 3, maxReps: 3, amrap: true },
+		{ setType: 'backoff', percentage: 0.8, weightBasis: { kind: 'topSet' }, minReps: 8, maxReps: 8, amrap: false },
+	] satisfies SetTemplate[];
+
+	it('moves a set up without mutating the original list', () => {
+		const result = moveSet(sets, 1, 0);
+
+		expect(result.map((set) => set.setType)).toEqual(['work', 'warmup', 'backoff']);
+		expect(sets.map((set) => set.setType)).toEqual(['warmup', 'work', 'backoff']);
+	});
+
+	it('moves a set down while preserving its data', () => {
+		const result = moveSet(sets, 1, 2);
+
+		expect(result[2]).toBe(sets[1]);
+		expect(result[2].amrap).toBe(true);
+	});
+
+	it('ignores moves beyond the list boundaries', () => {
+		expect(moveSet(sets, 0, -1)).toBe(sets);
+		expect(moveSet(sets, sets.length - 1, sets.length)).toBe(sets);
 	});
 });
 

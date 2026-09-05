@@ -2430,6 +2430,7 @@ body {
 .editor-col-reps { width: 2rem; text-align: center; }
 .editor-col-amrap { width: 2rem; text-align: center; }
 .editor-col-comment { width: 1.75rem; }
+.editor-col-move { width: 1.75rem; }
 .editor-col-remove { width: 1.75rem; }
 
 .editor-set-type {
@@ -2551,6 +2552,34 @@ body {
 
 .btn-remove-set:active {
 	color: var(--color-danger);
+}
+
+.editor-set-move {
+	display: flex;
+	flex-direction: column;
+	width: 1.75rem;
+}
+
+.btn-move-set {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.75rem;
+	height: 0.875rem;
+	padding: 0;
+	background: none;
+	border: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+}
+
+.btn-move-set:active:not(:disabled) {
+	color: var(--color-primary);
+}
+
+.btn-move-set:disabled {
+	opacity: 0.2;
+	cursor: default;
 }
 
 /* Comment button in set row */

@@ -49,3 +49,12 @@ Saving persists the full workout definition to the sheet using the existing `wor
 - Workout ID for new workouts can be auto-generated from the name (kebab-case slug) or entered manually. Either approach is fine as long as it's unique.
 - Keep the form thumb-friendly — inputs should be large enough to tap accurately on a phone. Consider collapsible exercise sections if the workout gets long.
 - The set type and weight basis fields use the existing enums (`SetType`, `WeightBasis`) from the data model. The serialization format for weight basis in the sheet is already defined: `topSet`, `backoff`, `crossReference:<liftId>`, `fixed:<number>`.
+
+## Iteration decisions
+
+### Set reordering (2026-09-05)
+
+- Each set row has up and down controls that move the set one position within its exercise.
+- The first set's up control and the last set's down control are disabled.
+- Reordering preserves all set fields and is saved through the existing workout definition flow.
+- Drag-and-drop reordering remains out of scope.
