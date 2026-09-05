@@ -14,7 +14,6 @@ vi.mock('firebase/firestore', () => ({
 	getDocs: vi.fn(async (ref: { path: string }) => ({
 		docs: mockState.docsByCollection.get(ref.path) ?? [],
 	})),
-	limit: vi.fn(),
 	query: vi.fn((ref: { path: string }) => ref),
 	runTransaction: vi.fn(async (_firestore: unknown, update: (transaction: {
 		get: (ref: { path: string }) => Promise<{ exists: () => boolean }>;
@@ -75,23 +74,28 @@ describe('Firestore default seeding writes', () => {
 		])
 	})
 
-	it('refuses to import default workouts over existing workouts', async () => {
+	it('adds default workouts without replacing existing workouts', async () => {
 		mockState.docsByCollection.set('firestore/users/user-1/workouts', [
 			{ id: 'custom', ref: { path: 'firestore/users/user-1/workouts/custom' } },
 		])
 
-		await expect(writeDefaultWorkoutDefs('user-1', [defaultWorkout]))
-			.rejects.toThrow('Default workouts can only be imported into an empty workouts library')
+		await writeDefaultWorkoutDefs('user-1', [defaultWorkout])
 
-		expect(mockState.commits).toEqual([])
+		expect(mockState.commits).toHaveLength(1)
+		expect(mockState.commits[0]).toEqual([
+			expect.objectContaining({
+				type: 'set',
+				path: 'firestore/users/user-1/workouts/A',
+			}),
+		])
 	})
 
-	it('refuses to overwrite a workout document created after the empty check', async () => {
+	it('refuses to overwrite a workout document with the generated import ID', async () => {
 		mockState.docsByCollection.set('firestore/users/user-1/workouts', [])
 		mockState.existingDocPaths.add('firestore/users/user-1/workouts/A')
 
 		await expect(writeDefaultWorkoutDefs('user-1', [defaultWorkout]))
-			.rejects.toThrow('Default workouts can only be imported into an empty workouts library')
+			.rejects.toThrow('Default workouts import generated an existing document ID')
 
 		expect(mockState.commits).toEqual([])
 	})

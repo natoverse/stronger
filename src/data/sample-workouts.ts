@@ -46,6 +46,13 @@ export function createDuplicateWorkoutDraft(
 	return { ...source, id, name: `${source.name} (Copy)`, favorite: false };
 }
 
+export function createDefaultWorkoutImportDrafts(
+	definitions: WorkoutDefinition[],
+	createId: () => string,
+): WorkoutDefinition[] {
+	return definitions.map((definition) => ({ ...definition, id: createId() }));
+}
+
 // ---------------------------------------------------------------------------
 // Computed workouts (ready for display)
 // ---------------------------------------------------------------------------

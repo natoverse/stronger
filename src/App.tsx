@@ -12,7 +12,7 @@ import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, genera
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
-import { buildWorkoutsFromConfigs, createDuplicateWorkoutDraft, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
+import { buildWorkoutsFromConfigs, createDefaultWorkoutImportDrafts, createDuplicateWorkoutDraft, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
 import { decodeSharedWorkout, encodeSharedWorkout, getImportedWorkoutName } from './data/workout-sharing.js';
 import type { SharedWorkout } from './data/workout-sharing.js';
 import { WorkoutSelect } from './components/WorkoutSelect.js';
@@ -403,18 +403,24 @@ function AppContent() {
       return;
     }
     const userId = spreadsheetId;
+    const defaultsToImport = createDefaultWorkoutImportDrafts(workoutDefinitions, generateStrongerId);
     try {
-      await withAuthRetry(() => writeDefaultWorkoutDefs(userId, workoutDefinitions));
+      await withAuthRetry(() => writeDefaultWorkoutDefs(userId, defaultsToImport));
       if (connectedUserRef.current !== userId) return;
-      setDefinitions(workoutDefinitions);
-      setWorkouts(buildWorkoutsFromConfigs(configs, workoutDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
+      setDefinitions((current) => {
+        const existingIds = new Set(current.map((definition) => definition.id));
+        return [
+          ...current,
+          ...defaultsToImport.filter((definition) => !existingIds.has(definition.id)),
+        ];
+      });
       setShowDefaultWorkoutImportPrompt(false);
       setDefaultWorkoutImportError(null);
     } catch (error) {
       if (connectedUserRef.current !== userId) return;
       setDefaultWorkoutImportError(error instanceof Error ? error.message : String(error));
     }
-  }, [spreadsheetId, configs]);
+  }, [spreadsheetId]);
 
   const handleDismissDefaultWorkoutImportPrompt = useCallback(() => {
     setShowDefaultWorkoutImportPrompt(false);

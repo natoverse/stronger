@@ -4,7 +4,6 @@ import {
 	documentId,
 	getDocs,
 	getDoc,
-	limit,
 	query,
 	runTransaction,
 	setDoc,
@@ -28,7 +27,7 @@ import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 2
 const BATCH_WRITE_LIMIT = 400
-const TRANSACTIONAL_SEED_LIMIT = 250
+const TRANSACTIONAL_WRITE_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 export type DateWindow = {
 	startDate: string
@@ -246,7 +245,7 @@ async function replaceCollection<T>(
 	await commitInBatches(operations)
 }
 
-async function seedCollectionRequireEmpty<T>(
+async function addCollectionWithTargetIdGuard<T>(
 	uid: string,
 	name: CollectionName,
 	values: T[],
@@ -254,22 +253,17 @@ async function seedCollectionRequireEmpty<T>(
 	existingDataDescription: string,
 ): Promise<void> {
 	const collectionRef = userCollection(uid, name)
-	const nonEmptyLibraryError = `Default ${existingDataDescription} can only be imported into an empty ${existingDataDescription} library; existing data was found, so nothing was changed.`
-	const existing = await getDocs(query(collectionRef, limit(1)))
-	if (existing.docs.length > 0) {
-		throw new Error(nonEmptyLibraryError)
-	}
 	const refs = values.map((value, index) => ({
 		ref: doc(collectionRef, getId(value, index)),
 		value,
 	}))
-	if (refs.length > TRANSACTIONAL_SEED_LIMIT) {
+	if (refs.length > TRANSACTIONAL_WRITE_LIMIT) {
 		throw new Error(`Default ${existingDataDescription} import is too large to write safely; nothing was changed.`)
 	}
 	await runTransaction(firestore, async (transaction) => {
 		const snapshots = await Promise.all(refs.map(({ ref }) => transaction.get(ref)))
 		if (snapshots.some((snapshot) => snapshot.exists())) {
-			throw new Error(nonEmptyLibraryError)
+			throw new Error(`Default ${existingDataDescription} import generated an existing document ID; nothing was changed.`)
 		}
 		const now = new Date().toISOString()
 		refs.forEach(({ ref, value }) => {
@@ -332,7 +326,7 @@ export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]):
 }
 
 export function writeDefaultWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
-	return seedCollectionRequireEmpty(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
+	return addCollectionWithTargetIdGuard(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
 }
 
 export function readCardioActivities(uid: string): Promise<CardioActivity[] | null> {
