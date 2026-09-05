@@ -4,10 +4,20 @@
  * Synced data sources (Withings, Garmin) can lag behind "today" when a sync
  * fails or a device hasn't uploaded. Charts alone don't make that obvious, so
  * each synced section shows the date of its most recent data point, e.g.
- * "Withings: Sep. 4".
+ * "Monday, Sept. 4th".
  */
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** AP-style month abbreviations; short months stay unabbreviated. */
+const MONTH_LABELS = [
+  'Jan.', 'Feb.', 'March', 'April', 'May', 'June',
+  'July', 'Aug.', 'Sept.', 'Oct.', 'Nov.', 'Dec.',
+];
+
+const WEEKDAY_LABELS = [
+  'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+];
 
 /** Returns the most recent YYYY-MM-DD date string, or null when there is none. */
 export function latestDateString(dates: (string | undefined | null)[]): string | null {
@@ -19,9 +29,20 @@ export function latestDateString(dates: (string | undefined | null)[]): string |
   return latest;
 }
 
+/** Returns the English ordinal suffix for a day of the month (1st, 2nd, 3rd...). */
+export function ordinalSuffix(day: number): string {
+  if (day % 100 >= 11 && day % 100 <= 13) return 'th';
+  switch (day % 10) {
+    case 1: return 'st';
+    case 2: return 'nd';
+    case 3: return 'rd';
+    default: return 'th';
+  }
+}
+
 /**
- * Formats a YYYY-MM-DD date as "Sep. 4". Months that aren't abbreviated (May)
- * are rendered without the period. Returns null for unparseable input.
+ * Formats a YYYY-MM-DD date as "Monday, Sept. 4th".
+ * Returns null for unparseable input.
  */
 export function formatShortDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -31,19 +52,13 @@ export function formatShortDate(iso: string | null): string | null {
   const d = new Date(year, month - 1, day);
   // Reject dates that rolled over (e.g. Feb 31).
   if (Number.isNaN(d.getTime()) || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  const short = d.toLocaleDateString('en-US', { month: 'short' });
-  const long = d.toLocaleDateString('en-US', { month: 'long' });
-  return `${short}${short === long ? '' : '.'} ${d.getDate()}`;
+  return `${WEEKDAY_LABELS[d.getDay()]}, ${MONTH_LABELS[month - 1]} ${day}${ordinalSuffix(day)}`;
 }
 
 /**
- * Builds a source freshness label such as "Withings: Sep. 4" from a set of
- * data dates. Returns null when no usable date exists.
+ * Builds a freshness label such as "Monday, Sept. 4th" from a set of data
+ * dates. Returns null when no usable date exists.
  */
-export function formatFreshnessLabel(
-  source: string,
-  dates: (string | undefined | null)[],
-): string | null {
-  const formatted = formatShortDate(latestDateString(dates));
-  return formatted === null ? null : `${source}: ${formatted}`;
+export function formatFreshnessLabel(dates: (string | undefined | null)[]): string | null {
+  return formatShortDate(latestDateString(dates));
 }

@@ -1856,7 +1856,7 @@ function AppContent() {
   }
 
   if (route.view === 'progress') {
-    const withingsFreshness = formatFreshnessLabel('Withings', withingsMeasurements.map((m) => m.date));
+    const withingsFreshness = formatFreshnessLabel(withingsMeasurements.map((m) => m.date));
     return (
       <>
         <GoogleAuth

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatFreshnessLabel, formatShortDate, latestDateString } from '../freshness.js';
+import { formatFreshnessLabel, formatShortDate, latestDateString, ordinalSuffix } from '../freshness.js';
 
 describe('latestDateString', () => {
   it('returns the most recent date', () => {
@@ -16,9 +16,31 @@ describe('latestDateString', () => {
   });
 });
 
+describe('ordinalSuffix', () => {
+  it('handles the common cases', () => {
+    expect(ordinalSuffix(1)).toBe('st');
+    expect(ordinalSuffix(2)).toBe('nd');
+    expect(ordinalSuffix(3)).toBe('rd');
+    expect(ordinalSuffix(4)).toBe('th');
+    expect(ordinalSuffix(21)).toBe('st');
+  });
+
+  it('handles the teens', () => {
+    expect(ordinalSuffix(11)).toBe('th');
+    expect(ordinalSuffix(12)).toBe('th');
+    expect(ordinalSuffix(13)).toBe('th');
+  });
+});
+
 describe('formatShortDate', () => {
-  it('formats as "Mon. D"', () => {
-    expect(formatShortDate('2026-09-04')).toBe('Sep. 4');
+  it('formats as "Weekday, Mon. Dth"', () => {
+    expect(formatShortDate('2026-09-04')).toBe('Friday, Sept. 4th');
+    expect(formatShortDate('2026-12-01')).toBe('Tuesday, Dec. 1st');
+  });
+
+  it('leaves short month names unabbreviated', () => {
+    expect(formatShortDate('2026-05-03')).toBe('Sunday, May 3rd');
+    expect(formatShortDate('2026-06-22')).toBe('Monday, June 22nd');
   });
 
   it('returns null for missing or invalid input', () => {
@@ -27,19 +49,14 @@ describe('formatShortDate', () => {
     expect(formatShortDate('2026-13-45')).toBeNull();
     expect(formatShortDate('2026-02-31')).toBeNull();
   });
-
-  it('omits the period for unabbreviated months', () => {
-    expect(formatShortDate('2026-05-04')).toBe('May 4');
-  });
 });
 
 describe('formatFreshnessLabel', () => {
-  it('prefixes the source name', () => {
-    expect(formatFreshnessLabel('Withings', ['2026-09-01', '2026-09-04'])).toBe('Withings: Sep. 4');
-    expect(formatFreshnessLabel('Garmin', ['2026-12-25'])).toBe('Garmin: Dec. 25');
+  it('uses the most recent date, with no platform prefix', () => {
+    expect(formatFreshnessLabel(['2026-09-01', '2026-09-04'])).toBe('Friday, Sept. 4th');
   });
 
   it('returns null when there is no data', () => {
-    expect(formatFreshnessLabel('Garmin', [])).toBeNull();
+    expect(formatFreshnessLabel([])).toBeNull();
   });
 });

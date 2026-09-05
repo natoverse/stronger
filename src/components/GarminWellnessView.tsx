@@ -1551,7 +1551,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const today = useMemo(() => new Date(), []);
 
   const freshness = useMemo(
-    () => formatFreshnessLabel('Garmin', entries.map((e) => e.date)),
+    () => formatFreshnessLabel(entries.map((e) => e.date)),
     [entries],
   );
 
