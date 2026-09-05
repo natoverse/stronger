@@ -10,6 +10,10 @@ describe('latestDateString', () => {
     expect(latestDateString([undefined, '', null, '2026-02-02'])).toBe('2026-02-02');
     expect(latestDateString([])).toBeNull();
   });
+
+  it('ignores malformed dates that would sort above valid ones', () => {
+    expect(latestDateString(['2026-02-02', 'not-a-date'])).toBe('2026-02-02');
+  });
 });
 
 describe('formatShortDate', () => {

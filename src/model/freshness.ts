@@ -7,11 +7,13 @@
  * "Withings: Sep. 4".
  */
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Returns the most recent YYYY-MM-DD date string, or null when there is none. */
 export function latestDateString(dates: (string | undefined | null)[]): string | null {
   let latest: string | null = null;
   for (const date of dates) {
-    if (!date) continue;
+    if (!date || !ISO_DATE.test(date)) continue;
     if (latest === null || date > latest) latest = date;
   }
   return latest;
