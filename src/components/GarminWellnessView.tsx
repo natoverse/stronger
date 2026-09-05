@@ -26,6 +26,7 @@ import {
   goalColorFromKey,
 } from '../model/wellness.js';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
+import { formatFreshnessLabel } from '../model/freshness.js';
 
 /* ------------------------------------------------------------------ */
 /*  Color constants                                                    */
@@ -1549,6 +1550,11 @@ interface Props {
 export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, sleepHoursGoal = 0, weeklyIntensityMinGoal = 0 }: Props) {
   const today = useMemo(() => new Date(), []);
 
+  const freshness = useMemo(
+    () => formatFreshnessLabel('Garmin', entries.map((e) => e.date)),
+    [entries],
+  );
+
   // Build chart data
   const readinessData   = useMemo(() => buildWellnessChartData(entries, 'readinessScore',       range, aggregation, today), [entries, range, aggregation, today]);
   const statusData      = useMemo(() => buildStatusChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
@@ -1655,6 +1661,8 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
 
   return (
     <div className={embedded ? 'strava-subview' : 'strava-view'}>
+      {freshness && <p className="strava-freshness">{freshness}</p>}
+
       {/* Section: Training */}
       <h2 className="strava-section-title">Training</h2>
       <WellnessBarChart

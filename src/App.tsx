@@ -38,6 +38,7 @@ import { filterActivitiesByRange } from './model/strava.js';
 import type { WithingsMeasurement } from './model/types.js';
 import type { WithingsGoal, WithingsMetric } from './model/withings.js';
 import { toDisplayUnit } from './model/withings.js';
+import { formatFreshnessLabel } from './model/freshness.js';
 import { WithingsView } from './components/WithingsView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
 import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
@@ -1855,6 +1856,7 @@ function AppContent() {
   }
 
   if (route.view === 'progress') {
+    const withingsFreshness = formatFreshnessLabel('Withings', withingsMeasurements.map((m) => m.date));
     return (
       <>
         <GoogleAuth
@@ -1898,7 +1900,12 @@ function AppContent() {
         />
         {withingsMeasurements.length > 0 && (
           <div className="strava-view">
-            <h3 className="strava-section-title">Body Composition</h3>
+            <h3 className="strava-section-title">
+              Body Composition
+              {withingsFreshness && (
+                <span className="strava-section-freshness">{withingsFreshness}</span>
+              )}
+            </h3>
             <WithingsView
               measurements={withingsMeasurements}
               goals={withingsGoals}

@@ -3819,6 +3819,20 @@ body {
 	margin: 16px 0 8px;
 }
 
+/* Latest synced data date, e.g. "Withings: Sep. 4" */
+.strava-section-freshness {
+	color: var(--color-primary);
+	margin-left: 8px;
+	text-transform: none;
+}
+
+.strava-freshness {
+	color: var(--color-primary);
+	font-size: 0.8rem;
+	letter-spacing: 0.05em;
+	margin: 0 0 8px;
+}
+
 /* Chart card */
 .strava-chart-card {
 	background: var(--color-surface);
