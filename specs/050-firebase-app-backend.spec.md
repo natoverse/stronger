@@ -172,3 +172,6 @@ Firestore after each successful sync.
   is empty. Unmatched events carrying a Stronger ID are pulled back into
   Firestore, using the workout ID embedded in their deep link when the event
   title is a custom label.
+- Default workout import for the Firebase backend is create-only: it writes
+  starter workouts only when the workout collection is empty and refuses to
+  replace existing workout documents.

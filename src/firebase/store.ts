@@ -237,6 +237,33 @@ async function replaceCollection<T>(
 	}
 }
 
+async function seedCollectionIfEmpty<T>(
+	uid: string,
+	name: CollectionName,
+	values: T[],
+	getId: (value: T, index: number) => string,
+	existingDataDescription: string,
+): Promise<void> {
+	const collectionRef = userCollection(uid, name)
+	const existing = await getDocs(collectionRef)
+	if (existing.docs.length > 0) {
+		throw new Error(`Default ${existingDataDescription} can only be imported into an empty library. Existing ${existingDataDescription} were found, so nothing was changed.`)
+	}
+
+	const operations = values.map((value, index) => {
+		const ref = doc(collectionRef, getId(value, index))
+		return (batch: ReturnType<typeof writeBatch>) => {
+			batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() })
+		}
+	})
+
+	for (let start = 0; start < operations.length; start += 400) {
+		const batch = writeBatch(firestore)
+		for (const operation of operations.slice(start, start + 400)) operation(batch)
+		await batch.commit()
+	}
+}
+
 async function writeDateScopedCollection<T>(
 	uid: string,
 	name: CollectionName,
@@ -294,7 +321,9 @@ export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]):
 	return replaceCollection(uid, 'workouts', definitions, (item) => idPart(item.id))
 }
 
-export const writeDefaultWorkoutDefs = writeWorkoutDefs
+export function writeDefaultWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
+	return seedCollectionIfEmpty(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
+}
 
 export function readCardioActivities(uid: string): Promise<CardioActivity[] | null> {
 	return readCollection<CardioActivity>(uid, 'cardioActivities').then((items) => items.length ? items : null)
