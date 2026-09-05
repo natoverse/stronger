@@ -86,6 +86,7 @@ function AppContent() {
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
   const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
   const settingsRef = useRef(new Map<string, string>());
+  const definitionsRef = useRef<WorkoutDefinition[]>([]);
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
@@ -407,20 +408,20 @@ function AppContent() {
     try {
       await withAuthRetry(() => writeDefaultWorkoutDefs(userId, defaultsToImport));
       if (connectedUserRef.current !== userId) return;
-      setDefinitions((current) => {
-        const existingIds = new Set(current.map((definition) => definition.id));
-        return [
-          ...current,
-          ...defaultsToImport.filter((definition) => !existingIds.has(definition.id)),
-        ];
-      });
+      const existingIds = new Set(definitionsRef.current.map((definition) => definition.id));
+      const updatedDefinitions = [
+        ...definitionsRef.current,
+        ...defaultsToImport.filter((definition) => !existingIds.has(definition.id)),
+      ];
+      setDefinitions(updatedDefinitions);
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       setShowDefaultWorkoutImportPrompt(false);
       setDefaultWorkoutImportError(null);
     } catch (error) {
       if (connectedUserRef.current !== userId) return;
       setDefaultWorkoutImportError(error instanceof Error ? error.message : String(error));
     }
-  }, [spreadsheetId]);
+  }, [spreadsheetId, configs]);
 
   const handleDismissDefaultWorkoutImportPrompt = useCallback(() => {
     setShowDefaultWorkoutImportPrompt(false);
@@ -1455,6 +1456,10 @@ function AppContent() {
       setWorkouts(buildWorkoutsFromConfigs(configs, definitions, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));
     }
   }, [appSettings.roundWarmupPlateMath, configs, definitions]);
+
+  useEffect(() => {
+    definitionsRef.current = definitions;
+  }, [definitions]);
 
   useEffect(() => {
     const redirect = getSettingsRouteRedirect(route, settingsLoaded, appSettings);
