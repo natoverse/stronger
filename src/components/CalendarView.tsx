@@ -307,7 +307,7 @@ function MonthLocationIcon({ location }: { location: LocationFlag }) {
 	);
 }
 
-function scheduledWorkoutRank(workoutId: string): number {
+export function scheduledWorkoutRank(workoutId: string): number {
 	if (workoutId === BLOCKER_ID) return -1;
 	if (workoutId.startsWith('cardio:')) return 0;
 	if (workoutId === REST_ID) return 2;

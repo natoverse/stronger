@@ -1,11 +1,12 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
+import { REST_ID, BLOCKER_ID } from '../model/index.js';
 import type { ParsedLogRow } from '../google/index.js';
 import type { LogSession } from './CalendarView.js';
-import { groupLogByDate } from './CalendarView.js';
+import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
 import { Banner } from './Banner.js';
 import { MotivationalQuote } from './MotivationalQuote.js';
-import { BicepsFlexed, ChevronDown, Pencil, Plus, Star, Bike, Trash2, Check, X, Copy, MoreVertical, Share2 } from 'lucide-react';
+import { BicepsFlexed, ChevronDown, Pencil, Plus, Star, Bike, Trash2, Check, X, Copy, MoreVertical, Share2, HeartPulse, Moon, Ban } from 'lucide-react';
 
 interface WorkoutSelectProps {
 	workouts: Workout[];
@@ -127,6 +128,81 @@ function todayDateString(): string {
 	return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+/** A single item in today's plan, shown on the home page. */
+export type TodayPlanItem =
+	| { kind: 'strength'; workoutId: string; workout: Workout; done: boolean }
+	| { kind: 'cardio' | 'rest' | 'blocker'; workoutId: string; name: string };
+
+/**
+ * Build the ordered list of items scheduled for a given date: blockers first,
+ * then cardio, then strength workouts, then rest — matching the calendar's
+ * ordering. Strength entries whose workout is unknown are dropped.
+ */
+export function buildTodaysPlan({
+	date,
+	workoutSchedule,
+	workouts,
+	cardioActivities,
+	logRows,
+}: {
+	date: string;
+	workoutSchedule?: WorkoutScheduleEntry[];
+	workouts: Workout[];
+	cardioActivities?: CardioActivity[];
+	logRows?: ParsedLogRow[];
+}): TodayPlanItem[] {
+	if (!workoutSchedule) return [];
+	const entries = workoutSchedule.filter((e) => e.date === date && e.workoutId);
+	if (entries.length === 0) return [];
+
+	const workoutMap = new Map(workouts.map((w) => [w.id, w]));
+	const cardioNameByWorkoutId = new Map((cardioActivities ?? []).map((c) => [`cardio:${c.id}`, c.name]));
+
+	const completedIds = new Set<string>();
+	for (const row of logRows ?? []) {
+		if (row.date === date) completedIds.add(row.workoutId);
+	}
+
+	const items: TodayPlanItem[] = [];
+	for (const e of entries) {
+		const wid = e.workoutId;
+		if (wid === BLOCKER_ID) {
+			items.push({ kind: 'blocker', workoutId: wid, name: e.label || 'Blocker' });
+		} else if (wid === REST_ID) {
+			items.push({ kind: 'rest', workoutId: wid, name: 'Rest' });
+		} else if (wid.startsWith('cardio:')) {
+			const defaultName = cardioNameByWorkoutId.get(wid) ?? wid.slice('cardio:'.length);
+			items.push({ kind: 'cardio', workoutId: wid, name: e.label || defaultName });
+		} else {
+			const workout = workoutMap.get(wid);
+			if (!workout) continue;
+			items.push({ kind: 'strength', workoutId: wid, workout, done: completedIds.has(wid) });
+		}
+	}
+
+	// Array.prototype.sort is stable, so ties keep their schedule order.
+	return items.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId));
+}
+
+const PLAN_ITEM_ICONS = {
+	cardio: HeartPulse,
+	rest: Moon,
+	blocker: Ban,
+} as const;
+
+/** Non-interactive card for a scheduled cardio, rest or blocker item. */
+function PlanInfoCard({ kind, name }: { kind: 'cardio' | 'rest' | 'blocker'; name: string }) {
+	const Icon = PLAN_ITEM_ICONS[kind];
+	return (
+		<div className={`workout-card-wrapper plan-info-card plan-info-card-${kind}`}>
+			<div className="workout-card plan-info-card-body">
+				<span className="strength-badge" aria-hidden="true"><Icon size={24} /></span>
+				<span className="workout-name">{name}</span>
+			</div>
+		</div>
+	);
+}
+
 export function WorkoutSelect({
 	workouts,
 	missingLiftIds,
@@ -160,32 +236,11 @@ export function WorkoutSelect({
 
 	const today = useMemo(() => todayDateString(), []);
 
-	/** Workouts scheduled for today, with completion status. */
-	const todaysPlan = useMemo(() => {
-		if (!workoutSchedule) return [];
-		const todayEntries = workoutSchedule.filter((e) => e.date === today);
-		if (todayEntries.length === 0) return [];
-
-		const workoutMap = new Map(workouts.map((w) => [w.id, w]));
-
-		// Build a set of workoutIds that have log entries for today
-		const completedIds = new Set<string>();
-		if (logRows) {
-			for (const row of logRows) {
-				if (row.date === today) {
-					completedIds.add(row.workoutId);
-				}
-			}
-		}
-
-		return todayEntries
-			.map((e) => {
-				const workout = workoutMap.get(e.workoutId);
-				if (!workout) return null;
-				return { workout, done: completedIds.has(e.workoutId) };
-			})
-			.filter((x): x is { workout: Workout; done: boolean } => x !== null);
-	}, [workoutSchedule, logRows, workouts, today]);
+	/** Items scheduled for today (blockers, cardio, strength, rest). */
+	const todaysPlan = useMemo(
+		() => buildTodaysPlan({ date: today, workoutSchedule, workouts, cardioActivities, logRows }),
+		[workoutSchedule, logRows, workouts, cardioActivities, today],
+	);
 
 	/** Build a map of today's sessions for completed workouts. */
 	const todaySessions = useMemo(() => {
@@ -223,13 +278,17 @@ export function WorkoutSelect({
 			{todaysPlan.length > 0 && (
 				<div className="todays-plan">
 					<div className="workout-list">
-						{todaysPlan.map(({ workout: w, done }) => (
-							<WorkoutCard
-								key={w.id}
-								w={w}
-								onSelect={() => handleTodayCardClick(w, done)}
-								done={done}
-							/>
+						{todaysPlan.map((item, idx) => (
+							item.kind === 'strength' ? (
+								<WorkoutCard
+									key={`plan-${item.workoutId}-${idx}`}
+									w={item.workout}
+									onSelect={() => handleTodayCardClick(item.workout, item.done)}
+									done={item.done}
+								/>
+							) : (
+								<PlanInfoCard key={`plan-${item.workoutId}-${idx}`} kind={item.kind} name={item.name} />
+							)
 						))}
 					</div>
 				</div>

@@ -2781,6 +2781,37 @@ body {
 	transition: background 0.15s;
 }
 
+/* Non-interactive today's-plan cards (cardio, rest, blocker) */
+.plan-info-card-body {
+	flex: 1;
+	cursor: default;
+	border: none;
+	border-radius: var(--radius);
+}
+
+.plan-info-card-cardio .strength-badge {
+	background: rgba(0, 229, 255, 0.12);
+	color: var(--color-primary);
+}
+
+.plan-info-card-rest .strength-badge {
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--color-text-muted);
+}
+
+.plan-info-card-rest .workout-name {
+	color: var(--color-text-muted);
+}
+
+.plan-info-card-blocker {
+	border-color: var(--color-danger);
+}
+
+.plan-info-card-blocker .strength-badge {
+	background: rgba(255, 23, 68, 0.12);
+	color: var(--color-danger);
+}
+
 .workout-more-select {
 	display: none;
 }
