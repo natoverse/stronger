@@ -26,6 +26,8 @@ import type { ParsedLogRow } from '../google/sheets.ts'
 import { firestore } from './client.ts'
 
 export const SCHEMA_VERSION = 2
+const BATCH_WRITE_LIMIT = 400
+const TRANSACTIONAL_WRITE_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 export type DateWindow = {
 	startDate: string
@@ -212,6 +214,16 @@ export function mergeDateWindowEntries<T extends { date: string }>(
 	].sort((left, right) => left.date.localeCompare(right.date))
 }
 
+async function commitInBatches(
+	operations: Array<(batch: ReturnType<typeof writeBatch>) => void>,
+): Promise<void> {
+	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
+		const batch = writeBatch(firestore)
+		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
+		await batch.commit()
+	}
+}
+
 async function replaceCollection<T>(
 	uid: string,
 	name: CollectionName,
@@ -230,11 +242,34 @@ async function replaceCollection<T>(
 		operations.push((batch) => batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() }))
 	})
 
-	for (let start = 0; start < operations.length; start += 400) {
-		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + 400)) operation(batch)
-		await batch.commit()
+	await commitInBatches(operations)
+}
+
+async function addCollectionWithTargetIdGuard<T>(
+	uid: string,
+	name: CollectionName,
+	values: T[],
+	getId: (value: T, index: number) => string,
+	existingDataDescription: string,
+): Promise<void> {
+	const collectionRef = userCollection(uid, name)
+	const refs = values.map((value, index) => ({
+		ref: doc(collectionRef, getId(value, index)),
+		value,
+	}))
+	if (refs.length > TRANSACTIONAL_WRITE_LIMIT) {
+		throw new Error(`Default ${existingDataDescription} import is too large to write safely; nothing was changed.`)
 	}
+	await runTransaction(firestore, async (transaction) => {
+		const snapshots = await Promise.all(refs.map(({ ref }) => transaction.get(ref)))
+		if (snapshots.some((snapshot) => snapshot.exists())) {
+			throw new Error(`Default ${existingDataDescription} import generated an existing document ID; nothing was changed.`)
+		}
+		const now = new Date().toISOString()
+		refs.forEach(({ ref, value }) => {
+			transaction.set(ref, { ...value as object, updatedAt: now })
+		})
+	})
 }
 
 async function writeDateScopedCollection<T>(
@@ -256,11 +291,7 @@ async function writeDateScopedCollection<T>(
 			}
 		}
 	})
-	for (let start = 0; start < operations.length; start += 400) {
-		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + 400)) operation(batch)
-		await batch.commit()
-	}
+	await commitInBatches(operations)
 }
 
 export async function ensureUser(uid: string): Promise<void> {
@@ -294,7 +325,9 @@ export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]):
 	return replaceCollection(uid, 'workouts', definitions, (item) => idPart(item.id))
 }
 
-export const writeDefaultWorkoutDefs = writeWorkoutDefs
+export function writeDefaultWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
+	return addCollectionWithTargetIdGuard(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
+}
 
 export function readCardioActivities(uid: string): Promise<CardioActivity[] | null> {
 	return readCollection<CardioActivity>(uid, 'cardioActivities').then((items) => items.length ? items : null)

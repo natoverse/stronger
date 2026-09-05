@@ -12,7 +12,7 @@ import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, genera
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './google/index.js';
-import { buildWorkoutsFromConfigs, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
+import { buildWorkoutsFromConfigs, createDefaultWorkoutImportDrafts, createDuplicateWorkoutDraft, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
 import { decodeSharedWorkout, encodeSharedWorkout, getImportedWorkoutName } from './data/workout-sharing.js';
 import type { SharedWorkout } from './data/workout-sharing.js';
 import { WorkoutSelect } from './components/WorkoutSelect.js';
@@ -84,7 +84,9 @@ function AppContent() {
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
+  const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
   const settingsRef = useRef(new Map<string, string>());
+  const definitionsRef = useRef<WorkoutDefinition[]>([]);
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
@@ -133,6 +135,7 @@ function AppContent() {
       setPriorityLoadPending(true);
       setShowDefaultWorkoutImportPrompt(false);
       setDefaultWorkoutImportError(null);
+      setDuplicateWorkoutDraft(undefined);
       logScopesLoadedRef.current.clear();
       dataLoadsRef.current.clear();
       loadQueueUserRef.current = null;
@@ -207,6 +210,7 @@ function AppContent() {
     setNeedsSetup(false);
     setShowDefaultWorkoutImportPrompt(false);
     setDefaultWorkoutImportError(null);
+    setDuplicateWorkoutDraft(undefined);
     setCardioActivities([]);
     setGarminActivities([]);
     setWellnessEntries([]);
@@ -400,11 +404,16 @@ function AppContent() {
       return;
     }
     const userId = spreadsheetId;
+    const defaultsToImport = createDefaultWorkoutImportDrafts(workoutDefinitions, generateStrongerId);
     try {
-      await withAuthRetry(() => writeDefaultWorkoutDefs(userId, workoutDefinitions));
+      await withAuthRetry(() => writeDefaultWorkoutDefs(userId, defaultsToImport));
       if (connectedUserRef.current !== userId) return;
-      setDefinitions(workoutDefinitions);
-      setWorkouts(buildWorkoutsFromConfigs(configs, workoutDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
+      const updatedDefinitions = [
+        ...definitionsRef.current,
+        ...defaultsToImport,
+      ];
+      setDefinitions(updatedDefinitions);
+      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefinitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
       setShowDefaultWorkoutImportPrompt(false);
       setDefaultWorkoutImportError(null);
     } catch (error) {
@@ -1153,10 +1162,12 @@ function AppContent() {
 
   // Editor handlers
   const handleEditWorkout = useCallback((workoutId: string) => {
+    setDuplicateWorkoutDraft(undefined);
     navigateTo({ view: 'editor', workoutId });
   }, [navigateTo]);
 
   const handleNewWorkout = useCallback(() => {
+    setDuplicateWorkoutDraft(undefined);
     navigateTo({ view: 'editor' });
   }, [navigateTo]);
 
@@ -1165,16 +1176,11 @@ function AppContent() {
       const source = definitions.find((d) => d.id === workoutId);
       if (!source) return;
       const newId = generateStrongerId();
-      const newDef = { ...source, id: newId, name: `${source.name} (Copy)`, favorite: false };
-      const updatedDefs = [...definitions, newDef];
-      setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
-      }
-      navigateTo({ view: 'editor', workoutId: newId });
+      const newDef = createDuplicateWorkoutDraft(source, newId);
+      setDuplicateWorkoutDraft(newDef);
+      navigateTo({ view: 'editor' });
     },
-    [definitions, configs, spreadsheetId, navigateTo],
+    [definitions, navigateTo],
   );
 
   const handleShareWorkout = useCallback(
@@ -1256,6 +1262,7 @@ function AppContent() {
   );
 
   const handleEditorCancel = useCallback(() => {
+    setDuplicateWorkoutDraft(undefined);
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
@@ -1318,6 +1325,7 @@ function AppContent() {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
       }
 
+      setDuplicateWorkoutDraft(undefined);
       navigateTo({ view: 'list' });
     },
     [definitions, configs, spreadsheetId, navigateTo],
@@ -1366,6 +1374,12 @@ function AppContent() {
       setDraftResults(null);
     }
   }, [route, activeWorkout, progressionProposals]);
+
+  useEffect(() => {
+    if (route.view !== 'editor' && duplicateWorkoutDraft) {
+      setDuplicateWorkoutDraft(undefined);
+    }
+  }, [route.view, duplicateWorkoutDraft]);
 
   const executeDatasetLoad = useCallback((
     request: FirebaseLoadRequest,
@@ -1441,6 +1455,10 @@ function AppContent() {
       setWorkouts(buildWorkoutsFromConfigs(configs, definitions, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));
     }
   }, [appSettings.roundWarmupPlateMath, configs, definitions]);
+
+  useEffect(() => {
+    definitionsRef.current = definitions;
+  }, [definitions]);
 
   useEffect(() => {
     const redirect = getSettingsRouteRedirect(route, settingsLoaded, appSettings);
@@ -1642,7 +1660,9 @@ function AppContent() {
           onOpenSettings={handleOpenSettings}
         />
         <WorkoutEditor
+          key={editDef?.id ?? duplicateWorkoutDraft?.id ?? 'new'}
           existing={editDef}
+          initialDefinition={editDef ? undefined : duplicateWorkoutDraft}
           allDefinitions={definitions}
           configs={configs}
           onSave={handleEditorSave}

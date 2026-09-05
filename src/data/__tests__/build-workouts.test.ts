@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
 	defaultLiftConfigs,
 	buildWorkoutsFromConfigs,
+	createDefaultWorkoutImportDrafts,
+	createDuplicateWorkoutDraft,
 	workoutDefinitions,
 } from '../sample-workouts.ts';
 
@@ -51,6 +53,35 @@ describe('buildWorkoutsFromConfigs', () => {
 	it('returns empty array when given empty configs', () => {
 		const workouts = buildWorkoutsFromConfigs([]);
 		expect(workouts).toHaveLength(0);
+	});
+
+	it('creates an unsaved duplicate workout draft without mutating definitions', () => {
+		const source = workoutDefinitions[0];
+		const definitions = [...workoutDefinitions];
+
+		const draft = createDuplicateWorkoutDraft(source, 'copy-id');
+
+		expect(draft).toEqual({
+			...source,
+			id: 'copy-id',
+			name: `${source.name} (Copy)`,
+			favorite: false,
+		});
+		expect(definitions).toEqual(workoutDefinitions);
+		expect(definitions).not.toContain(draft);
+	});
+
+	it('creates default import drafts with fresh ids', () => {
+		let nextId = 1;
+		const drafts = createDefaultWorkoutImportDrafts(workoutDefinitions.slice(0, 2), () => `random-${nextId++}`);
+
+		expect(drafts.map((draft) => draft.id)).toEqual(['random-1', 'random-2']);
+		expect(drafts.map((draft) => draft.name)).toEqual([
+			workoutDefinitions[0].name,
+			workoutDefinitions[1].name,
+		]);
+		expect(drafts.map((draft) => draft.id)).not.toContain(workoutDefinitions[0].id);
+		expect(workoutDefinitions[0].id).not.toBe('random-1');
 	});
 
 	it('gracefully handles partial configs (only bench press + squat)', () => {
