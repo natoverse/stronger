@@ -6,8 +6,11 @@ import {
 } from 'firebase/auth'
 import { firebaseAuth, googleAuthProvider } from './client.ts'
 
-export function observeAuth(callback: (user: User | null) => void): () => void {
-	return onAuthStateChanged(firebaseAuth, callback)
+export function observeAuth(
+	callback: (user: User | null) => void,
+	onError?: (error: Error) => void,
+): () => void {
+	return onAuthStateChanged(firebaseAuth, callback, onError)
 }
 
 export async function signInToStronger(): Promise<User> {

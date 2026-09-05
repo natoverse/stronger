@@ -5,11 +5,16 @@ import {
 	signInToStronger,
 	signOutOfStronger,
 } from '../firebase/index.ts'
+import { withTimeout } from '../firebase/timeout.ts'
 import { Calendar, Dumbbell, HeartPulse, Library, Settings, SportShoe, TrendingUp } from 'lucide-react'
+
+const AUTH_RESTORE_TIMEOUT_MS = 15_000
+const SIGN_IN_TIMEOUT_MS = 60_000
 
 interface Props {
 	onConnected: (userId: string) => void
 	onDisconnected: () => void
+	hideConnectedUi?: boolean
 	onOpenCalendar?: () => void
 	onOpenExercises?: () => void
 	onOpenProgress?: () => void
@@ -26,6 +31,7 @@ type Phase = 'loading' | 'sign-in' | 'connected' | 'error'
 export function GoogleAuth({
 	onConnected,
 	onDisconnected,
+	hideConnectedUi = false,
 	onOpenCalendar,
 	onOpenExercises,
 	onOpenProgress,
@@ -53,7 +59,15 @@ export function GoogleAuth({
 			setPhase('error')
 			return
 		}
+		let restored = false
+		const restoreTimeout = window.setTimeout(() => {
+			if (restored) return
+			setError('Restoring your session timed out. Check your connection and retry.')
+			setPhase('error')
+		}, AUTH_RESTORE_TIMEOUT_MS)
 		const unsubscribe = observeAuth((user) => {
+			restored = true
+			window.clearTimeout(restoreTimeout)
 			const generation = ++authGenerationRef.current
 			if (!user) {
 				setPhase('sign-in')
@@ -62,8 +76,15 @@ export function GoogleAuth({
 			}
 			setPhase('loading')
 			connect(user.uid, generation)
+		}, (reason) => {
+			restored = true
+			window.clearTimeout(restoreTimeout)
+			setError(reason.message || 'Unable to restore your session.')
+			setPhase('error')
+			onDisconnected()
 		})
 		return () => {
+			window.clearTimeout(restoreTimeout)
 			authGenerationRef.current += 1
 			unsubscribe()
 		}
@@ -74,7 +95,11 @@ export function GoogleAuth({
 		setSignInPending(true)
 		setError(null)
 		try {
-			await signInToStronger()
+			await withTimeout(
+				signInToStronger(),
+				SIGN_IN_TIMEOUT_MS,
+				'Sign-in timed out. Close any open popup and retry.',
+			)
 		} catch (reason) {
 			setError(reason instanceof Error ? reason.message : 'Sign-in failed.')
 			setPhase('sign-in')
@@ -84,7 +109,7 @@ export function GoogleAuth({
 	}, [signInPending])
 
 	if (phase === 'loading') {
-		return <div className="auth-screen"><p className="auth-status">Loading…</p></div>
+		return <div className="auth-screen"><p className="auth-status">Restoring session…</p></div>
 	}
 
 	if (phase === 'sign-in') {
@@ -113,6 +138,8 @@ export function GoogleAuth({
 			</div>
 		)
 	}
+
+	if (hideConnectedUi) return null
 
 	const onOpenGarminWellness = onOpenGarmin || onOpenWellness
 	return (

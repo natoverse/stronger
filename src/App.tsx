@@ -6,6 +6,7 @@ import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValu
 import type { DateWindow, YearBucketReadScope } from './firebase/index.js';
 import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
+import { withTimeout } from './firebase/timeout.js';
 import type { LiftGoal } from './google/index.js';
 import { signOutOfStronger } from './firebase/index.js';
 import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, generateStrongerId, listEventsInRange, isStrongerEvent, getEventDate } from './google/index.js';
@@ -43,7 +44,16 @@ import { GarminActivitiesListView } from './components/GarminActivitiesListView.
 import { DateRangeSelector } from './components/DateRangeSelector.js';
 import './App.css';
 
+const FIREBASE_LOAD_TIMEOUT_MS = 20_000;
 const CALENDAR_SYNC_ID_SETTING = 'calendar.syncCalendarId';
+
+function firebaseLoadKey(
+  request: FirebaseLoadRequest,
+  userId: string,
+  connectionGeneration: number,
+): string {
+  return `${connectionGeneration}:${userId}:${request.dataset}:${request.scope}`;
+}
 
 function AppContent() {
   const { route, navigateTo, replaceTo } = useHashRouter();
@@ -92,11 +102,14 @@ function AppContent() {
 
   const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>());
   const dataLoadsRef = useRef(new Map<string, Promise<void>>());
-  const loadQueueUserRef = useRef<string | null>(null);
+  const completedDataLoadsRef = useRef(new Set<string>());
+  const loadQueueKeyRef = useRef<string | null>(null);
+  const loadQueueGenerationRef = useRef(0);
   const calendarWindowRef = useRef(initialDateWindow());
   const calendarWindowLoadRef = useRef(Promise.resolve());
   const calendarMutationRef = useRef<Promise<unknown>>(Promise.resolve());
   const connectedUserRef = useRef<string | null>(null);
+  const connectionGenerationRef = useRef(0);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
 
   const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
@@ -127,6 +140,7 @@ function AppContent() {
       if (connectedUserRef.current === userId) return;
       if (connectedUserRef.current) disconnectCalendar();
       connectedUserRef.current = userId;
+      connectionGenerationRef.current += 1;
       setCalendarSyncId(null);
       setSpreadsheetId(userId);
       setSheetConnected(true);
@@ -138,7 +152,9 @@ function AppContent() {
       setDuplicateWorkoutDraft(undefined);
       logScopesLoadedRef.current.clear();
       dataLoadsRef.current.clear();
-      loadQueueUserRef.current = null;
+      completedDataLoadsRef.current.clear();
+      loadQueueKeyRef.current = null;
+      loadQueueGenerationRef.current += 1;
       calendarWindowRef.current = initialDateWindow();
       calendarWindowLoadRef.current = Promise.resolve();
       calendarMutationRef.current = Promise.resolve();
@@ -194,6 +210,7 @@ function AppContent() {
     disconnectCalendar();
     if (!connectedUserRef.current) return;
     connectedUserRef.current = null;
+    connectionGenerationRef.current += 1;
     clearDraft();
     setSheetConnected(false);
     setActiveWorkout(null);
@@ -219,7 +236,9 @@ function AppContent() {
     setCalendarSyncId(null);
     logScopesLoadedRef.current.clear();
     dataLoadsRef.current.clear();
-    loadQueueUserRef.current = null;
+    completedDataLoadsRef.current.clear();
+    loadQueueKeyRef.current = null;
+    loadQueueGenerationRef.current += 1;
     calendarWindowRef.current = initialDateWindow();
     calendarWindowLoadRef.current = Promise.resolve();
     calendarMutationRef.current = Promise.resolve();
@@ -373,9 +392,12 @@ function AppContent() {
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
-  const loadExercisesData = useCallback(async (userId: string) => {
+  const loadExercisesData = useCallback(async (userId: string, connectionGeneration: number) => {
     const loaded = await readConfigZone(userId);
-    if (connectedUserRef.current !== userId) return;
+    if (
+      connectedUserRef.current !== userId
+      || connectionGenerationRef.current !== connectionGeneration
+    ) return;
     if (!loaded) {
       setNeedsSetup(true);
       return;
@@ -384,9 +406,15 @@ function AppContent() {
     setNeedsSetup(false);
   }, []);
 
-  const loadWorkoutDefinitionsData = useCallback(async (userId: string) => {
+  const loadWorkoutDefinitionsData = useCallback(async (
+    userId: string,
+    connectionGeneration: number,
+  ) => {
     let loaded = await readWorkoutDefs(userId);
-    if (connectedUserRef.current !== userId) return;
+    if (
+      connectedUserRef.current !== userId
+      || connectionGenerationRef.current !== connectionGeneration
+    ) return;
     if (!loaded) {
       loaded = [];
       setShowDefaultWorkoutImportPrompt(true);
@@ -432,13 +460,21 @@ function AppContent() {
     setDefaultWorkoutImportError(null);
   }, []);
 
-  const loadCardioActivitiesData = useCallback(async (userId: string) => {
+  const loadCardioActivitiesData = useCallback(async (
+    userId: string,
+    connectionGeneration: number,
+  ) => {
     let loaded = await readCardioActivities(userId);
-    if (connectedUserRef.current !== userId) return;
+    if (
+      connectedUserRef.current !== userId
+      || connectionGenerationRef.current !== connectionGeneration
+    ) return;
     if (!loaded) {
-      loaded = defaultCardioActivities;
-      await writeDefaultCardioActivities(userId, loaded);
-      if (connectedUserRef.current !== userId) return;
+      const defaults = [...defaultCardioActivities];
+      setCardioActivities(defaults);
+      void withAuthRetry(() => writeDefaultCardioActivities(userId, defaults))
+        .catch((error) => console.error('Unable to persist default cardio activities:', error));
+      return;
     }
     setCardioActivities(loaded);
   }, []);
@@ -448,11 +484,15 @@ function AppContent() {
     sheetId: string,
     window?: DateWindow,
     required = false,
+    connectionGeneration = connectionGenerationRef.current,
   ) => {
     try {
       await withAuthRetry(async () => {
         const flags = await readFlags(sheetId, window);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
       });
     } catch (error) {
@@ -465,11 +505,15 @@ function AppContent() {
     sheetId: string,
     window?: DateWindow,
     required = false,
+    connectionGeneration = connectionGenerationRef.current,
   ) => {
     try {
       await withAuthRetry(async () => {
         const schedule = await readWorkoutSchedule(sheetId, window);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
       });
     } catch (error) {
@@ -481,11 +525,15 @@ function AppContent() {
   const loadLogData = useCallback(async (
     sheetId: string,
     scope: YearBucketReadScope = 'all',
+    connectionGeneration = connectionGenerationRef.current,
   ) => {
     try {
       await withAuthRetry(async () => {
         const rows = await readLogZone(sheetId, scope);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         setLogRows((existing) => mergeYearScopedEntries(existing, rows, scope));
         logScopesLoadedRef.current.add(scope);
       });
@@ -494,11 +542,17 @@ function AppContent() {
     }
   }, []);
 
-  const loadSettingsData = useCallback(async (sheetId: string) => {
+  const loadSettingsData = useCallback(async (
+    sheetId: string,
+    connectionGeneration = connectionGenerationRef.current,
+  ) => {
     try {
       await withAuthRetry(async () => {
         const settings = await readSettings(sheetId);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         settingsRef.current = settings;
         setStravaGoals(goalsFromSettings(settings));
         setWithingsGoals(bodyGoalsFromSettings(settings));
@@ -511,18 +565,25 @@ function AppContent() {
     } catch {
       // Silently ignore — settings data is optional
     } finally {
-      if (connectedUserRef.current === sheetId) setSettingsLoaded(true);
+      if (
+        connectedUserRef.current === sheetId
+        && connectionGenerationRef.current === connectionGeneration
+      ) setSettingsLoaded(true);
     }
   }, []);
 
   const loadGarminData = useCallback(async (
     sheetId: string,
     scope: YearBucketReadScope = 'all',
+    connectionGeneration = connectionGenerationRef.current,
   ) => {
     try {
       await withAuthRetry(async () => {
         const activities = await readGarminActivities(sheetId, scope);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         setGarminActivities((existing) => mergeYearScopedEntries(existing, activities, scope));
       });
     } catch {
@@ -533,11 +594,15 @@ function AppContent() {
   const loadWellnessData = useCallback(async (
     sheetId: string,
     scope: YearBucketReadScope = 'all',
+    connectionGeneration = connectionGenerationRef.current,
   ) => {
     try {
       await withAuthRetry(async () => {
         const entries = await readGarminWellnessEntries(sheetId, scope);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         setWellnessEntries((existing) => mergeYearScopedEntries(existing, entries, scope));
       });
     } catch {
@@ -548,11 +613,15 @@ function AppContent() {
   const loadWithingsData = useCallback(async (
     sheetId: string,
     scope: YearBucketReadScope = 'all',
+    connectionGeneration = connectionGenerationRef.current,
   ) => {
     try {
       await withAuthRetry(async () => {
         const measurements = await readWithingsMeasurements(sheetId, scope);
-        if (connectedUserRef.current !== sheetId) return;
+        if (
+          connectedUserRef.current !== sheetId
+          || connectionGenerationRef.current !== connectionGeneration
+        ) return;
         setWithingsMeasurements((existing) => mergeYearScopedEntries(existing, measurements, scope));
       });
     } catch {
@@ -1384,22 +1453,33 @@ function AppContent() {
   const executeDatasetLoad = useCallback((
     request: FirebaseLoadRequest,
     userId: string,
+    connectionGeneration: number,
     phase: 'priority' | 'deferred',
   ): Promise<void> => {
     const { dataset, scope } = request;
     const window = scope === 'initialWindow' ? calendarWindowRef.current : undefined;
     const yearScope: YearBucketReadScope = scope === 'initialWindow' ? 'all' : scope;
     switch (dataset) {
-      case 'exercises': return loadExercisesData(userId);
-      case 'workouts': return loadWorkoutDefinitionsData(userId);
-      case 'cardioActivities': return loadCardioActivitiesData(userId);
-      case 'schedule': return loadWorkoutScheduleData(userId, window, phase === 'priority');
-      case 'dayFlags': return loadFlagsData(userId, window, phase === 'priority');
-      case 'workoutSessions': return loadLogData(userId, yearScope);
-      case 'settings': return loadSettingsData(userId);
-      case 'garminActivities': return loadGarminData(userId, yearScope);
-      case 'garminWellness': return loadWellnessData(userId, yearScope);
-      case 'withingsMeasurements': return loadWithingsData(userId, yearScope);
+      case 'exercises': return loadExercisesData(userId, connectionGeneration);
+      case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration);
+      case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration);
+      case 'schedule': return loadWorkoutScheduleData(
+        userId,
+        window,
+        phase === 'priority',
+        connectionGeneration,
+      );
+      case 'dayFlags': return loadFlagsData(
+        userId,
+        window,
+        phase === 'priority',
+        connectionGeneration,
+      );
+      case 'workoutSessions': return loadLogData(userId, yearScope, connectionGeneration);
+      case 'settings': return loadSettingsData(userId, connectionGeneration);
+      case 'garminActivities': return loadGarminData(userId, yearScope, connectionGeneration);
+      case 'garminWellness': return loadWellnessData(userId, yearScope, connectionGeneration);
+      case 'withingsMeasurements': return loadWithingsData(userId, yearScope, connectionGeneration);
     }
   }, [
     loadCardioActivitiesData,
@@ -1417,33 +1497,68 @@ function AppContent() {
   const loadDataset = useCallback((
     request: FirebaseLoadRequest,
     userId: string,
+    connectionGeneration: number,
     phase: 'priority' | 'deferred',
   ): Promise<void> => {
-    const key = `${request.dataset}:${request.scope}`;
+    const key = firebaseLoadKey(request, userId, connectionGeneration);
+    if (completedDataLoadsRef.current.has(key)) return Promise.resolve();
     const existing = dataLoadsRef.current.get(key);
     if (existing) return existing;
-    const pending = executeDatasetLoad(request, userId, phase).catch((error) => {
-      dataLoadsRef.current.delete(key);
+    const pending = withTimeout(
+      executeDatasetLoad(request, userId, connectionGeneration, phase),
+      FIREBASE_LOAD_TIMEOUT_MS,
+      `Loading ${request.dataset} timed out. Check your connection and retry.`,
+    ).then(() => {
+      completedDataLoadsRef.current.add(key);
+    }).catch((error) => {
+      completedDataLoadsRef.current.delete(key);
       throw error;
+    }).finally(() => {
+      dataLoadsRef.current.delete(key);
     });
     dataLoadsRef.current.set(key, pending);
     return pending;
   }, [executeDatasetLoad]);
 
   useEffect(() => {
-    if (!spreadsheetId || loadQueueUserRef.current === spreadsheetId) return;
-    loadQueueUserRef.current = spreadsheetId;
+    if (!spreadsheetId) return;
+    const queueKey = `${spreadsheetId}:${route.view}`;
+    if (loadQueueKeyRef.current === queueKey) return;
+    loadQueueKeyRef.current = queueKey;
+    const generation = ++loadQueueGenerationRef.current;
     const userId = spreadsheetId;
+    const connectionGeneration = connectionGenerationRef.current;
     const queue = buildFirebaseLoadQueue(route.view);
+    const needsPriorityLoad = queue.priority.some(
+      (request) => !completedDataLoadsRef.current.has(
+        firebaseLoadKey(request, userId, connectionGeneration),
+      ),
+    );
+    setPriorityLoadPending(needsPriorityLoad);
+    setDataLoadError(null);
     void runFirebaseLoadQueue(
       queue,
-      (request, phase) => loadDataset(request, userId, phase),
+      (request, phase) => loadDataset(request, userId, connectionGeneration, phase),
       async () => {
-        if (connectedUserRef.current === userId) setPriorityLoadPending(false);
-        await ensureUser(userId);
+        if (
+          connectedUserRef.current !== userId
+          || loadQueueGenerationRef.current !== generation
+        ) return;
+        setPriorityLoadPending(false);
+        void withTimeout(
+          ensureUser(userId),
+          FIREBASE_LOAD_TIMEOUT_MS,
+          'Updating your account timed out.',
+        ).catch((error) => console.error('Unable to update Firebase user metadata:', error));
+      },
+      (request, reason) => {
+        console.warn(`Deferred Firebase load failed for ${request.dataset}:`, reason);
       },
     ).catch((reason) => {
-      if (connectedUserRef.current !== userId) return;
+      if (
+        connectedUserRef.current !== userId
+        || loadQueueGenerationRef.current !== generation
+      ) return;
       setPriorityLoadPending(false);
       setDataLoadError(reason instanceof Error ? reason.message : String(reason));
     });
@@ -1474,33 +1589,58 @@ function AppContent() {
   // Gate: require auth + sheet connection before showing workouts
   if (!sheetConnected) {
     return (
-      <GoogleAuth
-        onConnected={handleConnected}
-        onDisconnected={handleDisconnected}
-      />
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+        />
+      </>
     );
   }
 
   if (dataLoadError) {
     return (
-      <div className="auth-screen">
-        <p className="auth-error">{dataLoadError}</p>
-        <button className="btn-primary" onClick={() => window.location.reload()}>Retry</button>
-        <button className="btn-link" onClick={() => void handleSignOut()}>Sign out</button>
-      </div>
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          hideConnectedUi
+        />
+        <div className="auth-screen">
+          <p className="auth-error">{dataLoadError}</p>
+          <button className="btn-primary" onClick={() => window.location.reload()}>Retry</button>
+          <button className="btn-link" onClick={() => void handleSignOut()}>Sign out</button>
+        </div>
+      </>
     );
   }
 
   if (priorityLoadPending) {
-    return <div className="auth-screen"><p className="auth-status">Loading…</p></div>;
+    return (
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          hideConnectedUi
+        />
+        <div className="auth-screen"><p className="auth-status">Loading workout data…</p></div>
+      </>
+    );
   }
 
   // Show setup page for first-time users (empty config zone)
   if (needsSetup) {
     return (
-      <SetupPage
-        onConfirm={handleSetupConfirm}
-      />
+      <>
+        <GoogleAuth
+          onConnected={handleConnected}
+          onDisconnected={handleDisconnected}
+          hideConnectedUi
+        />
+        <SetupPage
+          onConfirm={handleSetupConfirm}
+        />
+      </>
     );
   }
 

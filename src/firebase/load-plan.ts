@@ -96,10 +96,14 @@ export async function runFirebaseLoadQueue(
 	queue: FirebaseLoadQueue,
 	load: (request: FirebaseLoadRequest, phase: 'priority' | 'deferred') => Promise<void>,
 	afterPriority: () => Promise<void> = async () => undefined,
+	onDeferredError: (request: FirebaseLoadRequest, reason: unknown) => void = () => undefined,
 ): Promise<void> {
 	await Promise.all(queue.priority.map((request) => load(request, 'priority')))
-	await Promise.all([
-		afterPriority(),
-		...queue.deferred.map((request) => load(request, 'deferred')),
-	])
+	await afterPriority()
+	const results = await Promise.allSettled(
+		queue.deferred.map((request) => load(request, 'deferred')),
+	)
+	results.forEach((result, index) => {
+		if (result.status === 'rejected') onDeferredError(queue.deferred[index], result.reason)
+	})
 }

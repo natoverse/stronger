@@ -177,3 +177,21 @@ Firestore after each successful sync.
   workout documents. Target IDs are checked transactionally before writing.
 - Duplicating a workout opens an unsaved editor draft. The copied template is
   not added to Firestore unless the user clicks Save.
+
+## Startup Reliability Iteration (2026-09-05)
+
+- Authentication restoration and route-priority Firestore loading expose
+  distinct status messages so a stalled phase can be identified.
+- Firebase authentication restoration has a bounded deadline and observes
+  explicit SDK errors. Popup sign-in also returns to a retryable state if its
+  promise never settles.
+- The authentication observer remains mounted while priority data loads,
+  avoiding a second persistence restoration cycle between sign-in and app
+  rendering.
+- Every startup dataset load has a bounded deadline. Priority failures show the
+  existing retry screen; deferred failures are logged, evicted from the
+  request cache, and do not replace an already-rendered route.
+- Route load queues are keyed by user and route, with a generation guard so an
+  obsolete queue cannot clear or fail the current route's loading state.
+- Default cardio activities populate local state immediately and persist in
+  the background rather than placing a Firestore write in the startup barrier.

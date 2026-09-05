@@ -90,4 +90,24 @@ describe('Firebase route load plan', () => {
 		expect(calls.indexOf('deferred:exercises:all'))
 			.toBeGreaterThan(calls.indexOf('priority:settings:all'))
 	})
+
+	it('reports deferred failures without rejecting the completed priority load', async () => {
+		const queue = buildFirebaseLoadQueue('settings')
+		const failures: string[] = []
+
+		await expect(runFirebaseLoadQueue(
+			queue,
+			async ({ dataset }, phase) => {
+				if (phase === 'deferred' && dataset === 'exercises') {
+					throw new Error('offline')
+				}
+			},
+			async () => undefined,
+			(request, reason) => {
+				failures.push(`${request.dataset}:${reason instanceof Error ? reason.message : reason}`)
+			},
+		)).resolves.toBeUndefined()
+
+		expect(failures).toEqual(['exercises:offline'])
+	})
 })
