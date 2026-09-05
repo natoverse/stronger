@@ -3819,7 +3819,7 @@ body {
 	margin: 16px 0 8px;
 }
 
-/* Latest synced data date, e.g. "Withings: Sep. 4" */
+/* Latest synced data date, e.g. "Monday, Sept. 4th" */
 .strava-section-freshness {
 	color: var(--color-primary);
 	margin-left: 8px;
