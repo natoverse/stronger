@@ -84,6 +84,7 @@ function AppContent() {
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
+  const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
   const settingsRef = useRef(new Map<string, string>());
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
@@ -133,6 +134,7 @@ function AppContent() {
       setPriorityLoadPending(true);
       setShowDefaultWorkoutImportPrompt(false);
       setDefaultWorkoutImportError(null);
+      setDuplicateWorkoutDraft(undefined);
       logScopesLoadedRef.current.clear();
       dataLoadsRef.current.clear();
       loadQueueUserRef.current = null;
@@ -207,6 +209,7 @@ function AppContent() {
     setNeedsSetup(false);
     setShowDefaultWorkoutImportPrompt(false);
     setDefaultWorkoutImportError(null);
+    setDuplicateWorkoutDraft(undefined);
     setCardioActivities([]);
     setGarminActivities([]);
     setWellnessEntries([]);
@@ -1153,10 +1156,12 @@ function AppContent() {
 
   // Editor handlers
   const handleEditWorkout = useCallback((workoutId: string) => {
+    setDuplicateWorkoutDraft(undefined);
     navigateTo({ view: 'editor', workoutId });
   }, [navigateTo]);
 
   const handleNewWorkout = useCallback(() => {
+    setDuplicateWorkoutDraft(undefined);
     navigateTo({ view: 'editor' });
   }, [navigateTo]);
 
@@ -1166,15 +1171,10 @@ function AppContent() {
       if (!source) return;
       const newId = generateStrongerId();
       const newDef = { ...source, id: newId, name: `${source.name} (Copy)`, favorite: false };
-      const updatedDefs = [...definitions, newDef];
-      setDefinitions(updatedDefs);
-      setWorkouts(buildWorkoutsFromConfigs(configs, updatedDefs, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
-      if (spreadsheetId) {
-        void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
-      }
-      navigateTo({ view: 'editor', workoutId: newId });
+      setDuplicateWorkoutDraft(newDef);
+      navigateTo({ view: 'editor' });
     },
-    [definitions, configs, spreadsheetId, navigateTo],
+    [definitions, navigateTo],
   );
 
   const handleShareWorkout = useCallback(
@@ -1256,6 +1256,7 @@ function AppContent() {
   );
 
   const handleEditorCancel = useCallback(() => {
+    setDuplicateWorkoutDraft(undefined);
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
@@ -1318,6 +1319,7 @@ function AppContent() {
         void withAuthRetry(() => writeWorkoutDefs(spreadsheetId, updatedDefs));
       }
 
+      setDuplicateWorkoutDraft(undefined);
       navigateTo({ view: 'list' });
     },
     [definitions, configs, spreadsheetId, navigateTo],
@@ -1642,7 +1644,9 @@ function AppContent() {
           onOpenSettings={handleOpenSettings}
         />
         <WorkoutEditor
+          key={editDef?.id ?? duplicateWorkoutDraft?.id ?? 'new'}
           existing={editDef}
+          initialDefinition={editDef ? undefined : duplicateWorkoutDraft}
           allDefinitions={definitions}
           configs={configs}
           onSave={handleEditorSave}

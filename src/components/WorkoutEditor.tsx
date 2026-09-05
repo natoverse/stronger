@@ -20,6 +20,8 @@ export interface EditableWorkout {
 interface WorkoutEditorProps {
 	/** Existing definition to edit, or undefined for a new workout. */
 	existing?: WorkoutDefinition;
+	/** Optional initial values for a new unsaved workout. */
+	initialDefinition?: WorkoutDefinition;
 	/** All current definitions (used for ID uniqueness checks). */
 	allDefinitions: WorkoutDefinition[];
 	/** Available lifts from configs. */
@@ -148,6 +150,7 @@ export function fromEditable(e: EditableWorkout, configs: LiftConfig[], existing
 
 export function WorkoutEditor({
 	existing,
+	initialDefinition,
 	allDefinitions,
 	configs,
 	onSave,
@@ -157,6 +160,8 @@ export function WorkoutEditor({
 	const [workout, setWorkout] = useState<EditableWorkout>(() =>
 		existing
 			? toEditable(existing)
+			: initialDefinition
+				? toEditable(initialDefinition)
 			: {
 					id: '',
 					name: '',
@@ -717,5 +722,4 @@ export function WorkoutEditor({
 		</div>
 	);
 }
-
 

@@ -71,3 +71,4 @@ On first connect (tab doesn't exist or is empty), the app creates the tab and wr
 
 - Startup no longer auto-seeds default workout definitions when the workout tab has no readable definitions. Instead, the app shows an explicit user prompt to import default workouts, so missing/failed loads do not trigger automatic overwrites.
 - The Firebase default workout import path is additionally guarded at the write layer: starter workouts are only written when the workout collection is empty, and existing workout documents block the import instead of being replaced.
+- Duplicating a workout template now creates an unsaved editor draft; canceling leaves stored workout definitions unchanged, and persistence happens only from the editor Save action.

@@ -175,3 +175,5 @@ Firestore after each successful sync.
 - Default workout import for the Firebase backend is create-only: it writes
   starter workouts only when the workout collection is empty and refuses to
   replace existing workout documents.
+- Duplicating a workout opens an unsaved editor draft. The copied template is
+  not added to Firestore unless the user clicks Save.

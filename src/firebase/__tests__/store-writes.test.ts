@@ -37,7 +37,7 @@ import { writeDefaultWorkoutDefs } from '../store.ts'
 const defaultWorkout: WorkoutDefinition = {
 	id: 'A',
 	name: 'Default A',
-	exercises: [],
+	templates: [],
 	favorite: false,
 }
 
