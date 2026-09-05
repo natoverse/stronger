@@ -13,6 +13,7 @@ vi.mock('firebase/firestore', () => ({
 	getDocs: vi.fn(async (ref: { path: string }) => ({
 		docs: mockState.docsByCollection.get(ref.path) ?? [],
 	})),
+	limit: vi.fn(),
 	query: vi.fn((ref: { path: string }) => ref),
 	runTransaction: vi.fn(),
 	setDoc: vi.fn(),
@@ -68,7 +69,7 @@ describe('Firestore default seeding writes', () => {
 		])
 
 		await expect(writeDefaultWorkoutDefs('user-1', [defaultWorkout]))
-			.rejects.toThrow('Existing workouts were found, so nothing was changed')
+			.rejects.toThrow('Existing data was found in the workouts library, so nothing was changed')
 
 		expect(mockState.commits).toEqual([])
 	})

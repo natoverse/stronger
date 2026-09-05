@@ -4,6 +4,7 @@ import {
 	documentId,
 	getDocs,
 	getDoc,
+	limit,
 	query,
 	runTransaction,
 	setDoc,
@@ -213,6 +214,16 @@ export function mergeDateWindowEntries<T extends { date: string }>(
 	].sort((left, right) => left.date.localeCompare(right.date))
 }
 
+async function commitInBatches(
+	operations: Array<(batch: ReturnType<typeof writeBatch>) => void>,
+): Promise<void> {
+	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
+		const batch = writeBatch(firestore)
+		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
+		await batch.commit()
+	}
+}
+
 async function replaceCollection<T>(
 	uid: string,
 	name: CollectionName,
@@ -231,11 +242,7 @@ async function replaceCollection<T>(
 		operations.push((batch) => batch.set(ref, { ...value as object, updatedAt: new Date().toISOString() }))
 	})
 
-	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
-		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
-		await batch.commit()
-	}
+	await commitInBatches(operations)
 }
 
 async function seedCollectionRequireEmpty<T>(
@@ -246,9 +253,9 @@ async function seedCollectionRequireEmpty<T>(
 	existingDataDescription: string,
 ): Promise<void> {
 	const collectionRef = userCollection(uid, name)
-	const existing = await getDocs(collectionRef)
+	const existing = await getDocs(query(collectionRef, limit(1)))
 	if (existing.docs.length > 0) {
-		throw new Error(`Default ${existingDataDescription} can only be imported into an empty library. Existing ${existingDataDescription} were found, so nothing was changed.`)
+		throw new Error(`Default ${existingDataDescription} can only be imported into an empty library. Existing data was found in the ${existingDataDescription} library, so nothing was changed.`)
 	}
 
 	const operations = values.map((value, index) => {
@@ -258,11 +265,7 @@ async function seedCollectionRequireEmpty<T>(
 		}
 	})
 
-	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
-		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
-		await batch.commit()
-	}
+	await commitInBatches(operations)
 }
 
 async function writeDateScopedCollection<T>(
@@ -284,11 +287,7 @@ async function writeDateScopedCollection<T>(
 			}
 		}
 	})
-	for (let start = 0; start < operations.length; start += BATCH_WRITE_LIMIT) {
-		const batch = writeBatch(firestore)
-		for (const operation of operations.slice(start, start + BATCH_WRITE_LIMIT)) operation(batch)
-		await batch.commit()
-	}
+	await commitInBatches(operations)
 }
 
 export async function ensureUser(uid: string): Promise<void> {
