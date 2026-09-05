@@ -70,7 +70,7 @@ describe('WorkoutSelect today plan rendering', () => {
 		expect(markup).toContain('plan-info-card-rest');
 		expect(markup).toContain('plan-info-card-blocker');
 		expect(markup).toContain('Dentist');
-		const planSection = markup.slice(markup.indexOf('todays-plan'), markup.indexOf('todays-plan') + 2000);
-		expect(planSection.indexOf('plan-info-card-blocker')).toBeLessThan(planSection.indexOf('plan-info-card-rest'));
+		expect(markup.indexOf('plan-info-card-blocker')).toBeLessThan(markup.indexOf('plan-info-card-cardio'));
+		expect(markup.indexOf('plan-info-card-cardio')).toBeLessThan(markup.indexOf('plan-info-card-rest'));
 	});
 });

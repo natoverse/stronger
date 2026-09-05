@@ -156,7 +156,7 @@ export function buildTodaysPlan({
 	if (entries.length === 0) return [];
 
 	const workoutMap = new Map(workouts.map((w) => [w.id, w]));
-	const cardioNames = new Map((cardioActivities ?? []).map((c) => [`cardio:${c.id}`, c.name]));
+	const cardioNameByWorkoutId = new Map((cardioActivities ?? []).map((c) => [`cardio:${c.id}`, c.name]));
 
 	const completedIds = new Set<string>();
 	for (const row of logRows ?? []) {
@@ -171,8 +171,8 @@ export function buildTodaysPlan({
 		} else if (wid === REST_ID) {
 			items.push({ kind: 'rest', workoutId: wid, name: 'Rest' });
 		} else if (wid.startsWith('cardio:')) {
-			const fallback = cardioNames.get(wid) ?? wid.slice('cardio:'.length);
-			items.push({ kind: 'cardio', workoutId: wid, name: e.label || fallback });
+			const defaultName = cardioNameByWorkoutId.get(wid) ?? wid.slice('cardio:'.length);
+			items.push({ kind: 'cardio', workoutId: wid, name: e.label || defaultName });
 		} else {
 			const workout = workoutMap.get(wid);
 			if (!workout) continue;
