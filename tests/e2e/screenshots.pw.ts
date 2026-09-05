@@ -5,8 +5,8 @@ const views = [
 	{ name: 'calendar', hash: '#/calendar', selector: '.calendar-view' },
 	{ name: 'exercises', hash: '#/exercises', selector: '.exercise-library' },
 	{ name: 'progress', hash: '#/progress', selector: '.progress-view' },
-	{ name: 'wellness', hash: '#/garmin', selector: '.garmin-wellness-view' },
-	{ name: 'activities', hash: '#/garmin-activities', selector: '.garmin-activities-list' },
+	{ name: 'wellness', hash: '#/garmin', selector: '.strava-subview' },
+	{ name: 'activities', hash: '#/garmin-activities', selector: '.activity-list-view' },
 	{ name: 'settings', hash: '#/settings', selector: '.settings-view' },
 ]
 

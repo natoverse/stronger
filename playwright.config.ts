@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
 	testDir: './tests/e2e',
+	testMatch: '**/*.pw.ts',
 	outputDir: 'test-results',
 	fullyParallel: true,
 	retries: process.env.CI ? 2 : 0,
