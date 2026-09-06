@@ -1,5 +1,18 @@
 # Stronger
 
+## Auth-free review mode
+
+Append `?mock=1` before the hash route to open the app with deterministic mock
+data and no Firebase login:
+
+```text
+http://localhost:5173/stronger/?mock=1#/calendar
+```
+
+Run `npm run test:screenshots` to capture the representative PR screenshots in
+`artifacts/screenshots/`. Pull requests run the same Playwright suite and
+publish the screenshots and HTML report as workflow artifacts.
+
 A barbell training tracker. Single-page React app, Google Sheets as the database, deployed to GitHub Pages. No backend.
 
 **This project is opinionated.** It reflects one person's planning style and training preferences. No human code is written — all code is authored by AI agents working from specs and deployed through GitHub Actions.

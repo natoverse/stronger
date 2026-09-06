@@ -3250,6 +3250,22 @@ body {
 	margin-top: 1rem;
 }
 
+.mock-mode-badge {
+	position: fixed;
+	right: 0.75rem;
+	bottom: 0.75rem;
+	z-index: 1000;
+	padding: 0.35rem 0.55rem;
+	border: 1px solid var(--color-warmup);
+	background: rgb(0 0 0 / 88%);
+	color: var(--color-warmup);
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	pointer-events: none;
+}
+
 .editor-field {
 	display: flex;
 	flex-direction: column;

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
@@ -43,6 +43,8 @@ import { WithingsView } from './components/WithingsView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
 import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
 import { DateRangeSelector } from './components/DateRangeSelector.js';
+import { createMockAppData } from './data/mock-app-data.js';
+import { isMockMode } from './data/mock-mode.js';
 import './App.css';
 
 const FIREBASE_LOAD_TIMEOUT_MS = 20_000;
@@ -58,46 +60,64 @@ function firebaseLoadKey(
 
 function AppContent() {
   const { route, navigateTo, replaceTo } = useHashRouter();
+  const mockMode = isMockMode();
+  const mockData = useMemo(() => mockMode ? createMockAppData() : null, [mockMode]);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [previousSets, setPreviousSets] = useState<PreviousSetData[][] | null>(null);
-  const [sheetConnected, setSheetConnected] = useState(false);
-  const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [sheetConnected, setSheetConnected] = useState(mockMode);
+  const [workouts, setWorkouts] = useState<Workout[]>(() => mockData?.workouts ?? []);
   const [startTime, setStartTime] = useState<string | null>(null);
   const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
-  const [configs, setConfigs] = useState<LiftConfig[]>([]);
-  const [definitions, setDefinitions] = useState<WorkoutDefinition[]>([]);
+  const [configs, setConfigs] = useState<LiftConfig[]>(() => mockData?.configs ?? []);
+  const [definitions, setDefinitions] = useState<WorkoutDefinition[]>(
+    () => mockData?.workoutDefinitions ?? [],
+  );
   const [progressionProposals, setProgressionProposals] = useState<ProgressionProposal[] | null>(null);
-  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>([]);
-  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>([]);
-  const [logRows, setLogRows] = useState<ParsedLogRow[]>([]);
+  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>(
+    () => mockData?.workoutSchedule ?? [],
+  );
+  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>(() => mockData?.dayFlags ?? []);
+  const [logRows, setLogRows] = useState<ParsedLogRow[]>(() => mockData?.logRows ?? []);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
-  const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>([]);
-  const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>([]);
-  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>([]);
-  const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>([]);
+  const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>(
+    () => mockData?.cardioActivities ?? [],
+  );
+  const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>(() => mockData?.stravaGoals ?? []);
+  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>(
+    () => mockData?.garminActivities ?? [],
+  );
+  const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>(
+    () => mockData?.garminWellness ?? [],
+  );
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [garminRange, setGarminRange] = useState<StravaTimeRange>('month');
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
-  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>([]);
-  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>([]);
-  const [liftGoals, setLiftGoals] = useState<LiftGoal[]>([]);
+  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>(
+    () => mockData?.withingsMeasurements ?? [],
+  );
+  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>(
+    () => mockData?.withingsGoals ?? [],
+  );
+  const [liftGoals, setLiftGoals] = useState<LiftGoal[]>(() => mockData?.liftGoals ?? []);
   const [draftResults, setDraftResults] = useState<SetResult[][] | null>(null);
   const [pendingFinish, setPendingFinish] = useState<{
     workout: Workout;
     results: SetResult[][];
     endTime: string;
   } | null>(null);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [appSettings, setAppSettings] = useState<AppSettings>(
+    () => mockData?.appSettings ?? DEFAULT_APP_SETTINGS,
+  );
   const [calendarSyncId, setCalendarSyncId] = useState<string | null>(null);
-  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(mockMode);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
   const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
   const settingsRef = useRef(new Map<string, string>());
-  const definitionsRef = useRef<WorkoutDefinition[]>([]);
+  const definitionsRef = useRef<WorkoutDefinition[]>(mockData?.workoutDefinitions ?? []);
   // Ref so callbacks can read the current value without being in their dependency arrays.
   const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
@@ -2021,7 +2041,7 @@ function AppContent() {
     return null;
   }
 
-  if (route.view === 'settings' && spreadsheetId) {
+  if (route.view === 'settings' && (spreadsheetId || mockMode)) {
     return (
       <>
         <GoogleAuth
@@ -2123,8 +2143,12 @@ function AppContent() {
 }
 
 function App() {
+  const mockMode = isMockMode();
   return (
-    <AppContent />
+    <>
+      <AppContent />
+      {mockMode && <div className="mock-mode-badge">Mock review data</div>}
+    </>
   );
 }
 

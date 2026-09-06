@@ -5,6 +5,6 @@ export default defineConfig({
   plugins: [react()],
   base: '/stronger/',
   test: {
-    exclude: [...configDefaults.exclude, '**/.worktrees/**'],
+    exclude: [...configDefaults.exclude, '**/.worktrees/**', 'e2e/**'],
   },
 })

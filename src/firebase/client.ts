@@ -23,7 +23,19 @@ export function isFirebaseConfigured(): boolean {
 	return Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId)
 }
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
+// Firebase Auth validates configuration during module initialization. A local
+// placeholder lets auth-free mock mode render while GoogleAuth still reports
+// missing production configuration before any Firebase operation can run.
+const initializationConfig = isFirebaseConfigured()
+	? firebaseConfig
+	: {
+			apiKey: 'AIzaSyMockConfigurationOnly0000000000',
+			authDomain: 'localhost',
+			projectId: 'stronger-mock',
+			appId: '1:000000000000:web:mock',
+		}
+
+const app = getApps().length ? getApp() : initializeApp(initializationConfig)
 
 export const firebaseAuth = (() => {
 	try {

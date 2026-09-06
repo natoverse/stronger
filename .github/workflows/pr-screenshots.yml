@@ -1,0 +1,53 @@
+name: PR Screenshots
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-screenshots-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:screenshots
+
+      - id: screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-screenshots
+          path: artifacts/screenshots
+          if-no-files-found: warn
+          retention-days: 14
+
+      - id: report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: warn
+          retention-days: 14
+
+      - if: always()
+        run: |
+          {
+            echo "## PR screenshots"
+            echo
+            echo "- [Download screenshots](${{ steps.screenshots.outputs.artifact-url }})"
+            echo "- [Open Playwright report](${{ steps.report.outputs.artifact-url }})"
+          } >> "$GITHUB_STEP_SUMMARY"
