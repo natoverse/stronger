@@ -5,6 +5,7 @@ import {
   formatElevation,
   garminActivityUrl,
   getDisplayedActivities,
+  getSelectableActivityTypes,
 } from '../GarminActivitiesListView.js';
 import type { StravaActivity } from '../../model/strava.js';
 
@@ -40,10 +41,25 @@ describe('Garmin activity card formatting', () => {
       ]);
     });
 
-    it('searches activities across all periods', () => {
-      expect(getDisplayedActivities(activities, 'month', selectedTypes, 'older', today)).toEqual([
-        activities[1],
-      ]);
+    it('combines search with the selected period', () => {
+      expect(getDisplayedActivities(activities, 'month', selectedTypes, 'older', today)).toEqual([]);
+    });
+
+    it('combines activity type, search, and date filters', () => {
+      const hike = { ...activity('2025-06-17', 'Park loop'), activityType: 'Hike' };
+      const run = activity('2025-06-16', 'Park run');
+      expect(getDisplayedActivities(
+        [hike, run, activities[1]],
+        'month',
+        new Set(['Hike']),
+        'park',
+        today,
+      )).toEqual([hike]);
+    });
+
+    it('excludes strength training from selectable activity types', () => {
+      const strength = { ...activity('2025-06-17', 'Lifting'), activityType: 'Weight Training' };
+      expect(getSelectableActivityTypes([strength, activities[0]])).toEqual(['Run']);
     });
 
     it('returns to the selected period when search is cleared', () => {
