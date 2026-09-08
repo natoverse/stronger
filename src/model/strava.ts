@@ -292,14 +292,21 @@ export function getMoreTimeRangeOptions(today: Date = new Date()): { value: Stra
   ];
 }
 
-/** Get ISO week number for a date. */
-function getISOWeek(d: Date): number {
+/** Get the ISO week number and week-numbering year for a date. */
+function getISOWeekInfo(d: Date): { year: number; week: number } {
   const tmp = new Date(d.getTime());
   tmp.setHours(0, 0, 0, 0);
   // Thursday of this week
   tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
-  const jan4 = new Date(tmp.getFullYear(), 0, 4);
-  return 1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  const year = tmp.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const week = 1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  return { year, week };
+}
+
+/** Get ISO week number for a date. */
+function getISOWeek(d: Date): number {
+  return getISOWeekInfo(d).week;
 }
 
 /**
@@ -353,19 +360,19 @@ export function generateBucketSlots(
       const seen = new Set<string>();
       const cursor = new Date(start);
       while (cursor <= end) {
-        const wk = getISOWeek(cursor);
-        const key = isAllTime ? `${cursor.getFullYear()}-W${wk}` : `W${wk}`;
+        const { year, week } = getISOWeekInfo(cursor);
+        const key = isAllTime ? `${year}-W${week}` : `W${week}`;
         if (!seen.has(key)) {
           seen.add(key);
-          slots.push({ key, label: isAllTime ? `W${wk} '${String(cursor.getFullYear()).slice(2)}` : `W${wk}` });
+          slots.push({ key, label: isAllTime ? `W${week} '${String(year).slice(2)}` : `W${week}` });
         }
         cursor.setDate(cursor.getDate() + 7);
       }
       // Also check the end date's week
-      const endWk = getISOWeek(end);
-      const endKey = isAllTime ? `${end.getFullYear()}-W${endWk}` : `W${endWk}`;
+      const { year: endYear, week: endWeek } = getISOWeekInfo(end);
+      const endKey = isAllTime ? `${endYear}-W${endWeek}` : `W${endWeek}`;
       if (!seen.has(endKey)) {
-        slots.push({ key: endKey, label: isAllTime ? `W${endWk} '${String(end.getFullYear()).slice(2)}` : `W${endWk}` });
+        slots.push({ key: endKey, label: isAllTime ? `W${endWeek} '${String(endYear).slice(2)}` : `W${endWeek}` });
       }
       return slots;
     }
@@ -499,7 +506,8 @@ export function buildMetricChartData(
     const displayVal = toDisplayUnit(metric, raw);
     let key = getBucketKey(activity.date, aggregation);
     if (range === 'all' && aggregation === 'week') {
-      key = `${activity.date.slice(0, 4)}-${key}`;
+      const { year, week } = getISOWeekInfo(new Date(`${activity.date}T00:00:00`));
+      key = `${year}-W${week}`;
     } else if (range === 'all' && aggregation === 'month') {
       key = `${activity.date.slice(0, 4)}-${key}`;
     }

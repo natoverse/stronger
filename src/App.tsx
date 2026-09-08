@@ -96,7 +96,9 @@ function AppContent() {
   const [selectedGarminActivityTypes, setSelectedGarminActivityTypes] = useState<Set<string>>(
     () => new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
   );
-  const garminActivityTypesSeeded = useRef(Boolean(mockData?.garminActivities.length));
+  const knownGarminActivityTypes = useRef(
+    new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
+  );
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>(
     () => mockData?.withingsMeasurements ?? [],
@@ -143,9 +145,12 @@ function AppContent() {
   );
 
   useEffect(() => {
-    if (selectableGarminActivityTypes.length > 0 && !garminActivityTypesSeeded.current) {
-      garminActivityTypesSeeded.current = true;
-      setSelectedGarminActivityTypes(new Set(selectableGarminActivityTypes));
+    const newTypes = selectableGarminActivityTypes.filter(
+      (type) => !knownGarminActivityTypes.current.has(type),
+    );
+    knownGarminActivityTypes.current = new Set(selectableGarminActivityTypes);
+    if (newTypes.length > 0) {
+      setSelectedGarminActivityTypes((selected) => new Set([...selected, ...newTypes]));
     }
   }, [selectableGarminActivityTypes]);
 

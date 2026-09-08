@@ -190,6 +190,8 @@ export function filterMeasurements(
   range: WithingsTimeRange,
   today: Date = new Date(),
 ): WithingsMeasurement[] {
+  if (range === 'all') return measurements;
+
   const startStr = toISODate(getRangeStart(range, today));
   const endStr = toISODate(getRangeEnd(range, today));
   return measurements.filter((m) => m.date >= startStr && m.date <= endStr);
@@ -298,9 +300,20 @@ function buildBucketSlots(
   range: WithingsTimeRange,
   aggregation: WithingsAggregation,
   today: Date,
+  measurements: WithingsMeasurement[] = [],
 ): { key: string; label: string }[] {
-  const start = getRangeStart(range, today);
-  const end = getRangeEnd(range, today);
+  const dates = range === 'all'
+    ? measurements
+        .map((measurement) => measurement.date)
+        .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+        .sort()
+    : [];
+  const start = dates.length > 0
+    ? new Date(`${dates[0]}T00:00:00`)
+    : getRangeStart(range, today);
+  const end = dates.length > 0
+    ? new Date(`${dates[dates.length - 1]}T23:59:59`)
+    : getRangeEnd(range, today);
   const slots: { key: string; label: string }[] = [];
   const seen = new Set<string>();
 
@@ -367,7 +380,7 @@ export function buildMetricTrendData(
   aggregation: WithingsAggregation = 'week',
   rangeMeasurements: WithingsMeasurement[] = measurements,
 ): MetricTrendData {
-  const slots = buildBucketSlots(range, aggregation, today);
+  const slots = buildBucketSlots(range, aggregation, today, measurements);
   const weeklyAverageWeights = buildWeeklyAverageWeights(rangeMeasurements);
 
   // Sort a copy of the measurements chronologically so aggregation, latest /

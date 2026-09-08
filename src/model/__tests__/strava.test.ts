@@ -217,6 +217,23 @@ describe('time range options', () => {
       expect.objectContaining({ label: "Jan '25" }),
     ]);
   });
+
+  it('keeps ISO week 1 buckets distinct at calendar-year boundaries', () => {
+    const activities = [
+      makeActivity({ date: '2024-01-01' }),
+      makeActivity({ date: '2024-12-30' }),
+    ];
+    const data = buildMetricChartData(
+      activities,
+      'distance',
+      'all',
+      null,
+      new Date(2024, 11, 30),
+      'week',
+    );
+
+    expect(data.buckets.filter((bucket) => bucket.value > 0)).toHaveLength(2);
+  });
 });
 
 describe('filterActivitiesByRange', () => {
