@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
-import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
-import type { DateWindow, YearBucketReadScope } from './firebase/index.js';
+import { appendLogRows, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
+import type { DateWindow, FirestoreReadSource, YearBucketReadScope } from './firebase/index.js';
 import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import { withTimeout } from './firebase/timeout.js';
@@ -182,6 +182,7 @@ function AppContent() {
       if (connectedUserRef.current === userId) return;
       if (connectedUserRef.current) disconnectCalendar();
       connectedUserRef.current = userId;
+      void setActiveSyncUser(userId);
       connectionGenerationRef.current += 1;
       setCalendarSyncId(null);
       setSpreadsheetId(userId);
@@ -252,6 +253,7 @@ function AppContent() {
     disconnectCalendar();
     if (!connectedUserRef.current) return;
     connectedUserRef.current = null;
+    void setActiveSyncUser(null);
     connectionGenerationRef.current += 1;
     clearDraft();
     setSheetConnected(false);
@@ -289,9 +291,13 @@ function AppContent() {
   }, [replaceTo]);
 
   const handleSignOut = useCallback(async () => {
+    if (spreadsheetId && await hasPendingMutations(spreadsheetId)) {
+      const confirmed = window.confirm('Some changes are still waiting to sync. Sign out anyway?');
+      if (!confirmed) return;
+    }
     await signOutOfStronger();
     handleDisconnected();
-  }, [handleDisconnected]);
+  }, [handleDisconnected, spreadsheetId]);
 
   const loadPreviousSets = useCallback(
     async (sheetId: string, workoutId: string) => {
@@ -434,8 +440,12 @@ function AppContent() {
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
-  const loadExercisesData = useCallback(async (userId: string, connectionGeneration: number) => {
-    const loaded = await readConfigZone(userId);
+  const loadExercisesData = useCallback(async (
+    userId: string,
+    connectionGeneration: number,
+    source: FirestoreReadSource = 'cacheFirst',
+  ) => {
+    const loaded = await readConfigZone(userId, source);
     if (
       connectedUserRef.current !== userId
       || connectionGenerationRef.current !== connectionGeneration
@@ -451,8 +461,9 @@ function AppContent() {
   const loadWorkoutDefinitionsData = useCallback(async (
     userId: string,
     connectionGeneration: number,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
-    let loaded = await readWorkoutDefs(userId);
+    let loaded = await readWorkoutDefs(userId, undefined, source);
     if (
       connectedUserRef.current !== userId
       || connectionGenerationRef.current !== connectionGeneration
@@ -505,8 +516,9 @@ function AppContent() {
   const loadCardioActivitiesData = useCallback(async (
     userId: string,
     connectionGeneration: number,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
-    let loaded = await readCardioActivities(userId);
+    let loaded = await readCardioActivities(userId, source);
     if (
       connectedUserRef.current !== userId
       || connectionGenerationRef.current !== connectionGeneration
@@ -527,10 +539,11 @@ function AppContent() {
     window?: DateWindow,
     required = false,
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const flags = await readFlags(sheetId, window);
+        const flags = await readFlags(sheetId, window, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -548,10 +561,11 @@ function AppContent() {
     window?: DateWindow,
     required = false,
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const schedule = await readWorkoutSchedule(sheetId, window);
+        const schedule = await readWorkoutSchedule(sheetId, window, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -568,10 +582,11 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const rows = await readLogZone(sheetId, scope);
+        const rows = await readLogZone(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -587,10 +602,11 @@ function AppContent() {
   const loadSettingsData = useCallback(async (
     sheetId: string,
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const settings = await readSettings(sheetId);
+        const settings = await readSettings(sheetId, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -618,10 +634,11 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const activities = await readGarminActivities(sheetId, scope);
+        const activities = await readGarminActivities(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -637,10 +654,11 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const entries = await readGarminWellnessEntries(sheetId, scope);
+        const entries = await readGarminWellnessEntries(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -656,10 +674,11 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const measurements = await readWithingsMeasurements(sheetId, scope);
+        const measurements = await readWithingsMeasurements(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -1497,31 +1516,34 @@ function AppContent() {
     userId: string,
     connectionGeneration: number,
     phase: 'priority' | 'deferred',
+    source: FirestoreReadSource = 'cacheFirst',
   ): Promise<void> => {
     const { dataset, scope } = request;
     const window = scope === 'initialWindow' ? calendarWindowRef.current : undefined;
     const yearScope: YearBucketReadScope = scope === 'initialWindow' ? 'all' : scope;
     switch (dataset) {
-      case 'exercises': return loadExercisesData(userId, connectionGeneration);
-      case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration);
-      case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration);
+      case 'exercises': return loadExercisesData(userId, connectionGeneration, source);
+      case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration, source);
+      case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration, source);
       case 'schedule': return loadWorkoutScheduleData(
         userId,
         window,
         phase === 'priority',
         connectionGeneration,
+        source,
       );
       case 'dayFlags': return loadFlagsData(
         userId,
         window,
         phase === 'priority',
         connectionGeneration,
+        source,
       );
-      case 'workoutSessions': return loadLogData(userId, yearScope, connectionGeneration);
-      case 'settings': return loadSettingsData(userId, connectionGeneration);
-      case 'garminActivities': return loadGarminData(userId, yearScope, connectionGeneration);
-      case 'garminWellness': return loadWellnessData(userId, yearScope, connectionGeneration);
-      case 'withingsMeasurements': return loadWithingsData(userId, yearScope, connectionGeneration);
+      case 'workoutSessions': return loadLogData(userId, yearScope, connectionGeneration, source);
+      case 'settings': return loadSettingsData(userId, connectionGeneration, source);
+      case 'garminActivities': return loadGarminData(userId, yearScope, connectionGeneration, source);
+      case 'garminWellness': return loadWellnessData(userId, yearScope, connectionGeneration, source);
+      case 'withingsMeasurements': return loadWithingsData(userId, yearScope, connectionGeneration, source);
     }
   }, [
     loadCardioActivitiesData,
@@ -1587,6 +1609,14 @@ function AppContent() {
           || loadQueueGenerationRef.current !== generation
         ) return;
         setPriorityLoadPending(false);
+        if (navigator.onLine) {
+          void Promise.allSettled(queue.priority.map((request) =>
+            withTimeout(
+              executeDatasetLoad(request, userId, connectionGeneration, 'deferred', 'server'),
+              FIREBASE_LOAD_TIMEOUT_MS,
+              `Refreshing ${request.dataset} timed out.`,
+            )));
+        }
         void withTimeout(
           ensureUser(userId),
           FIREBASE_LOAD_TIMEOUT_MS,
@@ -1604,7 +1634,7 @@ function AppContent() {
       setPriorityLoadPending(false);
       setDataLoadError(reason instanceof Error ? reason.message : String(reason));
     });
-  }, [loadDataset, route.view, spreadsheetId]);
+  }, [executeDatasetLoad, loadDataset, route.view, spreadsheetId]);
 
   // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {

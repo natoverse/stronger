@@ -2,8 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
 	isFirebaseConfigured,
 	observeAuth,
+	retryPendingWrites,
 	signInToStronger,
 	signOutOfStronger,
+	subscribeToSyncStatus,
+	type SyncSnapshot,
 } from '../firebase/index.ts'
 import { withTimeout } from '../firebase/timeout.ts'
 import { isMockMode } from '../data/mock-mode.ts'
@@ -47,6 +50,12 @@ export function GoogleAuth({
 	const [phase, setPhase] = useState<Phase>(mockMode ? 'connected' : 'loading')
 	const [error, setError] = useState<string | null>(null)
 	const [signInPending, setSignInPending] = useState(false)
+	const [syncStatus, setSyncStatus] = useState<SyncSnapshot>({
+		online: typeof navigator === 'undefined' ? true : navigator.onLine,
+		syncing: false,
+		pendingCount: 0,
+		lastSyncedAt: null,
+	})
 	const authGenerationRef = useRef(0)
 
 	const connect = useCallback((uid: string, generation: number) => {
@@ -92,6 +101,8 @@ export function GoogleAuth({
 			unsubscribe()
 		}
 	}, [connect, mockMode, onDisconnected])
+
+	useEffect(() => subscribeToSyncStatus(setSyncStatus), [])
 
 	const handleSignIn = useCallback(async () => {
 		if (signInPending) return
@@ -145,6 +156,16 @@ export function GoogleAuth({
 	if (hideConnectedUi) return null
 
 	const onOpenGarminWellness = onOpenGarmin || onOpenWellness
+	const syncLabel = !syncStatus.online
+		? 'Offline'
+		: syncStatus.syncing
+			? 'Syncing'
+			: syncStatus.pendingCount > 0
+				? `${syncStatus.pendingCount} ${syncStatus.pendingCount === 1 ? 'change' : 'changes'} pending`
+				: 'Synced'
+	const syncTitle = syncStatus.lastSyncedAt
+		? `Last synced ${new Date(syncStatus.lastSyncedAt).toLocaleString()}`
+		: 'Retry synchronization'
 	return (
 		<div className="auth-connected">
 			<div className="toolbar-nav">
@@ -157,6 +178,14 @@ export function GoogleAuth({
 				{onOpenWithings && <button className="btn-toolbar" onClick={onOpenWithings} title="Body Composition"><HeartPulse size={20} /></button>}
 				{onOpenSettings && <button className="btn-toolbar" onClick={onOpenSettings} title="Settings"><Settings size={20} /></button>}
 			</div>
+			<button
+				className={`sync-status ${syncStatus.online ? '' : 'sync-status-offline'}`}
+				onClick={() => void retryPendingWrites()}
+				title={syncTitle}
+				disabled={syncStatus.syncing}
+			>
+				{syncLabel}
+			</button>
 			<a
 				className="btn-toolbar"
 				href="https://github.com/natoverse/stronger"
