@@ -1,5 +1,5 @@
 import type { StravaTimeRange } from '../model/strava.js';
-import { getOlderYearOptions, getTimeRangeOptions } from '../model/strava.js';
+import { getMoreTimeRangeOptions, getTimeRangeOptions } from '../model/strava.js';
 
 interface Props {
   value: StravaTimeRange;
@@ -9,8 +9,8 @@ interface Props {
 
 export function DateRangeSelector({ value, onChange, today = new Date() }: Props) {
   const buttonOptions = getTimeRangeOptions(today);
-  const olderYearOptions = getOlderYearOptions(today);
-  const selectedOlderYear = olderYearOptions.some((option) => option.value === value) ? value : '';
+  const moreOptions = getMoreTimeRangeOptions(today);
+  const selectedMoreOption = moreOptions.some((option) => option.value === value) ? value : '';
 
   return (
     <div className="strava-range-group">
@@ -24,17 +24,17 @@ export function DateRangeSelector({ value, onChange, today = new Date() }: Props
           {option.label}
         </button>
       ))}
-      {olderYearOptions.length > 0 && (
+      {moreOptions.length > 0 && (
         <select
-          aria-label="More years"
-          className={`strava-range-btn strava-range-more${selectedOlderYear ? ' active' : ''}`}
-          value={selectedOlderYear}
+          aria-label="More ranges"
+          className={`strava-range-btn strava-range-more${selectedMoreOption ? ' active' : ''}`}
+          value={selectedMoreOption}
           onChange={(event) => {
             if (event.target.value) onChange(event.target.value);
           }}
         >
           <option value="" disabled>More</option>
-          {olderYearOptions.map((option) => (
+          {moreOptions.map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>

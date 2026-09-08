@@ -50,6 +50,7 @@ export type StravaMetric = 'distance' | 'elevationGain' | 'duration';
  * Time range selector for activity charts.
  * - 'month': rolling last 30 days
  * - 'year': rolling last 365 days
+ * - 'all': all available data
  * - A 4-digit year string (e.g. '2026'): that full calendar year (Jan 1 – Dec 31)
  */
 export type StravaTimeRange = string;
@@ -210,6 +211,10 @@ export function filterActivities(
   selectedTypes: Set<string>,
   today: Date = new Date(),
 ): StravaActivity[] {
+  if (range === 'all') {
+    return activities.filter((a) => selectedTypes.has(a.activityType));
+  }
+
   const start = getRangeStart(range, today);
   const end = getRangeEnd(range, today);
   const startStr = toISODate(start);
@@ -220,6 +225,20 @@ export function filterActivities(
       a.date >= startStr &&
       a.date <= endStr &&
       selectedTypes.has(a.activityType),
+  );
+}
+
+/** Filter activities by a case-insensitive match on activity name or type. */
+export function filterActivitiesByQuery(
+  activities: StravaActivity[],
+  query: string,
+): StravaActivity[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return activities;
+
+  return activities.filter((activity) =>
+    (activity.name ?? '').toLowerCase().includes(normalizedQuery) ||
+    activity.activityType.toLowerCase().includes(normalizedQuery),
   );
 }
 
@@ -265,14 +284,29 @@ export function getOlderYearOptions(today: Date = new Date()): { value: StravaTi
   }));
 }
 
-/** Get ISO week number for a date. */
-function getISOWeek(d: Date): number {
+/** Build the options shown in the More range menu. */
+export function getMoreTimeRangeOptions(today: Date = new Date()): { value: StravaTimeRange; label: string }[] {
+  return [
+    { value: 'all', label: 'All' },
+    ...getOlderYearOptions(today),
+  ];
+}
+
+/** Get the ISO week number and week-numbering year for a date. */
+function getISOWeekInfo(d: Date): { year: number; week: number } {
   const tmp = new Date(d.getTime());
   tmp.setHours(0, 0, 0, 0);
   // Thursday of this week
   tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
-  const jan4 = new Date(tmp.getFullYear(), 0, 4);
-  return 1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  const year = tmp.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const week = 1 + Math.round(((tmp.getTime() - jan4.getTime()) / 86400000 - 3 + ((jan4.getDay() + 6) % 7)) / 7);
+  return { year, week };
+}
+
+/** Get ISO week number for a date. */
+function getISOWeek(d: Date): number {
+  return getISOWeekInfo(d).week;
 }
 
 /**
@@ -292,9 +326,21 @@ export function generateBucketSlots(
   range: StravaTimeRange,
   aggregation: StravaAggregation = 'week',
   today: Date = new Date(),
+  activities: StravaActivity[] = [],
 ): { key: string; label: string }[] {
-  const start = getRangeStart(range, today);
-  const end = getRangeEnd(range, today);
+  const allDates = range === 'all'
+    ? activities
+        .map((activity) => activity.date)
+        .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
+        .sort()
+    : [];
+  const start = range === 'all' && allDates.length > 0
+    ? new Date(`${allDates[0]}T00:00:00`)
+    : getRangeStart(range, today);
+  const end = range === 'all' && allDates.length > 0
+    ? new Date(`${allDates[allDates.length - 1]}T23:59:59`)
+    : getRangeEnd(range, today);
+  const isAllTime = range === 'all';
 
   switch (aggregation) {
     case 'day': {
@@ -314,19 +360,19 @@ export function generateBucketSlots(
       const seen = new Set<string>();
       const cursor = new Date(start);
       while (cursor <= end) {
-        const wk = getISOWeek(cursor);
-        const key = `W${wk}`;
+        const { year, week } = getISOWeekInfo(cursor);
+        const key = isAllTime ? `${year}-W${week}` : `W${week}`;
         if (!seen.has(key)) {
           seen.add(key);
-          slots.push({ key, label: `W${wk}` });
+          slots.push({ key, label: isAllTime ? `W${week} '${String(year).slice(2)}` : `W${week}` });
         }
         cursor.setDate(cursor.getDate() + 7);
       }
       // Also check the end date's week
-      const endWk = getISOWeek(end);
-      const endKey = `W${endWk}`;
+      const { year: endYear, week: endWeek } = getISOWeekInfo(end);
+      const endKey = isAllTime ? `${endYear}-W${endWeek}` : `W${endWeek}`;
       if (!seen.has(endKey)) {
-        slots.push({ key: endKey, label: `W${endWk}` });
+        slots.push({ key: endKey, label: isAllTime ? `W${endWeek} '${String(endYear).slice(2)}` : `W${endWeek}` });
       }
       return slots;
     }
@@ -343,6 +389,19 @@ export function generateBucketSlots(
             seen.add(key);
             slots.push({ key, label: MONTH_LABELS[cursor.getMonth()] });
           }
+          cursor.setMonth(cursor.getMonth() + 1);
+        }
+        return slots;
+      }
+      if (isAllTime) {
+        const slots: { key: string; label: string }[] = [];
+        const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+        while (cursor <= end) {
+          const key = `${cursor.getFullYear()}-${cursor.getMonth()}`;
+          slots.push({
+            key,
+            label: `${MONTH_LABELS[cursor.getMonth()]} '${String(cursor.getFullYear()).slice(2)}`,
+          });
           cursor.setMonth(cursor.getMonth() + 1);
         }
         return slots;
@@ -367,6 +426,8 @@ export function prorateGoal(
   range: StravaTimeRange,
   today: Date = new Date(),
 ): number | null {
+  if (range === 'all') return null;
+
   const year = parseYearRange(range);
   if (year !== null) {
     // Current year → full goal; past years → no goal
@@ -431,7 +492,7 @@ export function buildMetricChartData(
     };
   }
 
-  const slots = generateBucketSlots(range, aggregation, today);
+  const slots = generateBucketSlots(range, aggregation, today, activities);
 
   // Aggregate into buckets
   const bucketMap = new Map<string, number>();
@@ -443,7 +504,13 @@ export function buildMetricChartData(
     const raw = activity[metric];
     if (typeof raw !== 'number' || raw <= 0) continue;
     const displayVal = toDisplayUnit(metric, raw);
-    const key = getBucketKey(activity.date, aggregation);
+    let key = getBucketKey(activity.date, aggregation);
+    if (range === 'all' && aggregation === 'week') {
+      const { year, week } = getISOWeekInfo(new Date(`${activity.date}T00:00:00`));
+      key = `${year}-W${week}`;
+    } else if (range === 'all' && aggregation === 'month') {
+      key = `${activity.date.slice(0, 4)}-${key}`;
+    }
     bucketMap.set(key, (bucketMap.get(key) ?? 0) + displayVal);
   }
 

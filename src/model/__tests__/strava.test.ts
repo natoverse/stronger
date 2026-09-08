@@ -12,6 +12,7 @@ import {
   formatMetricValue,
   getTimeRangeOptions,
   getOlderYearOptions,
+  getMoreTimeRangeOptions,
   isStrengthTraining,
   splitActivities,
   STRENGTH_ACTIVITY_TYPE,
@@ -178,6 +179,60 @@ describe('filterActivities', () => {
     const result = filterActivities(activities, '2025', new Set(['Run']), today);
     expect(result).toHaveLength(1);
     expect(result[0].date).toBe('2025-03-01');
+  });
+
+  it('keeps all dates for the all-time range', () => {
+    const activities = [
+      makeActivity({ date: '2010-01-01', activityType: 'Run' }),
+      makeActivity({ date: '2025-06-17', activityType: 'Hike' }),
+    ];
+    expect(filterActivities(activities, 'all', new Set(['Run', 'Hike']))).toEqual(activities);
+  });
+});
+
+describe('time range options', () => {
+  it('puts All at the top of the More menu', () => {
+    expect(getMoreTimeRangeOptions(new Date(2025, 5, 18))[0]).toEqual({
+      value: 'all',
+      label: 'All',
+    });
+  });
+
+  it('keeps all-time monthly buckets distinct across years', () => {
+    const activities = [
+      makeActivity({ date: '2024-01-10' }),
+      makeActivity({ date: '2025-01-10' }),
+    ];
+    const data = buildMetricChartData(
+      activities,
+      'distance',
+      'all',
+      null,
+      new Date(2025, 0, 10),
+      'month',
+    );
+
+    expect(data.buckets.filter((bucket) => bucket.value > 0)).toEqual([
+      expect.objectContaining({ label: "Jan '24" }),
+      expect.objectContaining({ label: "Jan '25" }),
+    ]);
+  });
+
+  it('keeps ISO week 1 buckets distinct at calendar-year boundaries', () => {
+    const activities = [
+      makeActivity({ date: '2024-01-01' }),
+      makeActivity({ date: '2024-12-30' }),
+    ];
+    const data = buildMetricChartData(
+      activities,
+      'distance',
+      'all',
+      null,
+      new Date(2024, 11, 30),
+      'week',
+    );
+
+    expect(data.buckets.filter((bucket) => bucket.value > 0)).toHaveLength(2);
   });
 });
 

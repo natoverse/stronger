@@ -3,6 +3,7 @@ import { Search, ChevronDown } from 'lucide-react';
 import type { StravaActivity, StravaTimeRange } from '../model/strava.js';
 import {
   filterActivitiesByRange,
+  filterActivitiesByQuery,
   getActivityTypes,
   isStrengthTraining,
   toDisplayUnit,
@@ -25,6 +26,16 @@ function isDefaultType(type: string): boolean {
 interface Props {
   activities: StravaActivity[];
   range: StravaTimeRange;
+  selectedTypes: Set<string>;
+  query: string;
+}
+
+interface ActivityFilterControlsProps {
+  activities: StravaActivity[];
+  selectedTypes: Set<string>;
+  query: string;
+  onSelectedTypesChange: (types: Set<string>) => void;
+  onQueryChange: (query: string) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -147,52 +158,59 @@ export function getDisplayedActivities(
   query: string,
   today: Date = new Date(),
 ): StravaActivity[] {
-  const q = query.trim().toLowerCase();
-  const rangeActivities = q ? activities : filterActivitiesByRange(activities, range, today);
+  const rangeActivities = filterActivitiesByRange(activities, range, today);
   const typeFiltered = rangeActivities.filter((activity) => selectedTypes.has(activity.activityType));
-  const searched = q
-    ? typeFiltered.filter((activity) => {
-        const name = (activity.name ?? '').toLowerCase();
-        const type = (activity.activityType ?? '').toLowerCase();
-        return name.includes(q) || type.includes(q);
-      })
-    : typeFiltered;
+  const searched = filterActivitiesByQuery(typeFiltered, query);
   return [...searched].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-export function GarminActivitiesListView({ activities, range }: Props) {
-  const [query, setQuery] = useState('');
-  const today = useMemo(() => new Date(), []);
+export function getSelectableActivityTypes(activities: StravaActivity[]): string[] {
+  return getActivityTypes(activities).filter(isDefaultType);
+}
 
-  // Derive all known types from the full activity list
-  const allTypes = useMemo(() => getActivityTypes(activities), [activities]);
-
-  // Initialize selected types: everything except strength training
-  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(
-    () => new Set(allTypes.filter(isDefaultType)),
-  );
-
-  // When the activity list first loads (allTypes changes from empty), seed defaults
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (allTypes.length > 0 && !seededRef.current) {
-      seededRef.current = true;
-      setSelectedTypes(new Set(allTypes.filter(isDefaultType)));
-    }
-  }, [allTypes]);
-
+export function ActivityFilterControls({
+  activities,
+  selectedTypes,
+  query,
+  onSelectedTypesChange,
+  onQueryChange,
+}: ActivityFilterControlsProps) {
+  const allTypes = useMemo(() => getSelectableActivityTypes(activities), [activities]);
   const handleToggle = (type: string) => {
-    setSelectedTypes((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
+    const next = new Set(selectedTypes);
+    if (next.has(type)) next.delete(type);
+    else next.add(type);
+    onSelectedTypesChange(next);
   };
 
-  const handleSelectAll = () => setSelectedTypes(new Set(allTypes));
-  const handleSelectNone = () => setSelectedTypes(new Set());
+  return (
+    <div className="activity-list-controls">
+      <div className="activity-list-search">
+        <Search size={15} className="activity-list-search-icon" />
+        <input
+          className="activity-list-search-input"
+          type="search"
+          placeholder="Search activities…"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+        />
+      </div>
+      {allTypes.length > 0 && (
+        <TypeFilterDropdown
+          allTypes={allTypes}
+          selectedTypes={selectedTypes}
+          onToggle={handleToggle}
+          onSelectAll={() => onSelectedTypesChange(new Set(allTypes))}
+          onSelectNone={() => onSelectedTypesChange(new Set())}
+        />
+      )}
+    </div>
+  );
+}
 
+export function GarminActivitiesListView({ activities, range, selectedTypes, query }: Props) {
+  const today = useMemo(() => new Date(), []);
+  const allTypes = useMemo(() => getSelectableActivityTypes(activities), [activities]);
   const displayed = useMemo(() => {
     return getDisplayedActivities(activities, range, selectedTypes, query, today);
   }, [activities, range, selectedTypes, query, today]);
@@ -200,28 +218,6 @@ export function GarminActivitiesListView({ activities, range }: Props) {
   return (
     <div className="activity-list-view">
       <h3 className="strava-section-title">Activity Log</h3>
-
-      <div className="activity-list-controls">
-        <div className="activity-list-search">
-          <Search size={15} className="activity-list-search-icon" />
-          <input
-            className="activity-list-search-input"
-            type="search"
-            placeholder="Search activities…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        {allTypes.length > 0 && (
-          <TypeFilterDropdown
-            allTypes={allTypes}
-            selectedTypes={selectedTypes}
-            onToggle={handleToggle}
-            onSelectAll={handleSelectAll}
-            onSelectNone={handleSelectNone}
-          />
-        )}
-      </div>
 
       {displayed.length === 0 ? (
         <p className="strava-empty">

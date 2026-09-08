@@ -10,6 +10,7 @@ import type {
 import {
   getActivityTypes,
   filterActivities,
+  filterActivitiesByQuery,
   buildMetricChartData,
   formatMetricValue,
   METRIC_LABELS,
@@ -28,6 +29,8 @@ interface Props {
   goals: StravaGoal[];
   range: StravaTimeRange;
   aggregation: StravaAggregation;
+  selectedTypes: Set<string>;
+  query: string;
   onGoalChange?: (metric: StravaMetric, value: number | null) => void;
   /** Heading shown at the top of the view. Defaults to "Activities". */
   title?: string | null;
@@ -49,45 +52,30 @@ const STRENGTH_METRICS: StravaMetric[] = ['duration'];
 const CHART_HEIGHT = 132;
 const CHART_PADDING = { top: 16, right: 56, bottom: 32, left: 52 };
 
+export function getFilteredActivityGroups(
+  activities: StravaActivity[],
+  range: StravaTimeRange,
+  selectedTypes: Set<string>,
+  query: string,
+  today: Date = new Date(),
+): { cardio: StravaActivity[]; strength: StravaActivity[] } {
+  const searchedActivities = filterActivitiesByQuery(activities, query);
+  const { cardio, strength } = splitActivities(searchedActivities);
+  return {
+    cardio: filterActivities(cardio, range, selectedTypes, today),
+    strength: filterActivities(strength, range, new Set(getActivityTypes(strength)), today),
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
 /* ------------------------------------------------------------------ */
 
-export function ActivitiesView({ activities, goals, range, aggregation, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.', embedded = false }: Props) {
-  // Split into cardio (everything except strength) and strength training
-  const { cardio: cardioActivities, strength: strengthActivities } = useMemo(
-    () => splitActivities(activities),
-    [activities],
-  );
-
-  const allTypes = useMemo(
-    () => getActivityTypes(cardioActivities),
-    [cardioActivities],
-  );
-
+export function ActivitiesView({ activities, goals, range, aggregation, selectedTypes, query, onGoalChange, title = 'Activities', emptyText = 'No activity data yet. Set up sync to see activity charts.', embedded = false }: Props) {
   const today = useMemo(() => new Date(), []);
-
-  // Cardio: filtered by range (all types included)
-  const filteredCardio = useMemo(
-    () => filterActivities(cardioActivities, range, new Set(allTypes), today),
-    [cardioActivities, range, allTypes, today],
-  );
-
-  // Strength: filtered by range only (all strength activities included)
-  const filteredStrength = useMemo(
-    () => {
-      const allStrength = new Set(getActivityTypes(strengthActivities));
-      return filterActivities(strengthActivities, range, allStrength, today);
-    },
-    [strengthActivities, range, today],
-  );
-
-  const filteredAllActivities = useMemo(
-    () => {
-      const allTypes = new Set(getActivityTypes(activities));
-      return filterActivities(activities, range, allTypes, today);
-    },
-    [activities, range, today],
+  const { cardio: filteredCardio, strength: filteredStrength } = useMemo(
+    () => getFilteredActivityGroups(activities, range, selectedTypes, query, today),
+    [activities, range, selectedTypes, query, today],
   );
 
   const goalMap = useMemo(() => {

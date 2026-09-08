@@ -41,7 +41,7 @@ import { toDisplayUnit } from './model/withings.js';
 import { formatFreshnessLabel } from './model/freshness.js';
 import { WithingsView } from './components/WithingsView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
-import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
+import { ActivityFilterControls, GarminActivitiesListView, getSelectableActivityTypes } from './components/GarminActivitiesListView.js';
 import { DateRangeSelector } from './components/DateRangeSelector.js';
 import { createMockAppData } from './data/mock-app-data.js';
 import { isMockMode } from './data/mock-mode.js';
@@ -92,6 +92,13 @@ function AppContent() {
   );
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [garminRange, setGarminRange] = useState<StravaTimeRange>('month');
+  const [garminActivityQuery, setGarminActivityQuery] = useState('');
+  const [selectedGarminActivityTypes, setSelectedGarminActivityTypes] = useState<Set<string>>(
+    () => new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
+  );
+  const knownGarminActivityTypes = useRef(
+    new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
+  );
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
   const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>(
     () => mockData?.withingsMeasurements ?? [],
@@ -132,6 +139,20 @@ function AppContent() {
   const connectedUserRef = useRef<string | null>(null);
   const connectionGenerationRef = useRef(0);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
+  const selectableGarminActivityTypes = useMemo(
+    () => getSelectableActivityTypes(garminActivities),
+    [garminActivities],
+  );
+
+  useEffect(() => {
+    const newTypes = selectableGarminActivityTypes.filter(
+      (type) => !knownGarminActivityTypes.current.has(type),
+    );
+    knownGarminActivityTypes.current = new Set(selectableGarminActivityTypes);
+    if (newTypes.length > 0) {
+      setSelectedGarminActivityTypes((selected) => new Set([...selected, ...newTypes]));
+    }
+  }, [selectableGarminActivityTypes]);
 
   const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
     const previous = sessionMutationRef.current.get(key) ?? Promise.resolve();
@@ -2020,17 +2041,31 @@ function AppContent() {
           </div>
         </div>
         <div className="strava-view">
+          <ActivityFilterControls
+            activities={garminActivities}
+            selectedTypes={selectedGarminActivityTypes}
+            query={garminActivityQuery}
+            onSelectedTypesChange={setSelectedGarminActivityTypes}
+            onQueryChange={setGarminActivityQuery}
+          />
           <ActivitiesView
             activities={garminActivities}
             goals={stravaGoals}
             range={garminRange}
             aggregation={chartAggregation}
+            selectedTypes={selectedGarminActivityTypes}
+            query={garminActivityQuery}
             onGoalChange={handleStravaGoalChange}
             title={null}
             emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
             embedded
           />
-          <GarminActivitiesListView activities={garminActivities} range={garminRange} />
+          <GarminActivitiesListView
+            activities={garminActivities}
+            range={garminRange}
+            selectedTypes={selectedGarminActivityTypes}
+            query={garminActivityQuery}
+          />
         </div>
       </>
     );
