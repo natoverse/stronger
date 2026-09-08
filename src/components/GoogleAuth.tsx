@@ -14,6 +14,7 @@ import { Calendar, Dumbbell, HeartPulse, Library, Settings, SportShoe, TrendingU
 
 const AUTH_RESTORE_TIMEOUT_MS = 15_000
 const SIGN_IN_TIMEOUT_MS = 60_000
+const LAST_USER_KEY = 'stronger:lastUserId'
 
 interface Props {
 	onConnected: (userId: string) => void
@@ -50,6 +51,7 @@ export function GoogleAuth({
 	const [phase, setPhase] = useState<Phase>(mockMode ? 'connected' : 'loading')
 	const [error, setError] = useState<string | null>(null)
 	const [signInPending, setSignInPending] = useState(false)
+	const [reauthRequired, setReauthRequired] = useState(false)
 	const [syncStatus, setSyncStatus] = useState<SyncSnapshot>({
 		online: typeof navigator === 'undefined' ? true : navigator.onLine,
 		syncing: false,
@@ -60,6 +62,12 @@ export function GoogleAuth({
 
 	const connect = useCallback((uid: string, generation: number) => {
 		if (authGenerationRef.current !== generation) return
+		try {
+			localStorage.setItem(LAST_USER_KEY, uid)
+		} catch {
+			// Auth persistence still has its own IndexedDB and storage fallbacks.
+		}
+		setReauthRequired(false)
 		setPhase('connected')
 		onConnected(uid)
 	}, [onConnected])
@@ -74,6 +82,18 @@ export function GoogleAuth({
 		let restored = false
 		const restoreTimeout = window.setTimeout(() => {
 			if (restored) return
+			let cachedUserId: string | null = null
+			try {
+				cachedUserId = localStorage.getItem(LAST_USER_KEY)
+			} catch {
+				// Fall through to the retry screen.
+			}
+			if (cachedUserId) {
+				setReauthRequired(true)
+				setPhase('connected')
+				onConnected(cachedUserId)
+				return
+			}
 			setError('Restoring your session timed out. Check your connection and retry.')
 			setPhase('error')
 		}, AUTH_RESTORE_TIMEOUT_MS)
@@ -82,6 +102,19 @@ export function GoogleAuth({
 			window.clearTimeout(restoreTimeout)
 			const generation = ++authGenerationRef.current
 			if (!user) {
+				const cachedUserId = (() => {
+					try {
+						return localStorage.getItem(LAST_USER_KEY)
+					} catch {
+						return null
+					}
+				})()
+				if (cachedUserId) {
+					setReauthRequired(true)
+					setPhase('connected')
+					onConnected(cachedUserId)
+					return
+				}
 				setPhase('sign-in')
 				onDisconnected()
 				return
@@ -91,6 +124,19 @@ export function GoogleAuth({
 		}, (reason) => {
 			restored = true
 			window.clearTimeout(restoreTimeout)
+			let cachedUserId: string | null = null
+			try {
+				cachedUserId = localStorage.getItem(LAST_USER_KEY)
+			} catch {
+				// Fall through to the normal retry screen.
+			}
+			if (cachedUserId) {
+				setError(reason.message || 'Sign in again to resume synchronization.')
+				setReauthRequired(true)
+				setPhase('connected')
+				onConnected(cachedUserId)
+				return
+			}
 			setError(reason.message || 'Unable to restore your session.')
 			setPhase('error')
 			onDisconnected()
@@ -158,6 +204,8 @@ export function GoogleAuth({
 	const onOpenGarminWellness = onOpenGarmin || onOpenWellness
 	const syncLabel = !syncStatus.online
 		? 'Offline'
+		: reauthRequired
+			? 'Sign in to sync'
 		: syncStatus.syncing
 			? 'Syncing'
 			: syncStatus.pendingCount > 0
@@ -180,7 +228,7 @@ export function GoogleAuth({
 			</div>
 			<button
 				className={`sync-status ${syncStatus.online ? '' : 'sync-status-offline'}`}
-				onClick={() => void retryPendingWrites()}
+				onClick={() => void (reauthRequired ? handleSignIn() : retryPendingWrites())}
 				title={syncTitle}
 				disabled={syncStatus.syncing}
 			>

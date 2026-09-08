@@ -1,6 +1,5 @@
 import {
 	collection,
-	deleteDoc,
 	doc,
 	documentId,
 	getDocs,
@@ -10,11 +9,12 @@ import {
 	getDocFromCache,
 	getDocFromServer,
 	query,
-	runTransaction,
 	setDoc,
 	where,
 	writeBatch,
 	type DocumentData,
+	type DocumentReference,
+	type Query,
 	type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import type {
@@ -39,6 +39,28 @@ export type FirestoreReadSource = 'cacheFirst' | 'server'
 export type DateWindow = {
 	startDate: string
 	endDate: string
+}
+
+function hydrationKey(uid: string, dataset: string, scope = 'all'): string {
+	return `stronger:hydrated:${uid}:${dataset}:${scope}`
+}
+
+function isHydrated(key?: string): boolean {
+	if (!key || typeof localStorage === 'undefined') return false
+	try {
+		return localStorage.getItem(key) === '1'
+	} catch {
+		return false
+	}
+}
+
+function markHydrated(key?: string): void {
+	if (!key || typeof localStorage === 'undefined') return
+	try {
+		localStorage.setItem(key, '1')
+	} catch {
+		// Firestore's IndexedDB cache remains usable when localStorage is blocked.
+	}
 }
 
 type DatedEntry = {
@@ -72,6 +94,8 @@ type StoredWorkoutExercise = {
 type StoredWorkoutSession = {
 	date: string
 	year?: string
+	deleted?: boolean
+	replaces?: string
 	startTime: string
 	endTime: string
 	workoutId: string
@@ -166,20 +190,21 @@ async function readYearBucketCollection<T extends DatedEntry>(
 ): Promise<T[]> {
 	const collectionRef = userCollection(uid, name)
 	const currentYear = String(new Date().getFullYear())
+	const cacheKey = hydrationKey(uid, name, scope)
 	let buckets: StoredYearBucket<T>[]
 	if (scope === 'currentYear') {
-		const snapshot = await readDocument(doc(collectionRef, currentYear), source)
+		const snapshot = await readDocument(doc(collectionRef, currentYear), source, cacheKey)
 		buckets = snapshot.exists()
 			? [cleanValue<StoredYearBucket<T>>(snapshot.data())]
 			: []
 	} else if (scope === 'otherYears') {
 		const [past, future] = await Promise.all([
-			readQuery(query(collectionRef, where(documentId(), '<', currentYear)), source),
-			readQuery(query(collectionRef, where(documentId(), '>', currentYear)), source),
+			readQuery(query(collectionRef, where(documentId(), '<', currentYear)), source, `${cacheKey}:past`),
+			readQuery(query(collectionRef, where(documentId(), '>', currentYear)), source, `${cacheKey}:future`),
 		])
 		buckets = [...past.docs, ...future.docs].map((item) => clean<StoredYearBucket<T>>(item))
 	} else {
-		buckets = await readCollection<StoredYearBucket<T>>(uid, name, source)
+		buckets = await readCollection<StoredYearBucket<T>>(uid, name, source, cacheKey)
 	}
 	return flattenYearBuckets(buckets)
 }
@@ -193,29 +218,52 @@ function replaceYearBucketCollection<T extends DatedEntry>(
 }
 
 async function readQuery(
-	reference: Parameters<typeof getDocs>[0],
+	reference: Query<DocumentData>,
 	source: FirestoreReadSource,
+	cacheKey?: string,
 ) {
-	if (source === 'server') return getDocsFromServer(reference)
+	if (source === 'server') {
+		const server = await getDocsFromServer(reference)
+		markHydrated(cacheKey)
+		return server
+	}
 	const cached = await getDocsFromCache(reference)
-	return cached.empty ? getDocs(reference) : cached
+	return cached.empty && !isHydrated(cacheKey)
+		&& (typeof navigator === 'undefined' || navigator.onLine)
+		? getDocs(reference).then((server) => {
+				markHydrated(cacheKey)
+				return server
+			})
+		: cached
 }
 
 async function readDocument(
-	reference: Parameters<typeof getDoc>[0],
+	reference: DocumentReference<DocumentData>,
 	source: FirestoreReadSource,
+	cacheKey?: string,
 ) {
-	if (source === 'server') return getDocFromServer(reference)
+	if (source === 'server') {
+		const server = await getDocFromServer(reference)
+		markHydrated(cacheKey)
+		return server
+	}
 	const cached = await getDocFromCache(reference)
-	return cached.exists() ? cached : getDoc(reference)
+	return !cached.exists() && !isHydrated(cacheKey)
+		&& (typeof navigator === 'undefined' || navigator.onLine)
+		? getDoc(reference).then((server) => {
+				markHydrated(cacheKey)
+				return server
+			})
+		: cached
 }
 
 async function readCollection<T>(
 	uid: string,
 	name: CollectionName,
 	source: FirestoreReadSource = 'cacheFirst',
+	cacheKey = hydrationKey(uid, name),
 ): Promise<T[]> {
-	const snapshot = await readQuery(userCollection(uid, name), source)
+	const snapshot = await readQuery(userCollection(uid, name), source, cacheKey)
 	return snapshot.docs.map((item) => clean<T>(item))
 }
 
@@ -230,7 +278,7 @@ async function readDateWindowCollection<T>(
 		collectionRef,
 		where(documentId(), '>=', window.startDate),
 		where(documentId(), '<', window.endDate),
-	), source)
+	), source, hydrationKey(uid, name, `${window.startDate}:${window.endDate}`))
 	return snapshot.docs.map((item) => clean<T>(item))
 }
 
@@ -262,7 +310,7 @@ async function replaceCollection<T>(
 	values: T[],
 	getId: (value: T, index: number) => string,
 ): Promise<void> {
-	const existing = await getDocs(userCollection(uid, name))
+	const existing = await getDocsFromCache(userCollection(uid, name))
 	const desired = new Set(values.map(getId))
 	const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = []
 
@@ -522,16 +570,31 @@ export function readLogZone(
 	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<ParsedLogRow[]> {
 	const currentYear = String(new Date().getFullYear())
-	return readQuery(userCollection(uid, 'workoutSessions'), source).then((snapshot) => {
-		const sessions = snapshot.docs.flatMap((item) => {
+	return readQuery(
+		userCollection(uid, 'workoutSessions'),
+		source,
+		hydrationKey(uid, 'workoutSessions', scope),
+	).then((snapshot) => {
+		const legacy: StoredWorkoutSession[] = []
+		const stable: StoredWorkoutSession[] = []
+		for (const item of snapshot.docs) {
 			const data = clean<StoredWorkoutSession | StoredYearBucket<StoredWorkoutSession>>(item)
-			return 'entries' in data ? data.entries : [data]
-		}).filter((session) => {
+			if ('entries' in data) legacy.push(...data.entries)
+			else stable.push(data)
+		}
+		const sessions = new Map(legacy.map((session) => [workoutSessionKey(session), session]))
+		for (const session of stable) {
+			if (session.replaces) sessions.delete(session.replaces)
+			const key = workoutSessionKey(session)
+			if (session.deleted) sessions.delete(key)
+			else sessions.set(key, session)
+		}
+		const scoped = [...sessions.values()].filter((session) => {
 			if (scope === 'all') return true
 			const isCurrent = yearForDate(session.date) === currentYear
 			return scope === 'currentYear' ? isCurrent : !isCurrent
 		})
-		return flattenWorkoutSessions(sessions)
+		return flattenWorkoutSessions(scoped)
 	})
 }
 
@@ -561,6 +624,7 @@ export async function updateLogRows(
 		batch.set(doc(userCollection(uid, 'workoutSessions'), updatedId), {
 			...session,
 			year: yearForDate(session.date),
+			...(originalKey === workoutSessionKey(session) ? {} : { replaces: originalKey }),
 			updatedAt: new Date().toISOString(),
 		})
 		await batch.commit()
@@ -580,7 +644,16 @@ export async function deleteLogSession(
 	})
 	const targetId = idPart(targetKey)
 	await trackMutation(uid, `workoutSession:${targetId}`, () =>
-		deleteDoc(doc(userCollection(uid, 'workoutSessions'), targetId)))
+		setDoc(doc(userCollection(uid, 'workoutSessions'), targetId), {
+			date: sessionDate,
+			year: yearForDate(sessionDate),
+			startTime: sessionStartTime,
+			endTime: '',
+			workoutId: sessionWorkoutId,
+			exercises: [],
+			deleted: true,
+			updatedAt: new Date().toISOString(),
+		}))
 }
 
 export function readFlags(
@@ -669,7 +742,11 @@ export async function readSettings(
 	uid: string,
 	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<Map<string, string>> {
-	const snapshot = await readDocument(doc(userDoc(uid), 'settings', 'app'), source)
+	const snapshot = await readDocument(
+		doc(userDoc(uid), 'settings', 'app'),
+		source,
+		hydrationKey(uid, 'settings'),
+	)
 	if (!snapshot.exists()) return new Map()
 	const values = snapshot.data().values as Record<string, string> | undefined
 	return new Map(Object.entries(values ?? {}))

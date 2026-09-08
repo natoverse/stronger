@@ -13,16 +13,27 @@ export type SyncSnapshot = {
 	lastSyncedAt: string | null
 }
 
-type PendingMutation = {
+export type PendingMutation = {
 	id: string
 	uid: string
 	key: string
 	createdAt: string
 }
 
+export function coalescePendingMutations(items: PendingMutation[]): PendingMutation[] {
+	const latest = new Map<string, PendingMutation>()
+	for (const item of [...items].sort((left, right) => left.createdAt.localeCompare(right.createdAt))) {
+		latest.set(`${item.uid}:${item.key}`, item)
+	}
+	return [...latest.values()].sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+}
+
 const listeners = new Set<(snapshot: SyncSnapshot) => void>()
+const fallbackMutations = new Map<string, PendingMutation>()
 let activeUid: string | null = null
 let syncPromise: Promise<void> | null = null
+let retryAttempt = 0
+let retryTimer: number | null = null
 let snapshot: SyncSnapshot = {
 	online: typeof navigator === 'undefined' ? true : navigator.onLine,
 	syncing: false,
@@ -59,53 +70,78 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 }
 
 async function mutationsForUser(uid: string): Promise<PendingMutation[]> {
-	const database = await openDatabase()
 	try {
-		const transaction = database.transaction(STORE_NAME, 'readonly')
-		const request = transaction.objectStore(STORE_NAME).index('uid').getAll(uid)
-		return await requestResult(request) as PendingMutation[]
-	} finally {
-		database.close()
+		const database = await openDatabase()
+		try {
+			const transaction = database.transaction(STORE_NAME, 'readonly')
+			const request = transaction.objectStore(STORE_NAME).index('uid').getAll(uid)
+			return coalescePendingMutations(await requestResult(request) as PendingMutation[])
+		} finally {
+			database.close()
+		}
+	} catch {
+		return coalescePendingMutations(
+			[...fallbackMutations.values()].filter((item) => item.uid === uid),
+		)
 	}
 }
 
 async function enqueueMutation(uid: string, key: string): Promise<void> {
-	const database = await openDatabase()
 	try {
-		const transaction = database.transaction(STORE_NAME, 'readwrite')
-		const store = transaction.objectStore(STORE_NAME)
-		const index = store.index('uidKey')
-		const existing = await requestResult(index.getAllKeys([uid, key]))
-		for (const id of existing) store.delete(id)
-		store.put({
-			id: crypto.randomUUID(),
-			uid,
-			key,
-			createdAt: new Date().toISOString(),
-		} satisfies PendingMutation)
-		await new Promise<void>((resolve, reject) => {
-			transaction.oncomplete = () => resolve()
-			transaction.onerror = () => reject(transaction.error)
-			transaction.onabort = () => reject(transaction.error)
-		})
-	} finally {
-		database.close()
+		const database = await openDatabase()
+		try {
+			await new Promise<void>((resolve, reject) => {
+				const transaction = database.transaction(STORE_NAME, 'readwrite')
+				const store = transaction.objectStore(STORE_NAME)
+				const cursorRequest = store.index('uidKey').openKeyCursor(IDBKeyRange.only([uid, key]))
+				cursorRequest.onsuccess = () => {
+					const cursor = cursorRequest.result
+					if (cursor) {
+						store.delete(cursor.primaryKey)
+						cursor.continue()
+						return
+					}
+					store.put({
+						id: crypto.randomUUID(),
+						uid,
+						key,
+						createdAt: new Date().toISOString(),
+					} satisfies PendingMutation)
+				}
+				cursorRequest.onerror = () => reject(cursorRequest.error)
+				transaction.oncomplete = () => resolve()
+				transaction.onerror = () => reject(transaction.error)
+				transaction.onabort = () => reject(transaction.error)
+			})
+		} finally {
+			database.close()
+		}
+	} catch {
+		for (const [id, item] of fallbackMutations) {
+			if (item.uid === uid && item.key === key) fallbackMutations.delete(id)
+		}
+		const id = crypto.randomUUID()
+		fallbackMutations.set(id, { id, uid, key, createdAt: new Date().toISOString() })
 	}
 }
 
 async function clearMutations(uid: string, ids: string[]): Promise<void> {
 	if (ids.length === 0) return
-	const database = await openDatabase()
 	try {
-		const transaction = database.transaction(STORE_NAME, 'readwrite')
-		const store = transaction.objectStore(STORE_NAME)
-		for (const id of ids) store.delete(id)
-		await new Promise<void>((resolve, reject) => {
-			transaction.oncomplete = () => resolve()
-			transaction.onerror = () => reject(transaction.error)
-		})
-	} finally {
-		database.close()
+		const database = await openDatabase()
+		try {
+			const transaction = database.transaction(STORE_NAME, 'readwrite')
+			const store = transaction.objectStore(STORE_NAME)
+			for (const id of ids) store.delete(id)
+			await new Promise<void>((resolve, reject) => {
+				transaction.oncomplete = () => resolve()
+				transaction.onerror = () => reject(transaction.error)
+			})
+		} finally {
+			database.close()
+		}
+	} catch {
+		for (const id of ids) fallbackMutations.delete(id)
 	}
 	const remaining = await mutationsForUser(uid)
 	if (activeUid === uid) emit({ pendingCount: remaining.length })
@@ -114,7 +150,13 @@ async function clearMutations(uid: string, ids: string[]): Promise<void> {
 export async function setActiveSyncUser(uid: string | null): Promise<void> {
 	activeUid = uid
 	const pendingCount = uid ? (await mutationsForUser(uid)).length : 0
-	emit({ pendingCount, syncing: false })
+	let lastSyncedAt: string | null = null
+	try {
+		lastSyncedAt = uid ? localStorage.getItem(`stronger:lastSynced:${uid}`) : null
+	} catch {
+		// Keep the in-memory value when localStorage is unavailable.
+	}
+	emit({ pendingCount, syncing: false, lastSyncedAt })
 	if (uid && snapshot.online) void retryPendingWrites()
 }
 
@@ -124,19 +166,21 @@ export function subscribeToSyncStatus(listener: (value: SyncSnapshot) => void): 
 	return () => listeners.delete(listener)
 }
 
-export async function trackMutation<T>(
+export async function trackMutation(
 	uid: string,
 	key: string,
-	write: () => Promise<T>,
-): Promise<T> {
+	write: () => Promise<void>,
+): Promise<void> {
 	await enqueueMutation(uid, key)
 	if (activeUid === uid) {
 		const pending = await mutationsForUser(uid)
 		emit({ pendingCount: pending.length })
 	}
-	const result = await write()
+	void write().catch(() => {
+		// The queue marker remains available for retry/status. Connectivity and
+		// auth recovery are handled independently from the calling UI.
+	})
 	if (snapshot.online) void retryPendingWrites()
-	return result
 }
 
 export function retryPendingWrites(): Promise<void> {
@@ -153,10 +197,30 @@ export function retryPendingWrites(): Promise<void> {
 			'Sync timed out.',
 		)
 		await clearMutations(uid, pending.map((item) => item.id))
-		emit({ lastSyncedAt: new Date().toISOString() })
+		retryAttempt = 0
+		if (retryTimer !== null) {
+			window.clearTimeout(retryTimer)
+			retryTimer = null
+		}
+		const lastSyncedAt = new Date().toISOString()
+		try {
+			localStorage.setItem(`stronger:lastSynced:${uid}`, lastSyncedAt)
+		} catch {
+			// The in-memory timestamp still updates.
+		}
+		emit({ lastSyncedAt })
 	})().catch(() => {
 		// A bounded failure leaves the durable Firestore queue and status records
 		// intact for the next online event or manual retry.
+		if (snapshot.online && retryTimer === null) {
+			const baseDelay = Math.min(60_000, 1_000 * (2 ** retryAttempt))
+			const delay = Math.round(baseDelay * (0.75 + Math.random() * 0.5))
+			retryAttempt += 1
+			retryTimer = window.setTimeout(() => {
+				retryTimer = null
+				void retryPendingWrites()
+			}, delay)
+		}
 	}).finally(() => {
 		emit({ syncing: false })
 		syncPromise = null
@@ -171,6 +235,24 @@ export async function hasPendingMutations(uid: string): Promise<boolean> {
 export async function clearPendingMutations(uid: string): Promise<void> {
 	const pending = await mutationsForUser(uid)
 	await clearMutations(uid, pending.map((item) => item.id))
+}
+
+export async function clearOfflineUserState(uid: string): Promise<void> {
+	await clearPendingMutations(uid)
+	if (typeof localStorage === 'undefined') return
+	const prefix = `stronger:hydrated:${uid}:`
+	try {
+		const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index))
+		for (const key of keys) {
+			if (key?.startsWith(prefix)) localStorage.removeItem(key)
+		}
+		if (localStorage.getItem('stronger:lastUserId') === uid) {
+			localStorage.removeItem('stronger:lastUserId')
+		}
+		localStorage.removeItem(`stronger:lastSynced:${uid}`)
+	} catch {
+		// Storage may be unavailable in private browsing modes.
+	}
 }
 
 if (typeof window !== 'undefined') {

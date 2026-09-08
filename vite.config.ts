@@ -1,11 +1,12 @@
 import { configDefaults, defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import type { Plugin } from 'vite'
 
-function offlineServiceWorker() {
+function offlineServiceWorker(): Plugin {
   return {
     name: 'stronger-offline-service-worker',
     apply: 'build' as const,
-    generateBundle(_: unknown, bundle: Record<string, unknown>) {
+    generateBundle(_, bundle) {
       const files = Object.keys(bundle).sort()
       const version = files.join('|').split('').reduce((hash, value) =>
         ((hash << 5) - hash + value.charCodeAt(0)) | 0, 0).toString(36)
@@ -28,7 +29,10 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
-  event.respondWith(caches.match(event.request).then(cached => {
+  const url = new URL(event.request.url);
+  event.respondWith(caches.open(CACHE).then(cache =>
+    cache.match(url.pathname, { ignoreSearch: true })).then(cached => {
+    if (cached && url.pathname.includes('/assets/')) return cached;
     const refresh = fetch(event.request).then(response => {
       if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
       return response;

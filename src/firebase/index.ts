@@ -2,6 +2,7 @@ export { isFirebaseConfigured, firebaseAuth, firestore } from './client.ts'
 export { observeAuth, signInToStronger, signOutOfStronger } from './auth.ts'
 export {
 	clearPendingMutations,
+	clearOfflineUserState,
 	hasPendingMutations,
 	retryPendingWrites,
 	setActiveSyncUser,

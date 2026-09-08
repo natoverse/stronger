@@ -11,9 +11,15 @@ vi.mock('firebase/firestore', () => ({
 	doc: vi.fn((parent: { path: string }, ...parts: string[]) => ({ path: `${parent.path}/${parts.join('/')}` })),
 	documentId: vi.fn(() => '__name__'),
 	getDoc: vi.fn(),
+	getDocFromCache: vi.fn(async (ref: { path: string }) => ({
+		exists: () => mockState.existingDocPaths.has(ref.path),
+	})),
+	getDocFromServer: vi.fn(),
 	getDocs: vi.fn(async (ref: { path: string }) => ({
 		docs: mockState.docsByCollection.get(ref.path) ?? [],
 	})),
+	getDocsFromCache: vi.fn(),
+	getDocsFromServer: vi.fn(),
 	query: vi.fn((ref: { path: string }) => ref),
 	runTransaction: vi.fn(async (_firestore: unknown, update: (transaction: {
 		get: (ref: { path: string }) => Promise<{ exists: () => boolean }>;
@@ -41,6 +47,9 @@ vi.mock('firebase/firestore', () => ({
 }))
 
 vi.mock('../client.ts', () => ({ firestore: { path: 'firestore' } }))
+vi.mock('../offline.ts', () => ({
+	trackMutation: vi.fn(async (_uid: string, _key: string, write: () => Promise<unknown>) => write()),
+}))
 
 import type { WorkoutDefinition } from '../../data/sample-workouts.ts'
 import { writeDefaultWorkoutDefs } from '../store.ts'

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
-import { appendLogRows, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
+import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
 import type { DateWindow, FirestoreReadSource, YearBucketReadScope } from './firebase/index.js';
 import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
@@ -120,6 +120,7 @@ function AppContent() {
   const [settingsLoaded, setSettingsLoaded] = useState(mockMode);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
+  const [onlineGeneration, setOnlineGeneration] = useState(0);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
   const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
@@ -153,6 +154,12 @@ function AppContent() {
       setSelectedGarminActivityTypes((selected) => new Set([...selected, ...newTypes]));
     }
   }, [selectableGarminActivityTypes]);
+
+  useEffect(() => {
+    const handleOnline = () => setOnlineGeneration((generation) => generation + 1);
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
 
   const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
     const previous = sessionMutationRef.current.get(key) ?? Promise.resolve();
@@ -295,6 +302,7 @@ function AppContent() {
       const confirmed = window.confirm('Some changes are still waiting to sync. Sign out anyway?');
       if (!confirmed) return;
     }
+    if (spreadsheetId) await clearOfflineUserState(spreadsheetId);
     await signOutOfStronger();
     handleDisconnected();
   }, [handleDisconnected, spreadsheetId]);
@@ -451,6 +459,7 @@ function AppContent() {
       || connectionGenerationRef.current !== connectionGeneration
     ) return;
     if (!loaded) {
+      if (source === 'server') return;
       setNeedsSetup(true);
       return;
     }
@@ -469,6 +478,7 @@ function AppContent() {
       || connectionGenerationRef.current !== connectionGeneration
     ) return;
     if (!loaded) {
+      if (source === 'server') return;
       loaded = [];
       setShowDefaultWorkoutImportPrompt(true);
       setDefaultWorkoutImportError(null);
@@ -524,6 +534,7 @@ function AppContent() {
       || connectionGenerationRef.current !== connectionGeneration
     ) return;
     if (!loaded) {
+      if (source === 'server') return;
       const defaults = [...defaultCardioActivities];
       setCardioActivities(defaults);
       void withAuthRetry(() => writeDefaultCardioActivities(userId, defaults))
@@ -548,6 +559,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && flags.length === 0) return;
         setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
       });
     } catch (error) {
@@ -570,6 +582,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && schedule.length === 0) return;
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
       });
     } catch (error) {
@@ -591,6 +604,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && rows.length === 0) return;
         setLogRows((existing) => mergeYearScopedEntries(existing, rows, scope));
         logScopesLoadedRef.current.add(scope);
       });
@@ -611,6 +625,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && settings.size === 0) return;
         settingsRef.current = settings;
         setStravaGoals(goalsFromSettings(settings));
         setWithingsGoals(bodyGoalsFromSettings(settings));
@@ -643,6 +658,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && activities.length === 0) return;
         setGarminActivities((existing) => mergeYearScopedEntries(existing, activities, scope));
       });
     } catch {
@@ -663,6 +679,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && entries.length === 0) return;
         setWellnessEntries((existing) => mergeYearScopedEntries(existing, entries, scope));
       });
     } catch {
@@ -683,6 +700,7 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && measurements.length === 0) return;
         setWithingsMeasurements((existing) => mergeYearScopedEntries(existing, measurements, scope));
       });
     } catch {
@@ -894,6 +912,7 @@ function AppContent() {
     (calendarId: string): Promise<CalendarSyncResult> => queueCalendarMutation(async () => {
       const syncUserId = spreadsheetId;
       if (!syncUserId) throw new Error('Not connected to Firebase.');
+      if (!navigator.onLine) throw new Error('Google Calendar sync is unavailable while offline.');
       if (calendarSyncId && calendarSyncId !== calendarId) {
         throw new Error(
           'This Stronger account is linked to a different Google Calendar. '
@@ -1576,6 +1595,9 @@ function AppContent() {
       completedDataLoadsRef.current.add(key);
     }).catch((error) => {
       completedDataLoadsRef.current.delete(key);
+      if (!navigator.onLine) {
+        throw new Error('No cached data is available yet. Connect once to finish setting up offline mode.');
+      }
       throw error;
     }).finally(() => {
       dataLoadsRef.current.delete(key);
@@ -1586,7 +1608,7 @@ function AppContent() {
 
   useEffect(() => {
     if (!spreadsheetId) return;
-    const queueKey = `${spreadsheetId}:${route.view}`;
+    const queueKey = `${spreadsheetId}:${route.view}:${onlineGeneration}`;
     if (loadQueueKeyRef.current === queueKey) return;
     loadQueueKeyRef.current = queueKey;
     const generation = ++loadQueueGenerationRef.current;
@@ -1634,7 +1656,7 @@ function AppContent() {
       setPriorityLoadPending(false);
       setDataLoadError(reason instanceof Error ? reason.message : String(reason));
     });
-  }, [executeDatasetLoad, loadDataset, route.view, spreadsheetId]);
+  }, [executeDatasetLoad, loadDataset, onlineGeneration, route.view, spreadsheetId]);
 
   // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {
