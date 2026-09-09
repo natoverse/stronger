@@ -174,3 +174,26 @@ jobs:
                 body,
               })
             }
+
+            const startMarker = '<!-- pr-screenshots:start -->'
+            const endMarker = '<!-- pr-screenshots:end -->'
+            const { data: pullRequest } = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: pullNumber,
+            })
+            const description = pullRequest.body || ''
+            const start = description.indexOf(startMarker)
+            const end = description.indexOf(endMarker)
+            if (start >= 0 && end >= start) {
+              const nextDescription = [
+                description.slice(0, start).trimEnd(),
+                description.slice(end + endMarker.length).trimStart(),
+              ].filter(Boolean).join('\n\n')
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pullNumber,
+                body: nextDescription,
+              })
+            }
