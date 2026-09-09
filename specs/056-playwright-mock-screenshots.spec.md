@@ -31,7 +31,8 @@ backend. It performs no authentication, network reads, or remote writes.
 - [ ] Screenshot tests fail if a route remains on authentication/loading UI or
       reaches the application error boundary.
 - [ ] Pull requests run the screenshot suite without repository secrets and
-      publish the screenshots and Playwright report as workflow artifacts.
+      publish the screenshots and Playwright report as workflow artifacts, with
+      links appended to the pull-request description.
 - [ ] Mock-mode parsing and fixture integrity have unit tests.
 
 ## Design Decisions (2026-09-06)
@@ -44,8 +45,14 @@ backend. It performs no authentication, network reads, or remote writes.
   configuration is absent. Normal unauthenticated URLs still stop at the
   existing configuration error before making Firebase requests.
 - The PR workflow uses GitHub Actions artifacts rather than a write-token PR
-  comment. This keeps forked pull requests safe and avoids executing untrusted
-  code with elevated `pull_request_target` permissions.
+- The PR workflow appends artifact links to a marker-delimited section of the
+  pull-request description. Screenshot generation runs in a read-only job; a
+  separate job receives only `pull-requests: write` and never checks out or runs
+  pull-request code.
+- The workflow deliberately avoids `pull_request_target`. GitHub may still
+  require approval before running workflows from forks or first-time
+  contributors; that repository security policy cannot be bypassed safely in
+  workflow YAML.
 - Screenshots use a fixed desktop viewport and disabled animations for stable,
   reviewer-friendly output. They are generated rather than committed as visual
   regression baselines, so intentional UI changes do not fail merely because
