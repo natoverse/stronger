@@ -87,3 +87,6 @@ installed successfully.
 - Failed or stalled Google Calendar SDK loads are bounded and retryable.
   Reconnection retries preparation automatically, and the Calendar panel also
   provides an explicit retry action.
+- Every deferred cache-first dataset load is followed by a server refresh while
+  online. This warms uncached calendar months and updates mounted views as the
+  refreshed schedule and day-flag state arrives.

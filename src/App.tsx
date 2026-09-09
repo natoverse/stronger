@@ -1648,6 +1648,14 @@ function AppContent() {
       (request, reason) => {
         console.warn(`Deferred Firebase load failed for ${request.dataset}:`, reason);
       },
+      async (request) => {
+        if (!navigator.onLine || connectedUserRef.current !== userId) return;
+        await withTimeout(
+          executeDatasetLoad(request, userId, connectionGeneration, 'deferred', 'server'),
+          FIREBASE_LOAD_TIMEOUT_MS,
+          `Caching ${request.dataset} timed out.`,
+        );
+      },
     ).catch((reason) => {
       if (
         connectedUserRef.current !== userId
