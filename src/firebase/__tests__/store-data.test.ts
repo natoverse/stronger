@@ -96,6 +96,20 @@ describe('Firestore data identifiers', () => {
 		])
 	})
 
+	it('clears stale calendar state when an authoritative window is empty', () => {
+		expect(mergeDateWindowEntries([
+			{ date: '2026-09-01', value: 'before' },
+			{ date: '2026-09-20', value: 'stale' },
+			{ date: '2026-11-01', value: 'after' },
+		], [], {
+			startDate: '2026-09-02',
+			endDate: '2026-11-01',
+		})).toEqual([
+			{ date: '2026-09-01', value: 'before' },
+			{ date: '2026-11-01', value: 'after' },
+		])
+	})
+
 	it('parses completed flags and numeric set values', () => {
 		const row = rowToParsedLogRow([
 			'2026-08-29', 'start', 'end', 'A', 'Squat', 'squat',

@@ -559,7 +559,6 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
-        if (source === 'server' && flags.length === 0) return;
         setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
       });
     } catch (error) {
@@ -582,7 +581,6 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
-        if (source === 'server' && schedule.length === 0) return;
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
       });
     } catch (error) {
@@ -1647,6 +1645,14 @@ function AppContent() {
       },
       (request, reason) => {
         console.warn(`Deferred Firebase load failed for ${request.dataset}:`, reason);
+      },
+      async (request) => {
+        if (!navigator.onLine || connectedUserRef.current !== userId) return;
+        await withTimeout(
+          executeDatasetLoad(request, userId, connectionGeneration, 'deferred', 'server'),
+          FIREBASE_LOAD_TIMEOUT_MS,
+          `Caching ${request.dataset} timed out.`,
+        );
       },
     ).catch((reason) => {
       if (

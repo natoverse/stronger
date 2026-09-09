@@ -123,4 +123,25 @@ describe('Firebase route load plan', () => {
 
 		expect(failures).toEqual(['exercises:offline'])
 	})
+
+	it('refreshes each deferred dataset after its cache-first load', async () => {
+		const queue = buildFirebaseLoadQueue('settings')
+		const calls: string[] = []
+
+		await runFirebaseLoadQueue(
+			queue,
+			async ({ dataset }, phase) => {
+				if (phase === 'deferred') calls.push(`cache:${dataset}`)
+			},
+			async () => undefined,
+			() => undefined,
+			async ({ dataset }) => {
+				calls.push(`server:${dataset}`)
+			},
+		)
+
+		for (const { dataset } of queue.deferred) {
+			expect(calls.indexOf(`server:${dataset}`)).toBeGreaterThan(calls.indexOf(`cache:${dataset}`))
+		}
+	})
 })
