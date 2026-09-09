@@ -90,3 +90,6 @@ installed successfully.
 - Every deferred cache-first dataset load is followed by a server refresh while
   online. This warms uncached calendar months and updates mounted views as the
   refreshed schedule and day-flag state arrives.
+- The toolbar status control is a circular, icon-only button with a distinct icon
+  for offline, reauthentication, syncing, pending, and synced states. Accessible
+  labels and tooltips retain the full state text and pending-write count.
