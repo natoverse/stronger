@@ -15,9 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    outputs:
-      screenshots-url: ${{ steps.screenshots.outputs.artifact-url }}
-      report-url: ${{ steps.report.outputs.artifact-url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -56,49 +53,3 @@ jobs:
             echo "- [Download screenshots](${{ steps.screenshots.outputs.artifact-url }})"
             echo "- [Open Playwright report](${{ steps.report.outputs.artifact-url }})"
           } >> "$GITHUB_STEP_SUMMARY"
-
-  append-to-pr:
-    if: always()
-    needs: screenshots
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-    steps:
-      - uses: actions/github-script@v8
-        env:
-          SCREENSHOTS_URL: ${{ needs.screenshots.outputs.screenshots-url }}
-          REPORT_URL: ${{ needs.screenshots.outputs.report-url }}
-        with:
-          script: |
-            const startMarker = '<!-- pr-screenshots:start -->'
-            const endMarker = '<!-- pr-screenshots:end -->'
-            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const screenshotsUrl = process.env.SCREENSHOTS_URL || runUrl
-            const reportUrl = process.env.REPORT_URL || runUrl
-            const section = [
-              startMarker,
-              '## PR screenshots',
-              '',
-              `- [Download screenshots](${screenshotsUrl})`,
-              `- [Open Playwright report](${reportUrl})`,
-              endMarker,
-            ].join('\n')
-
-            const { data: pullRequest } = await github.rest.pulls.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-            })
-            const body = pullRequest.body || ''
-            const start = body.indexOf(startMarker)
-            const end = body.indexOf(endMarker)
-            const nextBody = start >= 0 && end >= start
-              ? `${body.slice(0, start).trimEnd()}\n\n${section}${body.slice(end + endMarker.length)}`
-              : `${body.trimEnd()}\n\n${section}`
-
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              body: nextBody.trim(),
-            })

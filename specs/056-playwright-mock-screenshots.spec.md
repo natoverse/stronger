@@ -31,8 +31,8 @@ backend. It performs no authentication, network reads, or remote writes.
 - [ ] Screenshot tests fail if a route remains on authentication/loading UI or
       reaches the application error boundary.
 - [ ] Pull requests run the screenshot suite without repository secrets and
-      publish the screenshots and Playwright report as workflow artifacts, with
-      links appended to the pull-request description.
+      publish the screenshots and Playwright report as workflow artifacts, and
+      embed the screenshots in a reusable pull-request comment.
 - [ ] Mock-mode parsing and fixture integrity have unit tests.
 
 ## Design Decisions (2026-09-06)
@@ -44,11 +44,12 @@ backend. It performs no authentication, network reads, or remote writes.
 - Firebase receives a local placeholder configuration only when build-time
   configuration is absent. Normal unauthenticated URLs still stop at the
   existing configuration error before making Firebase requests.
-- The PR workflow appends artifact links to a marker-delimited section of the
-  pull-request description. Screenshot generation checks out and runs the PR
-  code with read-only permissions so it captures the proposed visual changes.
-  A separate job receives only `pull-requests: write` and never checks out or
-  runs pull-request code.
+- Screenshot generation checks out and runs the PR code with read-only
+  permissions so it captures the proposed visual changes. A separate
+  `workflow_run` workflow, loaded from the default branch, publishes validated
+  PNGs to the `pr-screenshot-assets` branch and embeds them in a
+  marker-delimited pull-request comment. The privileged publisher never checks
+  out or executes pull-request code.
 - The workflow deliberately avoids `pull_request_target`. GitHub requires
   approval for workflows on Copilot coding agent PRs by default, independently
   of whether the repository owner is a first-time contributor. Repository
