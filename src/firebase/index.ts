@@ -1,7 +1,18 @@
 export { isFirebaseConfigured, firebaseAuth, firestore } from './client.ts'
 export { observeAuth, signInToStronger, signOutOfStronger } from './auth.ts'
 export {
+	clearPendingMutations,
+	clearOfflineUserState,
+	hasPendingMutations,
+	retryPendingWrites,
+	setActiveSyncUser,
+	subscribeToSyncStatus,
+	trackMutation,
+	type SyncSnapshot,
+} from './offline.ts'
+export {
 	SCHEMA_VERSION,
+	type FirestoreReadSource,
 	type YearBucketReadScope,
 	type DateWindow,
 	mergeYearScopedEntries,

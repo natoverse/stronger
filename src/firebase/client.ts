@@ -8,7 +8,12 @@ import {
 	indexedDBLocalPersistence,
 	initializeAuth,
 } from 'firebase/auth'
-import { getFirestore, initializeFirestore } from 'firebase/firestore'
+import {
+	getFirestore,
+	initializeFirestore,
+	persistentLocalCache,
+	persistentMultipleTabManager,
+} from 'firebase/firestore'
 
 const firebaseConfig: FirebaseOptions = {
 	apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -58,7 +63,12 @@ export const googleAuthProvider = new GoogleAuthProvider()
 
 export const firestore = (() => {
 	try {
-		return initializeFirestore(app, { ignoreUndefinedProperties: true })
+		return initializeFirestore(app, {
+			ignoreUndefinedProperties: true,
+			localCache: persistentLocalCache({
+				tabManager: persistentMultipleTabManager(),
+			}),
+		})
 	} catch {
 		return getFirestore(app)
 	}

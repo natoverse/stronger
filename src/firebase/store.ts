@@ -3,13 +3,18 @@ import {
 	doc,
 	documentId,
 	getDocs,
+	getDocsFromCache,
+	getDocsFromServer,
 	getDoc,
+	getDocFromCache,
+	getDocFromServer,
 	query,
-	runTransaction,
 	setDoc,
 	where,
 	writeBatch,
 	type DocumentData,
+	type DocumentReference,
+	type Query,
 	type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import type {
@@ -24,14 +29,38 @@ import type { StravaActivity } from '../model/types.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import type { ParsedLogRow } from '../google/sheets.ts'
 import { firestore } from './client.ts'
+import { trackMutation } from './offline.ts'
 
 export const SCHEMA_VERSION = 2
 const BATCH_WRITE_LIMIT = 400
 const TRANSACTIONAL_WRITE_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
+export type FirestoreReadSource = 'cacheFirst' | 'server'
 export type DateWindow = {
 	startDate: string
 	endDate: string
+}
+
+function hydrationKey(uid: string, dataset: string, scope = 'all'): string {
+	return `stronger:hydrated:${uid}:${dataset}:${scope}`
+}
+
+function isHydrated(key?: string): boolean {
+	if (!key || typeof localStorage === 'undefined') return false
+	try {
+		return localStorage.getItem(key) === '1'
+	} catch {
+		return false
+	}
+}
+
+function markHydrated(key?: string): void {
+	if (!key || typeof localStorage === 'undefined') return
+	try {
+		localStorage.setItem(key, '1')
+	} catch {
+		// Firestore's IndexedDB cache remains usable when localStorage is blocked.
+	}
 }
 
 type DatedEntry = {
@@ -64,6 +93,9 @@ type StoredWorkoutExercise = {
 
 type StoredWorkoutSession = {
 	date: string
+	year?: string
+	deleted?: boolean
+	replaces?: string
 	startTime: string
 	endTime: string
 	workoutId: string
@@ -154,23 +186,25 @@ async function readYearBucketCollection<T extends DatedEntry>(
 	uid: string,
 	name: CollectionName,
 	scope: YearBucketReadScope = 'all',
+	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<T[]> {
 	const collectionRef = userCollection(uid, name)
 	const currentYear = String(new Date().getFullYear())
+	const cacheKey = hydrationKey(uid, name, scope)
 	let buckets: StoredYearBucket<T>[]
 	if (scope === 'currentYear') {
-		const snapshot = await getDoc(doc(collectionRef, currentYear))
+		const snapshot = await readDocument(doc(collectionRef, currentYear), source, cacheKey)
 		buckets = snapshot.exists()
 			? [cleanValue<StoredYearBucket<T>>(snapshot.data())]
 			: []
 	} else if (scope === 'otherYears') {
 		const [past, future] = await Promise.all([
-			getDocs(query(collectionRef, where(documentId(), '<', currentYear))),
-			getDocs(query(collectionRef, where(documentId(), '>', currentYear))),
+			readQuery(query(collectionRef, where(documentId(), '<', currentYear)), source, `${cacheKey}:past`),
+			readQuery(query(collectionRef, where(documentId(), '>', currentYear)), source, `${cacheKey}:future`),
 		])
 		buckets = [...past.docs, ...future.docs].map((item) => clean<StoredYearBucket<T>>(item))
 	} else {
-		buckets = await readCollection<StoredYearBucket<T>>(uid, name)
+		buckets = await readCollection<StoredYearBucket<T>>(uid, name, source, cacheKey)
 	}
 	return flattenYearBuckets(buckets)
 }
@@ -183,8 +217,53 @@ function replaceYearBucketCollection<T extends DatedEntry>(
 	return replaceCollection(uid, name, groupYearBuckets(entries), (bucket) => bucket.period)
 }
 
-async function readCollection<T>(uid: string, name: CollectionName): Promise<T[]> {
-	const snapshot = await getDocs(userCollection(uid, name))
+async function readQuery(
+	reference: Query<DocumentData>,
+	source: FirestoreReadSource,
+	cacheKey?: string,
+) {
+	if (source === 'server') {
+		const server = await getDocsFromServer(reference)
+		markHydrated(cacheKey)
+		return server
+	}
+	const cached = await getDocsFromCache(reference)
+	return cached.empty && !isHydrated(cacheKey)
+		&& (typeof navigator === 'undefined' || navigator.onLine)
+		? getDocs(reference).then((server) => {
+				markHydrated(cacheKey)
+				return server
+			})
+		: cached
+}
+
+async function readDocument(
+	reference: DocumentReference<DocumentData>,
+	source: FirestoreReadSource,
+	cacheKey?: string,
+) {
+	if (source === 'server') {
+		const server = await getDocFromServer(reference)
+		markHydrated(cacheKey)
+		return server
+	}
+	const cached = await getDocFromCache(reference)
+	return !cached.exists() && !isHydrated(cacheKey)
+		&& (typeof navigator === 'undefined' || navigator.onLine)
+		? getDoc(reference).then((server) => {
+				markHydrated(cacheKey)
+				return server
+			})
+		: cached
+}
+
+async function readCollection<T>(
+	uid: string,
+	name: CollectionName,
+	source: FirestoreReadSource = 'cacheFirst',
+	cacheKey = hydrationKey(uid, name),
+): Promise<T[]> {
+	const snapshot = await readQuery(userCollection(uid, name), source, cacheKey)
 	return snapshot.docs.map((item) => clean<T>(item))
 }
 
@@ -192,13 +271,14 @@ async function readDateWindowCollection<T>(
 	uid: string,
 	name: CollectionName,
 	window: DateWindow,
+	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<T[]> {
 	const collectionRef = userCollection(uid, name)
-	const snapshot = await getDocs(query(
+	const snapshot = await readQuery(query(
 		collectionRef,
 		where(documentId(), '>=', window.startDate),
 		where(documentId(), '<', window.endDate),
-	))
+	), source, hydrationKey(uid, name, `${window.startDate}:${window.endDate}`))
 	return snapshot.docs.map((item) => clean<T>(item))
 }
 
@@ -230,7 +310,7 @@ async function replaceCollection<T>(
 	values: T[],
 	getId: (value: T, index: number) => string,
 ): Promise<void> {
-	const existing = await getDocs(userCollection(uid, name))
+	const existing = await getDocsFromCache(userCollection(uid, name))
 	const desired = new Set(values.map(getId))
 	const operations: Array<(batch: ReturnType<typeof writeBatch>) => void> = []
 
@@ -260,16 +340,13 @@ async function addCollectionWithTargetIdGuard<T>(
 	if (refs.length > TRANSACTIONAL_WRITE_LIMIT) {
 		throw new Error(`Default ${existingDataDescription} import is too large to write safely; nothing was changed.`)
 	}
-	await runTransaction(firestore, async (transaction) => {
-		const snapshots = await Promise.all(refs.map(({ ref }) => transaction.get(ref)))
-		if (snapshots.some((snapshot) => snapshot.exists())) {
-			throw new Error(`Default ${existingDataDescription} import generated an existing document ID; nothing was changed.`)
-		}
-		const now = new Date().toISOString()
-		refs.forEach(({ ref, value }) => {
-			transaction.set(ref, { ...value as object, updatedAt: now })
-		})
-	})
+	const snapshots = await Promise.all(refs.map(({ ref }) => getDocFromCache(ref)))
+	if (snapshots.some((snapshot) => snapshot.exists())) {
+		throw new Error(`Default ${existingDataDescription} import generated an existing document ID; nothing was changed.`)
+	}
+	const now = new Date().toISOString()
+	await commitInBatches(refs.map(({ ref, value }) =>
+		(batch) => batch.set(ref, { ...value as object, updatedAt: now })))
 }
 
 async function writeDateScopedCollection<T>(
@@ -305,36 +382,50 @@ export async function ensureUser(uid: string): Promise<void> {
 	}, { merge: true })
 }
 
-export function readConfigZone(uid: string): Promise<LiftConfig[] | null> {
-	return readCollection<LiftConfig>(uid, 'exercises').then((items) => items.length ? items : null)
+export function readConfigZone(
+	uid: string,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<LiftConfig[] | null> {
+	return readCollection<LiftConfig>(uid, 'exercises', source).then((items) => items.length ? items : null)
 }
 
 export function writeDefaultConfig(uid: string, configs: LiftConfig[]): Promise<void> {
-	return replaceCollection(uid, 'exercises', configs, (item) => idPart(item.id))
+	return trackMutation(uid, 'exercises', () =>
+		replaceCollection(uid, 'exercises', configs, (item) => idPart(item.id)))
 }
 
 export function writeConfigValues(uid: string, configs: LiftConfig[]): Promise<void> {
 	return writeDefaultConfig(uid, configs)
 }
 
-export function readWorkoutDefs(uid: string, _liftNames?: Map<string, string>): Promise<WorkoutDefinition[] | null> {
-	return readCollection<WorkoutDefinition>(uid, 'workouts').then((items) => items.length ? items : null)
+export function readWorkoutDefs(
+	uid: string,
+	_liftNames?: Map<string, string>,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<WorkoutDefinition[] | null> {
+	return readCollection<WorkoutDefinition>(uid, 'workouts', source).then((items) => items.length ? items : null)
 }
 
 export function writeWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
-	return replaceCollection(uid, 'workouts', definitions, (item) => idPart(item.id))
+	return trackMutation(uid, 'workouts', () =>
+		replaceCollection(uid, 'workouts', definitions, (item) => idPart(item.id)))
 }
 
 export function writeDefaultWorkoutDefs(uid: string, definitions: WorkoutDefinition[]): Promise<void> {
-	return addCollectionWithTargetIdGuard(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts')
+	return trackMutation(uid, 'workouts', () =>
+		addCollectionWithTargetIdGuard(uid, 'workouts', definitions, (item) => idPart(item.id), 'workouts'))
 }
 
-export function readCardioActivities(uid: string): Promise<CardioActivity[] | null> {
-	return readCollection<CardioActivity>(uid, 'cardioActivities').then((items) => items.length ? items : null)
+export function readCardioActivities(
+	uid: string,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<CardioActivity[] | null> {
+	return readCollection<CardioActivity>(uid, 'cardioActivities', source).then((items) => items.length ? items : null)
 }
 
 export function writeCardioActivities(uid: string, activities: CardioActivity[]): Promise<void> {
-	return replaceCollection(uid, 'cardioActivities', activities, (item) => idPart(item.id))
+	return trackMutation(uid, 'cardioActivities', () =>
+		replaceCollection(uid, 'cardioActivities', activities, (item) => idPart(item.id)))
 }
 
 export const writeDefaultCardioActivities = writeCardioActivities
@@ -343,6 +434,12 @@ function workoutSessionKey(
 	session: Pick<ParsedLogRow, 'date' | 'startTime' | 'workoutId'>,
 ): string {
 	return `${session.date}:${session.startTime}:${session.workoutId}`
+}
+
+function workoutSessionDocumentId(
+	session: Pick<ParsedLogRow, 'date' | 'startTime' | 'workoutId'>,
+): string {
+	return idPart(workoutSessionKey(session))
 }
 
 export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSession[] {
@@ -426,26 +523,18 @@ export async function appendLogRows(
 		return value ? [value] : []
 	})
 	const sessions = groupWorkoutSessionRows(parsed)
-	for (const incoming of groupYearBuckets(sessions)) {
-		const ref = doc(userCollection(uid, 'workoutSessions'), incoming.period)
-		await runTransaction(firestore, async (transaction) => {
-			const snapshot = await transaction.get(ref)
-			const current = snapshot.exists()
-				? (snapshot.data() as StoredYearBucket<StoredWorkoutSession>).entries
-				: []
-			const incomingKeys = new Set(incoming.entries.map(workoutSessionKey))
-			const entries = sortDatedEntries([
-				...current.filter((session) => !incomingKeys.has(workoutSessionKey(session))),
-				...incoming.entries,
-			])
-			transaction.set(ref, {
-				period: incoming.period,
-				count: entries.length,
-				entries,
+	await trackMutation(
+		uid,
+		`workoutSessions:${sessions.map(workoutSessionDocumentId).join(',')}`,
+		() => commitInBatches(sessions.map((session) => {
+			const ref = doc(userCollection(uid, 'workoutSessions'), workoutSessionDocumentId(session))
+			return (batch) => batch.set(ref, {
+				...session,
+				year: yearForDate(session.date),
 				updatedAt: new Date().toISOString(),
 			})
-		})
-	}
+		})),
+	)
 	return parsed
 }
 
@@ -478,9 +567,35 @@ export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLog
 export function readLogZone(
 	uid: string,
 	scope: YearBucketReadScope = 'all',
+	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<ParsedLogRow[]> {
-	return readYearBucketCollection<StoredWorkoutSession>(uid, 'workoutSessions', scope)
-		.then(flattenWorkoutSessions)
+	const currentYear = String(new Date().getFullYear())
+	return readQuery(
+		userCollection(uid, 'workoutSessions'),
+		source,
+		hydrationKey(uid, 'workoutSessions', scope),
+	).then((snapshot) => {
+		const legacy: StoredWorkoutSession[] = []
+		const stable: StoredWorkoutSession[] = []
+		for (const item of snapshot.docs) {
+			const data = clean<StoredWorkoutSession | StoredYearBucket<StoredWorkoutSession>>(item)
+			if ('entries' in data) legacy.push(...data.entries)
+			else stable.push(data)
+		}
+		const sessions = new Map(legacy.map((session) => [workoutSessionKey(session), session]))
+		for (const session of stable) {
+			if (session.replaces) sessions.delete(session.replaces)
+			const key = workoutSessionKey(session)
+			if (session.deleted) sessions.delete(key)
+			else sessions.set(key, session)
+		}
+		const scoped = [...sessions.values()].filter((session) => {
+			if (scope === 'all') return true
+			const isCurrent = yearForDate(session.date) === currentYear
+			return scope === 'currentYear' ? isCurrent : !isCurrent
+		})
+		return flattenWorkoutSessions(scoped)
+	})
 }
 
 export async function updateLogRows(
@@ -499,40 +614,20 @@ export async function updateLogRows(
 		workoutId: sessionWorkoutId,
 		startTime: sessionStartTime,
 	})
-	const originalYear = yearForDate(sessionDate)
-	const updatedYear = yearForDate(session.date)
-	const years = [...new Set([originalYear, updatedYear])]
-	await runTransaction(firestore, async (transaction) => {
-		const refs = years.map((year) => doc(userCollection(uid, 'workoutSessions'), year))
-		const snapshots = await Promise.all(refs.map((ref) => transaction.get(ref)))
-		const entriesByYear = new Map(years.map((year, index) => [
-			year,
-			snapshots[index].exists()
-				? (snapshots[index].data() as StoredYearBucket<StoredWorkoutSession>).entries
-				: [],
-		]))
-		entriesByYear.set(
-			originalYear,
-			entriesByYear.get(originalYear)!.filter((item) => workoutSessionKey(item) !== originalKey),
-		)
-		entriesByYear.set(updatedYear, [
-			...entriesByYear.get(updatedYear)!.filter((item) => workoutSessionKey(item) !== workoutSessionKey(session)),
-			session,
-		])
-		for (let index = 0; index < years.length; index += 1) {
-			const year = years[index]
-			const entries = sortDatedEntries(entriesByYear.get(year)!)
-			if (entries.length === 0) {
-				transaction.delete(refs[index])
-			} else {
-				transaction.set(refs[index], {
-					period: year,
-					count: entries.length,
-					entries,
-					updatedAt: new Date().toISOString(),
-				})
-			}
+	const originalId = idPart(originalKey)
+	const updatedId = workoutSessionDocumentId(session)
+	await trackMutation(uid, `workoutSession:${originalId}`, async () => {
+		const batch = writeBatch(firestore)
+		if (originalId !== updatedId) {
+			batch.delete(doc(userCollection(uid, 'workoutSessions'), originalId))
 		}
+		batch.set(doc(userCollection(uid, 'workoutSessions'), updatedId), {
+			...session,
+			year: yearForDate(session.date),
+			...(originalKey === workoutSessionKey(session) ? {} : { replaces: originalKey }),
+			updatedAt: new Date().toISOString(),
+		})
+		await batch.commit()
 	})
 }
 
@@ -542,40 +637,38 @@ export async function deleteLogSession(
 	sessionWorkoutId: string,
 	sessionStartTime: string,
 ): Promise<void> {
-	const period = yearForDate(sessionDate)
 	const targetKey = workoutSessionKey({
 		date: sessionDate,
 		workoutId: sessionWorkoutId,
 		startTime: sessionStartTime,
 	})
-	const ref = doc(userCollection(uid, 'workoutSessions'), period)
-	await runTransaction(firestore, async (transaction) => {
-		const snapshot = await transaction.get(ref)
-		if (!snapshot.exists()) return
-		const current = (snapshot.data() as StoredYearBucket<StoredWorkoutSession>).entries
-		const entries = current.filter((session) => workoutSessionKey(session) !== targetKey)
-		if (entries.length === current.length) return
-		if (entries.length === 0) {
-			transaction.delete(ref)
-		} else {
-			transaction.set(ref, {
-				period,
-				count: entries.length,
-				entries,
-				updatedAt: new Date().toISOString(),
-			})
-		}
-	})
+	const targetId = idPart(targetKey)
+	await trackMutation(uid, `workoutSession:${targetId}`, () =>
+		setDoc(doc(userCollection(uid, 'workoutSessions'), targetId), {
+			date: sessionDate,
+			year: yearForDate(sessionDate),
+			startTime: sessionStartTime,
+			endTime: '',
+			workoutId: sessionWorkoutId,
+			exercises: [],
+			deleted: true,
+			updatedAt: new Date().toISOString(),
+		}))
 }
 
-export function readFlags(uid: string, window?: DateWindow): Promise<DayFlagEntry[]> {
+export function readFlags(
+	uid: string,
+	window?: DateWindow,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<DayFlagEntry[]> {
 	return window
-		? readDateWindowCollection<DayFlagEntry>(uid, 'dayFlags', window)
-		: readCollection<DayFlagEntry>(uid, 'dayFlags')
+		? readDateWindowCollection<DayFlagEntry>(uid, 'dayFlags', window, source)
+		: readCollection<DayFlagEntry>(uid, 'dayFlags', source)
 }
 
 export function writeFlags(uid: string, flags: DayFlagEntry[]): Promise<void> {
-	return replaceCollection(uid, 'dayFlags', flags, (entry) => entry.date)
+	return trackMutation(uid, 'dayFlags', () =>
+		replaceCollection(uid, 'dayFlags', flags, (entry) => entry.date))
 }
 
 export function writeFlagDates(
@@ -583,7 +676,9 @@ export function writeFlagDates(
 	flags: DayFlagEntry[],
 	dates: Iterable<string>,
 ): Promise<void> {
-	return writeDateScopedCollection(uid, 'dayFlags', flags, dates, (entry) => entry.date)
+	const dateList = [...dates]
+	return trackMutation(uid, `dayFlags:${dateList.sort().join(',')}`, () =>
+		writeDateScopedCollection(uid, 'dayFlags', flags, dateList, (entry) => entry.date))
 }
 
 export function scheduleDayDocumentId(day: Pick<WorkoutScheduleEntry, 'date'>): string {
@@ -605,20 +700,24 @@ export function flattenScheduleDays(days: StoredScheduleDay[]): WorkoutScheduleE
 		.flatMap((day) => day.events.map((event) => ({ date: day.date, ...event })))
 }
 
-export function readWorkoutSchedule(uid: string, window?: DateWindow): Promise<WorkoutScheduleEntry[]> {
+export function readWorkoutSchedule(
+	uid: string,
+	window?: DateWindow,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<WorkoutScheduleEntry[]> {
 	const pending = window
-		? readDateWindowCollection<StoredScheduleDay>(uid, 'schedule', window)
-		: readCollection<StoredScheduleDay>(uid, 'schedule')
+		? readDateWindowCollection<StoredScheduleDay>(uid, 'schedule', window, source)
+		: readCollection<StoredScheduleDay>(uid, 'schedule', source)
 	return pending.then(flattenScheduleDays)
 }
 
 export function writeWorkoutSchedule(uid: string, entries: WorkoutScheduleEntry[]): Promise<void> {
-	return replaceCollection(
+	return trackMutation(uid, 'schedule', () => replaceCollection(
 		uid,
 		'schedule',
 		groupScheduleEntries(entries),
 		scheduleDayDocumentId,
-	)
+	))
 }
 
 export function writeWorkoutScheduleDates(
@@ -626,37 +725,47 @@ export function writeWorkoutScheduleDates(
 	entries: WorkoutScheduleEntry[],
 	dates: Iterable<string>,
 ): Promise<void> {
-	return writeDateScopedCollection(
+	const dateList = [...dates]
+	return trackMutation(uid, `schedule:${dateList.sort().join(',')}`, () => writeDateScopedCollection(
 		uid,
 		'schedule',
 		groupScheduleEntries(entries),
-		dates,
+		dateList,
 		scheduleDayDocumentId,
-	)
+	))
 }
 
 export const readSchedule = readWorkoutSchedule
 export const writeSchedule = writeWorkoutSchedule
 
-export async function readSettings(uid: string): Promise<Map<string, string>> {
-	const snapshot = await getDoc(doc(userDoc(uid), 'settings', 'app'))
+export async function readSettings(
+	uid: string,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<Map<string, string>> {
+	const snapshot = await readDocument(
+		doc(userDoc(uid), 'settings', 'app'),
+		source,
+		hydrationKey(uid, 'settings'),
+	)
 	if (!snapshot.exists()) return new Map()
 	const values = snapshot.data().values as Record<string, string> | undefined
 	return new Map(Object.entries(values ?? {}))
 }
 
 export async function writeSettings(uid: string, settings: Map<string, string>): Promise<void> {
-	await setDoc(doc(userDoc(uid), 'settings', 'app'), {
-		values: Object.fromEntries(settings),
-		updatedAt: new Date().toISOString(),
-	})
+	await trackMutation(uid, 'settings', () =>
+		setDoc(doc(userDoc(uid), 'settings', 'app'), {
+			values: Object.fromEntries(settings),
+			updatedAt: new Date().toISOString(),
+		}))
 }
 
 export function readGarminActivities(
 	uid: string,
 	scope: YearBucketReadScope = 'all',
+	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<StravaActivity[]> {
-	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities', scope)
+	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities', scope, source)
 }
 
 export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {
@@ -666,8 +775,9 @@ export function writeGarminActivities(uid: string, items: StravaActivity[]): Pro
 export function readGarminWellnessEntries(
 	uid: string,
 	scope: YearBucketReadScope = 'all',
+	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<GarminWellnessEntry[]> {
-	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness', scope)
+	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness', scope, source)
 }
 
 export function writeGarminWellnessEntries(uid: string, items: GarminWellnessEntry[]): Promise<void> {
@@ -677,8 +787,9 @@ export function writeGarminWellnessEntries(uid: string, items: GarminWellnessEnt
 export function readWithingsMeasurements(
 	uid: string,
 	scope: YearBucketReadScope = 'all',
+	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<WithingsMeasurement[]> {
-	return readYearBucketCollection<WithingsMeasurement>(uid, 'withingsMeasurements', scope)
+	return readYearBucketCollection<WithingsMeasurement>(uid, 'withingsMeasurements', scope, source)
 }
 
 export function writeWithingsMeasurements(uid: string, items: WithingsMeasurement[]): Promise<void> {
