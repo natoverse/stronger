@@ -559,7 +559,6 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
-        if (source === 'server' && flags.length === 0) return;
         setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
       });
     } catch (error) {
@@ -582,7 +581,6 @@ function AppContent() {
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
-        if (source === 'server' && schedule.length === 0) return;
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
       });
     } catch (error) {
