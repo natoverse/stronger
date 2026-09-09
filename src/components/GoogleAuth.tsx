@@ -11,7 +11,7 @@ import {
 import { readCachedUserId, writeCachedUserId } from '../firebase/session-cache.ts'
 import { withTimeout } from '../firebase/timeout.ts'
 import { isMockMode } from '../data/mock-mode.ts'
-import { Calendar, Dumbbell, HeartPulse, Library, Settings, SportShoe, TrendingUp } from 'lucide-react'
+import { Calendar, Check, CloudUpload, Dumbbell, HeartPulse, Library, LogIn, RefreshCw, Settings, SportShoe, TrendingUp, WifiOff } from 'lucide-react'
 
 const AUTH_RESTORE_TIMEOUT_MS = 15_000
 const SIGN_IN_TIMEOUT_MS = 60_000
@@ -184,15 +184,33 @@ export function GoogleAuth({
 	if (hideConnectedUi) return null
 
 	const onOpenGarminWellness = onOpenGarmin || onOpenWellness
-	const syncLabel = !syncStatus.online
-		? 'Offline'
+	const syncState = !syncStatus.online
+		? 'offline'
 		: reauthRequired
+			? 'reauth'
+			: syncStatus.syncing
+				? 'syncing'
+				: syncStatus.pendingCount > 0
+					? 'pending'
+					: 'synced'
+	const syncLabel = syncState === 'offline'
+		? 'Offline'
+		: syncState === 'reauth'
 			? 'Sign in to sync'
-		: syncStatus.syncing
-			? 'Syncing'
-			: syncStatus.pendingCount > 0
-				? `${syncStatus.pendingCount} ${syncStatus.pendingCount === 1 ? 'change' : 'changes'} pending`
-				: 'Synced'
+			: syncState === 'syncing'
+				? 'Syncing'
+				: syncState === 'pending'
+					? `${syncStatus.pendingCount} ${syncStatus.pendingCount === 1 ? 'change' : 'changes'} pending`
+					: 'Synced'
+	const syncIcon = syncState === 'offline'
+		? <WifiOff size={18} />
+		: syncState === 'reauth'
+			? <LogIn size={18} />
+			: syncState === 'syncing'
+				? <RefreshCw size={18} />
+				: syncState === 'pending'
+					? <CloudUpload size={18} />
+					: <Check size={18} />
 	const syncTitle = syncStatus.lastSyncedAt
 		? `Last synced ${new Date(syncStatus.lastSyncedAt).toLocaleString()}`
 		: 'Retry synchronization'
@@ -209,12 +227,13 @@ export function GoogleAuth({
 				{onOpenSettings && <button className="btn-toolbar" onClick={onOpenSettings} title="Settings"><Settings size={20} /></button>}
 			</div>
 			<button
-				className={`sync-status ${syncStatus.online ? '' : 'sync-status-offline'}`}
+				className={`sync-status sync-status-${syncState}`}
 				onClick={() => void (reauthRequired ? handleSignIn() : retryPendingWrites())}
-				title={syncTitle}
+				aria-label={syncLabel}
+				title={`${syncLabel}. ${syncTitle}`}
 				disabled={syncStatus.syncing}
 			>
-				{syncLabel}
+				{syncIcon}
 			</button>
 			<a
 				className="btn-toolbar"

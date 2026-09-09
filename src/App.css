@@ -898,20 +898,40 @@ body {
 }
 
 .sync-status {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	flex: 0 0 auto;
-	max-width: 7rem;
-	padding: 0.25rem 0.4rem;
+	width: 36px;
+	height: 36px;
+	padding: 0;
 	border: 1px solid var(--color-completed);
-	border-radius: 999px;
+	border-radius: 50%;
 	background: transparent;
 	color: var(--color-completed);
-	font: inherit;
-	font-size: 0.65rem;
-	white-space: nowrap;
 	cursor: pointer;
 }
 
 .sync-status-offline {
+	border-color: var(--color-warmup);
+	color: var(--color-warmup);
+}
+
+.sync-status-reauth {
+	border-color: var(--color-accent);
+	color: var(--color-accent);
+}
+
+.sync-status-syncing {
+	border-color: var(--color-primary);
+	color: var(--color-primary);
+}
+
+.sync-status-syncing svg {
+	animation: spin 1s linear infinite;
+}
+
+.sync-status-pending {
 	border-color: var(--color-warmup);
 	color: var(--color-warmup);
 }
