@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { computeProgression, REST_ID } from './model/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './google/index.js';
-import { appendLogRows, ensureUser, readConfigZone, readLogZone, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
-import type { DateWindow, YearBucketReadScope } from './firebase/index.js';
+import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries, withAuthRetry } from './firebase/index.js';
+import type { DateWindow, FirestoreReadSource, YearBucketReadScope } from './firebase/index.js';
 import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
 import { withTimeout } from './firebase/timeout.js';
@@ -41,15 +41,14 @@ import { toDisplayUnit } from './model/withings.js';
 import { formatFreshnessLabel } from './model/freshness.js';
 import { WithingsView } from './components/WithingsView.js';
 import { GarminWellnessView } from './components/GarminWellnessView.js';
-import { GarminActivitiesListView } from './components/GarminActivitiesListView.js';
+import { ActivityFilterControls, GarminActivitiesListView, getSelectableActivityTypes } from './components/GarminActivitiesListView.js';
 import { DateRangeSelector } from './components/DateRangeSelector.js';
-import { createMockData, isMockMode, MOCK_USER_ID } from './data/mock-data.js';
+import { createMockAppData } from './data/mock-app-data.js';
+import { isMockMode } from './data/mock-mode.js';
 import './App.css';
 
 const FIREBASE_LOAD_TIMEOUT_MS = 20_000;
 const CALENDAR_SYNC_ID_SETTING = 'calendar.syncCalendarId';
-const MOCK_MODE = isMockMode();
-const MOCK_DATA = MOCK_MODE ? createMockData() : null;
 
 function firebaseLoadKey(
   request: FirebaseLoadRequest,
@@ -61,52 +60,76 @@ function firebaseLoadKey(
 
 function AppContent() {
   const { route, navigateTo, replaceTo } = useHashRouter();
+  const mockMode = isMockMode();
+  const mockData = useMemo(() => mockMode ? createMockAppData() : null, [mockMode]);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [previousSets, setPreviousSets] = useState<PreviousSetData[][] | null>(null);
-  const [sheetConnected, setSheetConnected] = useState(MOCK_MODE);
-  const [workouts, setWorkouts] = useState<Workout[]>(
-    MOCK_DATA ? buildWorkoutsFromConfigs(MOCK_DATA.configs, MOCK_DATA.definitions, { roundWarmupPlateMath: MOCK_DATA.appSettings.roundWarmupPlateMath }) : [],
-  );
+  const [sheetConnected, setSheetConnected] = useState(mockMode);
+  const [workouts, setWorkouts] = useState<Workout[]>(() => mockData?.workouts ?? []);
   const [startTime, setStartTime] = useState<string | null>(null);
-  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(MOCK_MODE ? MOCK_USER_ID : null);
-  const [configs, setConfigs] = useState<LiftConfig[]>(MOCK_DATA?.configs ?? []);
-  const [definitions, setDefinitions] = useState<WorkoutDefinition[]>(MOCK_DATA?.definitions ?? []);
+  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
+  const [configs, setConfigs] = useState<LiftConfig[]>(() => mockData?.configs ?? []);
+  const [definitions, setDefinitions] = useState<WorkoutDefinition[]>(
+    () => mockData?.workoutDefinitions ?? [],
+  );
   const [progressionProposals, setProgressionProposals] = useState<ProgressionProposal[] | null>(null);
-  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>(MOCK_DATA?.workoutSchedule ?? []);
-  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>(MOCK_DATA?.dayFlags ?? []);
-  const [logRows, setLogRows] = useState<ParsedLogRow[]>(MOCK_DATA?.logRows ?? []);
+  const [workoutSchedule, setWorkoutSchedule] = useState<WorkoutScheduleEntry[]>(
+    () => mockData?.workoutSchedule ?? [],
+  );
+  const [dayFlags, setDayFlags] = useState<DayFlagEntry[]>(() => mockData?.dayFlags ?? []);
+  const [logRows, setLogRows] = useState<ParsedLogRow[]>(() => mockData?.logRows ?? []);
   const [needsSetup, setNeedsSetup] = useState(false);
   const [viewingSession, setViewingSession] = useState<LogSession | null>(null);
-  const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>(MOCK_DATA?.cardioActivities ?? []);
-  const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>(MOCK_DATA?.stravaGoals ?? []);
-  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>(MOCK_DATA?.garminActivities ?? []);
-  const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>(MOCK_DATA?.wellnessEntries ?? []);
+  const [cardioActivities, setCardioActivities] = useState<CardioActivity[]>(
+    () => mockData?.cardioActivities ?? [],
+  );
+  const [stravaGoals, setStravaGoals] = useState<StravaGoal[]>(() => mockData?.stravaGoals ?? []);
+  const [garminActivities, setGarminActivities] = useState<StravaActivity[]>(
+    () => mockData?.garminActivities ?? [],
+  );
+  const [wellnessEntries, setWellnessEntries] = useState<GarminWellnessEntry[]>(
+    () => mockData?.garminWellness ?? [],
+  );
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [garminRange, setGarminRange] = useState<StravaTimeRange>('month');
+  const [garminActivityQuery, setGarminActivityQuery] = useState('');
+  const [selectedGarminActivityTypes, setSelectedGarminActivityTypes] = useState<Set<string>>(
+    () => new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
+  );
+  const knownGarminActivityTypes = useRef(
+    new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
+  );
   const [chartAggregation, setChartAggregation] = useState<StravaAggregation>('day');
-  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>(MOCK_DATA?.withingsMeasurements ?? []);
-  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>(MOCK_DATA?.withingsGoals ?? []);
-  const [liftGoals, setLiftGoals] = useState<LiftGoal[]>(MOCK_DATA?.liftGoals ?? []);
+  const [withingsMeasurements, setWithingsMeasurements] = useState<WithingsMeasurement[]>(
+    () => mockData?.withingsMeasurements ?? [],
+  );
+  const [withingsGoals, setWithingsGoals] = useState<WithingsGoal[]>(
+    () => mockData?.withingsGoals ?? [],
+  );
+  const [liftGoals, setLiftGoals] = useState<LiftGoal[]>(() => mockData?.liftGoals ?? []);
   const [draftResults, setDraftResults] = useState<SetResult[][] | null>(null);
   const [pendingFinish, setPendingFinish] = useState<{
     workout: Workout;
     results: SetResult[][];
     endTime: string;
   } | null>(null);
-  const [appSettings, setAppSettings] = useState<AppSettings>(MOCK_DATA?.appSettings ?? DEFAULT_APP_SETTINGS);
+  const [appSettings, setAppSettings] = useState<AppSettings>(
+    () => mockData?.appSettings ?? DEFAULT_APP_SETTINGS,
+  );
   const [calendarSyncId, setCalendarSyncId] = useState<string | null>(null);
-  const [settingsLoaded, setSettingsLoaded] = useState(MOCK_MODE);
+  const [settingsLoaded, setSettingsLoaded] = useState(mockMode);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
+  const [onlineGeneration, setOnlineGeneration] = useState(0);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
   const [defaultWorkoutImportError, setDefaultWorkoutImportError] = useState<string | null>(null);
   const [duplicateWorkoutDraft, setDuplicateWorkoutDraft] = useState<WorkoutDefinition | undefined>(undefined);
-  const settingsRef = useRef(new Map<string, string>(MOCK_DATA?.settings));
-  const definitionsRef = useRef<WorkoutDefinition[]>(MOCK_DATA?.definitions ?? []);
+  const settingsRef = useRef(new Map<string, string>());
+  const definitionsRef = useRef<WorkoutDefinition[]>(mockData?.workoutDefinitions ?? []);
   // Ref so callbacks can read the current value without being in their dependency arrays.
-  const roundWarmupPlateMathRef = useRef(MOCK_DATA?.appSettings.roundWarmupPlateMath ?? DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
+  const roundWarmupPlateMathRef = useRef(DEFAULT_APP_SETTINGS.roundWarmupPlateMath);
 
-  const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>(MOCK_MODE ? ['all'] : []));
+  const logScopesLoadedRef = useRef(new Set<YearBucketReadScope>());
   const dataLoadsRef = useRef(new Map<string, Promise<void>>());
   const completedDataLoadsRef = useRef(new Set<string>());
   const loadQueueKeyRef = useRef<string | null>(null);
@@ -114,9 +137,29 @@ function AppContent() {
   const calendarWindowRef = useRef(initialDateWindow());
   const calendarWindowLoadRef = useRef(Promise.resolve());
   const calendarMutationRef = useRef<Promise<unknown>>(Promise.resolve());
-  const connectedUserRef = useRef<string | null>(MOCK_MODE ? MOCK_USER_ID : null);
+  const connectedUserRef = useRef<string | null>(null);
   const connectionGenerationRef = useRef(0);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
+  const selectableGarminActivityTypes = useMemo(
+    () => getSelectableActivityTypes(garminActivities),
+    [garminActivities],
+  );
+
+  useEffect(() => {
+    const newTypes = selectableGarminActivityTypes.filter(
+      (type) => !knownGarminActivityTypes.current.has(type),
+    );
+    knownGarminActivityTypes.current = new Set(selectableGarminActivityTypes);
+    if (newTypes.length > 0) {
+      setSelectedGarminActivityTypes((selected) => new Set([...selected, ...newTypes]));
+    }
+  }, [selectableGarminActivityTypes]);
+
+  useEffect(() => {
+    const handleOnline = () => setOnlineGeneration((generation) => generation + 1);
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
+  }, []);
 
   const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
     const previous = sessionMutationRef.current.get(key) ?? Promise.resolve();
@@ -146,6 +189,7 @@ function AppContent() {
       if (connectedUserRef.current === userId) return;
       if (connectedUserRef.current) disconnectCalendar();
       connectedUserRef.current = userId;
+      void setActiveSyncUser(userId);
       connectionGenerationRef.current += 1;
       setCalendarSyncId(null);
       setSpreadsheetId(userId);
@@ -216,6 +260,7 @@ function AppContent() {
     disconnectCalendar();
     if (!connectedUserRef.current) return;
     connectedUserRef.current = null;
+    void setActiveSyncUser(null);
     connectionGenerationRef.current += 1;
     clearDraft();
     setSheetConnected(false);
@@ -253,9 +298,14 @@ function AppContent() {
   }, [replaceTo]);
 
   const handleSignOut = useCallback(async () => {
+    if (spreadsheetId && await hasPendingMutations(spreadsheetId)) {
+      const confirmed = window.confirm('Some changes are still waiting to sync. Sign out anyway?');
+      if (!confirmed) return;
+    }
+    if (spreadsheetId) await clearOfflineUserState(spreadsheetId);
     await signOutOfStronger();
     handleDisconnected();
-  }, [handleDisconnected]);
+  }, [handleDisconnected, spreadsheetId]);
 
   const loadPreviousSets = useCallback(
     async (sheetId: string, workoutId: string) => {
@@ -398,13 +448,18 @@ function AppContent() {
     navigateTo({ view: 'list' });
   }, [navigateTo]);
 
-  const loadExercisesData = useCallback(async (userId: string, connectionGeneration: number) => {
-    const loaded = await readConfigZone(userId);
+  const loadExercisesData = useCallback(async (
+    userId: string,
+    connectionGeneration: number,
+    source: FirestoreReadSource = 'cacheFirst',
+  ) => {
+    const loaded = await readConfigZone(userId, source);
     if (
       connectedUserRef.current !== userId
       || connectionGenerationRef.current !== connectionGeneration
     ) return;
     if (!loaded) {
+      if (source === 'server') return;
       setNeedsSetup(true);
       return;
     }
@@ -415,13 +470,15 @@ function AppContent() {
   const loadWorkoutDefinitionsData = useCallback(async (
     userId: string,
     connectionGeneration: number,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
-    let loaded = await readWorkoutDefs(userId);
+    let loaded = await readWorkoutDefs(userId, undefined, source);
     if (
       connectedUserRef.current !== userId
       || connectionGenerationRef.current !== connectionGeneration
     ) return;
     if (!loaded) {
+      if (source === 'server') return;
       loaded = [];
       setShowDefaultWorkoutImportPrompt(true);
       setDefaultWorkoutImportError(null);
@@ -469,13 +526,15 @@ function AppContent() {
   const loadCardioActivitiesData = useCallback(async (
     userId: string,
     connectionGeneration: number,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
-    let loaded = await readCardioActivities(userId);
+    let loaded = await readCardioActivities(userId, source);
     if (
       connectedUserRef.current !== userId
       || connectionGenerationRef.current !== connectionGeneration
     ) return;
     if (!loaded) {
+      if (source === 'server') return;
       const defaults = [...defaultCardioActivities];
       setCardioActivities(defaults);
       void withAuthRetry(() => writeDefaultCardioActivities(userId, defaults))
@@ -491,10 +550,11 @@ function AppContent() {
     window?: DateWindow,
     required = false,
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const flags = await readFlags(sheetId, window);
+        const flags = await readFlags(sheetId, window, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -512,10 +572,11 @@ function AppContent() {
     window?: DateWindow,
     required = false,
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const schedule = await readWorkoutSchedule(sheetId, window);
+        const schedule = await readWorkoutSchedule(sheetId, window, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
@@ -532,14 +593,16 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const rows = await readLogZone(sheetId, scope);
+        const rows = await readLogZone(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && rows.length === 0) return;
         setLogRows((existing) => mergeYearScopedEntries(existing, rows, scope));
         logScopesLoadedRef.current.add(scope);
       });
@@ -551,14 +614,16 @@ function AppContent() {
   const loadSettingsData = useCallback(async (
     sheetId: string,
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const settings = await readSettings(sheetId);
+        const settings = await readSettings(sheetId, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && settings.size === 0) return;
         settingsRef.current = settings;
         setStravaGoals(goalsFromSettings(settings));
         setWithingsGoals(bodyGoalsFromSettings(settings));
@@ -582,14 +647,16 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const activities = await readGarminActivities(sheetId, scope);
+        const activities = await readGarminActivities(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && activities.length === 0) return;
         setGarminActivities((existing) => mergeYearScopedEntries(existing, activities, scope));
       });
     } catch {
@@ -601,14 +668,16 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const entries = await readGarminWellnessEntries(sheetId, scope);
+        const entries = await readGarminWellnessEntries(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && entries.length === 0) return;
         setWellnessEntries((existing) => mergeYearScopedEntries(existing, entries, scope));
       });
     } catch {
@@ -620,14 +689,16 @@ function AppContent() {
     sheetId: string,
     scope: YearBucketReadScope = 'all',
     connectionGeneration = connectionGenerationRef.current,
+    source: FirestoreReadSource = 'cacheFirst',
   ) => {
     try {
       await withAuthRetry(async () => {
-        const measurements = await readWithingsMeasurements(sheetId, scope);
+        const measurements = await readWithingsMeasurements(sheetId, scope, source);
         if (
           connectedUserRef.current !== sheetId
           || connectionGenerationRef.current !== connectionGeneration
         ) return;
+        if (source === 'server' && measurements.length === 0) return;
         setWithingsMeasurements((existing) => mergeYearScopedEntries(existing, measurements, scope));
       });
     } catch {
@@ -839,6 +910,7 @@ function AppContent() {
     (calendarId: string): Promise<CalendarSyncResult> => queueCalendarMutation(async () => {
       const syncUserId = spreadsheetId;
       if (!syncUserId) throw new Error('Not connected to Firebase.');
+      if (!navigator.onLine) throw new Error('Google Calendar sync is unavailable while offline.');
       if (calendarSyncId && calendarSyncId !== calendarId) {
         throw new Error(
           'This Stronger account is linked to a different Google Calendar. '
@@ -1461,31 +1533,34 @@ function AppContent() {
     userId: string,
     connectionGeneration: number,
     phase: 'priority' | 'deferred',
+    source: FirestoreReadSource = 'cacheFirst',
   ): Promise<void> => {
     const { dataset, scope } = request;
     const window = scope === 'initialWindow' ? calendarWindowRef.current : undefined;
     const yearScope: YearBucketReadScope = scope === 'initialWindow' ? 'all' : scope;
     switch (dataset) {
-      case 'exercises': return loadExercisesData(userId, connectionGeneration);
-      case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration);
-      case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration);
+      case 'exercises': return loadExercisesData(userId, connectionGeneration, source);
+      case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration, source);
+      case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration, source);
       case 'schedule': return loadWorkoutScheduleData(
         userId,
         window,
         phase === 'priority',
         connectionGeneration,
+        source,
       );
       case 'dayFlags': return loadFlagsData(
         userId,
         window,
         phase === 'priority',
         connectionGeneration,
+        source,
       );
-      case 'workoutSessions': return loadLogData(userId, yearScope, connectionGeneration);
-      case 'settings': return loadSettingsData(userId, connectionGeneration);
-      case 'garminActivities': return loadGarminData(userId, yearScope, connectionGeneration);
-      case 'garminWellness': return loadWellnessData(userId, yearScope, connectionGeneration);
-      case 'withingsMeasurements': return loadWithingsData(userId, yearScope, connectionGeneration);
+      case 'workoutSessions': return loadLogData(userId, yearScope, connectionGeneration, source);
+      case 'settings': return loadSettingsData(userId, connectionGeneration, source);
+      case 'garminActivities': return loadGarminData(userId, yearScope, connectionGeneration, source);
+      case 'garminWellness': return loadWellnessData(userId, yearScope, connectionGeneration, source);
+      case 'withingsMeasurements': return loadWithingsData(userId, yearScope, connectionGeneration, source);
     }
   }, [
     loadCardioActivitiesData,
@@ -1518,6 +1593,9 @@ function AppContent() {
       completedDataLoadsRef.current.add(key);
     }).catch((error) => {
       completedDataLoadsRef.current.delete(key);
+      if (!navigator.onLine) {
+        throw new Error('No cached data is available yet. Connect once to finish setting up offline mode.');
+      }
       throw error;
     }).finally(() => {
       dataLoadsRef.current.delete(key);
@@ -1527,9 +1605,8 @@ function AppContent() {
   }, [executeDatasetLoad]);
 
   useEffect(() => {
-    if (MOCK_MODE) return;
     if (!spreadsheetId) return;
-    const queueKey = `${spreadsheetId}:${route.view}`;
+    const queueKey = `${spreadsheetId}:${route.view}:${onlineGeneration}`;
     if (loadQueueKeyRef.current === queueKey) return;
     loadQueueKeyRef.current = queueKey;
     const generation = ++loadQueueGenerationRef.current;
@@ -1552,6 +1629,14 @@ function AppContent() {
           || loadQueueGenerationRef.current !== generation
         ) return;
         setPriorityLoadPending(false);
+        if (navigator.onLine) {
+          void Promise.allSettled(queue.priority.map((request) =>
+            withTimeout(
+              executeDatasetLoad(request, userId, connectionGeneration, 'deferred', 'server'),
+              FIREBASE_LOAD_TIMEOUT_MS,
+              `Refreshing ${request.dataset} timed out.`,
+            )));
+        }
         void withTimeout(
           ensureUser(userId),
           FIREBASE_LOAD_TIMEOUT_MS,
@@ -1561,6 +1646,14 @@ function AppContent() {
       (request, reason) => {
         console.warn(`Deferred Firebase load failed for ${request.dataset}:`, reason);
       },
+      async (request) => {
+        if (!navigator.onLine || connectedUserRef.current !== userId) return;
+        await withTimeout(
+          executeDatasetLoad(request, userId, connectionGeneration, 'deferred', 'server'),
+          FIREBASE_LOAD_TIMEOUT_MS,
+          `Caching ${request.dataset} timed out.`,
+        );
+      },
     ).catch((reason) => {
       if (
         connectedUserRef.current !== userId
@@ -1569,7 +1662,7 @@ function AppContent() {
       setPriorityLoadPending(false);
       setDataLoadError(reason instanceof Error ? reason.message : String(reason));
     });
-  }, [loadDataset, route.view, spreadsheetId]);
+  }, [executeDatasetLoad, loadDataset, onlineGeneration, route.view, spreadsheetId]);
 
   // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {
@@ -2006,17 +2099,31 @@ function AppContent() {
           </div>
         </div>
         <div className="strava-view">
+          <ActivityFilterControls
+            activities={garminActivities}
+            selectedTypes={selectedGarminActivityTypes}
+            query={garminActivityQuery}
+            onSelectedTypesChange={setSelectedGarminActivityTypes}
+            onQueryChange={setGarminActivityQuery}
+          />
           <ActivitiesView
             activities={garminActivities}
             goals={stravaGoals}
             range={garminRange}
             aggregation={chartAggregation}
+            selectedTypes={selectedGarminActivityTypes}
+            query={garminActivityQuery}
             onGoalChange={handleStravaGoalChange}
             title={null}
             emptyText="No Garmin data yet. Run the Garmin sync to populate the 'Stronger - Garmin' tab."
             embedded
           />
-          <GarminActivitiesListView activities={garminActivities} range={garminRange} />
+          <GarminActivitiesListView
+            activities={garminActivities}
+            range={garminRange}
+            selectedTypes={selectedGarminActivityTypes}
+            query={garminActivityQuery}
+          />
         </div>
       </>
     );
@@ -2027,7 +2134,7 @@ function AppContent() {
     return null;
   }
 
-  if (route.view === 'settings' && spreadsheetId) {
+  if (route.view === 'settings' && (spreadsheetId || mockMode)) {
     return (
       <>
         <GoogleAuth
@@ -2129,8 +2236,12 @@ function AppContent() {
 }
 
 function App() {
+  const mockMode = isMockMode();
   return (
-    <AppContent />
+    <>
+      <AppContent />
+      {mockMode && <div className="mock-mode-badge">Mock review data</div>}
+    </>
   );
 }
 

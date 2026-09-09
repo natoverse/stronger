@@ -8,7 +8,12 @@ import {
 	indexedDBLocalPersistence,
 	initializeAuth,
 } from 'firebase/auth'
-import { getFirestore, initializeFirestore } from 'firebase/firestore'
+import {
+	getFirestore,
+	initializeFirestore,
+	persistentLocalCache,
+	persistentMultipleTabManager,
+} from 'firebase/firestore'
 
 const firebaseConfig: FirebaseOptions = {
 	apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -23,7 +28,19 @@ export function isFirebaseConfigured(): boolean {
 	return Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId)
 }
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
+// Firebase Auth validates configuration during module initialization. A local
+// placeholder lets auth-free mock mode render while GoogleAuth still reports
+// missing production configuration before any Firebase operation can run.
+const initializationConfig = isFirebaseConfigured()
+	? firebaseConfig
+	: {
+			apiKey: 'AIzaSyMockConfigurationOnly0000000000',
+			authDomain: 'localhost',
+			projectId: 'stronger-mock',
+			appId: '1:000000000000:web:mock',
+		}
+
+const app = getApps().length ? getApp() : initializeApp(initializationConfig)
 
 export const firebaseAuth = (() => {
 	try {
@@ -46,7 +63,12 @@ export const googleAuthProvider = new GoogleAuthProvider()
 
 export const firestore = (() => {
 	try {
-		return initializeFirestore(app, { ignoreUndefinedProperties: true })
+		return initializeFirestore(app, {
+			ignoreUndefinedProperties: true,
+			localCache: persistentLocalCache({
+				tabManager: persistentMultipleTabManager(),
+			}),
+		})
 	} catch {
 		return getFirestore(app)
 	}

@@ -1,5 +1,18 @@
 # Stronger
 
+## Auth-free review mode
+
+Append `?mock=1` before the hash route to open the app with deterministic mock
+data and no Firebase login:
+
+```text
+http://localhost:5173/stronger/?mock=1#/calendar
+```
+
+Run `npm run test:screenshots` to capture the representative PR screenshots in
+`artifacts/screenshots/`. Pull requests run the same Playwright suite and
+publish the screenshots and HTML report as workflow artifacts.
+
 A barbell training tracker. Single-page React app, Google Sheets as the database, deployed to GitHub Pages. No backend.
 
 **This project is opinionated.** It reflects one person's planning style and training preferences. No human code is written — all code is authored by AI agents working from specs and deployed through GitHub Actions.
@@ -22,16 +35,6 @@ shared project configuration, and one-time migration, see
 - **Spec-driven.** Every feature starts as a spec in `specs/`. Completed specs live in `.archive/specs/`.
 - **AI-authored.** Agents implement features from specs. The human role is directing, reviewing, and iterating.
 - **Push to main.** No PR workflow for most changes.
-
-## Mock screenshots
-
-Append `?mock=true` before the hash route to bypass sign-in and load local,
-date-relative fixtures for every data source. For example:
-`http://localhost:5173/stronger/?mock=true#/calendar`.
-
-Run `npm run screenshots` to build the app and capture each primary view with
-Playwright. Pull requests run the same suite and upload the PNGs as a workflow
-artifact.
 
 ## Tech stack
 

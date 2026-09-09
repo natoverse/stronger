@@ -32,6 +32,7 @@ const EMAIL_SCOPE = 'https://www.googleapis.com/auth/userinfo.email'
  * Maximum time to wait for an interactive token request to resolve.
  */
 const SIGN_IN_TIMEOUT_MS = 60_000
+const SCRIPT_LOAD_TIMEOUT_MS = 15_000
 
 /**
  * Refresh the token this many milliseconds before its real expiry so a
@@ -51,29 +52,49 @@ function loadScript(src: string): Promise<void> {
 	if (cached) return cached
 
 	const promise = new Promise<void>((resolve, reject) => {
-		const existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`)
+		let existing = document.querySelector<HTMLScriptElement>(`script[src="${src}"]`)
 		if (existing) {
 			if (existing.dataset.loaded === 'true') {
 				resolve()
 				return
 			}
-			existing.addEventListener('load', () => resolve(), { once: true })
-			existing.addEventListener('error', () => reject(new Error(`Failed to load script: ${src}`)), { once: true })
-			return
+			if (existing.dataset.failed === 'true') {
+				existing.remove()
+				existing = null
+			}
 		}
-		const el = document.createElement('script')
-		el.src = src
-		el.async = true
-		el.defer = true
-		el.onload = () => {
-			el.dataset.loaded = 'true'
+
+		const script = existing ?? document.createElement('script')
+		let settled = false
+		const finish = () => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timer)
+			script.dataset.loaded = 'true'
+			script.removeEventListener('load', finish)
+			script.removeEventListener('error', fail)
 			resolve()
 		}
-		el.onerror = () => {
+		const fail = () => {
+			if (settled) return
+			settled = true
+			window.clearTimeout(timer)
+			script.dataset.failed = 'true'
+			script.removeEventListener('load', finish)
+			script.removeEventListener('error', fail)
+			script.remove()
 			scriptPromises.delete(src)
 			reject(new Error(`Failed to load script: ${src}`))
 		}
-		document.head.appendChild(el)
+		const timer = window.setTimeout(fail, SCRIPT_LOAD_TIMEOUT_MS)
+		script.addEventListener('load', finish, { once: true })
+		script.addEventListener('error', fail, { once: true })
+		if (!existing) {
+			script.src = src
+			script.async = true
+			script.defer = true
+			document.head.appendChild(script)
+		}
 	})
 
 	scriptPromises.set(src, promise)

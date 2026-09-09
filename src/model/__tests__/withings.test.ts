@@ -123,6 +123,14 @@ describe('filterMeasurements', () => {
     const result = filterMeasurements(measurements, '2026', TODAY);
     expect(result.map((m) => m.grpId)).toEqual(['a', 'c']);
   });
+
+  it('keeps the complete history for the all-time range', () => {
+    const measurements = [
+      makeMeasurement({ date: '2018-01-01', grpId: 'a' }),
+      makeMeasurement({ date: '2026-06-19', grpId: 'b' }),
+    ];
+    expect(filterMeasurements(measurements, 'all', TODAY)).toEqual(measurements);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -130,6 +138,15 @@ describe('filterMeasurements', () => {
 /* ------------------------------------------------------------------ */
 
 describe('buildMetricTrendData', () => {
+  it('builds all-time buckets from the available measurement history', () => {
+    const measurements = [
+      makeMeasurement({ date: '2018-01-01', grpId: 'a', fatRatio: 22 }),
+      makeMeasurement({ date: '2026-06-19', grpId: 'b', fatRatio: 20 }),
+    ];
+    const data = buildMetricTrendData(measurements, 'fatRatio', 'all', null, TODAY, 'month');
+    expect(data.points.filter((point) => point.value !== null)).toHaveLength(2);
+  });
+
   it('reports the latest value by date', () => {
     const measurements = [
       makeMeasurement({ date: '2026-06-01', grpId: 'a', fatRatio: 22 }),

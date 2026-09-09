@@ -195,3 +195,20 @@ Firestore after each successful sync.
   obsolete queue cannot clear or fail the current route's loading state.
 - Default cardio activities populate local state immediately and persist in
   the background rather than placing a Firestore write in the startup barrier.
+
+## Offline Mode Iteration (2026-09-08)
+
+- Firestore uses persistent IndexedDB caching with multi-tab coordination.
+  Route-priority data is read from cache first and rendered before a bounded
+  server refresh starts in the background.
+- The application shell is precached by a generated, versioned service worker.
+  A previously visited deployment therefore starts without network access.
+- Browser writes use Firestore's durable local queue and a user-scoped IndexedDB
+  outbox tracks pending entities for status, coalescing, and reconnect retries.
+- Workout sessions are written as stable per-session documents. Existing yearly
+  bucket documents remain readable during migration, while new session writes
+  no longer depend on online-only transactions.
+- Authentication restoration relies on Firebase's persisted local user.
+  Network unavailability is an offline state, not a sign-out condition.
+- Offline, syncing, pending-write, last-synced, and reauthentication states are
+  non-blocking toolbar status. Calendar operations remain online-only.

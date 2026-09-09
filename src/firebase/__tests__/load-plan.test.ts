@@ -38,6 +38,10 @@ describe('Firebase route load plan', () => {
 			{ dataset: 'settings', scope: 'all' },
 		])
 		expect(queue.deferred[0]).toEqual({ dataset: 'workoutSessions', scope: 'otherYears' })
+		expect(queue.deferred).toContainEqual({ dataset: 'schedule', scope: 'all' })
+		expect(queue.deferred).toContainEqual({ dataset: 'dayFlags', scope: 'all' })
+		expect(queue.deferred).not.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
+		expect(queue.deferred).not.toContainEqual({ dataset: 'dayFlags', scope: 'initialWindow' })
 		expect(new Set([...queue.priority, ...queue.deferred].map(({ dataset }) => dataset)).size).toBe(10)
 	})
 
@@ -46,6 +50,15 @@ describe('Firebase route load plan', () => {
 			.toContainEqual({ dataset: 'workoutSessions', scope: 'currentYear' })
 		expect(buildFirebaseLoadQueue('list').priority)
 			.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
+	})
+
+	it('background-loads complete date collections before they are visited', () => {
+		const queue = buildFirebaseLoadQueue('settings')
+
+		expect(queue.deferred).toContainEqual({ dataset: 'schedule', scope: 'all' })
+		expect(queue.deferred).toContainEqual({ dataset: 'dayFlags', scope: 'all' })
+		expect(queue.deferred).not.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
+		expect(queue.deferred).not.toContainEqual({ dataset: 'dayFlags', scope: 'initialWindow' })
 	})
 
 	it('uses a month-aligned 60-day initial window and 30-day increments', () => {
@@ -109,5 +122,26 @@ describe('Firebase route load plan', () => {
 		)).resolves.toBeUndefined()
 
 		expect(failures).toEqual(['exercises:offline'])
+	})
+
+	it('refreshes each deferred dataset after its cache-first load', async () => {
+		const queue = buildFirebaseLoadQueue('settings')
+		const calls: string[] = []
+
+		await runFirebaseLoadQueue(
+			queue,
+			async ({ dataset }, phase) => {
+				if (phase === 'deferred') calls.push(`cache:${dataset}`)
+			},
+			async () => undefined,
+			() => undefined,
+			async ({ dataset }) => {
+				calls.push(`server:${dataset}`)
+			},
+		)
+
+		for (const { dataset } of queue.deferred) {
+			expect(calls.indexOf(`server:${dataset}`)).toBeGreaterThan(calls.indexOf(`cache:${dataset}`))
+		}
 	})
 })

@@ -894,6 +894,31 @@ body {
 	align-items: center;
 	gap: 0.25rem;
 	flex: 1;
+	overflow-x: auto;
+}
+
+.sync-status {
+	flex: 0 0 auto;
+	max-width: 7rem;
+	padding: 0.25rem 0.4rem;
+	border: 1px solid var(--color-completed);
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-completed);
+	font: inherit;
+	font-size: 0.65rem;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.sync-status-offline {
+	border-color: var(--color-warmup);
+	color: var(--color-warmup);
+}
+
+.sync-status:disabled {
+	cursor: default;
+	opacity: 0.75;
 }
 
 .btn-toolbar {
@@ -3248,6 +3273,22 @@ body {
 	flex-direction: column;
 	gap: 1rem;
 	margin-top: 1rem;
+}
+
+.mock-mode-badge {
+	position: fixed;
+	right: 0.75rem;
+	bottom: 0.75rem;
+	z-index: 1000;
+	padding: 0.35rem 0.55rem;
+	border: 1px solid var(--color-warmup);
+	background: rgb(0 0 0 / 88%);
+	color: var(--color-warmup);
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	pointer-events: none;
 }
 
 .editor-field {

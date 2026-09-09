@@ -9,7 +9,7 @@
     "typecheck": "tsc -b",
     "preview": "vite preview",
     "test": "vitest run",
-    "screenshots": "playwright test"
+    "test:screenshots": "playwright test e2e/pr-screenshots.spec.ts"
   },
   "dependencies": {
     "firebase": "^12.18.0",
