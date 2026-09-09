@@ -93,3 +93,5 @@ installed successfully.
 - The toolbar status control is a circular, icon-only button with a distinct icon
   for offline, reauthentication, syncing, pending, and synced states. Accessible
   labels and tooltips retain the full state text and pending-write count.
+- The status control's outer diameter matches the 20px GitHub logo beside it so
+  the offline indicator does not visually dominate the toolbar.
