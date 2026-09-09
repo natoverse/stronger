@@ -80,13 +80,17 @@ export function buildFirebaseLoadQueue(view: Route['view']): FirebaseLoadQueue {
 	const remainingOtherYears = datasetOrder
 		.filter((dataset) => yearBucketDatasets.has(dataset) && !selected.has(dataset))
 		.map((dataset) => request(dataset, 'otherYears'))
+	const completeDateWindows = datasetOrder
+		.filter((dataset) => dateWindowDatasets.has(dataset))
+		.map((dataset) => request(dataset, 'all'))
 	return {
 		priority,
 		deferred: [
 			...otherYears,
 			...remainingOtherYears,
+			...completeDateWindows,
 			...datasetOrder
-				.filter((dataset) => !selected.has(dataset))
+				.filter((dataset) => !selected.has(dataset) && !dateWindowDatasets.has(dataset))
 				.map((dataset) => request(dataset, scopeForColdLoad(dataset))),
 		],
 	}

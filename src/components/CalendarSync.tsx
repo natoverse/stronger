@@ -39,26 +39,41 @@ export function CalendarSync({ onSync, configuredCalendarId }: CalendarSyncProps
   const [calendarListLoaded, setCalendarListLoaded] = useState(false);
   const [loadingCalendars, setLoadingCalendars] = useState(false);
   const [authorizationReady, setAuthorizationReady] = useState(false);
+  const [preparingAuthorization, setPreparingAuthorization] = useState(true);
   const [preparationError, setPreparationError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [syncResult, setSyncResult] = useState<CalendarSyncResult | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    void prepareCalendarAuthorization()
+  const prepareAuthorization = useCallback(() => {
+    setPreparingAuthorization(true);
+    setPreparationError(null);
+    return prepareCalendarAuthorization()
       .then(() => {
-        if (!active) return;
         setAuthorizationReady(true);
         setPreparationError(null);
       })
       .catch((error) => {
-        if (!active) return;
+        setAuthorizationReady(false);
         setPreparationError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        setPreparingAuthorization(false);
       });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const prepare = () => {
+      if (!active) return;
+      void prepareAuthorization();
+    };
+    prepare();
+    window.addEventListener('online', prepare);
     return () => {
       active = false;
+      window.removeEventListener('online', prepare);
     };
-  }, []);
+  }, [prepareAuthorization]);
 
   useEffect(() => {
     if (configuredCalendarId) setSelectedCalendarId(configuredCalendarId);
@@ -179,13 +194,21 @@ export function CalendarSync({ onSync, configuredCalendarId }: CalendarSyncProps
       {!calendarListLoaded ? (
         <button
           className="calendar-push-btn"
-          onClick={() => void loadCalendars()}
-          disabled={!authorizationReady || loadingCalendars}
+          onClick={() => {
+            if (preparationError) {
+              void prepareAuthorization();
+            } else {
+              void loadCalendars();
+            }
+          }}
+          disabled={preparingAuthorization || (!authorizationReady && !preparationError) || loadingCalendars}
         >
           {loadingCalendars ? (
             <><Loader size={16} className="spin" /> Connecting…</>
-          ) : !authorizationReady ? (
+          ) : preparingAuthorization ? (
             <><Loader size={16} className="spin" /> Preparing Calendar…</>
+          ) : preparationError ? (
+            'Retry Google Calendar'
           ) : (
             'Connect Google Calendar'
           )}

@@ -69,7 +69,70 @@ describe('Google authentication', () => {
 		vi.unstubAllEnvs()
 		vi.stubGlobal('document', mockDocument())
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
-		vi.stubGlobal('window', { gapi: mockGapi() })
+		vi.stubGlobal('window', { gapi: mockGapi(), setTimeout, clearTimeout })
+	})
+
+	it('replaces failed Calendar scripts so preparation can retry', async () => {
+		type ScriptStub = {
+			src: string
+			async: boolean
+			defer: boolean
+			dataset: Record<string, string>
+			addEventListener: (type: string, listener: () => void) => void
+			removeEventListener: (type: string, listener: () => void) => void
+			remove: () => void
+			dispatch: (type: string) => void
+		}
+		const scripts: ScriptStub[] = []
+		const createScript = (): ScriptStub => {
+			const listeners = new Map<string, Set<() => void>>()
+			const script: ScriptStub = {
+				src: '',
+				async: false,
+				defer: false,
+				dataset: {},
+				addEventListener: (type, listener) => {
+					const registered = listeners.get(type) ?? new Set()
+					registered.add(listener)
+					listeners.set(type, registered)
+				},
+				removeEventListener: (type, listener) => listeners.get(type)?.delete(listener),
+				remove: () => {
+					const index = scripts.indexOf(script)
+					if (index >= 0) scripts.splice(index, 1)
+				},
+				dispatch: (type) => {
+					for (const listener of [...(listeners.get(type) ?? [])]) listener()
+				},
+			}
+			return script
+		}
+		vi.stubGlobal('document', {
+			cookie: '',
+			querySelector: (selector: string) => {
+				const src = selector.match(/src="([^"]+)"/)?.[1]
+				return scripts.find((script) => script.src === src) ?? null
+			},
+			createElement: () => createScript(),
+			head: {
+				appendChild: (script: ScriptStub) => {
+					scripts.push(script)
+					return script
+				},
+			},
+		})
+		const auth = await loadAuth()
+
+		const failedPreparation = auth.prepareCalendarAuthorization()
+		expect(scripts).toHaveLength(2)
+		for (const script of [...scripts]) script.dispatch('error')
+		await expect(failedPreparation).rejects.toThrow('Failed to load script')
+		expect(scripts).toHaveLength(0)
+
+		const retry = auth.prepareCalendarAuthorization()
+		expect(scripts).toHaveLength(2)
+		for (const script of [...scripts]) script.dispatch('load')
+		await expect(retry).resolves.toBeUndefined()
 	})
 
 	it('deduplicates concurrent Calendar authorization requests', async () => {
