@@ -81,6 +81,9 @@ installed successfully.
 
 - Background caching fetches every Firestore dataset in full after the current
   route's priority data loads, including all schedule and day-flag dates.
+- Startup immediately opens the last known user's cached data while Firebase
+  restores authentication in the background; the observer then confirms or
+  reconciles the session without keeping the app behind an auth spinner.
 - Failed or stalled Google Calendar SDK loads are bounded and retryable.
   Reconnection retries preparation automatically, and the Calendar panel also
   provides an explicit retry action.

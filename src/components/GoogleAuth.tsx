@@ -8,13 +8,13 @@ import {
 	subscribeToSyncStatus,
 	type SyncSnapshot,
 } from '../firebase/index.ts'
+import { readCachedUserId, writeCachedUserId } from '../firebase/session-cache.ts'
 import { withTimeout } from '../firebase/timeout.ts'
 import { isMockMode } from '../data/mock-mode.ts'
 import { Calendar, Dumbbell, HeartPulse, Library, Settings, SportShoe, TrendingUp } from 'lucide-react'
 
 const AUTH_RESTORE_TIMEOUT_MS = 15_000
 const SIGN_IN_TIMEOUT_MS = 60_000
-const LAST_USER_KEY = 'stronger:lastUserId'
 
 interface Props {
 	onConnected: (userId: string) => void
@@ -62,11 +62,7 @@ export function GoogleAuth({
 
 	const connect = useCallback((uid: string, generation: number) => {
 		if (authGenerationRef.current !== generation) return
-		try {
-			localStorage.setItem(LAST_USER_KEY, uid)
-		} catch {
-			// Auth persistence still has its own IndexedDB and storage fallbacks.
-		}
+		writeCachedUserId(uid)
 		setReauthRequired(false)
 		setPhase('connected')
 		onConnected(uid)
@@ -79,19 +75,16 @@ export function GoogleAuth({
 			setPhase('error')
 			return
 		}
+		const cachedUserId = readCachedUserId()
+		if (cachedUserId) {
+			setReauthRequired(true)
+			setPhase('connected')
+			onConnected(cachedUserId)
+		}
 		let restored = false
 		const restoreTimeout = window.setTimeout(() => {
 			if (restored) return
-			let cachedUserId: string | null = null
-			try {
-				cachedUserId = localStorage.getItem(LAST_USER_KEY)
-			} catch {
-				// Fall through to the retry screen.
-			}
 			if (cachedUserId) {
-				setReauthRequired(true)
-				setPhase('connected')
-				onConnected(cachedUserId)
 				return
 			}
 			setError('Restoring your session timed out. Check your connection and retry.')
@@ -102,17 +95,11 @@ export function GoogleAuth({
 			window.clearTimeout(restoreTimeout)
 			const generation = ++authGenerationRef.current
 			if (!user) {
-				const cachedUserId = (() => {
-					try {
-						return localStorage.getItem(LAST_USER_KEY)
-					} catch {
-						return null
-					}
-				})()
-				if (cachedUserId) {
+				const lastUserId = readCachedUserId()
+				if (lastUserId) {
 					setReauthRequired(true)
 					setPhase('connected')
-					onConnected(cachedUserId)
+					onConnected(lastUserId)
 					return
 				}
 				setPhase('sign-in')
@@ -124,17 +111,12 @@ export function GoogleAuth({
 		}, (reason) => {
 			restored = true
 			window.clearTimeout(restoreTimeout)
-			let cachedUserId: string | null = null
-			try {
-				cachedUserId = localStorage.getItem(LAST_USER_KEY)
-			} catch {
-				// Fall through to the normal retry screen.
-			}
-			if (cachedUserId) {
+			const lastUserId = readCachedUserId()
+			if (lastUserId) {
 				setError(reason.message || 'Sign in again to resume synchronization.')
 				setReauthRequired(true)
 				setPhase('connected')
-				onConnected(cachedUserId)
+				onConnected(lastUserId)
 				return
 			}
 			setError(reason.message || 'Unable to restore your session.')
