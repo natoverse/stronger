@@ -44,15 +44,16 @@ backend. It performs no authentication, network reads, or remote writes.
 - Firebase receives a local placeholder configuration only when build-time
   configuration is absent. Normal unauthenticated URLs still stop at the
   existing configuration error before making Firebase requests.
-- The PR workflow uses GitHub Actions artifacts rather than a write-token PR
 - The PR workflow appends artifact links to a marker-delimited section of the
-  pull-request description. Screenshot generation runs in a read-only job; a
-  separate job receives only `pull-requests: write` and never checks out or runs
-  pull-request code.
-- The workflow deliberately avoids `pull_request_target`. GitHub may still
-  require approval before running workflows from forks or first-time
-  contributors; that repository security policy cannot be bypassed safely in
-  workflow YAML.
+  pull-request description. Screenshot generation checks out and runs the PR
+  code with read-only permissions so it captures the proposed visual changes.
+  A separate job receives only `pull-requests: write` and never checks out or
+  runs pull-request code.
+- The workflow deliberately avoids `pull_request_target`. GitHub requires
+  approval for workflows on Copilot coding agent PRs by default, independently
+  of whether the repository owner is a first-time contributor. Repository
+  administrators can opt out under **Settings → Copilot → cloud agent → Actions
+  workflow approval** by disabling **Require approval for workflow runs**.
 - Screenshots use a fixed desktop viewport and disabled animations for stable,
   reviewer-friendly output. They are generated rather than committed as visual
   regression baselines, so intentional UI changes do not fail merely because
