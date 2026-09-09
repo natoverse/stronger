@@ -76,3 +76,11 @@ installed successfully.
 - Offline Google Calendar discovery or synchronization.
 - Browser-side editing of imported health datasets.
 - Cross-device conflict merging beyond last committed entity mutation.
+
+## Additional Decisions
+
+- Background caching fetches every Firestore dataset in full after the current
+  route's priority data loads, including all schedule and day-flag dates.
+- Failed or stalled Google Calendar SDK loads are bounded and retryable.
+  Reconnection retries preparation automatically, and the Calendar panel also
+  provides an explicit retry action.
