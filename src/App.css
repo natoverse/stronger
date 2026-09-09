@@ -4086,8 +4086,9 @@ body {
 }
 
 .strava-week-boundary-line {
-	stroke: rgba(255, 255, 255, 0.1);
-	stroke-width: 0.5;
+	stroke: rgba(255, 255, 255, 0.12);
+	stroke-width: 1;
+	vector-effect: non-scaling-stroke;
 	pointer-events: none;
 }
 
