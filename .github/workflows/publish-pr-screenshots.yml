@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: pr-screenshot-assets
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4.3.0
         with:
           name: pr-screenshots
           path: screenshots
