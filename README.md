@@ -11,7 +11,8 @@ http://localhost:5173/stronger/?mock=1#/calendar
 
 Run `npm run test:screenshots` to capture the representative PR screenshots in
 `artifacts/screenshots/`. Pull requests run the same Playwright suite and
-publish the screenshots and HTML report as workflow artifacts.
+embed the screenshots in a reusable PR comment. The HTML report remains
+available as a workflow artifact for diagnostics.
 
 A barbell training tracker. Single-page React app, Google Sheets as the database, deployed to GitHub Pages. No backend.
 

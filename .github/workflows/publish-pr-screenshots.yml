@@ -1,0 +1,176 @@
+name: Publish PR Screenshots
+
+on:
+  workflow_run:
+    workflows:
+      - PR Screenshots
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.pull_requests[0].number
+    runs-on: ubuntu-latest
+    concurrency: pr-screenshot-assets
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pr-screenshots
+          path: screenshots
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+        with:
+          script: |
+            const fs = require('fs')
+            const path = require('path')
+
+            const owner = context.repo.owner
+            const repo = context.repo.repo
+            const pullNumber = Number(process.env.PR_NUMBER)
+            const branch = 'pr-screenshot-assets'
+            const prefix = `pr-${pullNumber}`
+            const marker = '<!-- pr-screenshots -->'
+            const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+            const findPngs = directory => fs.readdirSync(directory, { withFileTypes: true })
+              .flatMap(entry => {
+                const entryPath = path.join(directory, entry.name)
+                return entry.isDirectory()
+                  ? findPngs(entryPath)
+                  : entry.name.toLowerCase().endsWith('.png') ? [entryPath] : []
+              })
+
+            const sourceFiles = findPngs('screenshots').sort()
+            if (sourceFiles.length === 0 || sourceFiles.length > 20) {
+              throw new Error(`Expected 1-20 screenshots, found ${sourceFiles.length}`)
+            }
+
+            const screenshots = sourceFiles.map((sourcePath, index) => {
+              const content = fs.readFileSync(sourcePath)
+              if (content.length > 10 * 1024 * 1024 || !content.subarray(0, 8).equals(pngSignature)) {
+                throw new Error(`Invalid PNG screenshot: ${sourcePath}`)
+              }
+              const safeName = path.basename(sourcePath).replace(/[^a-zA-Z0-9._-]/g, '-')
+              return {
+                content,
+                name: safeName.replace(/\.png$/i, ''),
+                targetPath: `${prefix}/${String(index + 1).padStart(2, '0')}-${safeName}`,
+              }
+            })
+
+            let assetRef
+            try {
+              assetRef = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` })
+            } catch (error) {
+              if (error.status !== 404) throw error
+              const { data: repository } = await github.rest.repos.get({ owner, repo })
+              const { data: defaultRef } = await github.rest.git.getRef({
+                owner,
+                repo,
+                ref: `heads/${repository.default_branch}`,
+              })
+              await github.rest.git.createRef({
+                owner,
+                repo,
+                ref: `refs/heads/${branch}`,
+                sha: defaultRef.object.sha,
+              })
+              assetRef = await github.rest.git.getRef({ owner, repo, ref: `heads/${branch}` })
+            }
+
+            const parentSha = assetRef.data.object.sha
+            const { data: parentCommit } = await github.rest.git.getCommit({
+              owner,
+              repo,
+              commit_sha: parentSha,
+            })
+            const { data: currentTree } = await github.rest.git.getTree({
+              owner,
+              repo,
+              tree_sha: parentCommit.tree.sha,
+              recursive: 'true',
+            })
+
+            const targetPaths = new Set(screenshots.map(screenshot => screenshot.targetPath))
+            const tree = currentTree.tree
+              .filter(entry => entry.type === 'blob' && entry.path.startsWith(`${prefix}/`) && !targetPaths.has(entry.path))
+              .map(entry => ({ path: entry.path, mode: '100644', type: 'blob', sha: null }))
+
+            for (const screenshot of screenshots) {
+              const { data: blob } = await github.rest.git.createBlob({
+                owner,
+                repo,
+                content: screenshot.content.toString('base64'),
+                encoding: 'base64',
+              })
+              tree.push({ path: screenshot.targetPath, mode: '100644', type: 'blob', sha: blob.sha })
+            }
+
+            const { data: nextTree } = await github.rest.git.createTree({
+              owner,
+              repo,
+              base_tree: parentCommit.tree.sha,
+              tree,
+            })
+            const { data: commit } = await github.rest.git.createCommit({
+              owner,
+              repo,
+              message: `Publish screenshots for PR #${pullNumber}`,
+              tree: nextTree.sha,
+              parents: [parentSha],
+            })
+            await github.rest.git.updateRef({
+              owner,
+              repo,
+              ref: `heads/${branch}`,
+              sha: commit.sha,
+            })
+
+            const imageSections = screenshots.map(screenshot => {
+              const imageUrl = `${context.serverUrl}/${owner}/${repo}/blob/${commit.sha}/${screenshot.targetPath}?raw=true`
+              return `<details open>\n<summary>${screenshot.name}</summary>\n\n![${screenshot.name}](${imageUrl})\n\n</details>`
+            })
+            const body = [
+              marker,
+              '## PR screenshots',
+              '',
+              ...imageSections,
+            ].join('\n')
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner,
+              repo,
+              issue_number: pullNumber,
+              per_page: 100,
+            })
+            const existing = comments.find(comment =>
+              comment.user?.type === 'Bot' && comment.body?.includes(marker)
+            )
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pullNumber,
+                body,
+              })
+            }
