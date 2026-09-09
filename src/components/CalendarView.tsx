@@ -499,7 +499,7 @@ export function CalendarView({
 	const [sessionMutationError, setSessionMutationError] = useState<string | null>(null);
 	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
 	const [labelDraft, setLabelDraft] = useState('');
-	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0]);
+	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0, 1, 2]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
 	const [loadingDateWindow, setLoadingDateWindow] = useState(false);
 	const [dateWindowError, setDateWindowError] = useState<string | null>(null);

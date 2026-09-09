@@ -139,3 +139,8 @@
 - The Calendar tab is shown by default.
 - Disabling the toggle persists the preference and hides the Calendar toolbar tab.
 - Direct calendar routes return to the workout list while the tab is disabled.
+
+## Iteration: restore three-month schedule default
+
+- The monthly calendar initially renders the current month and the following two months.
+- The detailed day list retains its existing windowed-loading behavior.
