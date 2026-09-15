@@ -7,6 +7,7 @@
 
 import { TARGET_TAB_NAME, WORKOUT_DEFS_TAB_NAME, LOG_TAB_NAME, SCHEDULE_TAB_NAME, WORKOUT_SCHEDULE_TAB_NAME, CARDIO_TAB_NAME, STRAVA_TAB_NAME, GARMIN_TAB_NAME, WITHINGS_TAB_NAME, SETTINGS_TAB_NAME, GARMIN_WELLNESS_TAB_NAME } from './config.ts'
 import type { LiftConfig, ComputedSet, SetResult, SetTemplate, ExerciseTemplate, ExerciseRole, WeightBasis, PreviousSetData, ScheduleEntry, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, StravaActivity, WithingsMeasurement, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from '../model/types.ts'
+import { getActivityDate } from '../model/strava.ts'
 import type { StravaGoal, StravaMetric } from '../model/strava.ts'
 import type { WithingsGoal, WithingsMetric } from '../model/withings.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
@@ -1784,7 +1785,7 @@ export const STRAVA_HEADER: string[] = [
 /** Convert a {@link StravaActivity} to a spreadsheet row. */
 export function stravaActivityToRow(activity: StravaActivity): string[] {
 	return [
-		activity.date,
+		getActivityDate(activity),
 		activity.stravaId,
 		activity.activityType,
 		activity.name,
@@ -1833,7 +1834,7 @@ export function parseStravaRow(row: string[]): StravaActivity | null {
 	if (!Number.isFinite(avgHR) || avgHR < 0) return null
 	if (!Number.isFinite(maxHR) || maxHR < 0) return null
 
-	return { date, stravaId, activityType, name, duration, distance, elevationGain, calories, avgHR, maxHR }
+	return { timestamp: `${date}T00:00:00`, stravaId, activityType, name, duration, distance, elevationGain, calories, avgHR, maxHR }
 }
 
 /* ------------------------------------------------------------------ */
@@ -1911,17 +1912,17 @@ export async function readStravaActivities(
 /* ------------------------------------------------------------------ */
 
 /**
- * A1 range for reading Garmin data (row 2 onward, open-ended, 18 columns).
+ * A1 range for reading Garmin data (row 2 onward, open-ended, 17 columns).
  * The tab is written by `scripts/garmin-sync.py`; the app only reads it.
  */
-const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:R`
+const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:Q`
 
 /**
  * Column order of the "Stronger - Garmin" tab (see scripts/garmin-sync.py).
  * Only a subset is consumed by the activity charts.
  */
 const GARMIN_COL = {
-	date: 0,
+	timestamp: 0,
 	activityId: 1,
 	activityType: 2,
 	name: 3,
@@ -1931,7 +1932,6 @@ const GARMIN_COL = {
 	elevationLoss: 8,
 	avgHR: 9,
 	maxHR: 10,
-	startTime: 17,
 } as const
 
 /* ------------------------------------------------------------------ */
@@ -1966,13 +1966,17 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	// Need at least through the maxHR column (index 10).
 	if (!row || row.length < GARMIN_COL.maxHR + 1) return null
 
-	const date = (row[GARMIN_COL.date] ?? '').trim()
+	const rawTimestamp = (row[GARMIN_COL.timestamp] ?? '').trim()
+	const timestamp = /^\d{4}-\d{2}-\d{2}$/.test(rawTimestamp)
+		? `${rawTimestamp}T00:00:00`
+		: rawTimestamp
 	const activityId = (row[GARMIN_COL.activityId] ?? '').trim()
 	const activityType = normalizeGarminActivityType(row[GARMIN_COL.activityType] ?? '')
 	const name = (row[GARMIN_COL.name] ?? '').trim()
 
-	if (!date || !activityId || !activityType) return null
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+	if (!timestamp || !activityId || !activityType) return null
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/.test(timestamp)
+		|| !Number.isFinite(Date.parse(timestamp))) return null
 
 	const duration = Number((row[GARMIN_COL.duration] ?? '').trim())
 	const distance = Number((row[GARMIN_COL.distance] ?? '').trim())
@@ -1981,8 +1985,6 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	const elevationLoss = rawElevationLoss ? Number(rawElevationLoss) : undefined
 	const avgHR = Number((row[GARMIN_COL.avgHR] ?? '').trim())
 	const maxHR = Number((row[GARMIN_COL.maxHR] ?? '').trim())
-	const rawStartTime = (row[GARMIN_COL.startTime] ?? '').trim()
-	const startTime = /^\d{2}:\d{2}:\d{2}$/.test(rawStartTime) ? rawStartTime : undefined
 
 	if (!Number.isFinite(duration) || duration < 0) return null
 	if (!Number.isFinite(distance) || distance < 0) return null
@@ -1992,8 +1994,7 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	if (!Number.isFinite(maxHR) || maxHR < 0) return null
 
 	return {
-		date,
-		startTime,
+		timestamp,
 		stravaId: activityId,
 		activityType,
 		name,

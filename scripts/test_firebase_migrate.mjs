@@ -299,6 +299,7 @@ test('collection-scoped plans do not require unrelated tabs', () => {
 	assert.deepEqual(Object.keys(plan), ['garminActivities'])
 	assert.equal(plan.garminActivities[0].id, '2026')
 	assert.equal(plan.garminActivities[0].data.entries[0].stravaId, '42')
+	assert.equal(plan.garminActivities[0].data.entries[0].timestamp, '2026-09-01T00:00:00')
 })
 
 test('date-keyed collections keep the last row for duplicate dates', () => {

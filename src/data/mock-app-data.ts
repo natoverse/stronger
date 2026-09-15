@@ -287,7 +287,7 @@ export function createMockAppData(anchor = new Date()): MockAppData {
 		],
 		garminActivities: [
 			{
-				date: yesterday,
+				timestamp: `${yesterday}T07:30:00`,
 				stravaId: 'mock-run',
 				activityType: 'Run',
 				name: 'River Trail Run',
@@ -298,7 +298,7 @@ export function createMockAppData(anchor = new Date()): MockAppData {
 				calories: 610,
 			},
 			{
-				date: twoDaysAgo,
+				timestamp: `${twoDaysAgo}T12:15:00`,
 				stravaId: 'mock-bike',
 				activityType: 'Cycling',
 				name: 'Lunch Ride',
@@ -309,7 +309,7 @@ export function createMockAppData(anchor = new Date()): MockAppData {
 				calories: 820,
 			},
 			{
-				date: localDateOffset(-6, anchor),
+				timestamp: `${localDateOffset(-6, anchor)}T09:00:00`,
 				stravaId: 'mock-hike',
 				activityType: 'Hiking',
 				name: 'Ridge Hike',

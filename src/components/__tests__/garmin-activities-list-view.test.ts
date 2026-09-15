@@ -9,9 +9,9 @@ import {
 } from '../GarminActivitiesListView.js';
 import type { StravaActivity } from '../../model/strava.js';
 
-function activity(date: string, name: string): StravaActivity {
+function activity(timestamp: string, name: string): StravaActivity {
   return {
-    date,
+    timestamp: `${timestamp}T00:00:00`,
     activityType: 'Run',
     name,
     duration: 3600,
@@ -58,9 +58,9 @@ describe('Garmin activity card formatting', () => {
     });
 
     it('sorts activities on the same day by start time descending', () => {
-      const morning = { ...activity('2025-06-17', 'Morning run'), startTime: '07:15:00' };
-      const evening = { ...activity('2025-06-17', 'Evening run'), startTime: '18:30:00' };
-      const afternoon = { ...activity('2025-06-17', 'Afternoon run'), startTime: '13:45:00' };
+      const morning = { ...activity('2025-06-17', 'Morning run'), timestamp: '2025-06-17T07:15:00' };
+      const evening = { ...activity('2025-06-17', 'Evening run'), timestamp: '2025-06-17T18:30:00' };
+      const afternoon = { ...activity('2025-06-17', 'Afternoon run'), timestamp: '2025-06-17T13:45:00' };
 
       expect(getDisplayedActivities(
         [morning, evening, afternoon],

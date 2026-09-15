@@ -6,6 +6,7 @@ import {
   filterActivitiesByQuery,
   getActivityTypes,
   isStrengthTraining,
+  getActivityDate,
   toDisplayUnit,
   formatMetricValue,
 } from '../model/strava.js';
@@ -161,8 +162,7 @@ export function getDisplayedActivities(
   const rangeActivities = filterActivitiesByRange(activities, range, today);
   const typeFiltered = rangeActivities.filter((activity) => selectedTypes.has(activity.activityType));
   const searched = filterActivitiesByQuery(typeFiltered, query);
-  return [...searched].sort((a, b) =>
-    `${b.date}T${b.startTime ?? ''}`.localeCompare(`${a.date}T${a.startTime ?? ''}`));
+  return [...searched].sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
 }
 
 export function getSelectableActivityTypes(activities: StravaActivity[]): string[] {
@@ -235,7 +235,7 @@ export function GarminActivitiesListView({ activities, range, selectedTypes, que
             const url = garminActivityUrl(a.stravaId);
             const title = a.name || a.activityType;
             return (
-              <div key={`${a.date}-${i}`} className="activity-card">
+              <div key={`${a.timestamp}-${i}`} className="activity-card">
                 <div className="activity-card-header">
                   {url ? (
                     <a
@@ -249,7 +249,7 @@ export function GarminActivitiesListView({ activities, range, selectedTypes, que
                   ) : (
                     <span className="activity-card-name">{title}</span>
                   )}
-                  <span className="activity-card-date">{formatDate(a.date)}</span>
+                  <span className="activity-card-date">{formatDate(getActivityDate(a))}</span>
                 </div>
                 <div className="activity-card-meta">
                   <span className="activity-card-type">{a.activityType}</span>

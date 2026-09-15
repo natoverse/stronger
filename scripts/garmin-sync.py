@@ -32,13 +32,13 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from firestore_sync import get_firestore_access, merge_year_bucket_entries
 
 HEADER = [
-    "date",
+    "timestamp",
     "activityId",
     "activityType",
     "name",
@@ -55,9 +55,8 @@ HEADER = [
     "aerobicTE",
     "anaerobicTE",
     "vo2Max",
-    "startTime",
 ]
-COLUMN_COUNT = len(HEADER)  # 18 -> columns A:R
+COLUMN_COUNT = len(HEADER)  # 17 -> columns A:Q
 ACTIVITY_LIMIT = 30
 
 # One-time backfill window (used only with the --backfill flag): 2015-01-01.
@@ -141,13 +140,15 @@ def activity_to_row(activity):
     migration before it is converted to the Firestore application model.
     """
     start = activity.get("startTimeLocal") or activity.get("startTimeGMT") or ""
-    date = start[:10]  # "YYYY-MM-DD"
-    start_time = start[11:19]  # "HH:MM:SS"
+    try:
+        timestamp = datetime.fromisoformat(start.replace("Z", "+00:00")).isoformat(timespec="seconds")
+    except (TypeError, ValueError):
+        timestamp = ""
 
     activity_id = activity.get("activityId")
     activity_id = str(activity_id) if activity_id is not None else ""
 
-    if not date or not activity_id:
+    if not timestamp or not activity_id:
         return None
 
     activity_type = ""
@@ -156,7 +157,7 @@ def activity_to_row(activity):
         activity_type = type_info.get("typeKey") or ""
 
     return [
-        date,
+        timestamp,
         activity_id,
         activity_type,
         activity.get("activityName") or "",
@@ -173,7 +174,6 @@ def activity_to_row(activity):
         _round_dec(activity.get("aerobicTrainingEffect", 0), 1),
         _round_dec(activity.get("anaerobicTrainingEffect", 0), 1),
         _round_dec(activity.get("vO2MaxValue", 0), 1),
-        start_time,
     ]
 
 
@@ -183,7 +183,7 @@ def activity_row_to_entry(row):
     if not activity_type:
         return None
     return {
-        "date": row[0],
+        "timestamp": row[0],
         "stravaId": row[1],
         "activityType": activity_type,
         "name": row[3],
@@ -194,7 +194,6 @@ def activity_row_to_entry(row):
         "calories": 0,
         "avgHR": int(row[9]),
         "maxHR": int(row[10]),
-        "startTime": row[17] if len(row) > 17 and row[17] else None,
     }
 
 

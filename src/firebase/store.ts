@@ -63,9 +63,10 @@ function markHydrated(key?: string): void {
 	}
 }
 
-type DatedEntry = {
-	date: string
-	startTime?: string
+type DatedEntry = { date: string; timestamp?: never } | { timestamp: string; date?: never }
+
+function datedTimestamp(entry: DatedEntry): string {
+	return entry.timestamp ?? entry.date
 }
 
 type StoredYearBucket<T> = {
@@ -149,13 +150,13 @@ function yearForDate(date: string): string {
 
 function sortDatedEntries<T extends DatedEntry>(entries: T[]): T[] {
 	return [...entries].sort((left, right) =>
-		`${left.date}:${left.startTime ?? ''}`.localeCompare(`${right.date}:${right.startTime ?? ''}`))
+		datedTimestamp(left).localeCompare(datedTimestamp(right)))
 }
 
 export function groupYearBuckets<T extends DatedEntry>(entries: T[]): StoredYearBucket<T>[] {
 	const buckets = new Map<string, StoredYearBucket<T>>()
 	for (const entry of sortDatedEntries(entries)) {
-		const period = yearForDate(entry.date)
+		const period = yearForDate(datedTimestamp(entry))
 		if (!buckets.has(period)) buckets.set(period, { period, count: 0, entries: [] })
 		const bucket = buckets.get(period)!
 		bucket.entries.push(entry)
@@ -177,8 +178,8 @@ export function mergeYearScopedEntries<T extends DatedEntry>(
 	if (scope === 'all') return sortDatedEntries(loaded)
 	const retained = existing.filter((entry) =>
 		scope === 'currentYear'
-			? !entry.date.startsWith(currentYear)
-			: entry.date.startsWith(currentYear))
+			? !datedTimestamp(entry).startsWith(currentYear)
+			: datedTimestamp(entry).startsWith(currentYear))
 	return sortDatedEntries([...retained, ...loaded])
 }
 
@@ -765,7 +766,23 @@ export function readGarminActivities(
 	scope: YearBucketReadScope = 'all',
 	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<StravaActivity[]> {
+	type LegacyActivity = Omit<StravaActivity, 'timestamp'> & {
+		timestamp?: string
+		date?: string
+		startTime?: string
+	}
 	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities', scope, source)
+		.then((items) => (items as LegacyActivity[]).flatMap<StravaActivity>((item) => {
+			if (item.timestamp) return [item as StravaActivity]
+			if (!item.date) return []
+			const { date, startTime, ...activity } = item
+			return [{
+				...activity,
+				timestamp: startTime
+					? `${date}T${startTime}`
+					: `${date}T00:00:00`,
+			}]
+		}))
 }
 
 export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {

@@ -36,9 +36,9 @@ export function generateMockStravaActivities(): StravaActivity[] {
     const count = rand() < 0.35 ? 1 : rand() < 0.08 ? 2 : 0;
     for (let i = 0; i < count; i++) {
       const typeInfo = types[Math.floor(rand() * types.length)];
-      const date = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+      const timestamp = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}T12:00:00`;
       activities.push({
-        date,
+        timestamp,
         activityType: typeInfo.type,
         distance: Math.round(randBetween(typeInfo.distRange[0], typeInfo.distRange[1])),
         elevationGain: Math.round(randBetween(typeInfo.elevRange[0], typeInfo.elevRange[1])),

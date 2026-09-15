@@ -277,10 +277,12 @@ export function yearBucketDocumentId(bucket) {
 export function groupYearBuckets(entries) {
 	const buckets = new Map()
 	const ordered = [...entries].sort((left, right) =>
-		`${left.date}:${left.startTime ?? ''}`.localeCompare(`${right.date}:${right.startTime ?? ''}`))
+		(left.timestamp ?? `${left.date}:${left.startTime ?? ''}`)
+			.localeCompare(right.timestamp ?? `${right.date}:${right.startTime ?? ''}`))
 	for (const entry of ordered) {
-		const period = entry.date?.slice(0, 4)
-		if (!/^\d{4}$/.test(period)) throw new Error(`Cannot create year bucket for invalid date: ${entry.date}`)
+		const value = entry.timestamp ?? entry.date
+		const period = value?.slice(0, 4)
+		if (!/^\d{4}$/.test(period)) throw new Error(`Cannot create year bucket for invalid date: ${value}`)
 		if (!buckets.has(period)) buckets.set(period, { period, count: 0, entries: [] })
 		const bucket = buckets.get(period)
 		bucket.entries.push(entry)
@@ -481,7 +483,11 @@ function normalizeGarminType(value) {
 }
 
 function parseGarminRow(row) {
-	const parsedDate = date(row[0])
+	const rawTimestamp = text(row[0])
+	const timestamp = date(rawTimestamp)
+		? `${rawTimestamp}T00:00:00`
+		: !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/.test(rawTimestamp)
+			|| Number.isNaN(Date.parse(rawTimestamp)) ? null : rawTimestamp
 	const stravaId = text(row[1])
 	const activityType = normalizeGarminType(row[2])
 	const duration = sheetNonNegative(row[4])
@@ -490,11 +496,11 @@ function parseGarminRow(row) {
 	const elevationLoss = text(row[8]) ? sheetNonNegative(row[8]) : undefined
 	const avgHR = sheetNonNegative(row[9])
 	const maxHR = sheetNonNegative(row[10])
-	if (!parsedDate || !stravaId || !activityType
+	if (!timestamp || !stravaId || !activityType
 		|| [duration, distance, elevationGain, avgHR, maxHR].some((value) => value == null)
 		|| (text(row[8]) && elevationLoss == null)) return null
 	return {
-		date: parsedDate,
+		timestamp,
 		stravaId,
 		activityType,
 		name: text(row[3]),
