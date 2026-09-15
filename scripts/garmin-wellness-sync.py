@@ -39,8 +39,8 @@ from firestore_sync import (
     read_year_entries,
 )
 
-# Keep in sync with the migrated GarminWellnessEntry field order.
-HEADER = [
+# Fields persisted in the Firestore GarminWellnessEntry model.
+WELLNESS_FIELDS = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
     "sleepDurationSec", "sleepDeepSec", "sleepLightSec",
@@ -61,8 +61,6 @@ HEADER = [
     "loadFocusAnaerobic", "loadFocusAnaerobicMin", "loadFocusAnaerobicMax",
     "hrvBaselineMin", "hrvBaselineMax",
 ]
-COLUMN_COUNT = len(HEADER)
-assert COLUMN_COUNT == 40, "Header count mismatch"
 
 # Default window: the last 72 hours. Wellness data is stored per calendar day,
 # so a 72-hour lookback spans four calendar days (today plus the prior three)
@@ -111,8 +109,7 @@ def _stress(v) -> str:
 
 TRAINING_STATUS_CODE_MAP = {
     # Garmin uses codes 0,1,2,4,5,6,7,8; code 3 is not emitted by the API payloads we ingest.
-    # Keys are integers here because script responses are numeric before CSV/string serialization.
-    # Keep values in sync with src/google/sheets.ts TRAINING_STATUS_CODE_MAP.
+    # Normalize numeric provider responses to the enum text stored in Firestore.
     0: "NO_STATUS",
     1: "DETRAINING",
     2: "UNPRODUCTIVE",
@@ -234,7 +231,7 @@ def login_from_tokens(token_bundle: str):
 
 
 # ---------------------------------------------------------------------------
-# Per-date fetchers — each returns a dict of column_name → value_str
+# Per-date fetchers — each returns a dict of metric_name → value_str
 # ---------------------------------------------------------------------------
 
 def _fetch_hrv(client, cdate: str) -> dict:
@@ -540,24 +537,23 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Row builder
+# Entry builder
 # ---------------------------------------------------------------------------
 
-def build_row(client, cdate: str) -> list[str]:
+def build_entry(client, cdate: str) -> dict:
     """Fetch all wellness metrics for a single date."""
-    row: dict[str, str] = {col: "" for col in HEADER}
-    row["date"] = cdate
+    metrics: dict[str, str] = {"date": cdate}
 
-    row.update(_fetch_hrv(client, cdate))
-    row.update(_fetch_sleep(client, cdate))
-    row.update(_fetch_readiness(client, cdate))
-    row.update(_fetch_training_status(client, cdate))
-    row.update(_fetch_daily_summary(client, cdate))
-    row.update(_fetch_vo2max(client, cdate))
-    row.update(_fetch_hill_score(client, cdate))
-    row.update(_fetch_endurance_score(client, cdate))
+    metrics.update(_fetch_hrv(client, cdate))
+    metrics.update(_fetch_sleep(client, cdate))
+    metrics.update(_fetch_readiness(client, cdate))
+    metrics.update(_fetch_training_status(client, cdate))
+    metrics.update(_fetch_daily_summary(client, cdate))
+    metrics.update(_fetch_vo2max(client, cdate))
+    metrics.update(_fetch_hill_score(client, cdate))
+    metrics.update(_fetch_endurance_score(client, cdate))
 
-    return [row[col] for col in HEADER]
+    return wellness_to_entry(metrics)
 
 
 def _entry_number(value):
@@ -567,18 +563,17 @@ def _entry_number(value):
     return int(number) if number.is_integer() else number
 
 
-def wellness_row_to_entry(row):
-    """Convert a fetched row to the exact migrated Firestore model."""
+def wellness_to_entry(metrics):
+    """Normalize fetched metrics to the Firestore model."""
     entry = {}
-    for index, field in enumerate(HEADER):
-        if field == "date":
-            entry[field] = row[index]
-        elif field == "hrvStatus":
-            entry[field] = row[index]
+    for field in WELLNESS_FIELDS:
+        value = metrics.get(field, "")
+        if field in ("date", "hrvStatus"):
+            entry[field] = value
         elif field == "trainingStatus":
-            entry[field] = normalize_training_status(row[index])
+            entry[field] = normalize_training_status(value)
         else:
-            entry[field] = _entry_number(row[index])
+            entry[field] = _entry_number(value)
     return entry
 
 
@@ -648,15 +643,14 @@ def main() -> None:
         return
 
     # 5. Fetch and build entries.
-    rows: list[list[str]] = []
+    entries = []
     for idx, cdate in enumerate(dates_to_fetch, 1):
         if backfill and idx % 20 == 0:
             print(f"  Progress: {idx}/{len(dates_to_fetch)} dates fetched...")
-        rows.append(build_row(garmin, cdate))
+        entries.append(build_entry(garmin, cdate))
         if idx < len(dates_to_fetch):
             time.sleep(PER_DATE_DELAY)
 
-    entries = [wellness_row_to_entry(row) for row in rows]
     # A wellness backfill can spend long enough in provider calls for the
     # original one-hour service-account token to expire.
     project_id, firestore_token = get_firestore_access(service_account_key)

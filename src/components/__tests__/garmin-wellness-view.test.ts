@@ -127,7 +127,7 @@ describe('wellness legend labels', () => {
     expect(enduranceScoreLegendLabel(8400)).toBe('Elite');
   });
 
-  it('formats HRV status labels from sheet status text', () => {
+  it('formats HRV status labels from stored status text', () => {
     expect(hrvStatusLegendLabel('UNBALANCED')).toBe('Unbalanced');
     expect(hrvStatusLegendLabel('')).toBe('Unknown');
   });

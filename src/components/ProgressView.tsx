@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import type { ParsedLogRow } from '../google/sheets.js';
-import type { LiftGoal } from '../google/sheets.js';
+import type { ParsedLogRow, LiftGoal } from '../model/index.js';
 import type { ProgressMetric, ProgressDataPoint } from '../model/progress.js';
 import {
   getLiftsWithData,

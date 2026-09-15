@@ -4,9 +4,9 @@
 
 ## What
 
-Warmup weights should not inherit an exercise's standard rounding factor. Each exercise gets a `warmupRoundingFactor` setting, editable alongside its existing weight settings and stored in the Exercises sheet. When easy plate math is enabled, calculated warmup weights first snap to a standard plate combination if their raw weight is within 5 lbs; otherwise they fall back to `warmupRoundingFactor`. Work, backoff, and joker sets continue to use `roundingFactor`.
+Warmup weights should not inherit an exercise's standard rounding factor. Each exercise gets a `warmupRoundingFactor` setting, editable alongside its existing weight settings and stored in its Firestore exercise document. When easy plate math is enabled, calculated warmup weights first snap to a standard plate combination if their raw weight is within 5 lbs; otherwise they fall back to `warmupRoundingFactor`. Work, backoff, and joker sets continue to use `roundingFactor`.
 
-Existing sheet rows without the new value and newly created exercises default warmup rounding to 5 lbs.
+Existing exercise documents without the new value and newly created exercises default warmup rounding to 5 lbs.
 
 ## Acceptance Criteria
 
@@ -17,14 +17,14 @@ Existing sheet rows without the new value and newly created exercises default wa
 - [ ] When easy plate math is enabled, a nearby standard plate combination takes precedence and warmup rounding is only the fallback.
 - [ ] Work, backoff, and joker sets continue to use the standard rounding factor.
 - [ ] Fixed and bar-weight sets preserve their explicit configured weights.
-- [ ] The Exercises sheet header and range include the new setting.
+- [ ] Firestore exercise documents preserve the new named setting.
 
 ## Scope
 
 ### In scope
 
 - Exercise configuration model and defaults
-- Exercises sheet serialization and backward-compatible parsing
+- Exercise persistence and backward-compatible defaults
 - Exercise editor field
 - Set weight calculation and regression coverage
 
@@ -36,4 +36,4 @@ Existing sheet rows without the new value and newly created exercises default wa
 
 ## Additional decisions
 
-- Existing sheets may already contain unrelated values in column J from before `warmupRoundingFactor` was added. A missing or invalid value in that optional column defaults to 5 lbs instead of discarding the entire exercise row.
+- A missing or invalid `warmupRoundingFactor` defaults to 5 lbs instead of discarding the entire exercise document.

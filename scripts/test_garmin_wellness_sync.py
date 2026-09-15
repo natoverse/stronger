@@ -61,20 +61,54 @@ def test_fetch_hrv_leaves_missing_baseline_range_blank():
     assert row["hrvBaselineMax"] == ""
 
 
-def test_wellness_row_to_entry_matches_firestore_schema():
-    row = [""] * len(garmin_wellness_sync.HEADER)
-    row[0] = "2026-08-15"
-    row[1] = "48"
-    row[2] = "BALANCED"
-    row[12] = "MAINTAINING_2"
-    row[15] = "8000"
-    entry = garmin_wellness_sync.wellness_row_to_entry(row)
+def test_wellness_to_entry_matches_firestore_schema():
+    entry = garmin_wellness_sync.wellness_to_entry({
+        "date": "2026-08-15",
+        "hrvWeeklyAvg": "48",
+        "hrvStatus": "BALANCED",
+        "trainingStatus": "MAINTAINING_2",
+        "steps": "8000",
+    })
+    assert len(entry) == 40
     assert entry["date"] == "2026-08-15"
     assert entry["hrvWeeklyAvg"] == 48
     assert entry["hrvStatus"] == "BALANCED"
     assert entry["trainingStatus"] == "MAINTAINING"
     assert entry["steps"] == 8000
     assert entry["sleepScore"] is None
+
+
+def test_build_entry_combines_provider_metrics_without_positional_fields():
+    from unittest.mock import patch
+
+    fetchers = {
+        "_fetch_hrv": {"hrvWeeklyAvg": "48", "hrvStatus": "BALANCED"},
+        "_fetch_sleep": {"sleepScore": "85"},
+        "_fetch_readiness": {"readinessScore": "72"},
+        "_fetch_training_status": {"trainingStatus": "MAINTAINING_2"},
+        "_fetch_daily_summary": {"steps": "8000"},
+        "_fetch_vo2max": {"vo2Max": "52.5"},
+        "_fetch_hill_score": {"hillScore": "90"},
+        "_fetch_endurance_score": {"enduranceScore": "7300"},
+    }
+    from contextlib import ExitStack
+
+    client = object()
+    with ExitStack() as stack:
+        mocks = [
+            stack.enter_context(patch.object(garmin_wellness_sync, name, return_value=values))
+            for name, values in fetchers.items()
+        ]
+        entry = garmin_wellness_sync.build_entry(client, "2026-08-15")
+        for fetch in mocks:
+            fetch.assert_called_once_with(client, "2026-08-15")
+
+    expected = {"date": "2026-08-15"}
+    for values in fetchers.values():
+        expected.update(values)
+    assert entry == garmin_wellness_sync.wellness_to_entry(expected)
+    assert entry["vo2Max"] == 52.5
+    assert entry["bodyBatteryHigh"] is None
 
 
 def test_fetch_training_status_prefers_human_readable_fields():
@@ -153,7 +187,7 @@ def test_fetch_training_status_omits_load_focus_when_balance_missing():
             }
 
     row = garmin_wellness_sync._fetch_training_status(FakeClient(), "2026-07-14")
-    # All load-focus columns present but blank when no balance data.
+    # All load-focus fields present but blank when no balance data.
     for key in (
         "loadFocusAerobicLow", "loadFocusAerobicLowMin", "loadFocusAerobicLowMax",
         "loadFocusAerobicHigh", "loadFocusAerobicHighMin", "loadFocusAerobicHighMax",

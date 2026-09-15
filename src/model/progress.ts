@@ -1,4 +1,4 @@
-import type { ParsedLogRow } from '../google/sheets.js';
+import type { ParsedLogRow } from './logs.js';
 import { getRangeStart, getRangeEnd } from './strava.js';
 import type { StravaTimeRange } from './strava.js';
 

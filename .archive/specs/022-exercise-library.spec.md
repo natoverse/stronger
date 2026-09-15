@@ -1,24 +1,24 @@
 # Feature: Exercise library management
 
-> Let users view, edit, and add exercises directly in the app instead of editing the spreadsheet by hand.
+> Let users view, edit, and add exercises directly in the app.
 
 ## What
 
-The app currently has no UI for managing the exercise library — lift configs are seeded during first-time setup and can only be changed by editing the Google Sheet directly. This spec adds an "Exercises" tab to the app where users can browse their exercise library, edit parameters for strength exercises, and add new exercises of either type (strength or cardio).
+This spec adds an "Exercises" tab to the app where users can browse their exercise library, edit parameters for strength exercises, and add new exercises of either type (strength or cardio) after first-time setup.
 
 The exercises tab should feel like the existing workouts list: a scrollable list of exercises, each tappable to edit. Strength exercises expose the editable weight parameters (top set weight, backoff weight, increment, minimum weight, rounding factor, bar weight, gear type). Cardio exercises appear in the list but have no editable parameters for now — they just need a name and type.
 
-A "new exercise" button lets the user add a strength or cardio exercise. New strength exercises should have sensible defaults for weight parameters. Changes are saved back to the Exercises sheet tab.
+A "new exercise" button lets the user add a strength or cardio exercise. New strength exercises should have sensible defaults for weight parameters. Changes are saved to the user's Firestore exercise or cardio-activity collection.
 
 ## Acceptance Criteria
 
 - [ ] A new "Exercises" tab/view is accessible from the app's navigation
 - [ ] All existing exercises are listed, showing name and type (strength/cardio icon)
 - [ ] Tapping a strength exercise opens an editor for its parameters (top set weight, backoff weight, increment, minimum weight, rounding factor, bar weight, gear type)
-- [ ] Editing a strength exercise saves changes to the sheet
+- [ ] Editing a strength exercise saves changes to Firestore
 - [ ] Cardio exercises are listed but have no editable parameters (name and type only)
 - [ ] A "new exercise" button allows adding a strength or cardio exercise
-- [ ] New exercises are written to the sheet and appear in the list immediately
+- [ ] New exercises are written to Firestore and appear in the list immediately
 - [ ] The view follows the existing neon visual style
 
 ## Scope
@@ -27,7 +27,7 @@ A "new exercise" button lets the user add a strength or cardio exercise. New str
 - Exercise list view (browse all exercises)
 - Inline or page-based editor for strength exercise parameters
 - Add new exercise (strength with weight parameters, cardio with name only)
-- Save changes to the Exercises sheet tab
+- Save changes to the user's Firestore exercise or cardio-activity collection
 - Navigation to/from the exercises view
 
 ### Out of scope
@@ -39,7 +39,7 @@ A "new exercise" button lets the user add a strength or cardio exercise. New str
 
 ## Notes
 
-- The data model for exercises is `LiftConfig` in `src/model/types.ts`. Cardio exercises currently have no representation in the config zone — adding one will require deciding how they coexist in the same sheet tab (or a separate one). A simple approach: cardio exercises get a row with a recognizable gear type or a new flag, and zeroed-out weight fields.
+- Strength exercises use `LiftConfig` in `src/model/types.ts` and the Firestore `exercises` collection. Cardio definitions use the simple `{ id, name }` `CardioActivity` type and the separate `cardioActivities` collection.
 - The existing `WorkoutEditor` component is a good reference for the editing pattern (form fields, save/cancel flow).
 - Navigation: this could be a new route (`#/exercises`) with a tab or button in the nav area, or it could share the home screen with workouts via a tab switcher.
 

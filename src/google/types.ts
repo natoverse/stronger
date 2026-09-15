@@ -1,6 +1,5 @@
 /**
- * Minimal type declarations for the gapi Sheets and Calendar clients
- * used by this app.
+ * Minimal type declarations for the gapi Calendar client used by this app.
  *
  * These cover only the surface area we actually use so we don't need the
  * full @types/gapi packages as dependencies.
@@ -10,83 +9,10 @@
 /*  gapi client (loaded from apis.google.com/js/api.js)               */
 /* ------------------------------------------------------------------ */
 
-export interface ValuesGetResponse {
-	result: {
-		range: string
-		majorDimension: string
-		values?: string[][]
-	}
-}
-
-export interface ValuesUpdateResponse {
-	result: {
-		spreadsheetId: string
-		updatedRange: string
-		updatedRows: number
-		updatedColumns: number
-		updatedCells: number
-	}
-}
-
-export interface ValuesAppendResponse {
-	result: {
-		spreadsheetId: string
-		updates: {
-			updatedRange: string
-			updatedRows: number
-			updatedColumns: number
-			updatedCells: number
-		}
-	}
-}
-
 export interface GapiClient {
 	init: (config: { discoveryDocs: string[] }) => Promise<void>
 	getToken: () => { access_token: string } | null
 	setToken: (token: { access_token: string } | null) => void
-	sheets: {
-		spreadsheets: {
-			create: (params: {
-				resource: {
-					properties: { title: string }
-				}
-			}) => Promise<SpreadsheetsGetResponse>
-			get: (params: {
-				spreadsheetId: string
-			}) => Promise<SpreadsheetsGetResponse>
-			batchUpdate: (params: {
-				spreadsheetId: string
-				resource: { requests: SheetRequest[] }
-			}) => Promise<unknown>
-			values: {
-				get: (params: {
-					spreadsheetId: string
-					range: string
-				}) => Promise<ValuesGetResponse>
-				update: (params: {
-					spreadsheetId: string
-					range: string
-					valueInputOption: string
-					resource: { values: (string | number)[][] }
-				}) => Promise<ValuesUpdateResponse>
-				batchUpdate: (params: {
-					spreadsheetId: string
-					resource: { valueInputOption: string; data: { range: string; values: (string | number)[][] }[] }
-				}) => Promise<unknown>
-				append: (params: {
-					spreadsheetId: string
-					range: string
-					valueInputOption: string
-					insertDataOption?: string
-					resource: { values: (string | number | boolean)[][] }
-				}) => Promise<ValuesAppendResponse>
-				clear: (params: {
-					spreadsheetId: string
-					range: string
-				}) => Promise<unknown>
-			}
-		}
-	}
 	calendar: {
 		calendarList: {
 			list: () => Promise<CalendarListResponse>
@@ -125,43 +51,6 @@ export interface GapiClient {
 export interface Gapi {
 	load: (lib: string, callback: () => void) => void
 	client: GapiClient
-}
-
-/* ------------------------------------------------------------------ */
-/*  Sheets API response types                                          */
-/* ------------------------------------------------------------------ */
-
-export interface SheetProperties {
-	sheetId: number
-	title: string
-	index: number
-}
-
-export interface SpreadsheetsGetResponse {
-	result: {
-		spreadsheetId: string
-		properties: { title: string }
-		sheets: Array<{ properties: SheetProperties }>
-	}
-}
-
-export interface SheetRequest {
-	addSheet?: {
-		properties: {
-			title: string
-		}
-	}
-	deleteSheet?: {
-		sheetId: number
-	}
-	deleteDimension?: {
-		range: {
-			sheetId: number
-			dimension: 'ROWS' | 'COLUMNS'
-			startIndex: number
-			endIndex: number
-		}
-	}
 }
 
 /* ------------------------------------------------------------------ */

@@ -1,14 +1,14 @@
 # Feature: Workout editor
 
-> Add an in-app editor for creating new workout definitions and modifying existing ones, using a spreadsheet-style form that writes back to the Google Sheet.
+> Add an in-app editor for creating new workout definitions and modifying existing ones, using a compact tabular form that saves to Firestore.
 
 ## What
 
-Today workout definitions can only be changed by editing the Google Sheet directly. This spec adds a phone-friendly editor screen that lets you create a new workout or modify an existing one — add exercises, assign roles, and define sets with percentage, rep range, and AMRAP — then save everything back to the Workout Defs tab.
+This spec adds a phone-friendly editor screen that lets you create a new workout or modify an existing one — add exercises, assign roles, and define sets with percentage, rep range, and AMRAP — then save the workout definition to Firestore.
 
-The editor uses a spreadsheet-inspired model. Each set row shows weight as a percentage of the weight basis (top set by default), a min reps and max reps field, and an AMRAP checkbox. Exercises are listed vertically; within each exercise, sets are listed as compact rows that can be added or removed. The editor is reached from the workout list (edit an existing workout or create a new one) and lives at its own route.
+The editor uses a tabular layout. Each set row shows weight as a percentage of the weight basis (top set by default), a min reps and max reps field, and an AMRAP checkbox. Exercises are listed vertically; within each exercise, sets are listed as compact rows that can be added or removed. The editor is reached from the workout list (edit an existing workout or create a new one) and lives at its own route.
 
-Saving persists the full workout definition to the sheet using the existing `workoutDefsToRows()` serialization, replacing all rows for that workout ID. The sheet remains the source of truth.
+Saving persists the full workout definition to its Firestore document, replacing the definition for that workout ID while preserving other workouts. Firestore remains the source of truth.
 
 ## Acceptance Criteria
 
@@ -19,7 +19,7 @@ Saving persists the full workout definition to the sheet using the existing `wor
 - [ ] Within each exercise, sets are displayed as compact rows with: set type (warmup / work / backoff / joker), percentage, weight basis (top set / backoff / cross-reference / fixed), min reps, max reps, and an AMRAP checkbox.
 - [ ] The user can add a new exercise to the workout and add or remove sets within an exercise.
 - [ ] The user can remove an exercise from the workout.
-- [ ] Saving writes the workout definition to the Workout Defs sheet tab, replacing all prior rows for that workout ID.
+- [ ] Saving writes the workout definition to its Firestore document, replacing the prior definition for that workout ID.
 - [ ] Validation prevents saving when: workout has no name, an exercise has no lift selected, or an exercise has zero sets.
 - [ ] After a successful save, the app navigates back to the workout list.
 
@@ -30,12 +30,12 @@ Saving persists the full workout definition to the sheet using the existing `wor
 - Exercise management (add, remove)
 - Set management within an exercise (add, remove)
 - All SetTemplate fields: setType, percentage, weightBasis, minReps, maxReps, amrap
-- Persisting to the Google Sheet via existing serialization functions
+- Persisting to Firestore via the existing workout-write path
 - Entry points from the workout list
 - Basic validation before save
 
 ### Out of scope
-- Deleting an entire workout definition from the sheet (can be a follow-up)
+- Deleting an entire workout definition (can be a follow-up)
 - Undo / redo within the editor
 - Drag-and-drop reordering of exercises or sets
 - Inline preview of computed weights (the editor works with percentages, not resolved numbers)
@@ -44,11 +44,11 @@ Saving persists the full workout definition to the sheet using the existing `wor
 
 ## Notes
 
-- The editor writes `WorkoutDefinition` rows to the sheet. It should use `workoutDefsToRows()` for serialization and the existing sheet-write path. For an existing workout, all rows matching that workout ID are replaced; for a new workout, rows are appended.
+- The editor writes a `WorkoutDefinition` document with ordered exercise and set arrays. Existing IDs update only that workout; new workouts receive a unique ID.
 - Weight basis defaults to "top set" for most use cases. The cross-reference and fixed options are less common but should be available — a dropdown or segmented control per set row is sufficient.
 - Workout ID for new workouts can be auto-generated from the name (kebab-case slug) or entered manually. Either approach is fine as long as it's unique.
 - Keep the form thumb-friendly — inputs should be large enough to tap accurately on a phone. Consider collapsible exercise sections if the workout gets long.
-- The set type and weight basis fields use the existing enums (`SetType`, `WeightBasis`) from the data model. The serialization format for weight basis in the sheet is already defined: `topSet`, `backoff`, `crossReference:<liftId>`, `fixed:<number>`.
+- The set type and weight basis fields use the existing domain types (`SetType`, `WeightBasis`). Weight bases are persisted as named-field objects, including the reference lift or fixed weight where applicable.
 
 ## Iteration decisions
 

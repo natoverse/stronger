@@ -2,7 +2,7 @@ name: Withings Sync (Withings → Firestore)
 
 on:
   schedule:
-    # Run daily at 06:30 UTC (offset from the Strava sync at 06:00)
+    # Run daily at 06:30 UTC.
     - cron: '30 6 * * *'
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
         type: boolean
         default: false
       overwrite:
-        description: 'Overwrite (upsert) existing rows for the fetched window instead of only appending new ones'
+        description: 'Overwrite (upsert) existing entries for the fetched window instead of only appending new ones'
         type: boolean
         default: true
 
@@ -35,7 +35,7 @@ jobs:
           node-version: '20'
 
       - name: Test Firestore mappings
-        run: node --test scripts/test_firestore_sync.mjs scripts/test_withings_sync.mjs
+        run: node --test scripts/test_firestore_admin.mjs scripts/test_firestore_sync.mjs scripts/test_withings_sync.mjs
 
       - name: Run Withings sync script
         env:
@@ -44,8 +44,8 @@ jobs:
           WITHINGS_REFRESH_TOKEN: ${{ secrets.WITHINGS_REFRESH_TOKEN }}
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
           FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
-        # Scheduled runs always overwrite the rolling window so recent rows are
-        # refreshed (fixes partial mid-day rows and picks up edited weigh-ins).
+        # Scheduled runs always overwrite the rolling window so recent entries
+        # are refreshed (fixes partial mid-day entries and edited weigh-ins).
         run: |
           for attempt in 1 2 3; do
             if node scripts/withings-sync.mjs ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}; then

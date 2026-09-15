@@ -71,7 +71,7 @@ export function ProgressionReview({
 					{completedSets} of {totalSets} sets completed.
 				</p>
 				<p className="finish-note">
-					Tap <strong>Confirm</strong> to save results to your Google Sheet, or go back to continue your workout.
+					Tap <strong>Confirm</strong> to save your results, or go back to continue your workout.
 				</p>
 			</div>
 

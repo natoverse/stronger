@@ -7,9 +7,9 @@ Remove nutrition tracking from Stronger so the app remains focused on training, 
 ## Decisions
 
 - Preserve the last nutrition-enabled revision with the `pre-nutrition-removal` Git tag.
-- Remove the Nutrition route, toolbar entry, settings, views, charts, models, load-plan datasets, and Google Sheets/Firestore access code.
+- Remove the Nutrition route, toolbar entry, settings, views, charts, models, load-plan datasets, and persistence access code.
 - Stop creating, reading, writing, migrating, or benchmarking nutrition data.
-- Leave existing nutrition tabs and Firestore collections untouched. Removing the feature must not delete user data.
+- Leave existing nutrition data untouched. Removing the feature must not delete user data.
 - Archive the superseded nutrition feature specs for historical reference.
 
 ## Acceptance criteria

@@ -48,12 +48,8 @@ workflow usage:
 
 | API | Service name | Used by | Enable in |
 |---|---|---|---|
-| Cloud Firestore API | `firestore.googleapis.com` | Stronger UI, migration, and direct health sync | Firebase project |
-| Identity Toolkit API | `identitytoolkit.googleapis.com` | Firebase Authentication and UID validation | Firebase project |
-| Google Sheets API | `sheets.googleapis.com` | One-time migration and comparison benchmark only | Project that owns the Google Sheets service account |
-
-If one service account and project are used for both Firebase administration
-and Google Sheets, enable all three APIs in that project.
+| Cloud Firestore API | `firestore.googleapis.com` | Stronger UI and direct health sync | Firebase project |
+| Identity Toolkit API | `identitytoolkit.googleapis.com` | Firebase Authentication | Firebase project |
 
 ### Google Cloud Console
 
@@ -61,10 +57,7 @@ and Google Sheets, enable all three APIs in that project.
 2. Select the Firebase project.
 3. Enable **Cloud Firestore API**.
 4. Enable **Identity Toolkit API**.
-5. Select the project whose ID appears in
-   `GOOGLE_SERVICE_ACCOUNT_KEY.project_id`.
-6. Enable **Google Sheets API**.
-7. Wait several minutes for activation to propagate.
+5. Wait several minutes for activation to propagate.
 
 Enabling APIs requires permission such as **Service Usage Admin** on the
 corresponding Google Cloud project.
@@ -76,10 +69,6 @@ gcloud services enable \
   firestore.googleapis.com \
   identitytoolkit.googleapis.com \
   --project=YOUR_FIREBASE_PROJECT_ID
-
-gcloud services enable \
-  sheets.googleapis.com \
-  --project=YOUR_GOOGLE_SERVICE_ACCOUNT_PROJECT_ID
 ```
 
 Verify the enabled services:
@@ -88,10 +77,6 @@ Verify the enabled services:
 gcloud services list --enabled \
   --project=YOUR_FIREBASE_PROJECT_ID \
   | grep -E 'firestore.googleapis.com|identitytoolkit.googleapis.com'
-
-gcloud services list --enabled \
-  --project=YOUR_GOOGLE_SERVICE_ACCOUNT_PROJECT_ID \
-  | grep 'sheets.googleapis.com'
 ```
 
 ## 3. Create the Firestore database
@@ -192,8 +177,8 @@ Firebase login does not replace the separate Google Calendar authorization.
 
 ## 7. Configure the administrative service account
 
-The browser application does not use a service-account key. The migration and
-scheduled health sync workflows do.
+The browser application does not use a service-account key. Scheduled health
+sync workflows do.
 
 1. Open **Project settings -> Service accounts -> Firebase Admin SDK**.
 2. Select **Generate new private key**.
@@ -205,12 +190,6 @@ A custom service account needs:
 
 - **Cloud Datastore User** (`roles/datastore.user`) for Firestore reads and
   writes.
-- **Firebase Authentication Viewer** (`roles/firebaseauth.viewer`) for
-  validating destination users.
-
-The same service account may be used for the legacy Sheets migration and
-Firebase if it belongs to the Firebase project, has the roles above, and has
-read access to the spreadsheet.
 
 Never commit a service-account key. Delete the local copy after storing it if
 it is no longer needed.
@@ -219,33 +198,28 @@ it is no longer needed.
 
 Public forks receive no upstream secrets. For each approved friends-and-family
 fork, the shared-project maintainer manually adds the common Firebase
-configuration and administrative key. That fork has its own Firebase UID and
-may have a legacy spreadsheet to migrate.
+configuration and administrative key. That fork configures the UID of the
+Firebase user who owns its imported health data.
 
 | Secret | Scope | Purpose |
 |---|---|---|
 | `VITE_FIREBASE_*` | Shared | Browser Firebase project configuration |
 | `FIREBASE_SERVICE_ACCOUNT_KEY` | Manually added to approved trusted forks only | Project-wide administrative Firestore writes |
-| `GOOGLE_SERVICE_ACCOUNT_KEY` | Migration-only | Reads the legacy source sheet |
-| `SPREADSHEET_ID` | Migration-only | Legacy source Google spreadsheet |
 | `FIREBASE_USER_ID` | Per user | Destination `/users/{uid}` path and scheduled sync owner |
 
-Before migrating, create the user's permanent UID from the existing
-Google Sheets-backed Stronger UI:
+Create the user's permanent UID by signing into Stronger:
 
 1. Configure the six `VITE_FIREBASE_*` secrets in the user's fork.
 2. Add the fork's GitHub Pages hostname to Firebase Authentication's authorized
    domains.
 3. Deploy the fork.
-4. Open Stronger and connect the Google Sheet normally.
-5. Open **Settings -> Firebase Migration Identity**.
-6. Select **Create Firebase migration ID** and sign in with the Google account
-   that will use Firebase Stronger.
-7. Verify the email and copy the displayed UID.
-8. Store it as `FIREBASE_USER_ID` in that fork.
+4. Open Stronger and sign in with the Google account that will own the data.
+5. In **Firebase Console -> Authentication -> Users**, find that account and
+   copy its UID.
+6. Store it as `FIREBASE_USER_ID` in that fork.
 
-Selecting the same Google account later returns the same UID. If the wrong
-account was selected, use **Choose another Google account** before copying it.
+Selecting the same Google account later returns the same UID. Verify the account
+before configuring its UID for scheduled synchronization.
 
 Configuring a unique `FIREBASE_USER_ID` prevents the provided workflows from
 accidentally targeting another user's tree. It is not a security boundary for
@@ -270,121 +244,12 @@ optimistic read-modify-write retries and preserve records outside their fetch
 window.
 
 Withings stores its rotating refresh token in the administrator-only
-`/syncState/{uid}` document. Browser rules do not expose that path. Existing
-installations should run the migration workflow once with `collections` set to
-`syncState` before enabling the direct Withings workflow.
+`/syncState/{uid}` document. Browser rules do not expose that path. The first run
+uses `WITHINGS_REFRESH_TOKEN` only when no token is stored in Firestore.
 
-## One-time Google Sheets migration
-
-The **Migrate Google Sheet to Firebase** workflow is a special-case,
-manual-only import. It copies an existing Stronger spreadsheet into the
-configured `/users/{FIREBASE_USER_ID}` tree before the application switches
-its data backend.
-
-The optional `collections` input can migrate a comma-separated subset. Use
-`syncState` to copy only the current Withings token from `Stronger - Infra`
-into `/syncState/{uid}`.
-
-### Minimum spreadsheet
-
-Only these tabs are required:
-
-- `Stronger - Exercises`
-- `Stronger - Workouts`
-
-Workout logs, schedules, cardio definitions, Garmin activities, Garmin
-wellness, Withings, and settings are optional. Missing optional tabs produce
-warnings and are excluded from both writes and replacement deletion.
-
-The deprecated `Stronger - Strava` tab is not read or migrated.
-
-Workout sessions, Garmin activities, Garmin wellness, and Withings
-measurements are stored in yearly bucket documents. Each bucket uses the year
-as its document ID and contains `period`, `count`, `entries`, and `updatedAt`.
-Rerun a previous migration with **Replace existing destination data** enabled
-to replace older per-record documents with yearly buckets.
-
-### Migration secrets
-
-The migration uses the four non-`VITE_*` secrets from the per-user table:
-
-```bash
-gh secret set GOOGLE_SERVICE_ACCOUNT_KEY < google-service-account.json
-gh secret set FIREBASE_SERVICE_ACCOUNT_KEY < firebase-service-account.json
-gh secret set SPREADSHEET_ID --body 'your-spreadsheet-id'
-gh secret set FIREBASE_USER_ID --body 'your-firebase-auth-uid'
-```
-
-Share the source spreadsheet with the Google service account's `client_email`
-as a **Viewer**. Scheduled sync jobs require Editor access instead.
-
-`FIREBASE_USER_ID` is optional for a dry run but required for a real migration.
-The Firebase service-account key's `project_id` determines the destination
-project.
-
-### Run the migration
-
-1. Open **Actions -> Migrate Google Sheet to Firebase -> Run workflow**.
-2. Select the `main` branch.
-3. Keep **Read and validate data without writing to Firestore** enabled.
-4. Keep **Delete existing migrated collections before writing** disabled.
-5. Run the workflow and inspect every collection count and warning.
-6. Confirm the log ends with
-   `Dry run complete. No Firestore writes were made.`
-7. Run it again with dry-run disabled.
-8. Leave replacement disabled for the first real migration.
-
-A true dry run reads only Google Sheets and never calls a
-`firestore.googleapis.com` URL.
-
-Without replacement, the real migration refuses to write when a migrated
-destination collection already contains documents. Replacement writes the new
-snapshot first and then removes stale documents from migration-owned
-collections.
-
-Missing optional tabs are excluded from replacement deletion. Present but
-empty optional tabs intentionally produce empty destination collections.
-
-Historical Day Flags and Garmin Wellness tabs may contain repeated dates.
-These one-document-per-day collections keep the last valid row and report a
-warning. Multiple Workout Schedule entries on the same date remain distinct.
-
-### Inspect the result
-
-1. Open **Firestore Database -> Data** in the Firebase console.
-2. Expand `users`.
-3. Open the document whose ID equals `FIREBASE_USER_ID`.
-4. Inspect its subcollections, especially `exercises`, `workouts`,
-   `workoutSessions`, `schedule`, and `settings`.
-5. Inspect the `migrations` document whose ID begins with `sheet-`.
-
-The migration does not modify the source spreadsheet, other users, or Firebase
-Authentication records.
-
-## Compare Sheets and Firestore read latency
-
-The **Benchmark Sheets vs Firestore reads** workflow
-(`scripts/firestore-benchmark.mjs`) uses `lib/firebase-load-plan.json` to replay
-the datasets required for each selected application route/tab against both
-backends. It is read-only, uses the same four migration secrets, and reports
-logical Firestore records separately from physical bucket documents.
-
-1. Run the migration first, so Firestore holds a current snapshot.
-2. Open **Actions -> Benchmark Sheets vs Firestore reads -> Run workflow**.
-3. Optionally change **iterations** (1-20, default 3) or pass a comma-separated
-   **tabs** list such as `calendar,garmin-activities` to narrow the
-   comparison. Leaving it blank runs every default benchmark route from the
-   shared load plan.
-4. Read the markdown table in the job summary. Each tab has one row with Sheets
-   cold load, Firestore cold load, Sheets records, and Firestore documents,
-   followed by per-dataset diagnostic medians. Sheets ranges that include row 1
-   exclude their header from logical record counts.
-
-For each tab and backend, all required dataset reads start concurrently in one
-timed batch. Sheets and Firestore use the same ordered dataset list, and access
-tokens are acquired before timing starts. A dataset that fails — for example a
-collection or sheet tab that does not exist — is reported without stopping the
-remaining reads.
+See [Garmin sync setup](GARMIN_SYNC_SETUP.md) and
+[Withings sync setup](WITHINGS_SYNC_SETUP.md) for provider credentials,
+backfills, and token recovery.
 
 ## Troubleshooting
 
@@ -396,7 +261,4 @@ remaining reads.
 | Firebase user does not exist | Copy the exact UID from **Authentication -> Users** and confirm the user and service-account key use the same project. |
 | Settings reports that Firebase is not configured | Add all six `VITE_FIREBASE_*` secrets and redeploy the site. |
 | Firebase sign-in reports an unauthorized domain | Add the deployment hostname under **Authentication -> Settings -> Authorized domains**. |
-| Google Sheets returns `403` | Enable the Sheets API and share the spreadsheet with the Google service account. |
 | Service-account secret is invalid JSON | Store the complete raw JSON file, not a filename or base64 encoding. |
-| Required sheet tab is missing or empty | Ensure Exercises and Workouts exist and contain valid data. |
-| Destination already contains documents | Inspect it first; enable replacement only when the sheet should overwrite the current snapshot. |

@@ -33,7 +33,7 @@ This spec adds a lightweight client-side router so the URL reflects the current 
 ## Notes
 
 - Since the app is hosted on GitHub Pages (static files), hash-based routing (`/#/workout/squat-a`) is the simplest path — no need for a custom 404.html redirect trick. But either approach is fine.
-- Auth must complete before the workout can be resolved from the URL. The router should defer workout resolution until after `sheetConnected` is true.
+- The router must defer workout resolution until the current Firebase user's workout data is available, including cached data during offline startup.
 - Workout IDs already exist and are stable (e.g. `squat-a`, `bench-b`), so they're suitable for use in URLs as-is.
 
 ## Post-merge decisions

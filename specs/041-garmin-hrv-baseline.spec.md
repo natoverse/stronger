@@ -3,7 +3,7 @@
 ## What
 
 Garmin Connect calculates a personal balanced HRV range from recent history.
-Sync the lower and upper bounds into the **Stronger - Garmin Wellness** sheet
+Sync the lower and upper bounds into Firestore Garmin wellness entries
 and show that range as a shaded band behind the existing HRV chart.
 
 ## Availability
@@ -21,9 +21,8 @@ No additional Garmin API request is required.
 
 ## Decisions
 
-- Append `hrvBaselineMin` and `hrvBaselineMax` to the wellness sheet schema,
-  growing it from 38 columns (A:AL) to 40 columns (A:AN).
-- Missing baseline data remains blank and does not prevent other daily wellness
+- Add optional `hrvBaselineMin` and `hrvBaselineMax` named fields to wellness entries.
+- Missing baseline data remains `null` and does not prevent other daily wellness
   values from syncing.
 - Aggregate each baseline bound by averaging it within week and month buckets,
   matching the existing HRV weekly-average aggregation.
@@ -36,9 +35,9 @@ No additional Garmin API request is required.
 
 - The wellness sync extracts `baseline.balancedLow` and
   `baseline.balancedUpper` from the HRV summary.
-- The sheet header, read range, row parser, and TypeScript model all include the
-  two appended fields.
+- The sync mapping, Firestore entry, and TypeScript model all include the two
+  optional fields.
 - The HRV chart displays the baseline band without changing HRV status colors.
 - Missing or partial baseline values render safely.
-- Python extraction, sheet parsing, aggregation, and chart behavior have
+- Python extraction, Firestore mapping, aggregation, and chart behavior have
   regression coverage.

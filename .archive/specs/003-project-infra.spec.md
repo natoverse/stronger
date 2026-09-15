@@ -28,7 +28,7 @@ This is purely scaffolding. The hello world page just needs to prove the pipelin
 - A single React component that renders "Hello World"
 
 ### Out of scope
-- Google OAuth / Sheets API setup
+- Firebase setup and optional Google Calendar OAuth
 - Any application UI or routing
 - CSS framework or design system selection
 - Testing infrastructure

@@ -1,5 +1,7 @@
 # Feature: Nutrition food finder (favorites / recents / search)
 
+Historical feature, retired by [spec 053](../../specs/053-remove-nutrition-tracking.spec.md). The following decisions preserve the removed feature's behavior, not active Firestore collections.
+
 ## What
 
 Revamp the Nutrition page around three ways to find a food to log, all sourced
@@ -26,29 +28,25 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
 - **Food identity.** A food is represented by a new `FoodItem` type keyed by its
   OFF `code` (barcode). Fields: `code`, `name`, `brand`, `servingLabel`, and the
   five per-serving macros. No meal category — the category is chosen at log time.
-- **Favorites** are stored in a new `Stronger - Meal Favorites` tab and rewritten
+- **Favorites** were stored in a dedicated favorites list and rewritten
   wholesale on every change. Starring adds a food; unstarring removes it (matched
   by `code`).
-- **Recents** are stored in a new `Stronger - Meal Recents` tab, ordered
+- **Recents** were stored in a dedicated recents list, ordered
   most-recent-first, deduplicated by `code`, and capped at 50 entries. Logging a
   food moves/adds it to the front of the list.
-- **Daily log** (`Stronger - Meal Log`) is unchanged: logging a food still
+- **Daily log** is unchanged: logging a food still
   appends a `MealLogEntry` (fresh id, date, chosen category, per-serving macros,
   quantity). The "Today's Meals" section and per-entry deletion are retained.
-- **Removed storage.** The `Stronger - Meal Items` saved-item library tab is no
-  longer read or written by the app (`readMealItems`/`writeMealItems` and its
-  verify/create helpers are removed). Existing tabs in a user's sheet are left in
-  place but ignored.
+- **Removed storage.** The saved-item library and its persistence helpers were
+  removed. Existing user data was left untouched and ignored.
 - **Goals.** The daily calorie/protein goal coloring in the totals bar is
   retained unchanged.
 
 ## Notes
 
-- **Storage schema.** Both new tabs use columns `A:I`
-  (`code`, `name`, `brand`, `servingLabel`, `calories`, `fat`, `carbs`, `fiber`,
-  `protein`). Favorites and recents tabs are verified and auto-created when the
-  Nutrition data loads (and on sheet connect) so existing users get them without
-  a manual step.
+- **Domain schema.** Favorites and recents retain `code`, `name`, `brand`,
+  `servingLabel`, `calories`, `fat`, `carbs`, `fiber`, and `protein`.
+  Empty lists initialize without manual setup.
 - **Read/write model.** Favorites and recents are read wholesale and rewritten
   wholesale (`readMealFavorites`/`writeMealFavorites`,
   `readMealRecents`/`writeMealRecents`). The meal log continues to append/delete
@@ -74,17 +72,17 @@ Only the five existing macros are tracked: calories, fat, carbs, fiber, protein.
   also collapses any pre-existing duplicate rows.
 - Each combined day entry has `−`/`+` steppers (0.25 increments, 0.25 minimum)
   that adjust the underlying log row's quantity in place via a new
-  `updateMealLogEntry` sheet helper, so servings can be changed without
+  `updateMealLogEntry` persistence helper, so servings can be changed without
   deleting and re-adding. The trash button deletes all rows in the group.
 
 ## Iteration: standard drinks tracking (2026-07)
 
 - Added `standardDrinks: number` to `FoodItem` and `MealLogEntry` (per-serving count, 0 for non-alcoholic).
 - OFF search responses are parsed for `alcohol_100g` and `alcohol_serving` nutriments. Standard drinks per serving are computed as `alcoholGrams / 14` (US standard: 1 drink = 14 g pure alcohol) and stored on both `FoodItem` and carried into the logged `MealLogEntry`.
-- Favorites and Recents storage extended from 9 to 10 columns (A:J); `standardDrinks` is the new column J. Legacy 9-column rows default `standardDrinks` to 0.
-- Meal Log extended from 10 to 11 columns (A:K); `standardDrinks` follows `quantity` at column K. Legacy rows without column K default to 0.
+- Favorites and Recents gained a `standardDrinks` field; older records default it to 0.
+- Meal Log also gained `standardDrinks`, separate from serving `quantity`; missing values default to 0.
 - The nutrition totals bar shows a 🍺 drinks line when any drinks are logged for the day or a goal is set: `X drinks today · Y this week [/ goal]`. The weekly count spans the Mon–Sun week containing the selected date.
-- Weekly alcohol goal (`weeklyAlcoholGoal`) added to `AppSettings` and persisted in the Settings tab as `app.weeklyAlcoholGoal` (0–100, default 0). When set, the drinks line uses the same green/yellow/pink goal-coloring scheme as calories and protein.
+- Weekly alcohol goal (`weeklyAlcoholGoal`) added to `AppSettings` as `app.weeklyAlcoholGoal` (0–100, default 0). When set, the drinks line uses the same green/yellow/pink goal-coloring scheme as calories and protein.
 - Settings page gains a "Weekly Drinks" field under Nutrition Goals.
 
 ## Iteration: quantity stepper bugfix (2026-07)

@@ -10,7 +10,7 @@ import {
   bodyWeightForDate,
   bodyWeightRatio,
 } from '../progress.js';
-import type { ParsedLogRow } from '../../google/sheets.js';
+import type { ParsedLogRow } from '../logs.js';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */

@@ -12,7 +12,7 @@ This spec adds a `relative` weight basis. A relative set references the lift's o
 
 - [x] `WeightBasis` gains a `{ kind: 'relative'; reference: 'topSet' | 'backoff'; offset: number }` variant.
 - [x] `computeSetWeight` resolves a relative set as `reference + offset`, rounded and clamped like other bases. Offsets may be negative.
-- [x] The weight basis serializes to/from the sheet as `relative:<reference>:<offset>` (e.g. `relative:backoff:-20`).
+- [x] The weight basis persists as `{ kind: 'relative', reference, offset }`, preserving signed offsets.
 - [x] The workout editor exposes "Top set ±" and "Backoff ±" basis options with an offset input, and disables the percentage field for relative sets.
 
 ## Scope
@@ -20,7 +20,7 @@ This spec adds a `relative` weight basis. A relative set references the lift's o
 ### In scope
 - New `relative` `WeightBasis` variant in the data model
 - Weight computation for relative sets (round + clamp)
-- Sheet serialization (`encodeWeightBasis` / `decodeWeightBasis`)
+- Firestore persistence of the named weight-basis fields
 - Workout editor UI (basis dropdown options + offset input)
 - Unit tests for compute and serialization
 
@@ -30,5 +30,5 @@ This spec adds a `relative` weight basis. A relative set references the lift's o
 
 ## Notes
 
-- Serialization format: `relative:<reference>:<offset>` where `<reference>` is `topSet` or `backoff` and `<offset>` is a signed number. Unlike `fixed`, negative values are valid for the offset.
+- Persisted object: `{ kind: 'relative', reference: 'topSet' | 'backoff', offset: number }`. Unlike `fixed`, negative values are valid for the offset.
 - The percentage field is ignored (and disabled in the editor) for relative sets, consistent with `fixed` and `barWeight`.

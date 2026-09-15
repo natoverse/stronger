@@ -1,10 +1,12 @@
 # Feature: Hevy CSV import
 
-> Let users migrate their workout history from Hevy by importing its CSV export directly into the Stronger log sheet.
+> Historical feature: import workout history from Hevy's CSV export into Stronger training history.
+
+This import was subsequently removed (see Post-merge iterations). The feature decisions below are retained as history, not an active implementation plan.
 
 ## What
 
-Many potential users already have months or years of training data in Hevy. The biggest barrier to switching is losing that history — especially per-exercise trends that power the progress charts. This spec adds a one-shot import flow that reads a Hevy CSV export and appends every row to the Stronger log tab, making all historical data immediately available for progress tracking.
+Many potential users already have months or years of training data in Hevy. The biggest barrier to switching is losing that history — especially per-exercise trends that power the progress charts. This spec defined a one-shot import flow that reads a Hevy CSV export and adds every logged set to Stronger history, making it available for progress tracking.
 
 The goal is exercise-level history, not workout recreation. We don't need to reverse-engineer Hevy's workout templates into Stronger workout definitions — just get every logged set into our log format so the progress charts, calendar history, and exercise-level queries work with the imported data.
 
@@ -36,7 +38,7 @@ Hevy's CSV export contains one row per set with these columns:
 
 ## Mapping to Stronger log format
 
-| Stronger column | Source | Notes |
+| Stronger field | Source | Notes |
 |-----------------|--------|-------|
 | `date` | `Workout Date` or parse from `Workout Start` | Format as YYYY-MM-DD |
 | `startTime` | `Workout Start` | Convert to ISO 8601 |
@@ -65,7 +67,7 @@ Hevy's CSV export contains one row per set with these columns:
 4. User selects CSV file via file picker (`<input type="file">`).
 5. App parses the CSV client-side and shows a summary: date range, total sets, unique exercises, and number of workouts found.
 6. User taps "Import" to confirm.
-7. App converts all rows to Stronger log format and appends them to the log sheet via `appendLogRows()`.
+7. App converts all rows to Stronger log format and adds them to workout history.
 8. On success, app reloads log data and shows a confirmation message with the count of imported rows.
 9. User can navigate away to progress charts or calendar history to see their imported data.
 
@@ -78,10 +80,10 @@ Hevy's CSV export contains one row per set with these columns:
 - [ ] The app parses the Hevy CSV format client-side (no server needed)
 - [ ] After parsing, a preview summary is shown: date range, total sets, unique exercises, workout count
 - [ ] The user must confirm before any data is written
-- [ ] All parsed rows are converted to Stronger's 18-column log format per the mapping table above
+- [ ] All parsed rows are converted to Stronger's domain log fields per the mapping table above
 - [ ] Weights are converted from kg to lbs when the row's weight system is metric
 - [ ] Rows with distance/seconds data and no weight are categorized as cardio
-- [ ] Converted rows are appended to the log sheet via the existing `appendLogRows()` function
+- [ ] Converted sets are added to workout history through the persistence layer
 - [ ] After import, the in-memory log state is refreshed so progress charts and history reflect the new data
 - [ ] A success message confirms how many rows were imported
 - [ ] The import is idempotent-safe: the UI warns that re-importing the same file will create duplicate entries
@@ -98,7 +100,7 @@ Hevy's CSV export contains one row per set with these columns:
 - Preview summary before import
 - Mapping Hevy rows → Stronger log rows
 - Unit conversion (kg → lbs, meters → miles, seconds → minutes)
-- Appending to sheet and refreshing in-memory state
+- Adding history and refreshing in-memory state
 - Duplicate-import warning
 
 ### Out of scope
@@ -117,7 +119,7 @@ Hevy's CSV export contains one row per set with these columns:
 - Hevy's timestamps may not include timezone info. Treat them as local time and convert to ISO 8601 with the browser's timezone offset.
 - Some Hevy rows may have 0 weight and 0 reps (e.g., bodyweight exercises logged without details). These should still be imported — they represent completed sets.
 - The `liftId` generated from Hevy exercise names won't match existing Stronger exercise configs. This is intentional: the imported data still shows up correctly in progress charts (which group by `liftId`), and the user can manually create matching exercise configs later if they want.
-- Large imports (thousands of rows) should work fine since `appendLogRows()` handles batch appends. Consider showing a loading indicator during the sheet write.
+- Large imports (thousands of rows) should use batched persistence with a loading indicator.
 - The Settings view route should be `#/settings`, added to the hash router's route union type in `src/hooks/useHashRouter.ts`.
 - For the nav bar icon, a gear/cog icon (`Settings` from lucide-react) is the natural choice.
 

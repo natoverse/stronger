@@ -13,7 +13,6 @@ export type {
 	LiftConfig,
 	PreviousSetData,
 	ProgressionProposal,
-	ScheduleEntry,
 	SetResult,
 	SetTemplate,
 	SetType,
@@ -24,7 +23,22 @@ export type {
 	WorkoutScheduleEntry,
 } from './types.js';
 
-export { FLAG_SENTINEL, REST_ID, BLOCKER_ID } from './types.js';
+export { REST_ID, BLOCKER_ID } from './types.js';
+
+export type { LogContext, ParsedLogRow } from './logs.js';
+export { buildLogRow, findPreviousWorkoutSets } from './logs.js';
+export type { LiftGoal } from './settings.js';
+export {
+	goalsFromSettings,
+	goalsToSettings,
+	bodyGoalsFromSettings,
+	bodyGoalsToSettings,
+	liftGoalsFromSettings,
+	liftGoalsToSettings,
+	DEFAULT_APP_SETTINGS,
+	appSettingsFromMap,
+	appSettingsToMap,
+} from './settings.js';
 
 export {
 	computeExercise,

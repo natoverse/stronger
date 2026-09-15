@@ -1,5 +1,7 @@
 # Feature: Nutrition trend charts
 
+Historical feature, retired by [spec 053](../../specs/053-remove-nutrition-tracking.spec.md). Chart and macro decisions remain below for reference; nutrition is not an active Firestore dataset.
+
 ## What
 
 Add three bar charts to the bottom of the Nutrition page — total calories, grams of
@@ -29,11 +31,9 @@ Each chart draws a goal line and color-codes its bars against the (aggregated) g
 
 ## Notes
 
-- **Storage schema**: `Stronger - Meal Items` now spans `A:I` (`…`, `protein`,
-  `standardDrinks`). `Stronger - Meal Log` now spans `A:K`; `standardDrinks` is
-  appended *after* `quantity` (column K) so the existing `quantity` column keeps its
-  index 9 — legacy rows without either column default `quantity` to 1 and
-  `standardDrinks` to 0.
+- **Domain schema**: Items and logged meals gained `standardDrinks`; serving
+  `quantity` remains independent. Older records without these fields default
+  `quantity` to 1 and `standardDrinks` to 0.
 - **Model**: `src/model/nutrition.ts` builds the bucketed chart data, reusing the
   strava.ts bucketing engine (`generateBucketSlots`, `getBucketKey`,
   `getRangeStart`, `getRangeEnd`; `getBucketKey` was exported for this). It exposes
@@ -44,20 +44,19 @@ Each chart draws a goal line and color-codes its bars against the (aggregated) g
   `useChartTooltip` hook. Bars are filled per-bucket via `nutritionColor`.
 - **Tests**: `src/model/__tests__/nutrition.test.ts` covers color banding, value
   formatting, serving-scaled bucket sums, weekly goal aggregation to 7, and exclusion
-  of future days. `src/google/__tests__/meal-data.test.ts` covers the new column with
-  backward-compatible legacy-row parsing.
+  of future days. Historical persistence tests covered backward-compatible
+  defaults for older records.
 
 ## Merge update (nutrition food-finder revamp, spec 036)
 
 This charts feature was merged on top of the OFF food-finder revamp
-(`specs/036-nutrition-food-finder.spec.md`), which replaced the saved Meal
+([spec 036](036-nutrition-food-finder.spec.md)), which replaced the saved Meal
 Items library and Quick-Add forms with a favorites/recents/search finder.
 Decisions adapted during the merge:
 
-- The `Stronger - Meal Items` tab (and its `verify`/`create` helpers) was removed
-  by the food-finder revamp. `standardDrinks` therefore lives only on the meal
-  **log** (`Stronger - Meal Log`, still `A:K`, `standardDrinks` at column K after
-  `quantity`) plus the shared `MealItem` type used for log serialization.
+- The saved-item library and its persistence helpers were removed by the
+  food-finder revamp. `standardDrinks` remained on logged meals alongside
+  `quantity`, with the shared `MealItem` type supporting log serialization.
 - Alcoholic drinks are now entered in the food finder: when a food's meal is set
   to **Drinks**, a compact "Alcoholic drinks" input appears in the food row and is
   scaled by the logged serving quantity. The old Save-Item/Quick-Add drink inputs
@@ -72,7 +71,7 @@ Added a fiber goal that mirrors protein end-to-end:
 
 - **Setting**: new per-day `app.dailyFiberGoalGrams` (default `0` = disabled),
   added to `AppSettings`/`AppNumericSettingKey`, `DEFAULT_APP_SETTINGS`, and the
-  Settings tab number-key map (0–1000g). A "Daily Fiber" input sits below
+  settings number-key map (0–1000g). A "Daily Fiber" input sits below
   "Daily Protein" in `SettingsView`.
 - **Display**: the Fiber totals chip is now color-coded (`fiberGoalStatus`) and
   shows `current / goal` g, exactly like protein.

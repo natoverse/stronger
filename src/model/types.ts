@@ -2,7 +2,7 @@
  * Exercise data model types.
  *
  * Three-layer model:
- *   1. LiftConfig      – per-lift settings stored as editable cells in the Google Sheet
+ *   1. LiftConfig      – per-lift settings stored in Firestore
  *   2. SetTemplate /    – the ordered list of sets for an exercise, each with a set type,
  *      ExerciseTemplate   percentage, weight basis, rep range, and optional comment
  *   3. ComputedSet /    – a concrete workout instance with calculated weights
@@ -10,12 +10,12 @@
  */
 
 // ---------------------------------------------------------------------------
-// Layer 1 – Lift configuration (Google Sheet "inputs" zone)
+// Layer 1 – Lift configuration
 // ---------------------------------------------------------------------------
 
 /**
  * Per-lift configuration that controls how weights are calculated and
- * progressed. Every field maps to an editable cell in the spreadsheet.
+ * progressed. Persisted in the user's Firestore exercises collection.
  */
 /** Equipment type for an exercise. */
 export type GearType = 'barbell' | 'dumbbell' | 'band' | 'bodyweight' | 'other';
@@ -117,7 +117,7 @@ export interface ExerciseTemplate {
 // Layer 3 – Computed weekly instance
 // ---------------------------------------------------------------------------
 
-/** A concrete set with a calculated weight, ready for display or sheet output. */
+/** A concrete set with a calculated weight, ready for display or logging. */
 export interface ComputedSet {
 	setType: SetType;
 	/** Calculated weight after percentage × reference → round → clamp. */
@@ -200,7 +200,7 @@ export interface DayFlags {
 	blocked: boolean;
 }
 
-/** A single day-flags entry stored in the Schedule (flags) tab. */
+/** A single day-flags entry stored in the Firestore dayFlags collection. */
 export interface DayFlagEntry {
 	/** Date in YYYY-MM-DD format. */
 	date: string;
@@ -212,7 +212,7 @@ export interface DayFlagEntry {
 // Layer 6b – Workout schedule (date→workout mapping for calendar planning)
 // ---------------------------------------------------------------------------
 
-/** A single workout schedule entry stored in the Workout Schedule tab. */
+/** A workout schedule entry stored in a Firestore schedule day document. */
 export interface WorkoutScheduleEntry {
 	/** Date in YYYY-MM-DD format. */
 	date: string;
@@ -223,7 +223,7 @@ export interface WorkoutScheduleEntry {
 	/**
 	 * Unique Stronger-generated ID for two-way calendar sync.
 	 * Written to the Google Calendar event's description/notes so we can
-	 * match sheet rows ↔ calendar events regardless of direction.
+	 * match schedule entries ↔ calendar events regardless of direction.
 	 */
 	strongerId?: string;
 	/**
@@ -233,12 +233,6 @@ export interface WorkoutScheduleEntry {
 	 */
 	label?: string;
 }
-
-/**
- * @deprecated Use {@link WorkoutScheduleEntry} instead. Kept for backward compatibility during migration.
- * Sentinel value used as workoutId for flag-only rows in the old combined schedule.
- */
-export const FLAG_SENTINEL = '__flags__';
 
 /**
  * Sentinel workoutId used to schedule an intentional Rest day.
@@ -257,19 +251,6 @@ export const REST_ID = 'rest';
  * user's personal calendar.
  */
 export const BLOCKER_ID = 'blocker';
-
-/**
- * @deprecated Use {@link WorkoutScheduleEntry} and {@link DayFlagEntry} separately.
- * Legacy combined schedule entry type.
- */
-export interface ScheduleEntry {
-	/** Date in YYYY-MM-DD format. */
-	date: string;
-	workoutId: string;
-	flags?: DayFlags;
-	calendarEventId?: string;
-	strongerId?: string;
-}
 
 // ---------------------------------------------------------------------------
 // Cardio activity (read-only, used for planning / calendar sync)
@@ -349,7 +330,7 @@ export interface WithingsMeasurement {
 }
 
 // ---------------------------------------------------------------------------
-// App settings (persisted in the Settings sheet tab as key-value pairs)
+// App settings (persisted as key-value pairs in Firestore settings/app)
 // ---------------------------------------------------------------------------
 
 /** User-configurable app settings. */
@@ -410,8 +391,8 @@ export type AppNumericSettingKey =
 // ---------------------------------------------------------------------------
 
 /**
- * One row in the "Stronger - Garmin Wellness" sheet — a single day's worth of
- * aggregated wellness metrics fetched from Garmin Connect.
+ * A single day's aggregated wellness metrics fetched from Garmin Connect
+ * and stored in Firestore.
  *
  * All numeric fields are `null` when the value was not available for that day.
  * String fields are `''` when unavailable.

@@ -2,28 +2,26 @@
 
 ## What
 
-The Garmin activity sync, Garmin wellness sync, and Withings sync currently run
-in append-only mode: they read the existing keys already in the sheet
-(`activityId` / date / `grpId`) and skip anything that matches, only appending
-genuinely new rows. That has two problems:
+The Garmin activity sync, Garmin wellness sync, and Withings sync originally
+ran in append-only mode: they checked stored identifiers and skipped anything
+that matched, adding only genuinely new records. That had two problems:
 
 1. **Partial mid-day rows are never fixed.** If a sync runs mid-day (e.g. a
    manual test) it can write incomplete data for today. The nightly cron then
    sees the day already present and skips it, so it stays partial forever.
 2. **Edits to old records are never picked up.** Editing an older Garmin
-   activity (or a Withings weigh-in) leaves the sheet stale — the only way to
-   refresh it was to delete the whole tab and re-run a full backfill.
+   activity (or a Withings weigh-in) left stored history stale — refreshing it
+   required discarding existing data and rerunning a full backfill.
 
-This adds an **overwrite (upsert)** mode: instead of skipping rows whose key
-already exists, the sync updates those rows in place and appends the rest. Now
+This adds an **overwrite (upsert)** mode: instead of skipping entries whose key
+already exists, the sync updates those entries and appends the rest. Now
 the syncs can run as often as we like and always reflect the latest full data.
 
 ## Decisions
 
-- **New `--overwrite` flag** on all three scripts. When set, fetched rows whose
-  key already exists in the sheet are rewritten in place (via the Sheets
-  `values:batchUpdate` endpoint); rows with a new key are appended as before.
-  Row order/position is preserved — updates target the existing row number.
+- **New `--overwrite` flag** on all three scripts. When set, fetched entries
+  replace matching stored identifiers in Firestore yearly buckets; new IDs are
+  added. Entries outside the fetched window remain intact.
 - **`--backfill` implies `--overwrite`.** A full-history backfill now refreshes
   existing rows too, so "re-run full sync" is enough to pull in edits to old
   activities (previously backfill also skipped existing keys).
@@ -34,21 +32,20 @@ the syncs can run as often as we like and always reflect the latest full data.
 - **`overwrite` workflow_dispatch input.** Manual runs can opt in explicitly
   (independent of `backfill`).
 - **Wellness re-fetches the whole window in overwrite mode.** In append mode the
-  wellness sync only fetches dates missing from the sheet; in overwrite mode it
+  wellness sync only fetches dates missing from stored history; in overwrite mode it
   fetches every date in the window (rolling or backfill) so existing days are
   refreshed from Garmin.
-- **Keys unchanged.** Dedup/merge keys stay the same: Garmin activities by
-  `activityId` (col B), wellness by `date` (col A), Withings by `grpId` (col B).
-  The first row matching a key wins if the sheet already contains duplicates.
+- **Stable source keys.** Garmin uses the provider `activityId` (retained as
+  `stravaId` in the shared activity model), wellness uses `date`, and Withings
+  uses `grpId`.
 
 ## Notes
 
-- The upsert split is factored into a small pure helper (`partition_rows` in the
-  Python scripts, `partitionRows` in the Withings script) that takes the fetched
-  rows plus an existing `key → rowNumber` map and returns `(updates, appends)`.
-  These are covered by the offline test harnesses.
-- `values:batchUpdate` sends one range per updated row (`A{n}:{col}{n}`), so a
-  single request refreshes the whole window.
+- Pure bucket merge helpers match fetched entries to stored source identifiers.
+  Offline tests cover append, overwrite, date ordering, and preservation of
+  unrelated entries.
+- Firestore bucket writes use optimistic concurrency and retry conflicts rather
+  than replacing a concurrently updated snapshot.
 
 ## Post-merge iteration (2026-07)
 
@@ -58,3 +55,7 @@ the syncs can run as often as we like and always reflect the latest full data.
   runs of all three sync workflows now overwrite by default. Unchecking the box
   still allows a pure append. Scheduled runs already passed `--overwrite`
   unconditionally, so this only affects `workflow_dispatch` runs.
+
+## Firestore-only iteration (2026-09-15)
+
+- Upserts operate on named entries inside yearly buckets, not positional records. Activity bucketing uses `timestamp`; wellness and Withings use `date`. Existing append, overwrite, and backfill controls are unchanged.

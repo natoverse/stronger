@@ -16,6 +16,6 @@
 
 ## Notes
 
-- The Workout Schedule sheet tab range grew from `A:D` to `A:E` to hold the new `label` column. Existing rows without a label continue to parse fine (label is omitted when blank).
+- Schedule event objects retain an optional `label` field in the Firestore day's `events` array. Existing entries without a label remain valid; blank labels are omitted.
 - Labels are keyed by `(date, workoutId)`, matching how `onRemove` already targets the first matching schedule row for that pair.
 - `syncScheduleWithCalendar` computes the desired event title as `entry.label?.trim() || resolveWorkoutName(entry.workoutId)`. For new entries this becomes the initial title; for entries already linked to a calendar event, a mismatch between the calendar event's current title and the desired title triggers a Calendar API `events.update` call (preserving the existing description and date) and is counted in `CalendarSyncResult.updated`, surfaced in the sync summary as "N titles updated".

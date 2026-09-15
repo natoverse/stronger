@@ -3,7 +3,7 @@
  *
  * Provides helpers to list the user's writable calendars, push
  * workout events as all-day entries with deep links back to the app,
- * and perform two-way sync between the schedule sheet and Google Calendar.
+ * and perform two-way sync between the Firestore schedule and Google Calendar.
  */
 
 import type { CalendarListEntry, CalendarEventResource, CalendarEventItem } from './types.ts'
@@ -405,9 +405,9 @@ export async function pushEventsToCalendar(
 export interface CalendarSyncResult {
 	/** Events created in Google Calendar (new schedule entries pushed). */
 	created: number
-	/** Events updated in Google Calendar (date changed in sheet). */
+	/** Events updated in Google Calendar (date changed in Stronger). */
 	updated: number
-	/** Events deleted from Google Calendar (removed from sheet). */
+	/** Events deleted from Google Calendar (removed from Stronger). */
 	deleted: number
 	/** Schedule entries created from calendar events (pulled from Google). */
 	pulledCreations: number
@@ -471,17 +471,17 @@ export function getEventDate(event: CalendarEventItem): string | undefined {
 }
 
 /**
- * Perform a two-way sync between the workout schedule (sheet) and Google Calendar.
+ * Perform a two-way sync between the workout schedule and Google Calendar.
  *
  * Uses the Stronger ID (`strongerId`) as the primary matching key between
- * sheet rows and calendar events. The stronger ID is embedded in the
+ * schedule entries and calendar events. The stronger ID is embedded in the
  * event description as `[stronger:<id>]`.
  *
  * Sync rules:
- * - Sheet rows with strongerId but no calendarEventId → push to calendar.
- * - Sheet rows with both strongerId and calendarEventId → reconcile
+ * - Schedule entries with strongerId but no calendarEventId → push to calendar.
+ * - Schedule entries with both strongerId and calendarEventId → reconcile
  *   (detect date moves, deletions in either direction).
- * - Calendar events with no strongerId → created in Google, pull to sheet.
+ * - Calendar events with no strongerId → created in Google, pull to Stronger.
  * - Blanked rows (calendarEventId but no workoutId) → delete from calendar.
  * - After sync, deduplicate by strongerId (one row per strongerId).
  */
@@ -657,7 +657,7 @@ export async function syncScheduleWithCalendar(
 			}
 
 			if (dateMoved) {
-				// Date was moved in Google Calendar → update the sheet entry
+				// Date was moved in Google Calendar → update the schedule entry
 				updatedSyncable.push({
 					...entry,
 					date: calDate,

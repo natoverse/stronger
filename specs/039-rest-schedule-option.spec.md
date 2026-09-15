@@ -17,8 +17,8 @@ Calendar sync.
 
 - **New `REST_ID = 'rest'` sentinel** (`src/model/types.ts`, exported from
   `src/model/index.ts`) used as the `workoutId` for a scheduled rest day. It is
-  stored in the "Workout Schedule" sheet tab like any other entry — no schema
-  change is needed since it reuses the existing `workoutId` column.
+  stored in the Firestore schedule day's `events` array like any other entry —
+  no schema change is needed since it reuses the existing `workoutId` field.
 - **Weekly planner (`CalendarPush`).** Added a standalone `Rest` option. The
   pre-existing clear behavior (sentinel `__rest__`, which blanks a day's
   workouts) was preserved but relabeled from "— Rest —" to "— Clear —" to

@@ -19,7 +19,7 @@ This gives the lifter at-a-glance context: "Last time I hit 185 × 5 on this set
 ## Scope
 
 ### In scope
-- Looking up the most recent completed workout by ID from the sheet log
+- Looking up the most recent completed workout by ID from Firestore session history
 - Displaying previous weight and reps per set in the workout execution UI
 
 ### Out of scope
@@ -29,7 +29,7 @@ This gives the lifter at-a-glance context: "Last time I hit 185 × 5 on this set
 
 ## Notes
 
-- This depends on completed workout data being appended to the sheet (per the workout execution flow). The lookup is by workout ID (A/B/C/D) scanning backward from the most recent entry.
+- This depends on completed sessions being saved to Firestore (per the workout execution flow). The lookup is by workout ID (A/B/C/D), ordered from the most recent session.
 - "Same set" matching should be by position within the exercise — set 1 maps to set 1, etc. If the template has changed (e.g., a set was added), unmatched sets just don't show previous data.
 
 ## Post-merge iterations
