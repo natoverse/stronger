@@ -25,10 +25,16 @@ Flags:
 
 Usage:
   python scripts/garmin-sync.py [--backfill] [--overwrite]
+
+Malformed provider records are printed and skipped instead of aborting the run.
+A final summary (fetched/valid/skipped/added/updated/status) is printed and, when
+running in GitHub Actions, appended to ``GITHUB_STEP_SUMMARY`` and
+``GITHUB_OUTPUT``.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -62,6 +68,22 @@ ACTIVITY_LIMIT = 30
 # One-time backfill window (used only with the --backfill flag): 2015-01-01.
 # Matches the earliest year selectable in the in-app year picker.
 BACKFILL_START_DATE = "2015-01-01"
+
+# Cap on how many invalid records are printed individually so a bad backfill
+# cannot flood the job log. The summary always reports exact totals.
+INVALID_PRINT_LIMIT = 50
+# Characters of an invalid record shown in the log (Garmin payloads are large).
+INVALID_RECORD_CHARS = 400
+
+# Counters reported at the end of the run (also exported to the workflow).
+SUMMARY = {
+    "fetched": 0,
+    "valid": 0,
+    "skipped": 0,
+    "added": 0,
+    "updated": 0,
+    "status": "not-started",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +155,17 @@ def _round_dec(value, ndigits=2):
     return text or "0"
 
 
+def parse_start_timestamp(value):
+    """Return an ISO timestamp for a Garmin start time, or ``None`` if unusable."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.isoformat(timespec="seconds")
+
+
 def activity_to_row(activity):
     """Convert a Garmin activity dict to the legacy row shape.
 
@@ -140,10 +173,7 @@ def activity_to_row(activity):
     migration before it is converted to the Firestore application model.
     """
     start = activity.get("startTimeLocal") or activity.get("startTimeGMT") or ""
-    try:
-        timestamp = datetime.fromisoformat(start.replace("Z", "+00:00")).isoformat(timespec="seconds")
-    except (TypeError, ValueError):
-        timestamp = ""
+    timestamp = parse_start_timestamp(start) or ""
 
     activity_id = activity.get("activityId")
     activity_id = str(activity_id) if activity_id is not None else ""
@@ -205,6 +235,143 @@ def normalize_activity_type(value):
 
 
 # ---------------------------------------------------------------------------
+# Validation / diagnostics
+# ---------------------------------------------------------------------------
+
+def activity_issues(activity):
+    """Return the reasons ``activity`` cannot be synced (empty list when valid)."""
+    if not isinstance(activity, dict):
+        return [f"record is not an object (got {type(activity).__name__})"]
+
+    reasons = []
+    start = activity.get("startTimeLocal") or activity.get("startTimeGMT")
+    if start in (None, ""):
+        reasons.append("missing startTimeLocal/startTimeGMT")
+    elif parse_start_timestamp(start) is None:
+        reasons.append(f"malformed start time: {start!r}")
+
+    if activity.get("activityId") in (None, ""):
+        reasons.append("missing activityId")
+
+    return reasons
+
+
+def safe_record_repr(record, limit=INVALID_RECORD_CHARS):
+    """Return a truncated, JSON-ish view of a Garmin record for logging.
+
+    Only the provider payload is rendered — never environment configuration —
+    and the output is truncated so one malformed record cannot flood the log.
+    """
+    try:
+        text = json.dumps(record, default=str, sort_keys=True)
+    except (TypeError, ValueError):
+        text = repr(record)
+    if len(text) > limit:
+        return f"{text[:limit]}… (truncated)"
+    return text
+
+
+def build_entries(activities):
+    """Map fetched activities to Firestore entries, collecting invalid records.
+
+    Returns ``(entries, invalid)`` where ``invalid`` holds one dict per skipped
+    record with its ``index``, ``reasons`` and a safe ``record`` preview.
+    """
+    entries = []
+    invalid = []
+    for index, activity in enumerate(activities):
+        reasons = activity_issues(activity)
+        entry = None
+        if not reasons:
+            row = activity_to_row(activity)
+            entry = activity_row_to_entry(row) if row is not None else None
+            if entry is None:
+                reasons = ["record could not be mapped to a Firestore entry"]
+        if reasons:
+            invalid.append({
+                "index": index,
+                "reasons": reasons,
+                "record": safe_record_repr(activity),
+            })
+            continue
+        entries.append(entry)
+    return entries, invalid
+
+
+def print_invalid_records(invalid, limit=INVALID_PRINT_LIMIT):
+    """Print each skipped record so the scale of the problem is visible."""
+    if not invalid:
+        return
+    print(f"Skipping {len(invalid)} invalid Garmin record(s):")
+    for item in invalid[:limit]:
+        print(
+            f"  [{item['index']}] {'; '.join(item['reasons'])} :: {item['record']}"
+        )
+    if len(invalid) > limit:
+        print(f"  … {len(invalid) - limit} more invalid record(s) not shown.")
+
+
+# ---------------------------------------------------------------------------
+# Run summary
+# ---------------------------------------------------------------------------
+
+def format_summary(summary):
+    return (
+        "Garmin sync summary — "
+        f"fetched {summary['fetched']}, "
+        f"valid {summary['valid']}, "
+        f"skipped {summary['skipped']}, "
+        f"added {summary['added']}, "
+        f"updated {summary['updated']} "
+        f"(status: {summary['status']})"
+    )
+
+
+def summary_markdown(summary):
+    return "\n".join([
+        "### Garmin sync summary",
+        "",
+        "| Metric | Count |",
+        "| --- | --- |",
+        f"| Fetched | {summary['fetched']} |",
+        f"| Valid | {summary['valid']} |",
+        f"| Skipped | {summary['skipped']} |",
+        f"| Added | {summary['added']} |",
+        f"| Updated | {summary['updated']} |",
+        f"| Status | {summary['status']} |",
+        "",
+    ])
+
+
+def _append_file(path, text):
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(text)
+
+
+def report_summary(summary=None, env=None):
+    """Print the summary and expose it to GitHub Actions.
+
+    Values are plain counts plus a single-word status, so they are safe to
+    write to ``GITHUB_OUTPUT`` and to echo from the workflow.
+    """
+    summary = SUMMARY if summary is None else summary
+    env = os.environ if env is None else env
+
+    print(format_summary(summary))
+
+    step_summary = env.get("GITHUB_STEP_SUMMARY")
+    if step_summary:
+        _append_file(step_summary, summary_markdown(summary))
+
+    output = env.get("GITHUB_OUTPUT")
+    if output:
+        _append_file(
+            output,
+            "".join(f"{key}={value}\n" for key, value in summary.items()),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -241,6 +408,7 @@ def main():
         print("Fetching recent activities from Garmin Connect...")
         activities = fetch_recent_activities(garmin, ACTIVITY_LIMIT)
     print(f"Fetched {len(activities)} activities from Garmin.")
+    SUMMARY["fetched"] = len(activities)
 
     # 3. Authenticate with Firestore.
     print("Authenticating with Firestore...")
@@ -248,12 +416,12 @@ def main():
     session = requests.Session()
 
     # 4. Convert fetched activities to the exact model stored by migration.
-    rows = [r for r in (activity_to_row(a) for a in activities) if r is not None]
-    entries = [
-        entry
-        for entry in (activity_row_to_entry(row) for row in rows)
-        if entry is not None
-    ]
+    #    Malformed provider records are printed and skipped so a single bad
+    #    activity cannot abort the whole sync.
+    entries, invalid = build_entries(activities)
+    print_invalid_records(invalid)
+    SUMMARY["valid"] = len(entries)
+    SUMMARY["skipped"] = len(invalid)
     if not entries:
         print("No valid activities to sync.")
         return
@@ -268,6 +436,8 @@ def main():
         "stravaId",
         overwrite,
     )
+    SUMMARY["added"] = result["added"]
+    SUMMARY["updated"] = result["updated"]
     print(
         f"Done — added {result['added']}, updated {result['updated']} "
         "Garmin activities in Firestore."
@@ -277,6 +447,10 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+        SUMMARY["status"] = "success"
     except Exception as err:  # noqa: BLE001 — top-level guard mirrors strava-sync
+        SUMMARY["status"] = "failed"
         print(f"Garmin sync failed: {err}", file=sys.stderr)
+        report_summary()
         sys.exit(1)
+    report_summary()

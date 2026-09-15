@@ -2,6 +2,7 @@
 """Offline unit tests for shared Firestore sync helpers."""
 
 from firestore_sync import (
+    entry_date,
     firestore_value,
     firestore_value_to_json,
     merge_entries,
@@ -47,6 +48,26 @@ def test_overwrite_merge_replaces_only_match():
     )
     assert entries[-1]["steps"] == 3
     assert (added, updated) == (0, 1)
+
+
+def test_entry_date_prefers_timestamp():
+    assert entry_date({"timestamp": "2026-01-02T06:30:00"}) == "2026-01-02T06:30:00"
+    assert entry_date({"date": "2026-01-02"}) == "2026-01-02"
+    assert entry_date({}) == ""
+
+
+def test_merge_sorts_timestamp_entries():
+    entries, added, updated = merge_entries(
+        [{"date": "2026-01-03", "stravaId": "3"}],
+        [
+            {"timestamp": "2026-01-02T06:30:00", "stravaId": "2"},
+            {"timestamp": "2026-01-01T06:30:00", "stravaId": "1"},
+        ],
+        "stravaId",
+        False,
+    )
+    assert [entry["stravaId"] for entry in entries] == ["1", "2", "3"]
+    assert (added, updated) == (2, 0)
 
 
 def _run():

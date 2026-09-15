@@ -186,6 +186,15 @@ def get_firestore_access(service_account_key):
     return key["project_id"], credentials.token
 
 
+def entry_date(entry):
+    """Return the date used for bucketing/sorting an entry.
+
+    Activity-style entries carry a full ISO ``timestamp`` while day-scoped
+    entries carry a ``date``. Mirrors the reader in src/firebase/store.ts.
+    """
+    return entry.get("timestamp") or entry.get("date") or ""
+
+
 def merge_entries(existing, incoming, key_field, overwrite):
     by_key = {str(entry[key_field]): entry for entry in existing}
     added = 0
@@ -200,7 +209,7 @@ def merge_entries(existing, incoming, key_field, overwrite):
             updated += 1
     entries = sorted(
         by_key.values(),
-        key=lambda entry: f"{entry['date']}:{entry[key_field]}",
+        key=lambda entry: f"{entry_date(entry)}:{entry[key_field]}",
     )
     return entries, added, updated
 
@@ -227,9 +236,9 @@ def merge_year_bucket_entries(
 ):
     by_year = {}
     for entry in incoming:
-        year = entry.get("date", "")[:4]
+        year = entry_date(entry)[:4]
         if len(year) != 4 or not year.isdigit():
-            raise ValueError(f"Invalid entry date: {entry.get('date')}")
+            raise ValueError(f"Invalid entry date: {entry_date(entry) or None}")
         by_year.setdefault(year, []).append(entry)
 
     totals = {"added": 0, "updated": 0}
