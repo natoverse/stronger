@@ -239,9 +239,6 @@ def test_format_summary_includes_all_counts():
 def test_report_summary_writes_github_files():
     import tempfile
 
-    directory = tempfile.mkdtemp(prefix="garmin-summary-")
-    step_summary = os.path.join(directory, "step-summary.md")
-    output = os.path.join(directory, "output.txt")
     summary = {
         "fetched": 10,
         "valid": 8,
@@ -251,20 +248,24 @@ def test_report_summary_writes_github_files():
         "status": "success",
     }
 
-    garmin_sync.report_summary(
-        summary,
-        {"GITHUB_STEP_SUMMARY": step_summary, "GITHUB_OUTPUT": output},
-    )
+    with tempfile.TemporaryDirectory(prefix="garmin-summary-") as directory:
+        step_summary = os.path.join(directory, "step-summary.md")
+        output = os.path.join(directory, "output.txt")
 
-    with open(output, encoding="utf-8") as handle:
-        lines = handle.read().splitlines()
+        garmin_sync.report_summary(
+            summary,
+            {"GITHUB_STEP_SUMMARY": step_summary, "GITHUB_OUTPUT": output},
+        )
+
+        with open(output, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+        with open(step_summary, encoding="utf-8") as handle:
+            markdown = handle.read()
+
     assert lines == [
         "fetched=10", "valid=8", "skipped=2",
         "added=1", "updated=7", "status=success",
     ], lines
-
-    with open(step_summary, encoding="utf-8") as handle:
-        markdown = handle.read()
     assert "### Garmin sync summary" in markdown
     assert "| Skipped | 2 |" in markdown
 

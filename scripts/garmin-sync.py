@@ -274,6 +274,10 @@ def safe_record_repr(record, limit=INVALID_RECORD_CHARS):
 def build_entries(activities):
     """Map fetched activities to Firestore entries, collecting invalid records.
 
+    Validation is two-phase: ``activity_issues`` checks the raw provider
+    payload, and records that survive it are still skipped when they cannot be
+    mapped to a Firestore entry (e.g. an unusable activity type).
+
     Returns ``(entries, invalid)`` where ``invalid`` holds one dict per skipped
     record with its ``index``, ``reasons`` and a safe ``record`` preview.
     """
