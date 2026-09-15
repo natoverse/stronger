@@ -72,6 +72,7 @@ describe('parseGarminRow', () => {
 
 	it('returns null for invalid date format', () => {
 		expect(parseGarminRow(garminRow({ 0: '2026/04/01' }))).toBeNull()
+		expect(parseGarminRow(garminRow({ 0: '2026-04-01' }))).toBeNull()
 	})
 
 	it('returns null for negative or non-numeric metrics', () => {

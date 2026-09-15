@@ -1967,9 +1967,7 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	if (!row || row.length < GARMIN_COL.maxHR + 1) return null
 
 	const rawTimestamp = (row[GARMIN_COL.timestamp] ?? '').trim()
-	const timestamp = /^\d{4}-\d{2}-\d{2}$/.test(rawTimestamp)
-		? `${rawTimestamp}T00:00:00`
-		: rawTimestamp
+	const timestamp = rawTimestamp
 	const activityId = (row[GARMIN_COL.activityId] ?? '').trim()
 	const activityType = normalizeGarminActivityType(row[GARMIN_COL.activityType] ?? '')
 	const name = (row[GARMIN_COL.name] ?? '').trim()

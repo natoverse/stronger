@@ -766,23 +766,7 @@ export function readGarminActivities(
 	scope: YearBucketReadScope = 'all',
 	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<StravaActivity[]> {
-	type LegacyActivity = Omit<StravaActivity, 'timestamp'> & {
-		timestamp?: string
-		date?: string
-		startTime?: string
-	}
 	return readYearBucketCollection<StravaActivity>(uid, 'garminActivities', scope, source)
-		.then((items) => (items as LegacyActivity[]).flatMap<StravaActivity>((item) => {
-			if (item.timestamp) return [item as StravaActivity]
-			if (!item.date) return []
-			const { date, startTime, ...activity } = item
-			return [{
-				...activity,
-				timestamp: startTime
-					? `${date}T${startTime}`
-					: `${date}T00:00:00`,
-			}]
-		}))
 }
 
 export function writeGarminActivities(uid: string, items: StravaActivity[]): Promise<void> {
