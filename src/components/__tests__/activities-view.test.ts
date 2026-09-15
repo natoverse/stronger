@@ -39,7 +39,7 @@ describe('activity goal chart scale', () => {
       activityType: string,
       name: string,
     ): StravaActivity => ({
-      date,
+      timestamp: `${date}T00:00:00`,
       activityType,
       name,
       duration: 3600,

@@ -42,7 +42,7 @@ def test_maps_full_activity():
     }
     row = garmin_sync.activity_to_row(activity)
     assert row == [
-        "2026-01-02",
+        "2026-01-02T06:30:00",
         "123456789",
         "running",
         "Morning Run",
@@ -77,9 +77,9 @@ def test_missing_optional_fields_default_to_zero():
         "startTimeLocal": "2026-03-04 12:00:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    # date, id, type, name, then thirteen numeric zeros
+    # timestamp, id, type, name, then thirteen numeric zeros
     assert row == [
-        "2026-03-04", "42", "", "",
+        "2026-03-04T12:00:00", "42", "", "",
         "0", "0", "0", "0", "0", "0",
         "0", "0", "0", "0", "0", "0", "0",
     ], row
@@ -91,7 +91,7 @@ def test_falls_back_to_gmt_start():
         "startTimeGMT": "2026-04-05 09:15:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    assert row[0] == "2026-04-05", row
+    assert row[0] == "2026-04-05T09:15:00", row
 
 
 def test_skips_activity_without_id():
@@ -129,7 +129,7 @@ def test_maps_firestore_activity_model():
         "maxHR": 140,
     })
     assert garmin_sync.activity_row_to_entry(row) == {
-        "date": "2026-01-02",
+        "timestamp": "2026-01-02T06:30:00",
         "stravaId": "123",
         "activityType": "Weight Training",
         "name": "Lift",

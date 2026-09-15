@@ -274,13 +274,14 @@ export function yearBucketDocumentId(bucket) {
 	return bucket.period
 }
 
-export function groupYearBuckets(entries) {
+export function groupYearBuckets(entries, timestampForEntry = (entry) => entry.date) {
 	const buckets = new Map()
 	const ordered = [...entries].sort((left, right) =>
-		`${left.date}:${left.startTime ?? ''}`.localeCompare(`${right.date}:${right.startTime ?? ''}`))
+		timestampForEntry(left).localeCompare(timestampForEntry(right)))
 	for (const entry of ordered) {
-		const period = entry.date?.slice(0, 4)
-		if (!/^\d{4}$/.test(period)) throw new Error(`Cannot create year bucket for invalid date: ${entry.date}`)
+		const value = timestampForEntry(entry)
+		const period = value?.slice(0, 4)
+		if (!/^\d{4}$/.test(period)) throw new Error(`Cannot create year bucket for invalid date: ${value}`)
 		if (!buckets.has(period)) buckets.set(period, { period, count: 0, entries: [] })
 		const bucket = buckets.get(period)
 		bucket.entries.push(entry)
@@ -481,7 +482,9 @@ function normalizeGarminType(value) {
 }
 
 function parseGarminRow(row) {
-	const parsedDate = date(row[0])
+	const rawTimestamp = text(row[0])
+	const timestamp = !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$/.test(rawTimestamp)
+		|| Number.isNaN(Date.parse(rawTimestamp)) ? null : rawTimestamp
 	const stravaId = text(row[1])
 	const activityType = normalizeGarminType(row[2])
 	const duration = sheetNonNegative(row[4])
@@ -490,11 +493,11 @@ function parseGarminRow(row) {
 	const elevationLoss = text(row[8]) ? sheetNonNegative(row[8]) : undefined
 	const avgHR = sheetNonNegative(row[9])
 	const maxHR = sheetNonNegative(row[10])
-	if (!parsedDate || !stravaId || !activityType
+	if (!timestamp || !stravaId || !activityType
 		|| [duration, distance, elevationGain, avgHR, maxHR].some((value) => value == null)
 		|| (text(row[8]) && elevationLoss == null)) return null
 	return {
-		date: parsedDate,
+		timestamp,
 		stravaId,
 		activityType,
 		name: text(row[3]),
@@ -672,7 +675,7 @@ export function buildMigrationPlan(
 		...(!requested.has('garminActivities') || values.garminActivities == null ? {} : {
 			garminActivities: planDocuments(
 				'Garmin activity years',
-				groupYearBuckets(values.garminActivities),
+				groupYearBuckets(values.garminActivities, (item) => item.timestamp),
 				yearBucketDocumentId,
 			),
 		}),

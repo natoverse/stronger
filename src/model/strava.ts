@@ -12,8 +12,8 @@
 
 /** A single Strava activity row (subset consumed by charts). */
 export interface StravaActivity {
-  /** ISO date string YYYY-MM-DD */
-  date: string;
+  /** ISO 8601 activity timestamp. */
+  timestamp: string;
   /** Source activity ID (Strava or Garmin). Optional for chart-only data. */
   stravaId?: string;
   /** Activity type (e.g. "Run", "Ride", "Hike") */
@@ -34,6 +34,11 @@ export interface StravaActivity {
   activeCalories?: number;
   /** Total calories burned (optional; Garmin only). */
   totalCalories?: number;
+}
+
+/** Return the activity's calendar date without changing its source timezone. */
+export function getActivityDate(activity: StravaActivity): string {
+  return activity.timestamp.slice(0, 10);
 }
 
 /** An annual goal for a single metric. */
@@ -222,8 +227,8 @@ export function filterActivities(
 
   return activities.filter(
     (a) =>
-      a.date >= startStr &&
-      a.date <= endStr &&
+      getActivityDate(a) >= startStr &&
+      getActivityDate(a) <= endStr &&
       selectedTypes.has(a.activityType),
   );
 }
@@ -330,7 +335,7 @@ export function generateBucketSlots(
 ): { key: string; label: string }[] {
   const allDates = range === 'all'
     ? activities
-        .map((activity) => activity.date)
+        .map(getActivityDate)
         .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))
         .sort()
     : [];
@@ -504,12 +509,13 @@ export function buildMetricChartData(
     const raw = activity[metric];
     if (typeof raw !== 'number' || raw <= 0) continue;
     const displayVal = toDisplayUnit(metric, raw);
-    let key = getBucketKey(activity.date, aggregation);
+    const activityDate = getActivityDate(activity);
+    let key = getBucketKey(activityDate, aggregation);
     if (range === 'all' && aggregation === 'week') {
-      const { year, week } = getISOWeekInfo(new Date(`${activity.date}T00:00:00`));
+      const { year, week } = getISOWeekInfo(new Date(`${activityDate}T00:00:00`));
       key = `${year}-W${week}`;
     } else if (range === 'all' && aggregation === 'month') {
-      key = `${activity.date.slice(0, 4)}-${key}`;
+      key = `${activityDate.slice(0, 4)}-${key}`;
     }
     bucketMap.set(key, (bucketMap.get(key) ?? 0) + displayVal);
   }
@@ -542,10 +548,11 @@ export function buildMetricChartData(
   const rangeStartISO = toISODate(getRangeStart(range, today));
   const rangeEndISO = toISODate(getRangeEnd(range, today));
   const latestActivity = activities.reduce<StravaActivity | null>((latest, activity) => {
-    if (activity.date < rangeStartISO || activity.date > rangeEndISO) return latest;
+    const activityDate = getActivityDate(activity);
+    if (activityDate < rangeStartISO || activityDate > rangeEndISO) return latest;
     const raw = activity[metric];
     if (typeof raw !== 'number' || raw <= 0) return latest;
-    return latest === null || activity.date >= latest.date ? activity : latest;
+    return latest === null || activity.timestamp >= latest.timestamp ? activity : latest;
   }, null);
   const latestValue = latestActivity === null
     ? null

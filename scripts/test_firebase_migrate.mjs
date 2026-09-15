@@ -212,8 +212,8 @@ test('migration buckets every high-cardinality history by year', () => {
 		schedule: [],
 		cardio: [],
 		garmin: [
-			['2025-12-31', 'g-1', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170'],
-			['2026-01-01', 'g-2', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170'],
+			['2025-12-31T06:30:00', 'g-1', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170'],
+			['2026-01-01T06:30:00', 'g-2', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170'],
 		],
 		garminWellness: [
 			['2025-12-31', '40', 'LOW'],
@@ -290,7 +290,7 @@ test('collection-scoped plans do not require unrelated tabs', () => {
 		schedule: null,
 		cardio: null,
 		strava: null,
-		garmin: [['2026-09-01', '42', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170']],
+		garmin: [['2026-09-01T06:30:00', '42', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170']],
 		garminWellness: null,
 		withings: null,
 		settings: null,
@@ -299,6 +299,26 @@ test('collection-scoped plans do not require unrelated tabs', () => {
 	assert.deepEqual(Object.keys(plan), ['garminActivities'])
 	assert.equal(plan.garminActivities[0].id, '2026')
 	assert.equal(plan.garminActivities[0].data.entries[0].stravaId, '42')
+	assert.equal(plan.garminActivities[0].data.entries[0].timestamp, '2026-09-01T06:30:00')
+})
+
+test('Garmin migration rejects date-only activity rows', () => {
+	const rows = {
+		exercises: null,
+		workouts: null,
+		logs: null,
+		dayFlags: null,
+		schedule: null,
+		cardio: null,
+		strava: null,
+		garmin: [['2026-09-01', '42', 'running', 'Run', '3600', '', '10000', '100', '90', '140', '170']],
+		garminWellness: null,
+		withings: null,
+		settings: null,
+	}
+	const { plan, warnings } = buildMigrationPlan(rows, [], ['garminActivities'])
+	assert.equal(plan.garminActivities.length, 0)
+	assert.deepEqual(warnings, ['Garmin: skipped 1 invalid row.'])
 })
 
 test('date-keyed collections keep the last row for duplicate dates', () => {

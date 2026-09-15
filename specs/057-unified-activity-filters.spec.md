@@ -19,3 +19,4 @@ Make the Activities page search, activity-type selection, and time range a singl
 - Activity search matches activity names and types case-insensitively.
 - Strength training remains a dedicated duration chart and is not included in the general activity card/type-filter flow.
 - All-time chart buckets begin with the earliest matching activity rather than a fixed historical date.
+- Activity cards sort newest first by their parsed ISO 8601 timestamp. Garmin sync stores that single timestamp rather than separate date and time fields.

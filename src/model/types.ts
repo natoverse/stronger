@@ -289,8 +289,8 @@ export interface CardioActivity {
 
 /** A single activity synced from the Strava API. */
 export interface StravaActivity {
-	/** Activity date in YYYY-MM-DD format. */
-	date: string;
+	/** ISO 8601 activity timestamp. */
+	timestamp: string;
 	/** Strava activity ID (used for deduplication). */
 	stravaId: string;
 	/** Strava activity type (e.g. "Run", "Ride", "WeightTraining"). */

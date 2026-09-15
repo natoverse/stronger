@@ -3,13 +3,13 @@ import { parseGarminRow, normalizeGarminActivityType } from '../sheets.ts'
 
 /**
  * Full 17-column Garmin row (see scripts/garmin-sync.py HEADER):
- * date, activityId, activityType, name, duration, movingDuration, distance,
+ * timestamp, activityId, activityType, name, duration, movingDuration, distance,
  * elevationGain, elevationLoss, avgHR, maxHR, avgSpeed, maxSpeed,
  * steps, aerobicTE, anaerobicTE, vo2Max
  */
 function garminRow(overrides: Record<number, string> = {}): string[] {
 	const row = [
-		'2026-04-01', '123456789', 'running', 'Morning Run',
+		'2026-04-01T06:30:00', '123456789', 'running', 'Morning Run',
 		'1800', '1790', '5000', '50', '45',
 		'145', '170', '2.7', '3.5', '5100', '3.5', '0.5', '52',
 	]
@@ -41,7 +41,7 @@ describe('normalizeGarminActivityType', () => {
 describe('parseGarminRow', () => {
 	it('parses a valid Garmin row into the shared activity shape', () => {
 		expect(parseGarminRow(garminRow())).toEqual({
-			date: '2026-04-01',
+			timestamp: '2026-04-01T06:30:00',
 			stravaId: '123456789',
 			activityType: 'Running',
 			name: 'Morning Run',
@@ -72,6 +72,7 @@ describe('parseGarminRow', () => {
 
 	it('returns null for invalid date format', () => {
 		expect(parseGarminRow(garminRow({ 0: '2026/04/01' }))).toBeNull()
+		expect(parseGarminRow(garminRow({ 0: '2026-04-01' }))).toBeNull()
 	})
 
 	it('returns null for negative or non-numeric metrics', () => {

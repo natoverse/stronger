@@ -13,7 +13,7 @@ describe('parseStravaRow', () => {
 				'1800', '5000', '50', '300', '145', '170',
 			]),
 		).toEqual({
-			date: '2026-04-01',
+			timestamp: '2026-04-01T00:00:00',
 			stravaId: '12345678',
 			activityType: 'Run',
 			name: 'Morning Run',
@@ -33,7 +33,7 @@ describe('parseStravaRow', () => {
 				' 1800 ', ' 5000 ', ' 50 ', ' 300 ', ' 145 ', ' 170 ',
 			]),
 		).toEqual({
-			date: '2026-04-01',
+			timestamp: '2026-04-01T00:00:00',
 			stravaId: '12345678',
 			activityType: 'Run',
 			name: 'Morning Run',
@@ -138,7 +138,7 @@ describe('stravaActivityToRow', () => {
 	it('converts a StravaActivity to a spreadsheet row', () => {
 		expect(
 			stravaActivityToRow({
-				date: '2026-04-01',
+				timestamp: '2026-04-01T00:00:00',
 				stravaId: '12345678',
 				activityType: 'Run',
 				name: 'Morning Run',
@@ -158,7 +158,7 @@ describe('stravaActivityToRow', () => {
 	it('converts zero numeric values', () => {
 		expect(
 			stravaActivityToRow({
-				date: '2026-04-01',
+				timestamp: '2026-04-01T06:30:00',
 				stravaId: '12345678',
 				activityType: 'WeightTraining',
 				name: 'Gym',
@@ -178,7 +178,7 @@ describe('stravaActivityToRow', () => {
 	it('round-trips through parseStravaRow', () => {
 		const activities = [
 			{
-				date: '2026-04-01',
+				timestamp: '2026-04-01T00:00:00',
 				stravaId: '12345678',
 				activityType: 'Run',
 				name: 'Morning Run',
@@ -190,7 +190,7 @@ describe('stravaActivityToRow', () => {
 				maxHR: 170,
 			},
 			{
-				date: '2026-03-15',
+				timestamp: '2026-03-15T00:00:00',
 				stravaId: '87654321',
 				activityType: 'Ride',
 				name: 'Weekend Ride',

@@ -23,14 +23,17 @@ import type { StravaActivity, StravaAggregation } from '../strava.js';
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function makeActivity(overrides: Partial<StravaActivity> = {}): StravaActivity {
+function makeActivity(
+  overrides: Partial<StravaActivity> & { date?: string } = {},
+): StravaActivity {
+  const { date, ...activityOverrides } = overrides;
   return {
-    date: '2025-06-15',
+    timestamp: date ? `${date}T00:00:00` : '2025-06-15T00:00:00',
     activityType: 'Run',
     duration: 3600,        // 1 hour
     distance: 10000,       // 10 km
     elevationGain: 100,    // 100 m
-    ...overrides,
+    ...activityOverrides,
   };
 }
 
@@ -157,7 +160,7 @@ describe('filterActivities', () => {
     ];
     const result = filterActivities(activities, 'month', new Set(['Run']), today);
     expect(result).toHaveLength(1);
-    expect(result[0].date).toBe('2025-06-16');
+    expect(result[0].timestamp).toBe('2025-06-16T00:00:00');
   });
 
   it('includes all types in selectedTypes', () => {
@@ -178,7 +181,7 @@ describe('filterActivities', () => {
     ];
     const result = filterActivities(activities, '2025', new Set(['Run']), today);
     expect(result).toHaveLength(1);
-    expect(result[0].date).toBe('2025-03-01');
+    expect(result[0].timestamp).toBe('2025-03-01T00:00:00');
   });
 
   it('keeps all dates for the all-time range', () => {
