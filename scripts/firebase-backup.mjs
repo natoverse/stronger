@@ -31,7 +31,7 @@ export function firestoreDocumentToBackup(document) {
 		throw new Error('Firestore document is missing its name.')
 	}
 	return {
-		id: decodeURIComponent(nameParts.at(-1)),
+		id: nameParts.at(-1),
 		createTime: document.createTime ?? null,
 		updateTime: document.updateTime ?? null,
 		data: Object.fromEntries(

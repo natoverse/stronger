@@ -35,7 +35,7 @@ test('converts Firestore documents to readable backup records', () => {
 			},
 		},
 	}), {
-		id: 'Workout A',
+		id: 'Workout%20A',
 		createTime: '2026-01-01T00:00:00Z',
 		updateTime: '2026-01-02T00:00:00Z',
 		data: {
