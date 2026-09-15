@@ -91,3 +91,5 @@ is required.
 - Garmin activities use `activity_to_entry`; wellness uses `build_entry` and
   `wellness_to_entry`. These helpers map provider data directly to named
   Firestore fields without intermediate positional records.
+- On 2026-09-15, the Withings workflow display name was shortened to
+  `Withings Sync`; the Firestore destination remains an implementation detail.

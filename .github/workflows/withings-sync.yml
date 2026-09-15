@@ -1,4 +1,4 @@
-name: Withings Sync (Withings → Firestore)
+name: Withings Sync
 
 on:
   schedule:

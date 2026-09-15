@@ -16,7 +16,7 @@ the account that uses the deployed Stronger application.
 
 ## Stored data
 
-- **Garmin Sync** writes shared activity-model entries to
+- **Garmin Activity Sync** writes shared activity-model entries to
   `/users/{uid}/garminActivities/{year}`.
 - **Garmin Wellness Sync** writes all daily wellness fields to
   `/users/{uid}/garminWellness/{year}`.
@@ -28,7 +28,7 @@ Incremental runs preserve all entries outside the fetched window.
 
 ## Run the workflows
 
-Use **Actions -> Garmin Sync** or **Actions -> Garmin Wellness Sync**.
+Use **Actions -> Garmin Activity Sync** or **Actions -> Garmin Wellness Sync**.
 Scheduled runs overwrite matching recent entries so partially populated days
 and edited activities are refreshed. Manual backfill runs fetch the configured
 full-history window and remain idempotent by source ID or date.

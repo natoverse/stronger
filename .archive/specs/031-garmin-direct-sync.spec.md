@@ -89,3 +89,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Full-history start date (2026-08-23):** The Garmin activity sync's `--backfill` option now fetches activities from 2015-01-01 instead of 2021-01-01, matching the earliest year available in the activity view.
 
 - **Firestore-only (2026-09-15):** Direct writes require `FIREBASE_SERVICE_ACCOUNT_KEY` and `FIREBASE_USER_ID`. Named activity fields feed yearly buckets directly, without positional row adapters or an intermediary datastore. Append, overwrite, backfill, concurrency safeguards, and provider authentication remain unchanged.
+
+- **Workflow naming (2026-09-15):** Renamed the GitHub Actions display name from `Garmin Sync (Garmin Connect → Firestore)` to `Garmin Activity Sync` so it is clearly distinguished from the wellness and Gaia sync workflows.
