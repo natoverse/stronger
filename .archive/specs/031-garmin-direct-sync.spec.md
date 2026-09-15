@@ -87,3 +87,5 @@ This keeps the recurring sync fully headless (works in a GitHub Action or on a s
 - **Activity log search scope (2026-08-23):** The Garmin activity log now receives the full activity history rather than the chart's selected time window. The range controls still scope the charts, while search and activity-type filtering can find any synced activity.
 
 - **Full-history start date (2026-08-23):** The Garmin activity sync's `--backfill` option now fetches activities from 2015-01-01 instead of 2021-01-01, matching the earliest year available in the activity view.
+
+- **Workflow naming (2026-09-15):** Renamed the GitHub Actions display name from `Garmin Sync (Garmin Connect → Firestore)` to `Garmin Activity Sync` so it is clearly distinguished from the wellness and Gaia sync workflows.
