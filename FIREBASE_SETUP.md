@@ -251,6 +251,20 @@ See [Garmin sync setup](GARMIN_SYNC_SETUP.md) and
 [Withings sync setup](WITHINGS_SYNC_SETUP.md) for provider credentials,
 backfills, and token recovery.
 
+## 10. Nightly Firebase backup
+
+The **Firebase backup** workflow runs nightly at 04:15 UTC and can also be
+started manually. It uses `FIREBASE_SERVICE_ACCOUNT_KEY` and
+`FIREBASE_USER_ID` to export the configured user's `exercises`, `workouts`,
+`workoutSessions`, `dayFlags`, and `schedule` collections.
+
+GitHub packages the JSON directory directly as the `firebase-backup` ZIP
+artifact and retains it for 30 days. After downloading and unzipping the
+artifact, the files are immediately readable without a decryption step. The
+artifact contains one JSON file per collection and a manifest with the source
+user path, export time, and document counts. Garmin, Withings, and other
+resynchronizable or nonessential collections are intentionally excluded.
+
 ## Troubleshooting
 
 | Error or symptom | Resolution |

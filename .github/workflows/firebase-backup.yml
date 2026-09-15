@@ -1,0 +1,42 @@
+name: Firebase backup
+
+on:
+  schedule:
+    - cron: '15 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test backup helpers
+        run: node --test scripts/test_firebase_backup.mjs
+
+      - name: Export Firebase data
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
+        run: node scripts/firebase-backup.mjs
+
+      - name: Upload Firebase backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: firebase-backup
+          path: firebase-backup/
+          if-no-files-found: error
+          retention-days: 30
