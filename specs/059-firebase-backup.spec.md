@@ -7,7 +7,8 @@
 
 Add a nightly and manually dispatched GitHub Actions workflow that reads the
 application data below `/users/{FIREBASE_USER_ID}`, writes one JSON file per
-backed-up collection, and uploads the directory as a ZIP artifact.
+backed-up collection, encrypts the JSON directory, and uploads it as a ZIP
+artifact.
 
 ## Acceptance Criteria
 
@@ -15,6 +16,8 @@ backed-up collection, and uploads the directory as a ZIP artifact.
 - [ ] The workflow can also be started manually.
 - [ ] Authentication uses `FIREBASE_SERVICE_ACCOUNT_KEY`, and the source user is
       selected by `FIREBASE_USER_ID`.
+- [ ] The backup is encrypted with `FIREBASE_BACKUP_PASSPHRASE` before upload so
+      personal workout data is not exposed through a public-repository artifact.
 - [ ] The export includes `exercises`, `workouts`, `workoutSessions`,
       `dayFlags`, and `schedule`.
 - [ ] Garmin, Withings, cardio, settings, migration records, and administrative
@@ -24,8 +27,8 @@ backed-up collection, and uploads the directory as a ZIP artifact.
 - [ ] A manifest records the source user path, export time, collection names,
       and document counts.
 - [ ] Pagination exports every document in each collection.
-- [ ] GitHub uploads the JSON directory directly so the downloadable workflow
-      artifact has a single ZIP layer.
+- [ ] The downloadable GitHub artifact contains only the encrypted backup
+      archive, never plaintext JSON.
 - [ ] Offline tests cover pagination, Firestore value conversion, collection
       scope, and generated files.
 

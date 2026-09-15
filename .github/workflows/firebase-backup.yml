@@ -33,10 +33,23 @@ jobs:
           FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
         run: node scripts/firebase-backup.mjs
 
+      - name: Encrypt Firebase backup
+        env:
+          FIREBASE_BACKUP_PASSPHRASE: ${{ secrets.FIREBASE_BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$FIREBASE_BACKUP_PASSPHRASE" ]; then
+            echo "::error::FIREBASE_BACKUP_PASSPHRASE is not configured"
+            exit 1
+          fi
+          tar -czf - firebase-backup/ |
+            openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+              -pass env:FIREBASE_BACKUP_PASSPHRASE \
+              -out firebase-backup.tar.gz.enc
+
       - name: Upload Firebase backup
         uses: actions/upload-artifact@v4
         with:
           name: firebase-backup
-          path: firebase-backup/
+          path: firebase-backup.tar.gz.enc
           if-no-files-found: error
           retention-days: 30

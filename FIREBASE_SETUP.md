@@ -281,10 +281,27 @@ started manually. It uses `FIREBASE_SERVICE_ACCOUNT_KEY` and
 `FIREBASE_USER_ID` to export the configured user's `exercises`, `workouts`,
 `workoutSessions`, `dayFlags`, and `schedule` collections.
 
-Each collection and a backup manifest are written as readable JSON in the
-`firebase-backup` artifact. GitHub packages the uploaded directory as a
-single-layer ZIP and retains it for 30 days. Garmin, Withings, and other
-resynchronizable or nonessential collections are intentionally excluded.
+Set `FIREBASE_BACKUP_PASSPHRASE` to a strong, unique repository secret and store
+a copy in a password manager. The workflow encrypts the JSON directory before
+upload because Actions artifacts from a public repository are available to
+anyone with repository read access. GitHub packages the encrypted
+`firebase-backup.tar.gz.enc` file in the `firebase-backup` ZIP artifact and
+retains it for 30 days. Garmin, Withings, and other resynchronizable or
+nonessential collections are intentionally excluded.
+
+After downloading and extracting the GitHub artifact ZIP, decrypt and unpack
+the backup:
+
+```bash
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+  -in firebase-backup.tar.gz.enc \
+  -pass env:FIREBASE_BACKUP_PASSPHRASE |
+  tar -xzf -
+```
+
+The resulting `firebase-backup` directory contains one readable JSON file per
+collection and a manifest with the source user path, export time, and document
+counts.
 
 ## One-time Google Sheets migration
 
