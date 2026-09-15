@@ -1911,10 +1911,10 @@ export async function readStravaActivities(
 /* ------------------------------------------------------------------ */
 
 /**
- * A1 range for reading Garmin data (row 2 onward, open-ended, 17 columns).
+ * A1 range for reading Garmin data (row 2 onward, open-ended, 18 columns).
  * The tab is written by `scripts/garmin-sync.py`; the app only reads it.
  */
-const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:Q`
+const GARMIN_READ_RANGE = `'${GARMIN_TAB_NAME}'!A2:R`
 
 /**
  * Column order of the "Stronger - Garmin" tab (see scripts/garmin-sync.py).
@@ -1931,6 +1931,7 @@ const GARMIN_COL = {
 	elevationLoss: 8,
 	avgHR: 9,
 	maxHR: 10,
+	startTime: 17,
 } as const
 
 /* ------------------------------------------------------------------ */
@@ -1980,6 +1981,8 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 	const elevationLoss = rawElevationLoss ? Number(rawElevationLoss) : undefined
 	const avgHR = Number((row[GARMIN_COL.avgHR] ?? '').trim())
 	const maxHR = Number((row[GARMIN_COL.maxHR] ?? '').trim())
+	const rawStartTime = (row[GARMIN_COL.startTime] ?? '').trim()
+	const startTime = /^\d{2}:\d{2}:\d{2}$/.test(rawStartTime) ? rawStartTime : undefined
 
 	if (!Number.isFinite(duration) || duration < 0) return null
 	if (!Number.isFinite(distance) || distance < 0) return null
@@ -1990,6 +1993,7 @@ export function parseGarminRow(row: string[]): StravaActivity | null {
 
 	return {
 		date,
+		startTime,
 		stravaId: activityId,
 		activityType,
 		name,

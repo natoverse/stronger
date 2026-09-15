@@ -57,6 +57,20 @@ describe('Garmin activity card formatting', () => {
       )).toEqual([hike]);
     });
 
+    it('sorts activities on the same day by start time descending', () => {
+      const morning = { ...activity('2025-06-17', 'Morning run'), startTime: '07:15:00' };
+      const evening = { ...activity('2025-06-17', 'Evening run'), startTime: '18:30:00' };
+      const afternoon = { ...activity('2025-06-17', 'Afternoon run'), startTime: '13:45:00' };
+
+      expect(getDisplayedActivities(
+        [morning, evening, afternoon],
+        'month',
+        selectedTypes,
+        '',
+        today,
+      )).toEqual([evening, afternoon, morning]);
+    });
+
     it('excludes strength training from selectable activity types', () => {
       const strength = { ...activity('2025-06-17', 'Lifting'), activityType: 'Weight Training' };
       expect(getSelectableActivityTypes([strength, activities[0]])).toEqual(['Run']);

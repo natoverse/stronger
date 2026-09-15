@@ -55,8 +55,9 @@ HEADER = [
     "aerobicTE",
     "anaerobicTE",
     "vo2Max",
+    "startTime",
 ]
-COLUMN_COUNT = len(HEADER)  # 17 -> columns A:Q
+COLUMN_COUNT = len(HEADER)  # 18 -> columns A:R
 ACTIVITY_LIMIT = 30
 
 # One-time backfill window (used only with the --backfill flag): 2015-01-01.
@@ -141,6 +142,7 @@ def activity_to_row(activity):
     """
     start = activity.get("startTimeLocal") or activity.get("startTimeGMT") or ""
     date = start[:10]  # "YYYY-MM-DD"
+    start_time = start[11:19]  # "HH:MM:SS"
 
     activity_id = activity.get("activityId")
     activity_id = str(activity_id) if activity_id is not None else ""
@@ -171,6 +173,7 @@ def activity_to_row(activity):
         _round_dec(activity.get("aerobicTrainingEffect", 0), 1),
         _round_dec(activity.get("anaerobicTrainingEffect", 0), 1),
         _round_dec(activity.get("vO2MaxValue", 0), 1),
+        start_time,
     ]
 
 
@@ -191,6 +194,7 @@ def activity_row_to_entry(row):
         "calories": 0,
         "avgHR": int(row[9]),
         "maxHR": int(row[10]),
+        "startTime": row[17] if len(row) > 17 and row[17] else None,
     }
 
 

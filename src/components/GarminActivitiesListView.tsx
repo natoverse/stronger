@@ -161,7 +161,8 @@ export function getDisplayedActivities(
   const rangeActivities = filterActivitiesByRange(activities, range, today);
   const typeFiltered = rangeActivities.filter((activity) => selectedTypes.has(activity.activityType));
   const searched = filterActivitiesByQuery(typeFiltered, query);
-  return [...searched].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return [...searched].sort((a, b) =>
+    `${b.date}T${b.startTime ?? ''}`.localeCompare(`${a.date}T${a.startTime ?? ''}`));
 }
 
 export function getSelectableActivityTypes(activities: StravaActivity[]): string[] {

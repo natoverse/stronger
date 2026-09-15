@@ -59,6 +59,7 @@ def test_maps_full_activity():
         "3.5",
         "0.5",
         "52",
+        "06:30:00",
     ], row
 
 
@@ -68,7 +69,7 @@ def test_row_matches_header_length():
         "startTimeLocal": "2026-01-02 06:30:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    assert len(row) == len(garmin_sync.HEADER) == 17, row
+    assert len(row) == len(garmin_sync.HEADER) == 18, row
 
 
 def test_missing_optional_fields_default_to_zero():
@@ -77,11 +78,11 @@ def test_missing_optional_fields_default_to_zero():
         "startTimeLocal": "2026-03-04 12:00:00",
     }
     row = garmin_sync.activity_to_row(activity)
-    # date, id, type, name, then thirteen numeric zeros
+    # date, id, type, name, thirteen numeric zeros, then start time
     assert row == [
         "2026-03-04", "42", "", "",
         "0", "0", "0", "0", "0", "0",
-        "0", "0", "0", "0", "0", "0", "0",
+        "0", "0", "0", "0", "0", "0", "0", "12:00:00",
     ], row
 
 
@@ -140,6 +141,7 @@ def test_maps_firestore_activity_model():
         "calories": 0,
         "avgHR": 100,
         "maxHR": 140,
+        "startTime": "06:30:00",
     }
 
 
