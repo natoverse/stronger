@@ -10,8 +10,8 @@ import type {
 } from '../model/index.js'
 import type { StravaActivity, StravaGoal } from '../model/strava.js'
 import type { WithingsGoal } from '../model/withings.js'
-import type { LiftGoal, ParsedLogRow } from '../google/index.js'
-import { DEFAULT_APP_SETTINGS } from '../google/index.js'
+import type { LiftGoal, ParsedLogRow } from '../model/index.js'
+import { DEFAULT_APP_SETTINGS } from '../model/index.js'
 import {
 	buildWorkoutsFromConfigs,
 	type WorkoutDefinition,

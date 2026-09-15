@@ -1,6 +1,6 @@
 /**
  * Mock Strava activity data for development.
- * Replaced with real data from the "Stronger - Strava" sheet tab once synced.
+ * Production activities are loaded from Firestore after synchronization.
  */
 import type { StravaActivity, StravaGoal } from '../model/strava.js';
 

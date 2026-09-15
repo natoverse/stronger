@@ -27,7 +27,7 @@ import type {
 } from '../model/index.ts'
 import type { StravaActivity } from '../model/types.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
-import type { ParsedLogRow } from '../google/sheets.ts'
+import type { ParsedLogRow } from '../model/logs.ts'
 import { firestore } from './client.ts'
 import { trackMutation } from './offline.ts'
 
@@ -517,13 +517,9 @@ export function mergeWorkoutSessionRows(
 
 export async function appendLogRows(
 	uid: string,
-	rows: (string | number | boolean)[][],
+	rows: ParsedLogRow[],
 ): Promise<ParsedLogRow[]> {
-	const parsed = rows.flatMap((row) => {
-		const value = rowToParsedLogRow(row)
-		return value ? [value] : []
-	})
-	const sessions = groupWorkoutSessionRows(parsed)
+	const sessions = groupWorkoutSessionRows(rows)
 	await trackMutation(
 		uid,
 		`workoutSessions:${sessions.map(workoutSessionDocumentId).join(',')}`,
@@ -536,33 +532,7 @@ export async function appendLogRows(
 			})
 		})),
 	)
-	return parsed
-}
-
-export function rowToParsedLogRow(row: (string | number | boolean)[]): ParsedLogRow | null {
-	if (row.length < 13) return null
-	const strings = row.map(String)
-	const setNumber = Number(strings[6])
-	const plannedWeight = Number(strings[8])
-	const plannedReps = Number(strings[9])
-	const actualWeight = Number(strings[10])
-	const actualReps = Number(strings[11])
-	if (!strings[0] || !strings[1] || !strings[3] || !strings[4] || !Number.isFinite(setNumber)) return null
-	return {
-		date: strings[0],
-		startTime: strings[1],
-		endTime: strings[2],
-		workoutId: strings[3],
-		exerciseName: strings[4],
-		liftId: strings[5],
-		setNumber,
-		setType: strings[7],
-		plannedWeight: Number.isFinite(plannedWeight) ? plannedWeight : 0,
-		plannedReps: Number.isFinite(plannedReps) ? plannedReps : 0,
-		actualWeight: Number.isFinite(actualWeight) ? actualWeight : 0,
-		actualReps: Number.isFinite(actualReps) ? actualReps : 0,
-		completed: strings[12].toUpperCase() === 'TRUE',
-	}
+	return rows
 }
 
 export function readLogZone(
@@ -736,9 +706,6 @@ export function writeWorkoutScheduleDates(
 	))
 }
 
-export const readSchedule = readWorkoutSchedule
-export const writeSchedule = writeWorkoutSchedule
-
 export async function readSettings(
 	uid: string,
 	source: FirestoreReadSource = 'cacheFirst',
@@ -796,20 +763,3 @@ export function readWithingsMeasurements(
 export function writeWithingsMeasurements(uid: string, items: WithingsMeasurement[]): Promise<void> {
 	return replaceYearBucketCollection(uid, 'withingsMeasurements', items)
 }
-
-export const verifyScheduleTab = async (_uid?: string) => true
-export const verifyWorkoutScheduleTab = async (_uid?: string) => true
-export const verifyGarminTab = async (_uid?: string) => true
-export const verifyGarminWellnessTab = async (_uid?: string) => true
-export const verifyWithingsTab = async (_uid?: string) => true
-export const verifySettingsTab = async (_uid?: string) => true
-export const createScheduleTab = async (_uid?: string) => undefined
-export const createWorkoutScheduleTab = async (_uid?: string) => undefined
-export const createWithingsTab = async (_uid?: string) => undefined
-export const createSettingsTab = async (_uid?: string) => undefined
-
-export async function withDataRetry<T>(fn: () => Promise<T>): Promise<T> {
-	return fn()
-}
-
-export const withAuthRetry = withDataRetry

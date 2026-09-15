@@ -5,12 +5,10 @@
 
 ## What
 
-Replace the Google Sheets write-and-mirror pipeline used by Garmin activities,
-Garmin wellness, and Withings with direct writes to the Firestore schema used
-by the migration action and Firebase UI.
-
-The one-time migration and comparison benchmark continue to read the legacy
-spreadsheet. They are migration tools, not ongoing ingestion paths.
+Garmin activities, Garmin wellness, and Withings write directly to the
+Firestore schema consumed by the Firebase UI. Firestore is the sole
+persistence target; no intermediary datastore, mirror, or alternate backend
+is required.
 
 ## Acceptance Criteria
 
@@ -22,7 +20,7 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
 - [ ] Withings writes directly to
       `/users/{uid}/withingsMeasurements/{year}`.
 - [ ] Every health bucket uses `{ period, count, entries, updatedAt }`, matching
-      the migration and Firebase UI adapters.
+      the Firebase UI adapters.
 - [ ] Incremental runs preserve entries outside the fetched window.
 - [ ] Append-only runs skip existing source identifiers; overwrite runs replace
       matching source identifiers and retain all unrelated entries.
@@ -34,21 +32,20 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
 - [ ] Transient Firestore failures are retried, and the Withings workflow
       retries the complete sync within the provider's old-token grace window.
 - [ ] Scheduled health workflows require `FIREBASE_SERVICE_ACCOUNT_KEY` and
-      `FIREBASE_USER_ID`, not Sheets credentials.
-- [ ] The obsolete Google Sheet backup workflow is removed.
-- [ ] The manual migration and benchmark workflows retain their Sheets
-      credentials because they intentionally read the legacy source.
+      `FIREBASE_USER_ID` for persistence.
+- [ ] Obsolete datastore backup, import, and cross-backend benchmark tooling is
+      removed.
 - [ ] Pure schema, bucketing, merge, and mapping behavior has offline tests.
 
 ## Schema Decisions
 
-- Health histories remain yearly rather than monthly. This matches spec 049,
-  spec 050, `lib/firebase-load-plan.json`, and the UI's current-year cold-load
+- Health histories remain yearly rather than monthly. This matches spec 050,
+  `lib/firebase-load-plan.json`, and the UI's current-year cold-load
   behavior.
 - Garmin activity documents store the shared activity model consumed by the UI,
-  not every field from the former Garmin sheet row. The source activity ID is
+  not every metric exposed by the provider. The source activity ID is
   retained as `stravaId` for compatibility with the existing shared model.
-- Garmin wellness entries retain all 40 migrated fields. Numeric blanks become
+- Garmin wellness entries retain all 40 domain fields. Numeric blanks become
   `null`; status blanks remain empty strings.
 - Withings entries retain `grpId` as the deduplication key and use `null` for
   unavailable optional metrics.
@@ -66,9 +63,8 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
   authorization-code exchange so setup documentation does not require users to
   manually construct signatures.
 - Reconnection documentation distinguishes a stale repository seed from the
-  live rotating token. Existing Sheets installations should migrate
-  `withings_refresh_token` from the Infra tab into Firestore `syncState` before
-  performing a new OAuth authorization.
+  live rotating token in Firestore `syncState`. Reauthorization is an explicit
+  provider-recovery action, not part of normal scheduled refresh.
 - On 2026-09-15, the Garmin activity sync failed for every record with
   `Invalid entry date: None`: activity entries carry `timestamp` (an ISO
   date-time), but the shared Python year-bucket writer read `date`. Year
@@ -82,5 +78,18 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
   fetched/valid/skipped/added/updated/status summary to stdout,
   `GITHUB_STEP_SUMMARY`, and `GITHUB_OUTPUT`. The workflow's final `if: always()`
   step echoes those step outputs so the totals survive a failing sync step.
+- **Firestore-only cleanup (2026-09-15):** Remove positional row schemas,
+  intermediary storage adapters, and retired administrative workflows. Provider
+  responses map directly to named Firestore fields; yearly bucket structure,
+  optimistic concurrency, incremental preservation, signed Withings requests,
+  immediate token persistence, and all overwrite/backfill controls remain
+  unchanged.
+- Node service-account authentication and Firestore value serialization live
+  in `scripts/firestore-admin.mjs`, independent of retired import tooling, with
+  offline authentication and serialization tests. The shared load plan retains
+  runtime metadata only, without comparison-specific route or label metadata.
+- Garmin activities use `activity_to_entry`; wellness uses `build_entry` and
+  `wellness_to_entry`. These helpers map provider data directly to named
+  Firestore fields without intermediate positional records.
 - On 2026-09-15, the Withings workflow display name was shortened to
   `Withings Sync`; the Firestore destination remains an implementation detail.

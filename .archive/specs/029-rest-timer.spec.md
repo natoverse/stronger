@@ -36,7 +36,7 @@ The timer text uses a digital LCD-style font (e.g., a monospace/segment-display 
 ### Out of scope
 - Configurable rest durations or countdown timers
 - Audio/vibration alerts when a target rest time is reached
-- Persisting rest times to the log or sheet
+- Persisting rest times to workout history
 - Timer behavior when unchecking a set
 
 ## Notes

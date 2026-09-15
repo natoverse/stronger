@@ -1,16 +1,13 @@
 # Feature: Firebase application backend
 
-> Replace Google Sheets as Stronger's application database with user-scoped
-> Cloud Firestore data while retaining Google authorization only for Calendar
-> sync.
+> Store Stronger's application data in user-scoped Cloud Firestore while
+> retaining separate Google authorization only for Calendar sync.
 
 ## What
 
-Stronger currently uses a short-lived Google OAuth access token for both
-application login and every data operation. The app will instead authenticate
-with Firebase Authentication and store each user's data below their Firebase
-UID in Cloud Firestore. Google API authorization becomes an optional,
-task-specific connection used only by Calendar sync.
+Stronger authenticates with Firebase Authentication and stores each user's data
+below their Firebase UID in Cloud Firestore. Google API authorization is an
+optional, task-specific connection used only by Calendar sync.
 
 The application remains a client-side React app hosted on GitHub Pages.
 
@@ -24,8 +21,8 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] Every document is stored below `/users/{uid}` and security rules prevent
   access to another user's records.
 - [ ] A new account can seed the existing default exercises, workouts, and
-  cardio activities without a spreadsheet.
-- [ ] The web app contains no Google Sheets migration controls.
+  cardio activities in Firestore.
+- [ ] The web app exposes only the Firestore application backend.
 - [ ] Google Calendar authorization is requested only from a calendar sync
   panel and an expired Calendar token does not sign the user out of Stronger.
 - [ ] Calendar authorization loads writable calendars without synchronizing;
@@ -35,8 +32,8 @@ The application remains a client-side React app hosted on GitHub Pages.
 - [ ] Selecting the wrong calendar cannot delete Firestore schedule entries.
 - [ ] Existing two-way Calendar synchronization and `strongerId` matching are
   preserved.
-- [ ] Garmin activities and Garmin wellness scheduled syncs mirror their
-  completed sheet updates into the corresponding Firestore collections.
+- [ ] Garmin activities, Garmin wellness, and Withings scheduled syncs write
+  directly into the corresponding Firestore collections.
 - [ ] Firebase configuration is supplied through public `VITE_FIREBASE_*`
   environment variables; no service-account credential is shipped to the app.
 - [ ] Firestore rules and repository behavior have automated tests.
@@ -87,12 +84,11 @@ views query only required collections or date ranges; they do not attach
 whole-history real-time listeners. Firebase's public web configuration is not a
 secret. Administrative sync credentials remain restricted to GitHub Actions.
 
-## Rollout
+## Persistence
 
-The migration action in spec 049 runs before this backend switch. Existing
-Sheets remain the ingestion ledger and backup during stabilization. Garmin and
-Garmin Wellness workflows mirror only their own completed collections into
-Firestore after each successful sync.
+Firestore is the sole application and health-ingestion data store. Administrative
+syncs write directly to their own collections, preserving records outside each
+fetch window. Browser access and Calendar authorization remain independent.
 
 ## Iteration Decisions
 
@@ -100,10 +96,10 @@ Firestore after each successful sync.
   views read Garmin data; the remaining `StravaActivity` type name is legacy
   shared chart terminology rather than a Strava data dependency.
 - Workout history is stored atomically as one nested document per session
-  instead of carrying the legacy Google Sheets row boundary into Firestore.
+  rather than treating individual sets as independent persistence boundaries.
   Session edits and deletes therefore require one document operation.
 - Scheduled workouts are stored as one document per day with an ordered events
-  array, rather than one document per legacy sheet row.
+  array, rather than one document per event.
 - Authentication no longer blocks on exercises, workouts, and cardio reads.
   The active route selects a priority collection batch from
   `lib/firebase-load-plan.json`; only after that batch completes does one
@@ -112,9 +108,8 @@ Firestore after each successful sync.
   activities load requests `garminActivities` before unrelated collections.
   The active view retains its loading state until that priority batch finishes,
   avoiding a false empty-state flash while background prefetch continues.
-- The benchmark consumes the same route load plan. Sheets retains its
-  full-range baseline while Firestore cold-load timing reads only the current
-  year for yearly datasets.
+- Firestore cold-load reads use the shared route load plan and read only the
+  current year for yearly datasets.
 - Yearly bucket datasets are split by load scope. Active-route cold start reads
   only the current-year document for workout sessions, Garmin activities,
   Garmin wellness, and Withings measurements. The immediate deferred batch
@@ -142,9 +137,8 @@ Firestore after each successful sync.
 - Clearing scheduled workouts requests Calendar authorization before deleting
   linked and orphaned Stronger events, and reports authorization failures
   instead of silently leaving events behind.
-- Scheduled Withings mirroring is deferred to separate workflow migration
-  work. The one-time migration still imports existing Withings measurements,
-  and the Firebase UI continues to read the migrated yearly buckets.
+- Scheduled Withings ingestion writes directly to yearly Firestore buckets,
+  which the Firebase UI reads alongside Garmin data.
 - Firebase Authentication initializes with IndexedDB, local-storage, and
   session-storage persistence fallbacks. Firebase rotates its one-hour ID token
   automatically through the long-lived refresh token; the application session
@@ -160,7 +154,7 @@ Firestore after each successful sync.
   session, preventing one Stronger user from inheriting another user's Google
   Calendar destination.
 - Calendar access requests only event read/write and calendar-list read scopes;
-  Firebase startup requests no Calendar or Sheets API scopes.
+  Firebase startup requests no Calendar API scopes.
 - The selected calendar is persisted as `calendar.syncCalendarId` in the
   Firebase settings document after the first verified sync. An unverified
   browser cookie cannot preselect a calendar.
@@ -212,3 +206,20 @@ Firestore after each successful sync.
   Network unavailability is an offline state, not a sign-out condition.
 - Offline, syncing, pending-write, last-synced, and reauthentication states are
   non-blocking toolbar status. Calendar operations remain online-only.
+
+## Firestore-only Cleanup (2026-09-15)
+
+- Retire the former persistence client, connection helpers, API configuration,
+  migration tooling, comparison workflows, and their storage-specific tests.
+  Existing Firestore documents are not rewritten or deleted by this cleanup.
+- Move shared log models, previous-workout lookup, settings, and goal conversion
+  helpers into the application domain layer so Firestore and views do not depend
+  on an obsolete backend module.
+- Use Firebase user identity and connection terminology throughout the app.
+  Firestore operations must not trigger Calendar authorization or its token
+  retries; Calendar synchronization retains its separate authorization flow.
+- Preserve shared helper coverage, offline queued writes, user-scoped security
+  rules, and direct Garmin/Withings synchronization. Administrative authentication
+  and Firestore serialization remain available independently of retired tools.
+- Update setup instructions, operational notes, and feature specs to describe
+  the current architecture; remove specs dedicated solely to retired tooling.

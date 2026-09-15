@@ -4,7 +4,7 @@
 
 ## What
 
-The app logs every set to the sheet but provides no way to see trends. This spec adds a "Progress" view that charts training data over time, giving a quick visual answer to "am I getting stronger?"
+The app logs every set but originally provided no way to see trends. This spec adds a "Progress" view that charts training data over time, giving a quick visual answer to "am I getting stronger?"
 
 The page shows a single timeline line chart at a time. The user picks a lift (any exercise from their log history) and a metric — total volume, heaviest weight, or estimated 1RM — and the chart plots one data point per session. A time-range selector (1 month, 3 months, 12 months, or all) filters the visible window.
 
@@ -34,7 +34,7 @@ Warmup sets are excluded from all calculations. Only completed, non-warmup sets 
 - Line chart rendering for a single lift at a time
 - Three metric calculations (volume, heaviest weight, estimated 1RM)
 - Four time-range filters
-- Reading log data from the existing sheet log tab
+- Reading logged sets from Firestore workout-session history
 - Route and navigation entry point
 
 ### Out of scope
@@ -46,7 +46,7 @@ Warmup sets are excluded from all calculations. Only completed, non-warmup sets 
 
 ## Notes
 
-- Log data comes from `readLogZone()` in `src/google/sheets.ts`, which returns `ParsedLogRow[]`. Each row has `setType`, `actualWeight`, `actualReps`, `completed`, `exerciseName`, `liftId`, and `date` — everything needed for the calculations.
+- Firestore session adapters expose log data as shared `ParsedLogRow[]` model values. Each row has `setType`, `actualWeight`, `actualReps`, `completed`, `exerciseName`, `liftId`, and `date` — everything needed for the calculations.
 - The app has no charting library today. The implementer will need to add one; the choice is left to implementation.
 - Route should be `#/progress`, added to the hash router's route union type in `src/hooks/useHashRouter.ts`.
 - The Epley formula breaks down for single-rep sets (reps = 1 yields 1RM = weight itself), which is correct and expected.

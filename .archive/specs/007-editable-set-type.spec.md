@@ -8,7 +8,7 @@ During a workout, each set displays its type (warmup, work, backoff). Tapping th
 
 Joker sets are unplanned bonus sets added when the lifter is feeling strong. They aren't part of the standard workout template — they're an in-session override. The joker type is available in the dropdown but not used in any templates or computed workouts yet.
 
-When the workout is saved, each set's actual type (including any changes or joker additions) is recorded in the sheet log.
+When the workout is saved, each set's actual type (including any changes or joker additions) is recorded in the workout log.
 
 ## Acceptance Criteria
 

@@ -51,7 +51,7 @@
 
 ## Iteration: hide alcohol day flag
 
-- The alcohol day flag remains in the persisted data model and sheet schema, but is not shown or editable from daily cards or the monthly calendar.
+- The alcohol day flag remains in the persisted Firestore data model, but is not shown or editable from daily cards or the monthly calendar.
 
 ## Iteration: scheduled workout tags
 
@@ -91,7 +91,7 @@
 
 ## Iteration: activity ordering and day status
 
-- Cardio activities are always shown before strength workouts in both month cells and detailed day lists, independent of sheet order. Rest follows both activity types.
+- Cardio activities are always shown before strength workouts in both month cells and detailed day lists, independent of stored entry order. Rest follows both activity types.
 - Month cells show up to three workout tags and are slightly taller to accommodate the additional tag.
 - Month headers show the purple visitors icon beside the location icon, and blocked dates use a red day number.
 - Travel icons use the neon yellow accent in both month headers and detailed day-list controls.

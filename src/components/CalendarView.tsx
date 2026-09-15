@@ -1,7 +1,8 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Workout, WorkoutScheduleEntry, SetType, CardioActivity, DayFlags, DayFlagEntry } from '../model/index.js';
 import { REST_ID, BLOCKER_ID } from '../model/index.js';
-import type { ParsedLogRow, CalendarSyncResult } from '../google/index.js';
+import type { ParsedLogRow } from '../model/index.js';
+import type { CalendarSyncResult } from '../google/index.js';
 import { prepareCalendarAuthorization } from '../google/index.js';
 import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save, Check, CalendarCog, HeartPulse, House, Palmtree, Plane, Users, Ban, RefreshCw, Loader, CheckCircle, AlertCircle, Moon, Pencil } from 'lucide-react';
 import { CalendarPush } from './CalendarPush.js';

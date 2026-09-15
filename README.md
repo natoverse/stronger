@@ -14,22 +14,22 @@ Run `npm run test:screenshots` to capture the representative PR screenshots in
 embed the screenshots in a reusable PR comment. The HTML report remains
 available as a workflow artifact for diagnostics.
 
-A barbell training tracker. Single-page React app, Google Sheets as the database, deployed to GitHub Pages. No backend.
+A barbell training tracker. Single-page React app with Firebase Authentication and Cloud Firestore, deployed to GitHub Pages.
 
 **This project is opinionated.** It reflects one person's planning style and training preferences. No human code is written — all code is authored by AI agents working from specs and deployed through GitHub Actions.
 
 ## How it works
 
-1. Sign in with Google OAuth.
-2. Connect (or create) a Google Sheet — the app reads/writes workout data directly to named tabs.
-3. Pick a workout, execute it, log results. The sheet is both storage and audit trail.
+1. Sign in with Google through Firebase Authentication.
+2. Set up your exercises and import starter workouts if needed.
+3. Pick a workout, execute it, and log results in your user-scoped Firestore data.
+4. Optionally connect Google Calendar to synchronize your workout schedule.
 
 ## Setup
 
-For the current Google Sheets application, see
-**[Google OAuth Setup](GOOGLE_SETUP.md)**. For the Firebase backend rollout,
-shared project configuration, and one-time migration, see
-**[Firebase Setup](FIREBASE_SETUP.md)**.
+See **[Firebase Setup](FIREBASE_SETUP.md)** for application and shared-project
+configuration. Optional Calendar synchronization uses the separate
+**[Google Calendar OAuth Setup](GOOGLE_SETUP.md)**.
 
 ## Development model
 
@@ -39,14 +39,14 @@ shared project configuration, and one-time migration, see
 
 ## Tech stack
 
-React 19 · TypeScript 5.7 · Vite 6 · Vitest · Google Sheets API · GitHub Pages
+React 19 · TypeScript 5.7 · Vite 6 · Vitest · Firebase Authentication · Cloud Firestore · GitHub Pages
 
 ## Project docs
 
 | File | Purpose |
 |------|---------|
 | [MANIFESTO.md](MANIFESTO.md) | Vision, principles, scope |
-| [GOOGLE_SETUP.md](GOOGLE_SETUP.md) | OAuth and Sheets configuration |
-| [FIREBASE_SETUP.md](FIREBASE_SETUP.md) | Firebase runtime, administration, and migration setup |
+| [GOOGLE_SETUP.md](GOOGLE_SETUP.md) | Optional Google Calendar OAuth configuration |
+| [FIREBASE_SETUP.md](FIREBASE_SETUP.md) | Firebase runtime and administration setup |
 | [GARMIN_SYNC_SETUP.md](GARMIN_SYNC_SETUP.md) | Activity data sync from Garmin Connect |
 | [AGENTS.md](AGENTS.md) | Operational notes for AI agents |

@@ -4,7 +4,7 @@
  * Fetches body-composition measurements from the Withings API and merges them
  * into yearly Firestore bucket documents.
  *
- * Unlike Strava, Withings ROTATES its refresh token on every refresh: each
+ * Withings ROTATES its refresh token on every refresh: each
  * call invalidates the previous token (it dies 8h later) and returns a new
  * one. The current refresh token is persisted in an administrator-only
  * /syncState/{uid} Firestore document. WITHINGS_REFRESH_TOKEN is only the
@@ -39,7 +39,7 @@ import { requestWithingsToken } from './withings-oauth.mjs'
 const WITHINGS_MEASURE_URL = 'https://wbsapi.withings.net/measure'
 const REFRESH_TOKEN_FIELD = 'withingsRefreshToken'
 
-// Withings meastype codes → our column keys. See:
+// Withings meastype codes → Firestore metric keys. See:
 // https://developer.withings.com/developer-guide/v3/data-api/all-available-health-data/
 const MEASTYPE = {
 	weight: 1,
@@ -52,7 +52,6 @@ const MEASTYPE = {
 	heartRate: 11,
 	visceralFat: 170,
 }
-// Order matters — this is the column order after date/grpId.
 const METRIC_KEYS = ['weight', 'fatMass', 'fatRatio', 'muscleMass', 'boneMass', 'hydration', 'fatFreeMass', 'heartRate', 'visceralFat']
 const MEASTYPES_PARAM = METRIC_KEYS.map((k) => MEASTYPE[k]).join(',')
 
@@ -214,7 +213,7 @@ async function main() {
 	const groups = await fetchMeasurements(accessToken, startdate)
 	console.log(`Fetched ${groups.length} measurement groups from Withings.`)
 
-	// 4. Convert groups to the migrated Firestore model.
+	// 4. Convert groups to the Firestore model.
 	const measurements = groups
 		.map(groupToMeasurement)
 		.filter((measurement) => measurement !== null)

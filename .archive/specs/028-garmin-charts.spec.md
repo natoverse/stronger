@@ -4,7 +4,7 @@
 
 ## What
 
-Spec 027 established a pipeline that writes Garmin activity data (via Strava) into the "Stronger - Garmin" sheet tab. This spec adds a UI view to chart that data — giving a visual answer to questions like "how much am I running this month?" and "am I on track for my annual mileage goal?"
+Spec 027 established the original activity pipeline through Strava; direct Garmin synchronization now supplies Firestore activity history. This spec adds a UI view to chart that data — giving a visual answer to questions like "how much am I running this month?" and "am I on track for my annual mileage goal?"
 
 The view shows three metrics — **distance** (miles), **elevation gain** (feet), and **duration** (hours) — each in its own chart. Each metric is optional per activity row (some activities may have distance but no elevation, etc.), and a chart is only shown when there is data for it.
 
@@ -25,18 +25,18 @@ Each chart is a **dual-axis** visualization:
 
 ### Activity type filtering
 
-A filter control lets the user select which activity types to include. By default all types are included. The filter applies to all metric charts simultaneously. Activity types are derived from the data — only types present in the Garmin tab are shown as filter options.
+A filter control lets the user select which activity types to include. By default all types are included. The filter applies to all metric charts simultaneously. Activity types are derived from the data — only types present in the activity history are shown as filter options.
 
 ### Goal setting
 
-Goals are **annual** and **per-metric**, stored in a new "Stronger - Goals" sheet tab. A goal represents a target cumulative value for the year (e.g., "run 1000 miles this year" or "gain 200,000 ft of elevation this year"). When viewing shorter time ranges, the goal line is prorated (e.g., a 1000-mile annual goal shows as ~83 miles on a month chart).
+Goals are **annual** and **per-metric**, persisted in the user's Firestore settings document. A goal represents a target cumulative value for the year (e.g., "run 1000 miles this year" or "gain 200,000 ft of elevation this year"). When viewing shorter time ranges, the goal line is prorated (e.g., a 1000-mile annual goal shows as ~83 miles on a month chart).
 
 Goals are set inline — tapping a "Set goal" icon near the chart opens a simple input. Goals are optional; if not set, no goal line appears.
 
 ## Acceptance Criteria
 
 - [ ] A "Garmin" view is accessible from the app's navigation (route: `#/garmin`)
-- [ ] The view reads activity data from the "Stronger - Garmin" sheet tab
+- [ ] The view reads activity data from the user's Firestore Garmin activity buckets
 - [ ] Three metric charts are displayed: distance (miles), elevation gain (feet), duration (hours)
 - [ ] Charts with no data for a metric are hidden
 - [ ] A time range selector offers: Week, Month, Quarter, Year, All
@@ -45,7 +45,7 @@ Goals are set inline — tapping a "Set goal" icon near the chart opens a simple
 - [ ] A cumulative line is plotted on the right y-axis in neon pink (`--color-accent`)
 - [ ] Activity type filter lets the user include/exclude specific types
 - [ ] Annual goals can be set per metric via inline input
-- [ ] Goals are stored in a "Stronger - Goals" sheet tab
+- [ ] Goals are stored in the user's Firestore settings document
 - [ ] When an annual goal is set, a dashed faded grey goal-pace line appears on the right axis, prorated to the selected time range
 - [ ] The cumulative line's position relative to the goal line shows whether the user is ahead or behind pace
 - [ ] The view follows the existing neon visual style
@@ -59,9 +59,9 @@ Goals are set inline — tapping a "Set goal" icon near the chart opens a simple
 - Cumulative line overlay on second y-axis
 - Activity type filtering
 - Time range selector (week, month, quarter, year, all)
-- Annual goal storage in a new sheet tab
+- Annual goal persistence in Firestore settings
 - Goal-pace line (prorated) on the cumulative axis
-- Reading data from the existing "Stronger - Garmin" tab
+- Reading data from existing Garmin activity buckets
 - SVG-based charts (consistent with existing progress charts)
 
 ### Out of scope
@@ -75,26 +75,24 @@ Goals are set inline — tapping a "Set goal" icon near the chart opens a simple
 
 ## Data model
 
-### Garmin tab (existing, from spec 027)
+### Garmin activity history
 
-Columns (suggested in spec 027): `date`, `stravaId`, `activityType`, `name`, `duration`, `distance`, `elevationGain`, `calories`, `avgHR`, `maxHR`.
+Yearly documents in `/users/{uid}/garminActivities/{year}` expose shared activity objects. The source activity ID retains the shared model's `stravaId` name; it is now a Garmin identifier.
 
-This spec consumes: `date`, `activityType`, `duration` (seconds), `distance` (meters), `elevationGain` (meters). The rest are ignored for charting.
+This spec consumes the activity date from `timestamp`, plus `activityType`, `duration` (seconds), `distance` (meters), and `elevationGain` (meters). Other fields are not required for these charts.
 
-> **Note**: The exact Garmin tab schema may evolve as spec 027 is implemented. The charting code should parse what's available and degrade gracefully if columns are missing.
+> **Note**: The charting code must degrade gracefully when optional metric fields are missing.
 
-### Settings tab (new)
+### Settings document
 
-Tab name: `Stronger - Settings`
+A general-purpose settings map in `/users/{uid}/settings/app`, including goals.
 
-A general-purpose key/value store for app settings, including goals.
-
-| Column | Description |
+| Field | Description |
 |--------|-------------|
 | `key` | Setting identifier (e.g. `goal.distance`, `goal.elevationGain`, `goal.duration`) |
 | `value` | Setting value as a string |
 
-Range: `A:B` (2 columns). Goal entries use a `goal.` prefix on the key (e.g. `goal.distance = 1000`). Additional non-goal settings can be added as new key/value rows without schema changes.
+Goal entries use a `goal.` prefix on the key (e.g. `goal.distance = 1000`). Additional non-goal settings can be added without changing a positional schema.
 
 ### Units and display
 
@@ -122,14 +120,14 @@ Conversions are display-only — storage remains in metric (matching Strava API 
 - **Empty buckets**: Time buckets with no activities show as zero-height bars (no gap in the x-axis). This makes the cumulative line's flat segments visible and meaningful.
 - **Goal editing UX**: Keep it minimal. Tapping a small "Set goal" or pencil icon near the chart shows an inline number input. Pressing enter saves. No modal, no separate settings page.
 - **Route**: `#/garmin` added to the hash router. Navigation icon: `Activity` or `Mountain` from lucide-react (or similar — whatever fits the neon aesthetic).
-- **Depends on**: Spec 027 (Garmin data sync). The view is useless without data in the Garmin tab, but the component can render an empty state ("No Garmin data yet. Set up sync to see activity charts.").
+- **Depends on**: Direct Garmin synchronization (spec 031). Without synced activity history, the component renders an empty state ("No Garmin data yet. Set up sync to see activity charts.").
 
 ## Implementation notes (added during development)
 
-- **Mock data first**: Initial implementation uses `src/data/mock-garmin.ts` which generates ~6 months of synthetic activities (Run, Ride, Hike, Trail Run) using a deterministic PRNG. Goals also use mock defaults (1500 mi, 200k ft, 500 hrs). Will switch to real Garmin sheet data once spec 027 is fully implemented.
+- **Mock data first**: Initial implementation used `src/data/mock-garmin.ts`, generating ~6 months of synthetic activities (Run, Ride, Hike, Trail Run) using a deterministic PRNG. Goals used mock defaults (1500 mi, 200k ft, 500 hrs), pending real activity integration.
 - **Nav icon**: Uses `Activity` from lucide-react. Title shows "Activities" since the view shows all synced activities, not just Garmin-branded ones.
-- **Goal storage**: Currently in-memory only (state resets on reload). Sheet-backed goal persistence (via "Stronger - Goals" tab) deferred until real data integration.
-- **Goal persistence (implemented)**: Goals are persisted via a general-purpose "Stronger - Settings" key/value sheet tab. Goal entries use `goal.<metric>` keys (e.g. `goal.distance`). The settings tab is auto-created on first visit and loaded alongside Garmin activities. `goalsFromSettings()` / `goalsToSettings()` handle conversion. 14 unit tests in `settings-data.test.ts`.
+- **Goal storage**: Initially in-memory only (state reset on reload); persistence was deferred until real data integration.
+- **Goal persistence (implemented)**: Goals now persist in the general-purpose Firestore settings document, using `goal.<metric>` keys (e.g. `goal.distance`). `goalsFromSettings()` / `goalsToSettings()` in `src/model/settings.ts` handle conversion and are exported through `src/model/index.ts`.
 - **Model/view split**: Chart logic is in `src/model/garmin.ts` (pure functions, 31 unit tests). Component is in `src/components/GarminView.tsx`. This mirrors the existing `progress.ts` / `ProgressView.tsx` pattern.
 - **SVG approach**: Hand-rolled SVG with viewBox for responsiveness, matching the existing progress charts style. niceTicksFor helper is duplicated (same algorithm as ProgressView) — could be extracted later.
 - **Filter UX**: Collapsible chip-based filter for activity types. "All" toggle for convenience. Filter only appears when more than one activity type exists.

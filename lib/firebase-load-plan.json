@@ -38,23 +38,5 @@
     "garmin-activities": ["garminActivities", "settings"],
     "wellness": ["garminWellness", "settings"],
     "withings": ["workoutSessions", "withingsMeasurements", "exercises", "settings"]
-  },
-  "benchmarkRoutes": [
-    "list",
-    "calendar",
-    "exercises",
-    "progress",
-    "garmin",
-    "garmin-activities",
-    "settings"
-  ],
-  "labels": {
-    "list": "Workouts",
-    "calendar": "Calendar",
-    "exercises": "Exercises",
-    "progress": "Progress",
-    "garmin": "Garmin wellness",
-    "garmin-activities": "Garmin activities",
-    "settings": "Settings"
   }
 }

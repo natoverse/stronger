@@ -8,7 +8,7 @@
  * The signed-in account email is persisted in a cookie and used as a
  * `login_hint` so Google can select the previous account.
  *
- * gapi is still loaded for the Sheets and Calendar REST APIs.
+ * gapi is loaded only for the Calendar REST API.
  */
 
 import { GOOGLE_CLIENT_ID, CALENDAR_DISCOVERY_DOC, CALENDAR_SCOPE } from './config.ts'
@@ -117,7 +117,7 @@ export function loadGis(): Promise<void> {
 
 let gapiInited = false
 
-/** Initialise the gapi client and load Sheets + Calendar discovery docs. */
+/** Initialize the gapi client with the Calendar discovery document. */
 export async function initGapiClient(): Promise<void> {
 	if (gapiInited) return
 	const gapi = window.gapi
@@ -359,46 +359,4 @@ export function getGapiErrorStatus(err: unknown): number | undefined {
  */
 export function isAuthError(err: unknown): boolean {
 	return getGapiErrorStatus(err) === 401
-}
-
-/**
- * Return a user-friendly error message for a sheet connection failure.
- * Uses the HTTP status code to give actionable guidance.
- */
-export function describeSheetError(err: unknown): string {
-	const status = getGapiErrorStatus(err)
-	switch (status) {
-		case 404:
-			return 'This spreadsheet was not found — it may have been deleted or moved to Trash.'
-		case 403: {
-			const guidance = 'Share the sheet with this account, or sign out and use a different Google account.'
-			const email = loadUserEmail()
-			const accountMessage = email
-				? `The signed-in account (${email}) doesn’t have access to this spreadsheet.`
-				: 'You don\'t have permission to access this spreadsheet.'
-			return `${accountMessage} ${guidance}`
-		}
-		default:
-			return err instanceof Error
-				? err.message
-				: 'Unable to access the sheet.'
-	}
-}
-
-/* ------------------------------------------------------------------ */
-/*  Auth-retry wrapper                                                 */
-/* ------------------------------------------------------------------ */
-
-/**
- * Execute an async operation and clear an expired token after a 401.
- * Re-authentication always requires the user to click the sign-in button.
- */
-export async function withAuthRetry<T>(fn: () => Promise<T>): Promise<T> {
-	try {
-		return await fn()
-	} catch (err) {
-		if (!isAuthError(err)) throw err
-		clearAuth()
-		throw err
-	}
 }

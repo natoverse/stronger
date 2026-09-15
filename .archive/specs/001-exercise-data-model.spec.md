@@ -1,23 +1,23 @@
 # Feature: Exercise data model
 
-> Define a structured data model for exercises, sets, and per-lift configuration so that workouts can be calculated, stored, and progressed week-to-week in a Google Sheet.
+> Define a structured data model for exercises, sets, and per-lift configuration so that workouts can be calculated, stored, and progressed week-to-week.
 
 ## What
 
 We need a data model that captures all the parameters required to fully describe a workout program like RSS Intermediate B. The model must support percentage-based weight calculations, independent tracking of top-set and backoff weights, rep ranges, AMRAP sets, per-set comments (e.g., progression rules), and per-lift configuration such as weight floors and rounding.
 
-**The Google Sheet is the source of truth.** Every parameter in this model — top set weight, backoff weight, increment, minimum, rounding factor — must be a cell in the spreadsheet that the user can edit at any time. The app reads these values on load and calculates the workout from them. There is no configuration in application code. If a user has a bad week and wants to increase bench by 1 lb instead of 2.5 lbs, they edit the cell in the sheet, and the next time they load the app the workout reflects the change.
+**Firestore is the source of truth.** Every parameter in this model — top set weight, backoff weight, increment, minimum, rounding factor — is a named field in the user's exercise configuration. The app reads these values and calculates the workout from them. Defaults in application data are only for initial setup; subsequent edits use the exercise editor. For example, changing bench's increment from 2.5 lbs to 1 lb changes the next progression proposal.
 
-**The sheet has two zones:**
+**Separate persisted inputs from computed output:**
 
-1. **Inputs** (top of the sheet) — editable cells for each lift's configuration: top set weight, backoff weight, increment, minimum weight, rounding factor, and any other parameters. These are the only cells the user ever edits. In the future, the app will provide UI to edit these directly; for now, they are edited in the spreadsheet.
-2. **Computed workouts** (below the inputs) — the weekly workout plan with concrete weights for every set. These are entirely derived from the inputs via percentage calculations, rounding, and minimum clamping. The user never manually edits these cells.
+1. **Inputs** — editable lift configuration and workout templates persisted below `/users/{uid}`.
+2. **Computed workouts** — concrete weights derived at runtime via percentage calculations, rounding, and minimum clamping. These computed instances are not persisted; actual execution results are saved separately as workout sessions.
 
 The model has three layers:
 
 1. **Lift configuration** — per-lift settings that control how weights are calculated and progressed (e.g., top set weight, backoff weight, increment, minimum weight, rounding factor).
 2. **Exercise template** — the ordered list of sets for a given exercise in a workout, with each set's type, percentage basis, rep scheme, and comments.
-3. **Weekly instance** — a concrete workout for a specific week with calculated weights, to be written into the spreadsheet.
+3. **Weekly instance** — a concrete workout for a specific week with calculated weights, computed at runtime.
 
 ## Acceptance Criteria
 
@@ -32,18 +32,18 @@ The model has three layers:
 - [ ] Each lift has a **rounding factor** — all calculated weights are rounded to the nearest multiple (e.g., 5 lbs for barbell, 2.5 lbs for smaller increments).
 - [ ] The model supports sets where the percentage basis is derived from a *different* lift's top set weight (e.g., secondary press at 85% of primary press top set).
 - [ ] Given a lift configuration and an exercise template, all set weights for a given week can be deterministically calculated.
-- [ ] All lift configuration values (top set weight, backoff weight, increment, minimum, rounding factor) are stored as editable cells in the Google Sheet — not in application code. The user can change any value at any time, and the app recalculates on next load.
+- [ ] All lift configuration values (top set weight, backoff weight, increment, minimum, rounding factor) are stored as editable Firestore fields, not fixed in application code. The user can change any value, and the app recalculates from the updated configuration.
 
 ## Scope
 
 ### In scope
 - Defining the data model (fields, types, relationships)
-- Defining the two-zone sheet layout: inputs at the top, computed workouts below
+- Separating persisted configuration from computed workout instances
 - Documenting how calculations work (percentage × reference weight → round → clamp to minimum)
-- Identifying what goes into the Google Sheet and how it maps to columns/rows
+- Identifying persisted fields and their mapping to the domain model
 
 ### Out of scope
-- Implementing the Google Sheets read/write code
+- Implementing Firestore persistence
 - Building the UI
 - In-app editing of lift configuration inputs (future spec)
 - Progression logic that automatically updates weights week-to-week (separate spec)
@@ -55,3 +55,7 @@ The model has three layers:
 - Secondary lifts derive their working weight from another lift's primary top set (e.g., secondary press = 85% of primary press top set; secondary squat = 75% of primary squat top set). The model needs a way to express this cross-reference.
 - Assistance exercises use their own independent working weight, not derived from a primary lift. They still need top set / backoff tracking (e.g., skull crusher 100% × 8, 85% × 8+).
 - All primary and secondary lifts (barbell lifts) always begin with a warmup set of the empty bar (45 lbs × 10 reps). This is a fixed warmup, not percentage-based. Assistance exercises do not have this bar warmup.
+
+## Firestore-only iteration (2026-09-15)
+
+- Configuration uses named document fields; computed workouts remain ephemeral. The original separation of inputs, templates, and execution results is preserved without positional storage schemas.

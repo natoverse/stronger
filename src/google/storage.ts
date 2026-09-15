@@ -1,23 +1,3 @@
-const SHEET_ID_COOKIE = 'stronger_sheet_id'
-
-/** Cookie lifetime for the sheet ID: 1 year in seconds. */
-const SHEET_ID_MAX_AGE = 365 * 24 * 60 * 60
-
-/** Persist the spreadsheet ID in a long-lived cookie. */
-export function saveSheetId(id: string): void {
-	setCookie(SHEET_ID_COOKIE, id, SHEET_ID_MAX_AGE)
-}
-
-/** Read the stored spreadsheet ID, or `null` if not set. */
-export function loadSheetId(): string | null {
-	return getCookie(SHEET_ID_COOKIE)
-}
-
-/** Remove the stored spreadsheet ID. */
-export function clearSheetId(): void {
-	deleteCookie(SHEET_ID_COOKIE)
-}
-
 /* ------------------------------------------------------------------ */
 /*  Access token persistence (cookie-based)                            */
 /* ------------------------------------------------------------------ */

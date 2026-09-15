@@ -31,13 +31,13 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
 - Setup and recovery documentation, including manual Gaia session-cookie renewal and the unsupported-API warning.
 
 ### Out of scope
-- Syncing other activity types, routes/waypoints/photos, or changing the Stronger UI or Sheets schema.
+- Syncing other activity types, routes/waypoints/photos, or changing the Stronger UI or Firestore schema.
 - Automating Gaia login, CAPTCHA/MFA, scraping browser credentials, or claiming support from Garmin/Gaia.
 - Deleting or updating Gaia tracks when a Garmin activity changes; that requires a separate conflict-policy spec.
 
 ## Notes
 
-- Existing context: `.github/workflows/garmin-sync.yml` runs hourly, but the Gaia sync reads activities directly from Garmin and does not depend on the Google Sheets write.
+- Existing context: `.github/workflows/garmin-sync.yml` runs hourly, but the Gaia sync reads activities directly from Garmin and does not depend on Firestore ingestion.
 - **Workflow separation decision:** use a standalone `garmin-gaia-sync.yml` workflow with its own nightly cron and manual dispatch. GitHub's workflow controls replace custom enable and UTC-hour variables.
 - Garmin's official Activity API confirms activity file delivery in FIT, GPX, and TCX, but access requires an approved business integration: https://developer.garmin.com/gc-developer-program/activity-api/
 - The installed client family exposes `download_activity(..., ActivityDownloadFormat.GPX)` against Garmin Connect's GPX export endpoint and returns raw bytes: https://github.com/cyberjunky/python-garminconnect/blob/981d150caeda7d632224a75f3895c08df27a2a34/garminconnect/__init__.py#L2825-L2862

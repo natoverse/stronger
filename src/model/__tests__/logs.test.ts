@@ -1,112 +1,46 @@
 import { describe, it, expect } from 'vitest';
-import { parseLogRow, findPreviousWorkoutSets } from '../sheets.ts';
-import type { ParsedLogRow } from '../sheets.ts';
+import { buildLogRow, findPreviousWorkoutSets } from '../logs.ts';
+import type { ParsedLogRow } from '../logs.ts';
 
 /* ------------------------------------------------------------------ */
-/*  parseLogRow                                                        */
+/*  buildLogRow                                                        */
 /* ------------------------------------------------------------------ */
 
-describe('parseLogRow', () => {
-	const validRow = [
-		'2026-03-28',
-		'2026-03-28T18:00:00.000Z',
-		'2026-03-28T19:15:00.000Z',
-		'A',
-		'Primary: Bench Press',
-		'bench',
-		'1',
-		'work',
-		'200',
-		'5',
-		'200',
-		'6',
-		'TRUE',
-	];
-
-	it('parses a valid row into a ParsedLogRow', () => {
-		const result = parseLogRow(validRow);
-		expect(result).toEqual({
+describe('buildLogRow', () => {
+	it.each([true, false])('preserves planned and actual values with completed=%s', (completed) => {
+		const ctx = {
 			date: '2026-03-28',
 			startTime: '2026-03-28T18:00:00.000Z',
 			endTime: '2026-03-28T19:15:00.000Z',
 			workoutId: 'A',
+		};
+		const planned = { setType: 'work' as const, weight: 200, minReps: 3, maxReps: 5, amrap: true };
+		const result = { actualWeight: 205, actualReps: 6, actualSetType: 'joker' as const, completed };
+		expect(buildLogRow(ctx, 'Primary: Bench Press', 'bench', 2, result.actualSetType, planned, result)).toEqual({
+			...ctx,
 			exerciseName: 'Primary: Bench Press',
 			liftId: 'bench',
-			setNumber: 1,
-			setType: 'work',
+			setNumber: 2,
+			setType: 'joker',
 			plannedWeight: 200,
 			plannedReps: 5,
-			actualWeight: 200,
+			actualWeight: 205,
 			actualReps: 6,
-			completed: true,
+			completed,
 		});
 	});
 
-	it('returns null for rows with fewer than 13 columns', () => {
-		expect(parseLogRow(['2026-03-28', 'A'])).toBeNull();
-		expect(parseLogRow([])).toBeNull();
-	});
-
-	it('returns null when date is empty', () => {
-		const row = [...validRow];
-		row[0] = '';
-		expect(parseLogRow(row)).toBeNull();
-	});
-
-	it('returns null when startTime is empty', () => {
-		const row = [...validRow];
-		row[1] = '';
-		expect(parseLogRow(row)).toBeNull();
-	});
-
-	it('returns null when workoutId is empty', () => {
-		const row = [...validRow];
-		row[3] = '';
-		expect(parseLogRow(row)).toBeNull();
-	});
-
-	it('returns null when exerciseName is empty', () => {
-		const row = [...validRow];
-		row[4] = '';
-		expect(parseLogRow(row)).toBeNull();
-	});
-
-	it('returns null when setNumber is not a positive integer', () => {
-		expect(parseLogRow([...validRow.slice(0, 6), '0', ...validRow.slice(7)])).toBeNull();
-		expect(parseLogRow([...validRow.slice(0, 6), '-1', ...validRow.slice(7)])).toBeNull();
-		expect(parseLogRow([...validRow.slice(0, 6), 'abc', ...validRow.slice(7)])).toBeNull();
-	});
-
-	it('returns null when actualWeight is non-numeric', () => {
-		const row = [...validRow];
-		row[10] = 'abc';
-		expect(parseLogRow(row)).toBeNull();
-	});
-
-	it('returns null when actualReps is non-numeric', () => {
-		const row = [...validRow];
-		row[11] = 'abc';
-		expect(parseLogRow(row)).toBeNull();
-	});
-
-	it('parses FALSE for incomplete sets', () => {
-		const row = [...validRow];
-		row[12] = 'FALSE';
-		expect(parseLogRow(row)!.completed).toBe(false);
-	});
-
-	it('defaults plannedWeight to 0 for non-numeric values', () => {
-		const row = [...validRow];
-		row[8] = 'N/A';
-		expect(parseLogRow(row)!.plannedWeight).toBe(0);
-	});
-
-	it('trims whitespace from all fields', () => {
-		const row = validRow.map((v) => `  ${v}  `);
-		const result = parseLogRow(row);
-		expect(result).not.toBeNull();
-		expect(result!.workoutId).toBe('A');
-		expect(result!.exerciseName).toBe('Primary: Bench Press');
+	it('keeps zero weights and reps for bodyweight or unfinished sets', () => {
+		const ctx = { date: '2026-03-28', startTime: 'start', endTime: 'end', workoutId: 'A' };
+		const planned = { setType: 'work' as const, weight: 0, minReps: 5, maxReps: 10, amrap: false };
+		const result = { actualWeight: 0, actualReps: 0, actualSetType: 'work' as const, completed: false };
+		expect(buildLogRow(ctx, 'Push-Up', 'push-up', 1, 'work', planned, result)).toMatchObject({
+			plannedWeight: 0,
+			plannedReps: 10,
+			actualWeight: 0,
+			actualReps: 0,
+			completed: false,
+		});
 	});
 });
 

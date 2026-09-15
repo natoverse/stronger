@@ -1,7 +1,7 @@
 /**
  * Strava activity chart data model and aggregation logic.
  *
- * Consumes activity data from the "Stronger - Strava" sheet tab and
+ * Consumes activity data from Firestore and
  * produces chart-ready data: bucketed bars, cumulative totals, and
  * prorated goal lines.
  */
@@ -28,7 +28,7 @@ export interface StravaActivity {
   elevationGain: number;
   /** Elevation loss in meters (Garmin activities only) */
   elevationLoss?: number;
-  /** Calories burned (optional; populated by Garmin/Strava sheet parsers). */
+  /** Calories burned (optional; populated by activity imports). */
   calories?: number;
   /** Active calories burned (optional; Garmin only). */
   activeCalories?: number;

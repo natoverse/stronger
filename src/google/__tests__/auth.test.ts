@@ -72,6 +72,18 @@ describe('Google authentication', () => {
 		vi.stubGlobal('window', { gapi: mockGapi(), setTimeout, clearTimeout })
 	})
 
+	it('prepares only the Calendar API without requesting authorization', async () => {
+		window.google = mockGoogle(mockTokenClient)
+		const auth = await loadAuth()
+
+		await auth.prepareCalendarAuthorization()
+
+		expect(window.gapi?.client.init).toHaveBeenCalledWith({
+			discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
+		})
+		expect(window.google.accounts.oauth2.initTokenClient).not.toHaveBeenCalled()
+	})
+
 	it('replaces failed Calendar scripts so preparation can retry', async () => {
 		type ScriptStub = {
 			src: string

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline unit tests for the Garmin sync row mapping.
+"""Offline unit tests for the Garmin sync Firestore mapping.
 
 Run with:  python scripts/test_garmin_sync.py
 
@@ -40,83 +40,78 @@ def test_maps_full_activity():
         "anaerobicTrainingEffect": 0.5,
         "vO2MaxValue": 52.0,
     }
-    row = garmin_sync.activity_to_row(activity)
-    assert row == [
-        "2026-01-02T06:30:00",
-        "123456789",
-        "running",
-        "Morning Run",
-        "1830",
-        "1801",
-        "5013",
-        "43",
-        "40",
-        "148",
-        "172",
-        "2.73",
-        "3.5",
-        "5123",
-        "3.5",
-        "0.5",
-        "52",
-    ], row
-
-
-def test_row_matches_header_length():
-    activity = {
-        "activityId": 1,
-        "startTimeLocal": "2026-01-02 06:30:00",
+    entry = garmin_sync.activity_to_entry(activity)
+    assert entry == {
+        "timestamp": "2026-01-02T06:30:00",
+        "stravaId": "123456789",
+        "activityType": "Running",
+        "name": "Morning Run",
+        "duration": 1830,
+        "distance": 5013,
+        "elevationGain": 43,
+        "elevationLoss": 40,
+        "calories": 0,
+        "avgHR": 148,
+        "maxHR": 172,
     }
-    row = garmin_sync.activity_to_row(activity)
-    assert len(row) == len(garmin_sync.HEADER) == 17, row
 
 
 def test_missing_optional_fields_default_to_zero():
     activity = {
         "activityId": 42,
         "startTimeLocal": "2026-03-04 12:00:00",
+        "activityType": {"typeKey": "running"},
     }
-    row = garmin_sync.activity_to_row(activity)
-    # timestamp, id, type, name, then thirteen numeric zeros
-    assert row == [
-        "2026-03-04T12:00:00", "42", "", "",
-        "0", "0", "0", "0", "0", "0",
-        "0", "0", "0", "0", "0", "0", "0",
-    ], row
+    entry = garmin_sync.activity_to_entry(activity)
+    assert entry == {
+        "timestamp": "2026-03-04T12:00:00",
+        "stravaId": "42",
+        "activityType": "Running",
+        "name": "",
+        "duration": 0,
+        "distance": 0,
+        "elevationGain": 0,
+        "elevationLoss": 0,
+        "calories": 0,
+        "avgHR": 0,
+        "maxHR": 0,
+    }
 
 
 def test_falls_back_to_gmt_start():
     activity = {
         "activityId": 7,
         "startTimeGMT": "2026-04-05 09:15:00",
+        "activityType": {"typeKey": "running"},
     }
-    row = garmin_sync.activity_to_row(activity)
-    assert row[0] == "2026-04-05T09:15:00", row
+    entry = garmin_sync.activity_to_entry(activity)
+    assert entry["timestamp"] == "2026-04-05T09:15:00", entry
 
 
 def test_skips_activity_without_id():
     activity = {"startTimeLocal": "2026-01-02 06:30:00"}
-    assert garmin_sync.activity_to_row(activity) is None
+    assert garmin_sync.activity_to_entry(activity) is None
 
 
 def test_skips_activity_without_date():
     activity = {"activityId": 99}
-    assert garmin_sync.activity_to_row(activity) is None
+    assert garmin_sync.activity_to_entry(activity) is None
 
 
 def test_non_numeric_metric_defaults_to_zero():
     activity = {
         "activityId": 5,
         "startTimeLocal": "2026-01-02 06:30:00",
+        "activityType": {"typeKey": "running"},
         "distance": None,
         "averageHR": "n/a",
     }
-    row = garmin_sync.activity_to_row(activity)
-    assert row[6] == "0" and row[9] == "0", row
+    entry = garmin_sync.activity_to_entry(activity)
+    assert entry["distance"] == 0 and entry["avgHR"] == 0, entry
 
 
 def test_maps_firestore_activity_model():
-    row = garmin_sync.activity_to_row({
+    entry = garmin_sync.activity_to_entry({
         "activityId": 123,
         "activityName": "Lift",
         "startTimeLocal": "2026-01-02 06:30:00",
@@ -128,7 +123,7 @@ def test_maps_firestore_activity_model():
         "averageHR": 100,
         "maxHR": 140,
     })
-    assert garmin_sync.activity_row_to_entry(row) == {
+    assert entry == {
         "timestamp": "2026-01-02T06:30:00",
         "stravaId": "123",
         "activityType": "Weight Training",
@@ -152,11 +147,11 @@ def test_backfill_starts_at_2015():
 
 
 def test_skips_firestore_entry_without_activity_type():
-    row = garmin_sync.activity_to_row({
+    entry = garmin_sync.activity_to_entry({
         "activityId": 123,
         "startTimeLocal": "2026-01-02 06:30:00",
     })
-    assert garmin_sync.activity_row_to_entry(row) is None
+    assert entry is None
 
 
 def test_activity_issues_reports_missing_date():

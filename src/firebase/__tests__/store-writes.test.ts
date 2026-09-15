@@ -50,9 +50,16 @@ vi.mock('../client.ts', () => ({ firestore: { path: 'firestore' } }))
 vi.mock('../offline.ts', () => ({
 	trackMutation: vi.fn(async (_uid: string, _key: string, write: () => Promise<unknown>) => write()),
 }))
+vi.mock('../../google/auth.ts', () => ({
+	authorizeCalendar: vi.fn(),
+	clearAuth: vi.fn(),
+}))
 
 import type { WorkoutDefinition } from '../../data/sample-workouts.ts'
-import { writeDefaultWorkoutDefs } from '../store.ts'
+import { buildLogRow } from '../../model/logs.ts'
+import { authorizeCalendar, clearAuth } from '../../google/auth.ts'
+import { trackMutation } from '../offline.ts'
+import { appendLogRows, writeDefaultWorkoutDefs } from '../store.ts'
 
 const defaultWorkout: WorkoutDefinition = {
 	id: 'A',
@@ -66,6 +73,74 @@ describe('Firestore default seeding writes', () => {
 		mockState.docsByCollection.clear()
 		mockState.existingDocPaths.clear()
 		mockState.commits.length = 0
+	})
+
+	describe('Firestore workout session writes', () => {
+		const row = buildLogRow(
+			{
+				date: '2026-09-15',
+				startTime: '2026-09-15T10:00:00Z',
+				endTime: '2026-09-15T11:00:00Z',
+				workoutId: 'A',
+			},
+			'Bench Press',
+			'bench-press',
+			1,
+			'work',
+			{ setType: 'work', weight: 200, minReps: 3, maxReps: 5, amrap: false },
+			{ actualSetType: 'work', actualWeight: 205, actualReps: 4, completed: true },
+		)
+
+		beforeEach(() => {
+			mockState.commits.length = 0
+			vi.mocked(trackMutation).mockClear()
+			vi.mocked(authorizeCalendar).mockClear()
+			vi.mocked(clearAuth).mockClear()
+		})
+
+		it('queues typed workout records using the existing stable session schema', async () => {
+			const saved = await appendLogRows('user-1', [row])
+
+			expect(saved).toEqual([row])
+			expect(trackMutation).toHaveBeenCalledWith('user-1', expect.stringContaining('workoutSessions:'), expect.any(Function))
+			expect(mockState.commits).toHaveLength(1)
+			expect(mockState.commits[0]).toEqual([{
+				type: 'set',
+				path: expect.stringMatching(/^firestore\/users\/user-1\/workoutSessions\/.+/),
+				data: {
+					date: row.date,
+					startTime: row.startTime,
+					endTime: row.endTime,
+					workoutId: 'A',
+					year: '2026',
+					updatedAt: expect.any(String),
+					exercises: [{
+						liftId: 'bench-press',
+						exerciseName: 'Bench Press',
+						sets: [{
+							setNumber: 1,
+							setType: 'work',
+							plannedWeight: 200,
+							plannedReps: 5,
+							actualWeight: 205,
+							actualReps: 4,
+							completed: true,
+						}],
+					}],
+				},
+			}])
+		})
+
+		it.each(['permission-denied', 'unauthenticated'])('preserves %s errors without invoking Calendar auth', async (code) => {
+			const error = Object.assign(new Error('Firebase operation failed'), { code })
+			vi.mocked(trackMutation).mockRejectedValueOnce(error)
+
+			await expect(appendLogRows('user-1', [row])).rejects.toBe(error)
+			expect(trackMutation).toHaveBeenCalledTimes(1)
+			expect(mockState.commits).toEqual([])
+			expect(authorizeCalendar).not.toHaveBeenCalled()
+			expect(clearAuth).not.toHaveBeenCalled()
+		})
 	})
 
 	it('writes default workouts when the workout library is empty', async () => {

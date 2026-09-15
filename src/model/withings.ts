@@ -1,7 +1,7 @@
 /**
  * Withings body-composition chart data model and aggregation logic.
  *
- * Consumes measurement data from the "Stronger - Withings" sheet tab and
+ * Consumes measurement data from Firestore and
  * produces chart-ready data. Unlike Strava activities (which are summed into
  * totals per bucket), body-composition metrics are point-in-time samples: a
  * bucket's value is the average of the measurements that fall in it, and the
@@ -105,7 +105,7 @@ const KG_TO_LB = 2.2046226218;
 
 /**
  * Metrics stored in kilograms. These are converted to pounds for display —
- * the sheet stays canonical (kg, matching the Withings API), and the UI only
+ * stored data stays canonical (kg, matching the Withings API), and the UI only
  * ever shows imperial units. Body fat (%) and heart rate (bpm) are not masses
  * and pass through unchanged.
  */
@@ -385,7 +385,7 @@ export function buildMetricTrendData(
 
   // Sort a copy of the measurements chronologically so aggregation, latest /
   // earliest tracking, and any downstream rendering are deterministic
-  // regardless of the order rows arrive from the sheet. Ties on date are
+  // regardless of the order measurements arrive from Firestore. Ties on date are
   // broken by grpId to keep the ordering stable.
   const ordered = [...measurements].sort((a, b) =>
     a.date === b.date ? a.grpId.localeCompare(b.grpId) : a.date < b.date ? -1 : 1,

@@ -1,8 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 import {
-	saveSheetId,
-	loadSheetId,
-	clearSheetId,
 	saveAccessToken,
 	loadAccessToken,
 	clearAccessToken,
@@ -41,27 +38,6 @@ function mockDocument() {
 describe('storage', () => {
 	beforeEach(() => {
 		vi.stubGlobal('document', mockDocument())
-	})
-
-	it('returns null when no sheet ID is stored', () => {
-		expect(loadSheetId()).toBeNull()
-	})
-
-	it('persists and retrieves a sheet ID', () => {
-		saveSheetId('abc123')
-		expect(loadSheetId()).toBe('abc123')
-	})
-
-	it('overwrites a previously stored sheet ID', () => {
-		saveSheetId('first')
-		saveSheetId('second')
-		expect(loadSheetId()).toBe('second')
-	})
-
-	it('clears the stored sheet ID', () => {
-		saveSheetId('abc123')
-		clearSheetId()
-		expect(loadSheetId()).toBeNull()
 	})
 
 	it('persists and clears access token', () => {

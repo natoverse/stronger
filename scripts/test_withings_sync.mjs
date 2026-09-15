@@ -103,7 +103,7 @@ test('maps a Withings group to the Firestore model', () => {
 	})
 })
 
-test('requires a positive weight like the migration parser', () => {
+test('requires a positive measurement weight', () => {
 	assert.equal(groupToMeasurement({
 		grpid: 123,
 		date: Date.UTC(2026, 7, 15) / 1000,

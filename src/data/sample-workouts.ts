@@ -1,9 +1,8 @@
 /**
  * Default workout data sourced from the JSON library files in lib/.
  *
- * Exports default lift configs and workout definitions so the sheet
- * integration can write defaults on first connect and recompute
- * workouts from sheet-sourced configs on subsequent visits.
+ * Exports default lift configs and workout definitions for first-use
+ * Firestore seeding and computes workouts from the user's saved configs.
  */
 
 import type { ExerciseTemplate, LiftConfig, Workout, ComputedExercise, CardioActivity } from '../model/index.js';
@@ -14,7 +13,7 @@ import workoutsJson from '../../lib/workouts.json';
 import cardioJson from '../../lib/cardio.json';
 
 // ---------------------------------------------------------------------------
-// Lift configurations — defaults written to the sheet on first connect
+// Lift configurations — defaults written to Firestore during setup
 // ---------------------------------------------------------------------------
 
 export const defaultLiftConfigs: LiftConfig[] = exercisesJson as LiftConfig[];
@@ -59,7 +58,7 @@ export function createDefaultWorkoutImportDrafts(
 
 /**
  * Build workouts from a set of LiftConfig values and workout definitions.
- * Used by the sheet integration to compute workouts from sheet-sourced data.
+ * Computes workouts from the user's saved exercise and workout definitions.
  *
  * Exercises whose liftId is not present in `configs` are silently skipped.
  * Workouts with no remaining exercises are excluded from the result.

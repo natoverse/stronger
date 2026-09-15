@@ -38,7 +38,7 @@ one downloadable ZIP artifact. It never authenticates with or writes to Gaia.
 
 - Uploading, syncing, or deduplicating tracks in Gaia.
 - Scheduled exports or exporting other Garmin activity types.
-- Changes to the Stronger application or Google Sheets data.
+- Changes to the Stronger application or Firestore data.
 
 ## Iteration decisions
 

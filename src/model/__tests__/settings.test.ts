@@ -2,10 +2,14 @@ import { describe, it, expect } from 'vitest'
 import {
 	goalsFromSettings,
 	goalsToSettings,
+	bodyGoalsFromSettings,
+	bodyGoalsToSettings,
+	liftGoalsFromSettings,
+	liftGoalsToSettings,
 	DEFAULT_APP_SETTINGS,
 	appSettingsFromMap,
 	appSettingsToMap,
-} from '../sheets.ts'
+} from '../settings.ts'
 
 /* ------------------------------------------------------------------ */
 /*  goalsFromSettings                                                   */
@@ -155,6 +159,81 @@ describe('goalsToSettings', () => {
 /* ------------------------------------------------------------------ */
 /*  appSettingsFromMap / appSettingsToMap                              */
 /* ------------------------------------------------------------------ */
+
+describe('bodyGoalsFromSettings / bodyGoalsToSettings', () => {
+	it('extracts body goals with the bodyGoal. prefix', () => {
+		const settings = new Map<string, string>([
+			['bodyGoal.weight', '75'],
+			['bodyGoal.fatRatio', '15'],
+			['bodyGoal.visceralFat', '8'],
+			['goal.distance', '1500'],
+			['unrelated', 'x'],
+		])
+		expect(bodyGoalsFromSettings(settings)).toEqual([
+			{ metric: 'weight', value: 75 },
+			{ metric: 'fatRatio', value: 15 },
+			{ metric: 'visceralFat', value: 8 },
+		])
+	})
+
+	it('ignores invalid metrics and non-positive values', () => {
+		const settings = new Map<string, string>([
+			['bodyGoal.bogus', '10'],
+			['bodyGoal.weight', '0'],
+			['bodyGoal.muscleMass', '-5'],
+			['bodyGoal.fatRatio', 'NaN'],
+		])
+		expect(bodyGoalsFromSettings(settings)).toEqual([])
+	})
+
+	it('does not collide with activity goal keys', () => {
+		const settings = new Map<string, string>([['goal.distance', '1500']])
+		bodyGoalsToSettings([{ metric: 'weight', value: 75 }], settings)
+		expect(settings.get('goal.distance')).toBe('1500')
+		expect(settings.get('bodyGoal.weight')).toBe('75')
+	})
+
+	it('replaces existing body goals', () => {
+		const settings = new Map<string, string>([['bodyGoal.weight', '80']])
+		bodyGoalsToSettings([{ metric: 'fatRatio', value: 15 }], settings)
+		expect(settings.has('bodyGoal.weight')).toBe(false)
+		expect(settings.get('bodyGoal.fatRatio')).toBe('15')
+	})
+})
+
+describe('liftGoalsFromSettings / liftGoalsToSettings', () => {
+	it('round-trips goals for all four main lifts without changing unrelated settings', () => {
+		const goals = ['squat', 'bench-press', 'deadlift', 'overhead-press']
+			.map((liftId) => ({ liftId, weight: 200 }))
+		const settings = new Map([['calendar.syncCalendarId', 'calendar-id']])
+		expect(liftGoalsToSettings(goals, settings)).toBe(settings)
+		expect(liftGoalsFromSettings(settings)).toEqual(goals)
+		expect(settings.get('calendar.syncCalendarId')).toBe('calendar-id')
+	})
+
+	it('ignores invalid lift IDs and invalid weights', () => {
+		expect(liftGoalsFromSettings(new Map([
+			['liftGoal.curl', '100'],
+			['liftGoal.squat', '0'],
+			['liftGoal.bench-press', '-1'],
+			['liftGoal.deadlift', 'NaN'],
+			['liftGoal.overhead-press', 'Infinity'],
+		]))).toEqual([])
+	})
+
+	it('replaces or clears lift goals without removing other goals', () => {
+		const settings = new Map([
+			['liftGoal.squat', '300'],
+			['bodyGoal.weight', '75'],
+			['goal.distance', '1000'],
+		])
+		liftGoalsToSettings([{ liftId: 'deadlift', weight: 400 }], settings)
+		expect(settings.has('liftGoal.squat')).toBe(false)
+		expect(liftGoalsFromSettings(settings)).toEqual([{ liftId: 'deadlift', weight: 400 }])
+		liftGoalsToSettings([], settings)
+		expect([...settings]).toEqual([['bodyGoal.weight', '75'], ['goal.distance', '1000']])
+	})
+})
 
 describe('appSettingsFromMap / appSettingsToMap', () => {
 	it('uses defaults when settings are missing', () => {

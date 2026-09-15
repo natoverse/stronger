@@ -39,8 +39,8 @@ backend. It performs no authentication, network reads, or remote writes.
 
 - The public URL switch is the explicit query parameter `mock=1`; hash routes
   remain unchanged, for example `/stronger/?mock=1#/calendar`.
-- Mock mode is read-only by construction: `spreadsheetId` remains `null`, so
-  existing persistence callbacks cannot target a Firebase user.
+- Mock mode is read-only by construction: `firebaseUid` remains `null`, so
+  persistence callbacks cannot write to a real user.
 - Firebase receives a local placeholder configuration only when build-time
   configuration is absent. Normal unauthenticated URLs still stop at the
   existing configuration error before making Firebase requests.

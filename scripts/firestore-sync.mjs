@@ -3,7 +3,7 @@ import {
 	getAccessToken,
 	parseServiceAccount,
 	required,
-} from './firebase-migrate.mjs'
+} from './firestore-admin.mjs'
 
 const FIRESTORE_API_BASE = 'https://firestore.googleapis.com/v1'
 const MAX_RETRIES = 5

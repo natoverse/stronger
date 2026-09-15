@@ -81,10 +81,9 @@ retries, and the workflow retries the full sync twice more at one-minute
 intervals so a transient persistence failure is recovered within Withings'
 old-token grace window.
 
-For an existing Sheets installation, run **Migrate Google Sheet to Firebase**
-with `collections` set to `syncState`. This copies the current
-`withings_refresh_token` from the legacy `Stronger - Infra` tab. If no legacy
-token exists, the first run uses `WITHINGS_REFRESH_TOKEN`.
+The first run uses `WITHINGS_REFRESH_TOKEN` only if no token is stored in
+Firestore. Later runs use the rotating `withingsRefreshToken` value from
+`/syncState/{uid}` rather than the original repository seed.
 
 ## Stored data
 

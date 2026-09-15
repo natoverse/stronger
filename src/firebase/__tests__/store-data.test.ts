@@ -12,27 +12,39 @@ import {
 	mergeDateWindowEntries,
 	mergeYearScopedEntries,
 	mergeWorkoutSessionRows,
-	rowToParsedLogRow,
 	scheduleDayDocumentId,
 } from '../store.ts'
 
 describe('Firestore data identifiers', () => {
 	it('groups workout sessions into yearly buckets', () => {
-		const first = rowToParsedLogRow([
-			'2026-08-29', '2026-08-29T10:00:00Z', '2026-08-29T11:00:00Z',
-			'A', 'Bench Press', 'bench-press', 1, 'work', 200, 5, 205, 5, 'TRUE',
-		])
-		const second = rowToParsedLogRow([
-			'2026-08-29', '2026-08-29T10:00:00Z', '2026-08-29T11:00:00Z',
-			'A', 'Close Grip Bench', 'bench-press', 1, 'work', 150, 8, 150, 8, 'TRUE',
-		])
+		const first = {
+			date: '2026-08-29',
+			startTime: '2026-08-29T10:00:00Z',
+			endTime: '2026-08-29T11:00:00Z',
+			workoutId: 'A',
+			exerciseName: 'Bench Press',
+			liftId: 'bench-press',
+			setNumber: 1,
+			setType: 'work',
+			plannedWeight: 200,
+			plannedReps: 5,
+			actualWeight: 205,
+			actualReps: 5,
+			completed: true,
+		}
+		const second = {
+			...first,
+			exerciseName: 'Close Grip Bench',
+			plannedWeight: 150,
+			plannedReps: 8,
+			actualWeight: 150,
+			actualReps: 8,
+		}
 
-		expect(first).not.toBeNull()
-		expect(second).not.toBeNull()
 		const sessions = groupWorkoutSessionRows([
-			first!,
-			second!,
-			{ ...first!, date: '2025-12-31', startTime: '2025-12-31T10:00:00Z' },
+			first,
+			second,
+			{ ...first, date: '2025-12-31', startTime: '2025-12-31T10:00:00Z' },
 		])
 		const buckets = groupYearBuckets(sessions)
 
@@ -108,20 +120,6 @@ describe('Firestore data identifiers', () => {
 			{ date: '2026-09-01', value: 'before' },
 			{ date: '2026-11-01', value: 'after' },
 		])
-	})
-
-	it('parses completed flags and numeric set values', () => {
-		const row = rowToParsedLogRow([
-			'2026-08-29', 'start', 'end', 'A', 'Squat', 'squat',
-			2, 'backoff', 180, 8, 185, 9, 'false',
-		])
-
-		expect(row).toMatchObject({
-			setNumber: 2,
-			actualWeight: 185,
-			actualReps: 9,
-			completed: false,
-		})
 	})
 
 	it('groups and restores ordered exercises and sets', () => {

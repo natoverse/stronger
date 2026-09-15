@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid, includeCalendarDate } from '../CalendarView.js';
 import type { LogSession } from '../CalendarView.js';
-import type { ParsedLogRow } from '../../google/index.js';
+import type { ParsedLogRow } from '../../model/index.js';
 
 describe('generatePastDays', () => {
 	it('generates the correct number of past days', () => {

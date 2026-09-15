@@ -9,9 +9,9 @@ The app already syncs Garmin activity data (workouts, runs, rides) via `garmin-s
 ## Solution
 
 ### Data model
-A single new sheet tab, **"Stronger - Garmin Wellness"**, holds one row per day with 24 columns (A:X):
+Yearly Firestore buckets at `/users/{uid}/garminWellness/{year}` contain one entry per day. The original 24 domain fields were:
 
-| # | Column | Description |
+| # | Field | Description |
 |---|--------|-------------|
 | 1 | date | YYYY-MM-DD |
 | 2 | hrvLastNight | Overnight HRV (ms) |
@@ -44,11 +44,11 @@ A single new sheet tab, **"Stronger - Garmin Wellness"**, holds one row per day 
 - Append-only with date deduplication (same pattern as activity sync)
 - Default window: last 14 days. `--backfill` flag: all dates since 2021-01-01
 - 0.15s delay between dates for rate-limit courtesy
-- Partial rows written on API failure (field = `''`); never aborts mid-sync
+- Partial daily entries are retained when individual metrics are unavailable; numeric fields use `null` and status fields use empty strings.
 
 ### GitHub Actions — `.github/workflows/garmin-wellness-sync.yml`
 - Runs daily at 08:00 UTC (one hour after garmin-sync)
-- Same secrets: GARMIN_TOKENS, GOOGLE_SERVICE_ACCOUNT_KEY, SPREADSHEET_ID
+- Secrets: `GARMIN_TOKENS`, `FIREBASE_SERVICE_ACCOUNT_KEY`, `FIREBASE_USER_ID`
 - `backfill` workflow_dispatch input for one-time historical backfills
 
 ### Frontend — `GarminWellnessView`
@@ -73,17 +73,15 @@ A single new sheet tab, **"Stronger - Garmin Wellness"**, holds one row per day 
 ### Files changed
 - `scripts/garmin-wellness-sync.py` — new sync script
 - `.github/workflows/garmin-wellness-sync.yml` — new workflow
-- `src/model/types.ts` — `GarminWellnessEntry` interface (24 fields)
-- `src/google/config.ts` — `GARMIN_WELLNESS_TAB_NAME` constant
+- `src/model/types.ts` — `GarminWellnessEntry` interface (initially 24 fields)
 - `src/model/wellness.ts` — new aggregation model (`buildWellnessChartData`, `buildStatusChartData`, formatters)
-- `src/google/sheets.ts` — `parseGarminWellnessRow`, `verifyGarminWellnessTab`, `readGarminWellnessEntries`
-- `src/google/index.ts` — exports for new functions
+- `src/firebase/` — Firestore adapters for reading wellness buckets
 - `src/components/GarminWellnessView.tsx` — new chart view component
 - `src/hooks/useHashRouter.ts` — `wellness` route
 - `src/components/GoogleAuth.tsx` — Wellness nav button (Stethoscope icon)
 - `src/App.tsx` — state, lazy loading, route rendering
 - `src/App.css` — wellness status legend styles
-- `src/google/__tests__/garmin-wellness-data.test.ts` — parse tests
+- `scripts/test_garmin_wellness_sync.py` — extraction and mapping tests
 
 ## API field audit (post-implementation)
 
@@ -122,17 +120,17 @@ Verified all fields against the real Garmin Connect API response structures usin
 ## Iteration notes
 - The Recovery HRV chart now plots `hrvWeeklyAvg` instead of `hrvLastNight` so the visual trend reflects Garmin's rolling weekly signal rather than the noisier overnight reading.
 - HRV bar colors continue to come from `hrvStatus` for the same underlying rows, with BALANCED/OPTIMAL = green, UNBALANCED = yellow, and LOW = red.
-- Training status now normalizes Garmin's numeric/status-phrase variants to stable enum text before writing or reading sheet rows. The sync prefers `trainingStatusFeedbackPhrase` / `trainingStatusKey` when available, and falls back to numeric-code mapping so values like `4` render as `MAINTAINING` instead of a raw number.
+- Training status normalizes Garmin's numeric/status-phrase variants to stable enum text before persistence or display. The sync prefers `trainingStatusFeedbackPhrase` / `trainingStatusKey` when available, and falls back to numeric-code mapping so values like `4` render as `MAINTAINING` instead of a raw number.
 - VO₂ Max, Hill Score, and Endurance Score charts now use fixed threshold palettes instead of the default accent color so their bars show Garmin-style fitness bands at a glance. The VO₂ Max request specified a `fair` band without a color, which is implemented as orange to keep the palette aligned with the other wellness threshold charts.
 - Training Status now hides its full legend by default and exposes the palette as compact header swatches that open a popover, so the label can be inspected one color at a time without permanently taking chart space.
 - Added a toolbar visibility toggle in Settings for the combined Garmin page (`app.showGarminTab`). The Garmin/Wellness tab is off by default and only shown when enabled.
 - Garmin wellness chart legends are now title-triggered popovers (no always-visible swatches), with updated threshold text for Training Readiness, Load Ratio, VO₂ Max, Hill Score, Endurance Score, and HRV Status. In day aggregation, the header now appends the active legend band label beside the numeric value for those charts.
-- Goal harvesting fix (2026-07-14): `_fetch_goals` fetched the daily user summary but read the floors goal from the wrong key (`floorsAscendedGoal`; Garmin uses `userFloorsAscendedGoal`). Because the code passed each raw value through `_num` (which returns `""` for a missing field) and then called `int("")`, a single missing/renamed field raised `ValueError`, which the broad `except` swallowed — so *no* goals were written to the Settings tab. Extracted a pure `parse_goals(data)` helper that coerces each field with a tolerant `_positive_int` (None/zero/invalid → skipped, never raises) and accepts field aliases for all three goals. Regression coverage added to `scripts/test_garmin_wellness_sync.py`.
+- Goal harvesting fix (2026-07-14): `_fetch_goals` fetched the daily user summary but read the floors goal from the wrong key (`floorsAscendedGoal`; Garmin uses `userFloorsAscendedGoal`). Because the code passed each raw value through `_num` (which returns `""` for a missing field) and then called `int("")`, a single missing/renamed field raised `ValueError`, which the broad `except` swallowed — so *no* goals were persisted. Extracted a pure `parse_goals(data)` helper that coerces each field with a tolerant `_positive_int` (None/zero/invalid → skipped, never raises) and accepts field aliases for all three goals. Regression coverage added to `scripts/test_garmin_wellness_sync.py`.
 - Garmin page split cleanup (2026-07-18): the combined `#/garmin` page was simplified back to wellness-only content, keeping its shared range / aggregation controls and switching the toolbar entry to a Heart Pulse icon labeled “Wellness.” The separate `#/garmin-activities` page now owns the Garmin activity charts plus the searchable activity list, with the same range / aggregation buttons copied over so all activity-specific data lives on one tab.
 - Hourly cadence + 24-hour window (2026-07-22): The scheduled sync now defaults to a last-24-hours window (`ROLLING_DAYS = 2`, today + yesterday to cover midnight) instead of a 14-day rolling window, and runs every hour on the hour (`cron: "0 * * * *"`) instead of once daily. The cron is intentionally kept simple with no time-zone/DST gating — since the sync only looks back 24 hours, running around the clock is cheap and guarantees near-continual updates. Manual `workflow_dispatch` runs can still pass `--backfill` for a full since-2021 index. If an hourly scheduled run fails (e.g. Garmin API rate limits), the workflow opens/comments a single deduplicated `garmin-sync`-labeled issue so the cron can be tuned.
 - Wellness sync lookback extension (2026-08-04): Expanded the default overwrite window to 72 hours (`ROLLING_DAYS = 4`, today plus the prior three calendar days). This lets the hourly sync repair rows that were only partially populated while the device was offline.
-- Daily stress estimation (2026-07-22): Added an `avgStress` column (26th column, Z) to the wellness sync and sheet schema, sourced from `get_user_summary().averageStressLevel`. Garmin's no-data sentinels (`-1`/`-2`, device not worn) are coerced to blank via a dedicated `_stress` helper. The Recovery section now renders a Stress bar chart **above** the HRV chart, using fixed color bands: 0–25 Rest (blue), 26–50 Low (yellow), 51–75 Medium (orange), 76–100 High (red). Offline coverage added in `scripts/test_garmin_wellness_sync.py`.
-- Heat + altitude acclimation charts (2026-07-23): The wellness sync now harvests Garmin acclimation data from the training-status payload, accepting both the top-level `heatAltitudeAcclimationDTO` shape and the older `mostRecentVO2Max.heatAltitudeAcclimation` fallback. The sheet schema grew to 29 columns (A:AC) with `heatAcclimationPct`, `altitudeAcclimationPct`, and `currentAltitude`, and the Wellness page now renders uncoded Heat Acclimation and Altitude Acclimation bar charts at the bottom of the Training section.
+- Daily stress estimation (2026-07-22): Added the `avgStress` field to wellness data, sourced from `get_user_summary().averageStressLevel`. Garmin's no-data sentinels (`-1`/`-2`, device not worn) are treated as unavailable via a dedicated `_stress` helper. The Recovery section renders a Stress chart **above** HRV, using fixed color bands: 0–25 Rest (blue), 26–50 Low (yellow), 51–75 Medium (orange), 76–100 High (red). Offline coverage was added in `scripts/test_garmin_wellness_sync.py`.
+- Heat + altitude acclimation charts (2026-07-23): The wellness sync harvests Garmin acclimation data from the training-status payload, accepting both the top-level `heatAltitudeAcclimationDTO` shape and the older `mostRecentVO2Max.heatAltitudeAcclimation` fallback. The model gained `heatAcclimationPct`, `altitudeAcclimationPct`, and `currentAltitude`, and the Wellness page added Heat Acclimation and Altitude Acclimation charts at the bottom of Training.
 - Training Status categorical dot chart (2026-08-15): Replaced the full-height status bars with dots positioned on a fixed nine-level categorical y-axis. The legend and scale run from Peaking at 9 through No status at 1, preserving the existing relative status order between those endpoints.
 - Altitude chart correction (2026-08-04): Garmin's `altitudeAcclimationPct` value is an acclimated elevation in meters despite the legacy field name, not a percentage. The Wellness page now combines current altitude bars with an altitude-adaptation line on one shared axis and converts both series to feet for display.
 - Selected chart dots (2026-08-15): Replaced bars with filled dots for Training Readiness, Load Ratio, Low/High Aerobic Load, Anaerobic Load, VO₂ Max, Hill Score, Endurance Score, HRV Status, Resting Heart Rate, and Sleep Score. Axes, dimensions, colors, range overlays, summaries, and tooltips remain unchanged; all other wellness charts retain their existing visualization.
@@ -144,3 +142,4 @@ Verified all fields against the real Garmin Connect API response structures usin
 - Fixed chart y-domains (2026-08-29): Several wellness charts now use fixed y-axis ranges instead of auto-scaling to the data extent, so day-to-day movement is readable. Score charts center on the latest value: VO₂ Max ±10, Resting Heart Rate ±15, Hill Score ±20, Endurance Score ±1000 (the lower bound is clamped at zero). HRV Status spans the visible baseline band padded by 5 below the minimum and 5 above the maximum. Goal-driven bar charts cap the axis at a multiple of the goal, scaled by aggregation the same way `goalColor` scales (week ×7, month ×30): steps 1.5×, floors 3×, and intensity minutes 2× the daily goal derived from the weekly goal ÷ 7. Bars exceeding a capped axis are clipped at the top and filled with the shared `strava-overflow-pattern` hatch already used by the activity goal charts; values outside a centered domain are clamped to the nearest bound. When a goal is unset or no current value exists, the chart falls back to the previous auto-scaled behavior.
 - Overflow hatch colors (2026-08-29): Each capped wellness bar now defines a hatch from its computed status color rather than the shared cyan hatch. Overflow therefore preserves the chart's normal goal/status color while using the hatch solely to signal truncation.
 - Intensity week boundaries (2026-09-09): The day-aggregated intensity-minutes chart separates Monday-start weeks with faint vertical lines. Boundary strokes do not scale with the responsive SVG, keeping them subtle but visible at every chart size.
+- Firestore-only (2026-09-15): Daily wellness values use named fields in yearly `{ period, count, entries, updatedAt }` buckets. Direct writes preserve unrelated dates and use optimistic concurrency; Garmin goal updates merge into `/users/{uid}/settings/app`. The rolling-window, overwrite, and provider-mapping decisions remain unchanged.

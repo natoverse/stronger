@@ -1,14 +1,16 @@
 # Feature: Garmin Data Sync via Strava
 
-> Pull activity and fitness data from Garmin (via the Strava API) into a new Google Sheet tab, so the app can display Garmin-tracked metrics alongside manually logged workouts.
+> Historical feature: pull Garmin activity and fitness data through the Strava API for display alongside manually logged workouts.
+
+This indirect pipeline was retired in favor of [direct Garmin Connect synchronization](031-garmin-direct-sync.spec.md). Provider and activity-model decisions remain below as historical context; current persistence is defined in [direct Firestore sync](../../specs/052-direct-firestore-sync-actions.spec.md).
 
 ## What
 
-Garmin auto-syncs activities to Strava, and Strava has a proper OAuth2 REST API. A scheduled GitHub Actions workflow uses the Strava API to fetch recent activities, then writes them to a new "Stronger - Garmin" tab in the Google Sheet. This keeps Garmin data flowing into the sheet-based data model without a backend, manual exports, or reverse-engineered auth.
+Garmin auto-syncs activities to Strava, which exposes an OAuth2 REST API. The original scheduled workflow fetched recent Strava activities and stored them as application activity history without manual exports or reverse-engineered auth.
 
-The workflow authenticates with Strava using a refresh token stored in repo secrets. A Node.js script refreshes the access token, fetches activity summaries from the Strava API, and appends new rows to the sheet via a Google service account. The workflow runs daily on a cron schedule and can also be triggered manually.
+The workflow authenticated with Strava using a refresh token stored in repo secrets. A Node.js script refreshed the access token, fetched activity summaries, and appended new activity records. The workflow ran daily and supported manual dispatch.
 
-The app reads the Garmin tab at load time alongside the other tabs. This spec covers only the data pipeline — displaying the data in the UI is deferred.
+The app loaded activity history alongside other application data. This spec covered only the data pipeline; displaying the data was deferred.
 
 ### Why Strava instead of Garmin directly?
 
@@ -19,11 +21,10 @@ Garmin has no public API for individual developers. The unofficial SSO approach 
 - [ ] A new GitHub Actions workflow (`garmin-sync.yml`) runs on a daily cron schedule and on `workflow_dispatch`
 - [ ] The workflow authenticates with Strava using an OAuth2 refresh token (repo secret)
 - [ ] The workflow fetches recent activities from the Strava API (date, activity type, duration, distance, calories, avg heart rate, elevation gain)
-- [ ] New rows are appended to a "Stronger - Garmin" tab in the user's Google Sheet via a service account
+- [ ] New records are appended to the user's activity history
 - [ ] Duplicate rows (same Strava activity ID) are not created on re-runs — the sync is idempotent
-- [ ] The sheet tab has a clear header row with descriptive column names
-- [ ] A `GARMIN_SYNC_RANGE` and header constant are added to `src/google/config.ts` for the new tab
-- [ ] The app can read and deserialize rows from the Garmin tab (type definitions + parse function)
+- [ ] Activity records use descriptive field names
+- [ ] The app can read activity records into its shared model
 
 ## Scope
 
@@ -31,8 +32,8 @@ Garmin has no public API for individual developers. The unofficial SSO approach 
 - GitHub Actions workflow for scheduled sync
 - Strava OAuth2 token refresh via repo secrets
 - Activity summary data from Strava (date, type, name, duration, distance, calories, avg HR, elevation gain)
-- Writing to a new Google Sheet tab via service account
-- TypeScript types and sheet config for reading the tab in the app
+- Persisting activity history
+- TypeScript types for reading activity records in the app
 - One-time Strava OAuth2 setup instructions (get initial refresh token)
 
 ### Out of scope
@@ -46,9 +47,7 @@ Garmin has no public API for individual developers. The unofficial SSO approach 
 ## Notes
 
 - **Strava OAuth2 setup**: One-time manual step. Create a Strava API app at [strava.com/settings/api](https://www.strava.com/settings/api), authorize with the `read,activity:read` scopes, capture the refresh token. Store `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, and `STRAVA_REFRESH_TOKEN` as repo secrets. The workflow refreshes the access token on each run — refresh tokens don't expire.
-- **Service account**: Same as before — a Google service account with editor access to the spreadsheet. Service account key JSON goes in a repo secret (`GOOGLE_SERVICE_ACCOUNT_KEY`).
 - **Strava API rate limits**: 100 requests per 15 minutes, 1000 per day. Fetching the last 30 activities per run is well within limits.
-- **Idempotency**: Read existing rows from the sheet, check Strava activity IDs, only append new ones. Simple and reliable.
-- **Column layout**: Suggested columns — `date`, `stravaId`, `activityType`, `name`, `duration`, `distance`, `elevationGain`, `calories`, `avgHR`, `maxHR`. All from Strava's `SummaryActivity` response.
-- **Tab naming**: The tab is called "Stronger - Garmin" because the data originates from the Garmin watch, even though Strava is the intermediary. Could also be called "Stronger - Activities" — open to either.
+- **Idempotency**: Check stored Strava activity IDs and only append new records.
+- **Activity fields**: The original model retained `date`, `stravaId`, `activityType`, `name`, `duration`, `distance`, `elevationGain`, `calories`, `avgHR`, and `maxHR` from Strava's `SummaryActivity` response.
 - **Garmin → Strava delay**: Activities typically appear in Strava within 5-10 minutes of syncing from the watch. The daily cron schedule means data is never more than ~24h behind.

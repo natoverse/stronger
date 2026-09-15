@@ -15,8 +15,8 @@ or the weekly planner, and given a custom label (e.g. "Dentist appointment").
 
 - **New `BLOCKER_ID = 'blocker'` sentinel** (`src/model/types.ts`, exported
   from `src/model/index.ts`), used as the `workoutId` for a scheduled Blocker
-  entry. Stored in the "Workout Schedule" tab like any other entry — no
-  schema change needed.
+  entry. Stored in the Firestore schedule day's `events` array like any other
+  entry — no schema change needed.
 - **Per-day picker (`CalendarView`).** Added a `Blocker` button above `Rest`
   in the assign-workout picker.
 - **Weekly planner (`CalendarPush`).** Added a standalone `Blocker` option

@@ -27,7 +27,7 @@ This is a manual, on-demand action — not an ongoing sync. If the user's schedu
 - Schedule configuration UI (day → workout mapping, week count)
 - Calendar picker (list user's writable calendars)
 - Batch event creation via Google Calendar API
-- Adding the Calendar API OAuth scope to the existing auth flow
+- Requesting Calendar API OAuth authorization separately from Firebase sign-in
 
 ### Out of scope
 - Editing or deleting previously pushed events
@@ -38,6 +38,10 @@ This is a manual, on-demand action — not an ongoing sync. If the user's schedu
 ## Notes
 
 - This feature depends on spec 014 (deep-link routing) for the URLs embedded in calendar events.
-- The Google Calendar API requires an additional OAuth scope (`https://www.googleapis.com/auth/calendar.events`). The existing Google auth setup will need to request this scope alongside the Sheets scope. This may trigger a re-consent prompt for existing users.
-- The manifesto says "client-only deployment" — the Calendar API is callable from the browser with an OAuth token, same pattern as Sheets, so this stays client-only.
+- The Google Calendar API requires the `https://www.googleapis.com/auth/calendar.events` OAuth scope. Calendar authorization is optional and separate from Firebase Authentication.
+- The manifesto says "client-only deployment" — the Calendar API is callable from the browser with an OAuth token, so this stays client-only.
 - Event times: workouts don't have a fixed time of day. The simplest approach is to create all-day events, or default to a fixed time (e.g., 6:00 AM). This is an implementation detail left to the implementer.
+
+## Firestore-only iteration (2026-09-15)
+
+- Firebase Authentication owns the application session. Google OAuth remains only for optional, online Google Calendar operations; calendar events and deep links are unchanged.

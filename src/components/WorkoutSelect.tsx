@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { REST_ID, BLOCKER_ID } from '../model/index.js';
-import type { ParsedLogRow } from '../google/index.js';
+import type { ParsedLogRow } from '../model/index.js';
 import type { LogSession } from './CalendarView.js';
 import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
 import { Banner } from './Banner.js';
@@ -298,8 +298,8 @@ export function WorkoutSelect({
 					{!canImportDefaultWorkouts && (
 						<p className="auth-error">
 							{canOfferImportDefaultWorkouts
-								? 'No workouts available. You can import the default workouts or check your sheet data.'
-								: 'No workouts available. Check that your sheet has valid lift configurations with numeric values for all weight fields.'}
+								? 'No workouts available. You can import the default workouts or check your exercise library.'
+								: 'No workouts available. Check that your exercises have valid numeric values for all weight fields.'}
 						</p>
 					)}
 					{!canImportDefaultWorkouts && canOfferImportDefaultWorkouts && (
@@ -309,7 +309,7 @@ export function WorkoutSelect({
 					)}
 					{canImportDefaultWorkouts && (
 						<div className="workout-import-defaults-prompt">
-							<p>No workouts were found in your sheet. Import the default starter workouts?</p>
+							<p>No workouts were found in your account. Import the default starter workouts?</p>
 							<button className="btn-primary" onClick={onImportDefaultWorkouts}>
 								Import default workouts
 							</button>

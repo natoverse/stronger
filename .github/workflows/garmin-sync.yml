@@ -11,7 +11,7 @@ on:
         type: boolean
         default: false
       overwrite:
-        description: 'Overwrite (upsert) existing rows for the fetched window instead of only appending new ones'
+        description: 'Overwrite (upsert) existing entries for the fetched window instead of only appending new ones'
         type: boolean
         default: true
 permissions:
@@ -33,11 +33,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
@@ -52,8 +47,8 @@ jobs:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
           FIREBASE_USER_ID: ${{ secrets.FIREBASE_USER_ID }}
-        # Scheduled runs always overwrite the rolling window so recent rows are
-        # refreshed (fixes partial mid-day rows and picks up edited activities).
+        # Scheduled runs always overwrite the rolling window so recent entries
+        # are refreshed (fixes partial mid-day entries and edited activities).
         run: python3 scripts/garmin-sync.py ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
 
       # Reads step outputs written by the sync script (not shell-local state) so

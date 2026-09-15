@@ -43,26 +43,6 @@ from pathlib import Path
 
 from firestore_sync import get_firestore_access, merge_year_bucket_entries
 
-HEADER = [
-    "timestamp",
-    "activityId",
-    "activityType",
-    "name",
-    "duration",
-    "movingDuration",
-    "distance",
-    "elevationGain",
-    "elevationLoss",
-    "avgHR",
-    "maxHR",
-    "avgSpeed",
-    "maxSpeed",
-    "steps",
-    "aerobicTE",
-    "anaerobicTE",
-    "vo2Max",
-]
-COLUMN_COUNT = len(HEADER)  # 17 -> columns A:Q
 ACTIVITY_LIMIT = 30
 
 # One-time backfill window (used only with the --backfill flag): 2015-01-01.
@@ -139,20 +119,9 @@ def fetch_activities_since(client, start_date):
 
 def _round_int(value):
     try:
-        return str(round(float(value)))
+        return round(float(value))
     except (TypeError, ValueError):
-        return "0"
-
-
-def _round_dec(value, ndigits=2):
-    """Round to ``ndigits`` decimals, trimming trailing zeros. Defaults to "0"."""
-    try:
-        rounded = round(float(value), ndigits)
-    except (TypeError, ValueError):
-        return "0"
-    # Format without a trailing ".0" / trailing zeros (e.g. 3.50 -> "3.5").
-    text = f"{rounded:.{ndigits}f}".rstrip("0").rstrip(".")
-    return text or "0"
+        return 0
 
 
 def parse_start_timestamp(value):
@@ -166,12 +135,8 @@ def parse_start_timestamp(value):
     return parsed.isoformat(timespec="seconds")
 
 
-def activity_to_row(activity):
-    """Convert a Garmin activity dict to the legacy row shape.
-
-    The intermediate row keeps mapping behavior identical to the one-time
-    migration before it is converted to the Firestore application model.
-    """
+def activity_to_entry(activity):
+    """Convert a Garmin activity directly to the Firestore activity model."""
     start = activity.get("startTimeLocal") or activity.get("startTimeGMT") or ""
     timestamp = parse_start_timestamp(start) or ""
 
@@ -184,46 +149,21 @@ def activity_to_row(activity):
     activity_type = ""
     type_info = activity.get("activityType")
     if isinstance(type_info, dict):
-        activity_type = type_info.get("typeKey") or ""
-
-    return [
-        timestamp,
-        activity_id,
-        activity_type,
-        activity.get("activityName") or "",
-        _round_int(activity.get("duration", 0)),
-        _round_int(activity.get("movingDuration", 0)),
-        _round_int(activity.get("distance", 0)),
-        _round_int(activity.get("elevationGain", 0)),
-        _round_int(activity.get("elevationLoss", 0)),
-        _round_int(activity.get("averageHR", 0)),
-        _round_int(activity.get("maxHR", 0)),
-        _round_dec(activity.get("averageSpeed", 0)),
-        _round_dec(activity.get("maxSpeed", 0)),
-        _round_int(activity.get("steps", 0)),
-        _round_dec(activity.get("aerobicTrainingEffect", 0), 1),
-        _round_dec(activity.get("anaerobicTrainingEffect", 0), 1),
-        _round_dec(activity.get("vO2MaxValue", 0), 1),
-    ]
-
-
-def activity_row_to_entry(row):
-    """Convert the legacy row shape to the Firestore activity model."""
-    activity_type = normalize_activity_type(row[2])
+        activity_type = normalize_activity_type(type_info.get("typeKey"))
     if not activity_type:
         return None
     return {
-        "timestamp": row[0],
-        "stravaId": row[1],
+        "timestamp": timestamp,
+        "stravaId": activity_id,
         "activityType": activity_type,
-        "name": row[3],
-        "duration": int(row[4]),
-        "distance": int(row[6]),
-        "elevationGain": int(row[7]),
-        "elevationLoss": int(row[8]),
+        "name": activity.get("activityName") or "",
+        "duration": _round_int(activity.get("duration", 0)),
+        "distance": _round_int(activity.get("distance", 0)),
+        "elevationGain": _round_int(activity.get("elevationGain", 0)),
+        "elevationLoss": _round_int(activity.get("elevationLoss", 0)),
         "calories": 0,
-        "avgHR": int(row[9]),
-        "maxHR": int(row[10]),
+        "avgHR": _round_int(activity.get("averageHR", 0)),
+        "maxHR": _round_int(activity.get("maxHR", 0)),
     }
 
 
@@ -287,8 +227,7 @@ def build_entries(activities):
         reasons = activity_issues(activity)
         entry = None
         if not reasons:
-            row = activity_to_row(activity)
-            entry = activity_row_to_entry(row) if row is not None else None
+            entry = activity_to_entry(activity)
             if entry is None:
                 reasons = ["record could not be mapped to a Firestore entry"]
         if reasons:
@@ -419,7 +358,7 @@ def main():
     project_id, firestore_token = get_firestore_access(service_account_key)
     session = requests.Session()
 
-    # 4. Convert fetched activities to the exact model stored by migration.
+    # 4. Convert fetched activities to the Firestore model.
     #    Malformed provider records are printed and skipped so a single bad
     #    activity cannot abort the whole sync.
     entries, invalid = build_entries(activities)
