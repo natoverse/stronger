@@ -59,3 +59,10 @@ backend. It performs no authentication, network reads, or remote writes.
   reviewer-friendly output. They are generated rather than committed as visual
   regression baselines, so intentional UI changes do not fail merely because
   pixels changed.
+
+## Iteration Decisions (2026-09-15)
+
+- The PR screenshot workflow runs only when a pull request changes direct UI
+  surfaces: the app shell, global styles, components, visual assets, public
+  files, or the root HTML document. Foundation, data, test, script, workflow,
+  and documentation-only changes do not generate screenshots.

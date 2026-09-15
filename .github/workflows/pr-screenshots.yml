@@ -2,6 +2,13 @@ name: PR Screenshots
 
 on:
   pull_request:
+    paths:
+      - index.html
+      - public/**
+      - src/App.css
+      - src/App.tsx
+      - src/assets/**
+      - src/components/**/*.tsx
 
 permissions:
   contents: read
