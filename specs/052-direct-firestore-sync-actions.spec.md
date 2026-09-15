@@ -69,3 +69,16 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
   live rotating token. Existing Sheets installations should migrate
   `withings_refresh_token` from the Infra tab into Firestore `syncState` before
   performing a new OAuth authorization.
+- On 2026-09-15, the Garmin activity sync failed for every record with
+  `Invalid entry date: None`: activity entries carry `timestamp` (an ISO
+  date-time), but the shared Python year-bucket writer read `date`. Year
+  bucketing and sorting now take an explicit `date_field` argument instead of
+  guessing between the two field names — activities pass `timestamp`, wellness
+  passes `date`. Activity documents use `timestamp` only; pre-existing
+  `date`-keyed activity entries are re-indexed rather than read through a
+  compatibility fallback.
+- The Garmin sync also prints each invalid provider record (index, reasons, and
+  a truncated payload preview), skips it, and reports a
+  fetched/valid/skipped/added/updated/status summary to stdout,
+  `GITHUB_STEP_SUMMARY`, and `GITHUB_OUTPUT`. The workflow's final `if: always()`
+  step echoes those step outputs so the totals survive a failing sync step.

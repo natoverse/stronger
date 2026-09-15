@@ -669,6 +669,7 @@ def main() -> None:
         entries,
         "date",
         overwrite,
+        "date",
     )
     print(
         f"Done — added {result['added']}, updated {result['updated']} "

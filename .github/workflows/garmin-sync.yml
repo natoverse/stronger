@@ -47,6 +47,7 @@ jobs:
           python3 scripts/test_garmin_sync.py
 
       - name: Run Garmin sync script
+        id: sync
         env:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
@@ -54,3 +55,23 @@ jobs:
         # Scheduled runs always overwrite the rolling window so recent rows are
         # refreshed (fixes partial mid-day rows and picks up edited activities).
         run: python3 scripts/garmin-sync.py ${{ inputs.backfill && '--backfill' || '' }} ${{ (github.event_name == 'schedule' || inputs.overwrite) && '--overwrite' || '' }}
+
+      # Reads step outputs written by the sync script (not shell-local state) so
+      # the totals are printed even when the sync step fails.
+      - name: Print Garmin sync summary
+        if: always()
+        env:
+          FETCHED: ${{ steps.sync.outputs.fetched || 'unknown' }}
+          VALID: ${{ steps.sync.outputs.valid || 'unknown' }}
+          SKIPPED: ${{ steps.sync.outputs.skipped || 'unknown' }}
+          ADDED: ${{ steps.sync.outputs.added || 'unknown' }}
+          UPDATED: ${{ steps.sync.outputs.updated || 'unknown' }}
+          STATUS: ${{ steps.sync.outputs.status || 'unknown' }}
+        run: |
+          echo "Garmin sync summary"
+          echo "  fetched: $FETCHED"
+          echo "  valid:   $VALID"
+          echo "  skipped: $SKIPPED"
+          echo "  added:   $ADDED"
+          echo "  updated: $UPDATED"
+          echo "  status:  $STATUS"
