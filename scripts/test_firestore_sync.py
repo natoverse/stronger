@@ -2,10 +2,10 @@
 """Offline unit tests for shared Firestore sync helpers."""
 
 from firestore_sync import (
-    entry_date,
     firestore_value,
     firestore_value_to_json,
     merge_entries,
+    merge_year_bucket_entries,
 )
 
 
@@ -28,6 +28,7 @@ def test_append_merge_preserves_existing_match():
         ],
         "stravaId",
         False,
+        "date",
     )
     assert entries == [
         {"date": "2026-01-01", "stravaId": "1", "name": "old"},
@@ -45,29 +46,40 @@ def test_overwrite_merge_replaces_only_match():
         [{"date": "2026-01-02", "dateKey": "2026-01-02", "steps": 3}],
         "dateKey",
         True,
+        "date",
     )
     assert entries[-1]["steps"] == 3
     assert (added, updated) == (0, 1)
 
 
-def test_entry_date_prefers_timestamp():
-    assert entry_date({"timestamp": "2026-01-02T06:30:00"}) == "2026-01-02T06:30:00"
-    assert entry_date({"date": "2026-01-02"}) == "2026-01-02"
-    assert entry_date({}) == ""
-
-
-def test_merge_sorts_timestamp_entries():
+def test_merge_sorts_activity_entries_by_timestamp():
     entries, added, updated = merge_entries(
-        [{"date": "2026-01-03", "stravaId": "3"}],
+        [{"timestamp": "2026-01-03T06:30:00", "stravaId": "3"}],
         [
             {"timestamp": "2026-01-02T06:30:00", "stravaId": "2"},
             {"timestamp": "2026-01-01T06:30:00", "stravaId": "1"},
         ],
         "stravaId",
         False,
+        "timestamp",
     )
     assert [entry["stravaId"] for entry in entries] == ["1", "2", "3"]
     assert (added, updated) == (2, 0)
+
+
+def test_year_bucket_rejects_entry_missing_date_field():
+    try:
+        merge_year_bucket_entries(
+            None, "project", "token", "uid", "garminActivities",
+            [{"date": "2026-01-02", "stravaId": "1"}],
+            "stravaId",
+            True,
+            "timestamp",
+        )
+    except ValueError as error:
+        assert str(error) == "Invalid timestamp for stravaId '1': ''", error
+    else:
+        raise AssertionError("expected ValueError for a missing timestamp")
 
 
 def _run():

@@ -439,6 +439,7 @@ def main():
         entries,
         "stravaId",
         overwrite,
+        "timestamp",
     )
     SUMMARY["added"] = result["added"]
     SUMMARY["updated"] = result["updated"]
