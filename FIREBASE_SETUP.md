@@ -274,6 +274,18 @@ Withings stores its rotating refresh token in the administrator-only
 installations should run the migration workflow once with `collections` set to
 `syncState` before enabling the direct Withings workflow.
 
+## 10. Nightly Firebase backup
+
+The **Firebase backup** workflow runs nightly at 04:15 UTC and can also be
+started manually. It uses `FIREBASE_SERVICE_ACCOUNT_KEY` and
+`FIREBASE_USER_ID` to export the configured user's `exercises`, `workouts`,
+`workoutSessions`, `dayFlags`, and `schedule` collections.
+
+Each collection and a backup manifest are written as readable JSON in the
+`firebase-backup` artifact. GitHub packages the uploaded directory as a
+single-layer ZIP and retains it for 30 days. Garmin, Withings, and other
+resynchronizable or nonessential collections are intentionally excluded.
+
 ## One-time Google Sheets migration
 
 The **Migrate Google Sheet to Firebase** workflow is a special-case,
