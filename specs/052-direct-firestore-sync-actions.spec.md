@@ -82,3 +82,5 @@ spreadsheet. They are migration tools, not ongoing ingestion paths.
   fetched/valid/skipped/added/updated/status summary to stdout,
   `GITHUB_STEP_SUMMARY`, and `GITHUB_OUTPUT`. The workflow's final `if: always()`
   step echoes those step outputs so the totals survive a failing sync step.
+- On 2026-09-15, the Withings workflow display name was shortened to
+  `Withings Sync`; the Firestore destination remains an implementation detail.
