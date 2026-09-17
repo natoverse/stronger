@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sync recent Garmin hiking tracks to Gaia GPS.
+"""Sync recent Garmin tracks of configured activity types to Gaia GPS.
 
 Gaia has no supported write API. This script uses its private web behavior to
 upload validated GPX files into an existing folder.
@@ -8,6 +8,9 @@ Required environment variables:
   GARMIN_TOKENS    Saved garminconnect token bundle.
   GAIA_SESSION_ID  Browser-extracted Gaia session cookie.
   GAIA_FOLDER_ID   Existing destination folder ID.
+
+Optional environment variables:
+  GARMIN_ACTIVITY_TYPES  Comma-separated exact type keys (hiking,mountaineering).
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ import argparse
 import math
 import os
 import random
+import re
 import sys
 import tempfile
 import time
@@ -24,7 +28,8 @@ from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
 
-ELIGIBLE_TYPES = frozenset({"hiking", "mountaineering"})
+DEFAULT_ACTIVITY_TYPES = "hiking,mountaineering"
+ELIGIBLE_TYPES = frozenset(DEFAULT_ACTIVITY_TYPES.split(","))
 ROLLING_DAYS = 4
 MAX_GPX_BYTES = 25 * 1024 * 1024
 GAIA_BASE_URL = "https://www.gaiagps.com"
@@ -63,12 +68,33 @@ def login_from_tokens(token_bundle):
     return garmin
 
 
-def eligible_activity(activity):
-    """Return whether an activity has an exact Gaia-sync type key."""
+def parse_activity_types(value):
+    """Parse exact Garmin type keys, rejecting empty or malformed selections."""
+    keys = [key.strip() for key in value.split(",")]
+    if any(not re.fullmatch(r"[a-z][a-z0-9_]*", key) for key in keys):
+        raise argparse.ArgumentTypeError(
+            "activity types must be comma-separated exact Garmin type keys "
+            "(for example: hiking,mountaineering or cycling,mountain_biking)"
+        )
+    return frozenset(keys)
+
+
+def add_activity_types_argument(parser):
+    parser.add_argument(
+        "--activity-types",
+        type=parse_activity_types,
+        default=os.environ.get("GARMIN_ACTIVITY_TYPES", DEFAULT_ACTIVITY_TYPES),
+        help="Comma-separated exact Garmin type keys; defaults to "
+        "GARMIN_ACTIVITY_TYPES or hiking,mountaineering",
+    )
+
+
+def eligible_activity(activity, activity_types=ELIGIBLE_TYPES):
+    """Return whether an activity has one of the selected exact type keys."""
     activity_type = activity.get("activityType")
     return (
         isinstance(activity_type, dict)
-        and activity_type.get("typeKey") in ELIGIBLE_TYPES
+        and activity_type.get("typeKey") in activity_types
     )
 
 
@@ -548,6 +574,7 @@ def run(
     gaia,
     folder_id,
     today=None,
+    activity_types=ELIGIBLE_TYPES,
 ):
     """Process activities in the selected window and return a summary."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -557,7 +584,7 @@ def run(
     failures = 0
 
     for activity in activities:
-        if not eligible_activity(activity):
+        if not eligible_activity(activity, activity_types):
             continue
         activity_id = str(activity.get("activityId") or "")
         try:
@@ -634,13 +661,14 @@ def run(
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="gaia-gpx")
+    add_activity_types_argument(parser)
     args = parser.parse_args(argv)
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
     session_id = os.environ.get("GAIA_SESSION_ID")
-    folder_id = os.environ.get("GAIA_FOLDER_ID")
+    folder_id = os.environ.get("GAIA_FOLDER_ID", "").strip()
     if not session_id:
         raise SystemExit("Missing GAIA_SESSION_ID environment variable")
     if not folder_id:
@@ -653,7 +681,9 @@ def main(argv=None):
         raise SystemExit("GAIA_REQUEST_DELAY_SECONDS must not be negative")
     gaia = GaiaClient(session_id, delay)
     gaia.verify_auth()
+    _one_by_id(gaia.list_objects("folder"), folder_id, "folder")
 
+    print(f"Selected Garmin activity types: {', '.join(sorted(args.activity_types))}")
     print("Loading Garmin tokens...")
     garmin = login_from_tokens(garmin_tokens)
     summary, failures = run(
@@ -661,10 +691,14 @@ def main(argv=None):
         Path(args.output_dir),
         gaia=gaia,
         folder_id=folder_id,
+        activity_types=args.activity_types,
     )
     print("Garmin-to-Gaia summary:")
     if not summary:
-        print("  No eligible hiking or mountaineering activities found.")
+        print(
+            "  No eligible activities found for: "
+            f"{', '.join(sorted(args.activity_types))}."
+        )
     for entry in summary:
         print(
             "  "

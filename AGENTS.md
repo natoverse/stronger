@@ -148,8 +148,10 @@ the browser-readable user tree. See [WITHINGS_SYNC_SETUP.md](WITHINGS_SYNC_SETUP
 - `garmin-sync.yml` — hourly Garmin activities → Firestore sync
 - `garmin-wellness-sync.yml` — hourly Garmin wellness → Firestore sync
 - `withings-sync.yml` — daily Withings → Firestore body-composition sync
-- `garmin-gaia-sync.yml` — nightly Garmin-to-Gaia activity sync
-- `garmin-gpx-export.yml` — manual Garmin GPX export
+- `garmin-gaia-sync.yml` — nightly hiking/mountaineering Garmin-to-Gaia sync
+- `garmin-gaia-sync-cycling.yml` / `garmin-gaia-sync-mountain-biking.yml` — separate nightly type/folder configurations
+- `garmin-gaia-sync-reusable.yml` — shared sync job with exact activity-type input and explicitly passed folder/session secrets
+- `garmin-gpx-export.yml` — manual full-history Garmin GPX export with activity-type selection
 - `auto-spec-issues.yml` — creates GitHub issues from new spec files
 - `auto-archive-specs.yml` — moves spec files to `.archive/specs/` when their issue is closed
 

@@ -7,6 +7,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _spec = importlib.util.spec_from_file_location(
@@ -108,3 +109,74 @@ def test_reports_failure_without_discarding_successful_exports():
             "failed: invalid Garmin activity ID",
         ]
         assert (output_dir / "garmin-123.gpx").exists()
+
+
+def test_exports_only_selected_types_with_full_history_year_boundary():
+    for selected, expected_ids in (
+        ("cycling", ["1"]),
+        ("mountain_biking", ["2"]),
+        ("cycling,mountain_biking", ["1", "2"]),
+        ("walking", []),
+    ):
+        garmin = mock.Mock()
+        garmin.get_activities_by_date.return_value = [
+            {"activityId": index, "activityName": key, "activityType": {"typeKey": key}}
+            for index, key in enumerate(
+                ("cycling", "mountain_biking", "hiking", "indoor_cycling"), start=1
+            )
+        ]
+        garmin.download_activity.return_value = VALID_GPX
+        with tempfile.TemporaryDirectory() as directory:
+            summary, failures = export.export_activities(
+                garmin, Path(directory), today=date(2026, 12, 31),
+                activity_types=export.gaia_sync.parse_activity_types(selected),
+            )
+            assert failures == 0
+            assert [item["activity_id"] for item in summary] == expected_ids
+            assert sorted(path.name for path in Path(directory).iterdir()) == [
+                f"garmin-{activity_id}.gpx" for activity_id in expected_ids
+            ]
+        garmin.get_activities_by_date.assert_called_once_with("2015-01-01", "2027-01-01")
+        assert [call.args[0] for call in garmin.download_activity.call_args_list] == expected_ids
+
+
+def test_main_forwards_types_without_gaia_credentials():
+    for argv, expected in (
+        ([], frozenset({"cycling"})),
+        (["--activity-types", "mountain_biking"], frozenset({"mountain_biking"})),
+    ):
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            mock.patch.dict(os.environ, {
+                "GARMIN_TOKENS": "tokens",
+                "GARMIN_ACTIVITY_TYPES": "cycling",
+            }, clear=True),
+            mock.patch.object(export.gaia_sync, "login_from_tokens") as login,
+            mock.patch.object(export.gaia_sync, "GaiaClient") as gaia,
+            mock.patch.object(export, "export_activities", return_value=([], 0)) as run,
+            mock.patch("builtins.print") as output,
+        ):
+            export.main(["--output-dir", directory, *argv])
+            run.assert_called_once_with(
+                login.return_value, Path(directory), activity_types=expected
+            )
+            gaia.assert_not_called()
+            messages = " ".join(str(call) for call in output.call_args_list)
+            assert "No eligible activities found for: " + ", ".join(expected) in messages
+
+
+def test_main_rejects_invalid_types_before_garmin_login():
+    for argv, environment in (
+        (["--activity-types", "*"], {}),
+        ([], {"GARMIN_ACTIVITY_TYPES": ""}),
+    ):
+        with (
+            mock.patch.dict(os.environ, {"GARMIN_TOKENS": "tokens", **environment}, clear=True),
+            mock.patch.object(export.gaia_sync, "login_from_tokens") as login,
+        ):
+            try:
+                export.main(argv)
+                raise AssertionError("Expected invalid type selection to fail")
+            except SystemExit as error:
+                assert error.code == 2
+            login.assert_not_called()
