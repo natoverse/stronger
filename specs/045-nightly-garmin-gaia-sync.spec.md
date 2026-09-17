@@ -107,3 +107,25 @@ Gaia does **not** publish a supported write API or OAuth flow. The automation us
   inspect only the last 72 hours (four calendar days for Garmin's date-based
   API), and activity-ID marker checks remain mandatory so reruns never upload a
   duplicate GPX.
+- Multiple sync configurations (2026-09-16): Both scripts accept
+  `--activity-types` (or `GARMIN_ACTIVITY_TYPES`) as a comma-separated list of
+  exact Garmin type keys, defaulting to `hiking,mountaineering`. Whitespace is
+  trimmed and duplicates collapse; blank entries, display names, and wildcard
+  syntax fail before authentication. No parent-type expansion is performed.
+- A reusable `garmin-gaia-sync-reusable.yml` workflow receives `activity_types`
+  and explicitly passed Garmin/session/folder secrets. Existing hiking runs
+  retain `GAIA_FOLDER_ID` and 03:00 UTC; separate cycling and mountain-biking
+  callers run at 04:00 and 05:00 UTC using `GAIA_CYCLING_FOLDER_ID` and
+  `GAIA_MOUNTAIN_BIKING_FOLDER_ID`. The user will provision these folder secrets.
+  Missing configuration fails explicitly; no destination fallback is allowed.
+- The shared sync job serializes Gaia runs with a repository-wide concurrency
+  group and never cancels a running sync. Each caller retains its own manual
+  dispatch and GitHub enable/disable controls. `queue: max` preserves multiple
+  pending configurations instead of replacing the previous pending job.
+- The existing four-day window, global activity-ID deduplication, and folder
+  recovery behavior are preserved. Overlapping configurations reuse an existing
+  marked track and assign it to the requested folder, rather than upload a copy.
+  Folder validation occurs before Garmin login, even when no activities match.
+- Validation covers custom exact-type filtering, CLI/environment configuration,
+  destination isolation and repeat runs across folders, missing configuration,
+  and the reusable workflow/caller wiring, without contacting Garmin or Gaia.

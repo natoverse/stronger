@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export Garmin hiking and mountaineering GPX files to a ZIP archive."""
+"""Export Garmin GPX files for configured activity types to an artifact directory."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 
@@ -34,16 +35,19 @@ def summary_entry(activity_id, title, gpx_name, result):
     }
 
 
-def export_activities(garmin, output_dir, today=None):
-    """Export all eligible Garmin activities since the Gaia backfill boundary."""
+def export_activities(
+    garmin, output_dir, today=None, activity_types=gaia_sync.ELIGIBLE_TYPES
+):
+    """Export selected Garmin activities since 2015, independent of sync bounds."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    start_date, end_date = gaia_sync.activity_date_range(backfill=True, today=today)
+    today = today or date.today()
+    start_date, end_date = "2015-01-01", (today + timedelta(days=1)).isoformat()
     activities = garmin.get_activities_by_date(start_date, end_date) or []
     summary = []
     failures = 0
 
     for activity in activities:
-        if not gaia_sync.eligible_activity(activity):
+        if not gaia_sync.eligible_activity(activity, activity_types):
             continue
         activity_id = str(activity.get("activityId") or "")
         try:
@@ -106,20 +110,27 @@ def export_activities(garmin, output_dir, today=None):
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-dir", default="garmin-gpx")
+    gaia_sync.add_activity_types_argument(parser)
     args = parser.parse_args(argv)
 
     garmin_tokens = os.environ.get("GARMIN_TOKENS")
     if not garmin_tokens:
         raise SystemExit("Missing GARMIN_TOKENS environment variable")
 
+    print(f"Selected Garmin activity types: {', '.join(sorted(args.activity_types))}")
     print("Loading Garmin tokens...")
     garmin = gaia_sync.login_from_tokens(garmin_tokens)
     output_dir = Path(args.output_dir)
-    summary, failures = export_activities(garmin, output_dir)
+    summary, failures = export_activities(
+        garmin, output_dir, activity_types=args.activity_types
+    )
 
     print("Garmin GPX export summary:")
     if not summary:
-        print("  No eligible hiking or mountaineering activities found.")
+        print(
+            "  No eligible activities found for: "
+            f"{', '.join(sorted(args.activity_types))}."
+        )
     for entry in summary:
         print(
             "  "

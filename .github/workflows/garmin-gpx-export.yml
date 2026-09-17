@@ -2,6 +2,12 @@ name: Garmin GPX Export
 
 on:
   workflow_dispatch:
+    inputs:
+      activity_types:
+        description: 'Comma-separated exact Garmin type keys (e.g. cycling,mountain_biking)'
+        type: string
+        required: true
+        default: hiking,mountaineering
 
 permissions:
   contents: read
@@ -24,6 +30,7 @@ jobs:
       - name: Export Garmin GPX files
         env:
           GARMIN_TOKENS: ${{ secrets.GARMIN_TOKENS }}
+          GARMIN_ACTIVITY_TYPES: ${{ inputs.activity_types }}
         run: python scripts/garmin-gpx-export.py
 
       - name: Upload Garmin GPX archive

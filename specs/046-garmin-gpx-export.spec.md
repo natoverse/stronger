@@ -48,3 +48,16 @@ one downloadable ZIP artifact. It never authenticates with or writes to Gaia.
 - Prepared files preserve GPX's default XML namespace rather than serializing
   elements with an `ns0` prefix, because Gaia's file importer otherwise reports
   that the valid tracks contain no features.
+- Parameterized export (2026-09-16): Manual dispatch exposes an `activity_types`
+  string, default `hiking,mountaineering`, passed through the environment rather
+  than interpolated into shell code. Both export and sync use the same
+  `--activity-types` / `GARMIN_ACTIVITY_TYPES` parser and exact-key filter.
+  For example, `cycling`, `mountain_biking`, or `cycling,mountain_biking` can be
+  exported without any Gaia credentials or changes to the nightly schedules.
+- Full-history export owns its 2015-01-01 start boundary and next-day exclusive
+  end boundary. It no longer calls the sync's removed `backfill` argument;
+  parameterizing export does not reintroduce historical Gaia synchronization.
+- Empty-match summaries identify the selected types. The single-layer artifact
+  name, GPX namespace, Garmin activity titles, and partial-failure behavior remain
+  unchanged. Tests cover custom exports, CLI/environment forwarding, invalid
+  configuration before authentication, and full-history date bounds.

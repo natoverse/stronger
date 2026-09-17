@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline tests for the Garmin-to-Gaia sync."""
 
+import argparse
 import importlib.util
 import os
 import sys
@@ -286,6 +287,119 @@ def test_filters_exact_activity_types():
     assert not sync.eligible_activity({"activityType": "hiking"})
 
 
+def test_parses_custom_exact_activity_types():
+    selected = sync.parse_activity_types(" cycling, mountain_biking,cycling ")
+    assert selected == frozenset({"cycling", "mountain_biking"})
+    for key in ("cycling", "mountain_biking"):
+        assert sync.eligible_activity({"activityType": {"typeKey": key}}, selected)
+    for key in ("hiking", "Cycling", "indoor_cycling", "gravel_cycling", None):
+        assert not sync.eligible_activity({"activityType": {"typeKey": key}}, selected)
+    assert not sync.eligible_activity({}, selected)
+    assert not sync.eligible_activity(
+        {"activityType": {"typeKey": "mountain_biking"}}, frozenset({"cycling"})
+    )
+
+
+def test_rejects_blank_or_malformed_type_lists():
+    for value in ("", " ", ",", "cycling,", ",hiking", "hiking,,cycling",
+                  "Cycling", "mountain biking", "*", "cycling;echo bad"):
+        try:
+            sync.parse_activity_types(value)
+            raise AssertionError(f"Expected invalid selection to fail: {value!r}")
+        except argparse.ArgumentTypeError:
+            pass
+
+
+def test_activity_argument_defaults_environment_and_cli_precedence():
+    for environment, argv, expected in (
+        ({}, [], {"hiking", "mountaineering"}),
+        ({"GARMIN_ACTIVITY_TYPES": "cycling"}, [], {"cycling"}),
+        ({"GARMIN_ACTIVITY_TYPES": "hiking"},
+         ["--activity-types", "mountain_biking"], {"mountain_biking"}),
+    ):
+        with mock.patch.dict(os.environ, environment, clear=True):
+            parser = argparse.ArgumentParser()
+            sync.add_activity_types_argument(parser)
+            assert parser.parse_args(argv).activity_types == frozenset(expected)
+
+
+def test_main_passes_selected_types_and_folder_without_logging_folder():
+    for argv, selected in (
+        ([], frozenset({"cycling"})),
+        (["--activity-types", "mountain_biking"], frozenset({"mountain_biking"})),
+    ):
+        with (
+            mock.patch.dict(os.environ, {
+                "GARMIN_TOKENS": "tokens",
+                "GAIA_SESSION_ID": "session",
+                "GAIA_FOLDER_ID": "private-folder",
+                "GARMIN_ACTIVITY_TYPES": "cycling",
+            }, clear=True),
+            mock.patch.object(sync, "GaiaClient") as client,
+            mock.patch.object(sync, "login_from_tokens") as login,
+            mock.patch.object(sync, "run", return_value=([], 0)) as run,
+            mock.patch("builtins.print") as output,
+        ):
+            client.return_value.list_objects.return_value = [
+                {"id": "private-folder", "tracks": []}
+            ]
+            sync.main(argv)
+            client.return_value.verify_auth.assert_called_once()
+            run.assert_called_once_with(
+                login.return_value, Path("gaia-gpx"),
+                gaia=client.return_value, folder_id="private-folder",
+                activity_types=selected,
+            )
+            messages = " ".join(str(call) for call in output.call_args_list)
+            assert "private-folder" not in messages
+            assert "No eligible activities found for: " + ", ".join(selected) in messages
+
+
+def test_main_rejects_missing_folder_and_invalid_types_before_authentication():
+    for overrides in (
+        {"GAIA_FOLDER_ID": ""},
+        {"GAIA_FOLDER_ID": " "},
+        {"GARMIN_ACTIVITY_TYPES": ""},
+        {"GARMIN_ACTIVITY_TYPES": "cycling,"},
+    ):
+        with (
+            mock.patch.dict(os.environ, {
+                "GARMIN_TOKENS": "tokens",
+                "GAIA_SESSION_ID": "session",
+                "GAIA_FOLDER_ID": "folder",
+                **overrides,
+            }, clear=True),
+            mock.patch.object(sync, "GaiaClient") as client,
+            mock.patch.object(sync, "login_from_tokens") as login,
+        ):
+            try:
+                sync.main([])
+                raise AssertionError("Expected invalid configuration to fail")
+            except SystemExit as error:
+                assert error.code != 0
+            client.assert_not_called()
+            login.assert_not_called()
+
+
+def test_main_validates_destination_before_garmin_login():
+    with (
+        mock.patch.dict(os.environ, {
+            "GARMIN_TOKENS": "tokens",
+            "GAIA_SESSION_ID": "session",
+            "GAIA_FOLDER_ID": "missing",
+        }, clear=True),
+        mock.patch.object(sync, "GaiaClient") as client,
+        mock.patch.object(sync, "login_from_tokens") as login,
+    ):
+        client.return_value.list_objects.return_value = []
+        try:
+            sync.main([])
+            raise AssertionError("Expected missing destination to fail")
+        except RuntimeError as error:
+            assert "matched 0 objects" in str(error)
+        login.assert_not_called()
+
+
 def test_prepares_valid_gpx_with_activity_name_only():
     prepared = sync.prepare_gpx(VALID_GPX, "Ridge")
     root = ET.fromstring(prepared)
@@ -332,10 +446,12 @@ class FakeGaia:
 
     def create_track(self, gpx_bytes, title, folder_id, activity_id):
         self.uploads += 1
-        self.folders[0]["tracks"].append("new-track")
+        track_id = "new-track" if self.uploads == 1 else f"new-track-{self.uploads}"
+        destination = next(folder for folder in self.folders if folder["id"] == folder_id)
+        destination["tracks"].append(track_id)
         self.tracks.append(
             {
-                "id": "new-track",
+                "id": track_id,
                 "name": title,
                 "source": sync.activity_marker(activity_id),
             }
@@ -475,6 +591,50 @@ def test_run_uploads_only_eligible_valid_tracks():
             }
         ]
         assert [path.name for path in Path(directory).iterdir()] == ["garmin-123.gpx"]
+
+
+def test_multiple_type_configurations_isolate_folders_and_deduplicate():
+    garmin = mock.Mock()
+    garmin.get_activities_by_date.return_value = [
+        {"activityId": index, "activityName": key, "activityType": {"typeKey": key}}
+        for index, key in enumerate(
+            ("hiking", "cycling", "mountain_biking", "indoor_cycling"), start=1
+        )
+    ]
+    garmin.download_activity.return_value = VALID_GPX
+    gaia = FakeGaia(
+        [{"id": folder, "tracks": []} for folder in ("hiking", "cycling", "mtb", "both")],
+        [],
+    )
+    with tempfile.TemporaryDirectory() as directory:
+        for key, folder, activity_id in (
+            ("hiking", "hiking", "1"),
+            ("cycling", "cycling", "2"),
+            ("mountain_biking", "mtb", "3"),
+        ):
+            output = Path(directory) / folder
+            for expected in ("uploaded", "duplicate"):
+                summary, failures = sync.run(
+                    garmin, output, gaia, folder, today=date(2026, 8, 24),
+                    activity_types=sync.parse_activity_types(key),
+                )
+                assert failures == 0
+                assert [(item["activity_id"], item["result"]) for item in summary] == [
+                    (activity_id, expected)
+                ]
+                assert [path.name for path in output.iterdir()] == [
+                    f"garmin-{activity_id}.gpx"
+                ]
+        summary, failures = sync.run(
+            garmin, Path(directory) / "both", gaia, "both",
+            activity_types=sync.parse_activity_types("cycling,mountain_biking"),
+        )
+    assert failures == 0
+    assert [item["result"] for item in summary] == ["recovered", "recovered"]
+    assert gaia.uploads == 3
+    assert [folder["tracks"] for folder in gaia.folders] == [
+        ["new-track"], ["new-track-2"], ["new-track-3"], ["new-track-2", "new-track-3"]
+    ]
 
 
 def test_run_reports_missing_title_without_downloading():
