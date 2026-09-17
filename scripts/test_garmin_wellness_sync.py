@@ -69,7 +69,7 @@ def test_wellness_to_entry_matches_firestore_schema():
         "trainingStatus": "MAINTAINING_2",
         "steps": "8000",
     })
-    assert len(entry) == 40
+    assert len(entry) == 45
     assert entry["date"] == "2026-08-15"
     assert entry["hrvWeeklyAvg"] == 48
     assert entry["hrvStatus"] == "BALANCED"
@@ -90,6 +90,9 @@ def test_build_entry_combines_provider_metrics_without_positional_fields():
         "_fetch_vo2max": {"vo2Max": "52.5"},
         "_fetch_hill_score": {"hillScore": "90"},
         "_fetch_endurance_score": {"enduranceScore": "7300"},
+        "_fetch_lactate_threshold": {"lactateThresholdHr": "165"},
+        "_fetch_fitness_age": {"fitnessAge": "29"},
+        "_fetch_max_hr": {"maxHrEstimate": "187"},
     }
     from contextlib import ExitStack
 
@@ -278,6 +281,67 @@ def test_fetch_endurance_score_from_nested_object():
     client = _MockGarminClient(endurance_score={"enduranceScore": {"latestScore": 7450}})
     row = garmin_wellness_sync._fetch_endurance_score(client, "2026-07-14")
     assert row == {"enduranceScore": "7450"}, row
+
+
+def test_fetch_lactate_threshold_combines_hr_speed_and_power():
+    class FakeClient:
+        def get_lactate_threshold(self, *, latest=True):
+            return {
+                "speed_and_heart_rate": {"heartRate": 165, "speed": 3.472},
+                "power": {"power": 268},
+            }
+
+    row = garmin_wellness_sync._fetch_lactate_threshold(FakeClient(), "2026-07-14")
+    assert row == {
+        "lactateThresholdHr": "165",
+        "lactateThresholdSpeed": "3.472",
+        "lactateThresholdPower": "268",
+    }, row
+
+
+def test_fetch_lactate_threshold_handles_missing_power():
+    class FakeClient:
+        def get_lactate_threshold(self, *, latest=True):
+            return {"speed_and_heart_rate": {"heartRate": 160, "speed": None}, "power": {}}
+
+    row = garmin_wellness_sync._fetch_lactate_threshold(FakeClient(), "2026-07-14")
+    assert row == {"lactateThresholdHr": "160"}, row
+
+
+def test_fetch_fitness_age_from_nested_object():
+    class FakeClient:
+        def get_fitnessage_data(self, _cdate):
+            return {"fitnessAge": {"age": 29, "lowerRange": 27, "upperRange": 31}}
+
+    row = garmin_wellness_sync._fetch_fitness_age(FakeClient(), "2026-07-14")
+    assert row == {"fitnessAge": "29"}, row
+
+
+def test_fetch_fitness_age_from_direct_scalar():
+    class FakeClient:
+        def get_fitnessage_data(self, _cdate):
+            return {"fitnessAge": 31.0}
+
+    row = garmin_wellness_sync._fetch_fitness_age(FakeClient(), "2026-07-14")
+    assert row == {"fitnessAge": "31"}, row
+
+
+def test_fetch_max_hr_from_userdata():
+    class FakeClient:
+        def get_userprofile_settings(self):
+            return {"userData": {"maxHeartRate": 187}}
+
+    row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
+    assert row == {"maxHrEstimate": "187"}, row
+
+
+def test_fetch_max_hr_missing_returns_empty():
+    class FakeClient:
+        def get_userprofile_settings(self):
+            return {"userData": {}}
+
+    row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
+    assert row == {}, row
 
 
 def test_parse_goals_standard_fields():

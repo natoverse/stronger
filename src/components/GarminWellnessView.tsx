@@ -1562,6 +1562,11 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const vo2Data         = useMemo(() => buildWellnessChartData(entries, 'vo2Max',               range, aggregation, today), [entries, range, aggregation, today]);
   const hillData        = useMemo(() => buildWellnessChartData(entries, 'hillScore',            range, aggregation, today), [entries, range, aggregation, today]);
   const enduranceData   = useMemo(() => buildWellnessChartData(entries, 'enduranceScore',       range, aggregation, today), [entries, range, aggregation, today]);
+  const lactateHrData    = useMemo(() => buildWellnessChartData(entries, 'lactateThresholdHr',    range, aggregation, today), [entries, range, aggregation, today]);
+  const lactateSpeedData = useMemo(() => buildWellnessChartData(entries, 'lactateThresholdSpeed', range, aggregation, today), [entries, range, aggregation, today]);
+  const lactatePowerData = useMemo(() => buildWellnessChartData(entries, 'lactateThresholdPower', range, aggregation, today), [entries, range, aggregation, today]);
+  const fitnessAgeData   = useMemo(() => buildWellnessChartData(entries, 'fitnessAge',            range, aggregation, today), [entries, range, aggregation, today]);
+  const maxHrData        = useMemo(() => buildWellnessChartData(entries, 'maxHrEstimate',         range, aggregation, today), [entries, range, aggregation, today]);
   const heatAcclimationData = useMemo(() => buildWellnessChartData(entries, 'heatAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
   const altitudeAcclimationData = useMemo(() => buildWellnessChartData(entries, 'altitudeAcclimationPct', range, aggregation, today), [entries, range, aggregation, today]);
   const currentAltitudeData = useMemo(() => buildWellnessChartData(entries, 'currentAltitude', range, aggregation, today), [entries, range, aggregation, today]);
@@ -1603,6 +1608,10 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const vo2Domain       = useMemo(() => centeredDomain(vo2Data.latestValue, 10), [vo2Data.latestValue]);
   const hillDomain      = useMemo(() => centeredDomain(hillData.latestValue, 20), [hillData.latestValue]);
   const enduranceDomain = useMemo(() => centeredDomain(enduranceData.latestValue, 1000), [enduranceData.latestValue]);
+  const lactateHrDomain    = useMemo(() => centeredDomain(lactateHrData.latestValue, 15), [lactateHrData.latestValue]);
+  const lactatePowerDomain = useMemo(() => centeredDomain(lactatePowerData.latestValue, 40), [lactatePowerData.latestValue]);
+  const fitnessAgeDomain   = useMemo(() => centeredDomain(fitnessAgeData.latestValue, 5), [fitnessAgeData.latestValue]);
+  const maxHrDomain        = useMemo(() => centeredDomain(maxHrData.latestValue, 10), [maxHrData.latestValue]);
   const rhrDomain       = useMemo(() => centeredDomain(rhrData.latestValue, 15), [rhrData.latestValue]);
   const hrvDomain       = useMemo(() => baselineDomain(hrvData.buckets, 5), [hrvData.buckets]);
   const stepsDomain     = useMemo(() => {
@@ -1754,6 +1763,41 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         domain={enduranceDomain}
       />
       <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.lactateThresholdHr}
+        unit={WELLNESS_METRIC_UNITS.lactateThresholdHr}
+        buckets={lactateHrData.buckets}
+        summaryLabel={summaryStr(summaryValue(lactateHrData), 'lactateThresholdHr', WELLNESS_METRIC_UNITS.lactateThresholdHr)}
+        formatValue={numFmt('lactateThresholdHr')}
+        renderAsDots
+        domain={lactateHrDomain}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.lactateThresholdSpeed}
+        unit={WELLNESS_METRIC_UNITS.lactateThresholdSpeed}
+        buckets={lactateSpeedData.buckets}
+        summaryLabel={summaryStr(summaryValue(lactateSpeedData), 'lactateThresholdSpeed', '')}
+        formatValue={numFmt('lactateThresholdSpeed')}
+        renderAsDots
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.lactateThresholdPower}
+        unit={WELLNESS_METRIC_UNITS.lactateThresholdPower}
+        buckets={lactatePowerData.buckets}
+        summaryLabel={summaryStr(summaryValue(lactatePowerData), 'lactateThresholdPower', WELLNESS_METRIC_UNITS.lactateThresholdPower)}
+        formatValue={numFmt('lactateThresholdPower')}
+        renderAsDots
+        domain={lactatePowerDomain}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.fitnessAge}
+        unit={WELLNESS_METRIC_UNITS.fitnessAge}
+        buckets={fitnessAgeData.buckets}
+        summaryLabel={summaryStr(summaryValue(fitnessAgeData), 'fitnessAge', WELLNESS_METRIC_UNITS.fitnessAge)}
+        formatValue={numFmt('fitnessAge')}
+        renderAsDots
+        domain={fitnessAgeDomain}
+      />
+      <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.heatAcclimationPct}
         unit={WELLNESS_METRIC_UNITS.heatAcclimationPct}
         buckets={heatAcclimationData.buckets}
@@ -1809,6 +1853,15 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('restingHR')}
         renderAsDots
         domain={rhrDomain}
+      />
+      <WellnessBarChart
+        label={WELLNESS_METRIC_LABELS.maxHrEstimate}
+        unit={WELLNESS_METRIC_UNITS.maxHrEstimate}
+        buckets={maxHrData.buckets}
+        summaryLabel={summaryStr(summaryValue(maxHrData), 'maxHrEstimate', WELLNESS_METRIC_UNITS.maxHrEstimate)}
+        formatValue={numFmt('maxHrEstimate')}
+        renderAsDots
+        domain={maxHrDomain}
       />
       <WellnessRangeBarChart
         label="Body Battery Range"

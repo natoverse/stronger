@@ -81,6 +81,11 @@ function wellnessEntry(date: string, index: number): GarminWellnessEntry {
 		loadFocusAnaerobicMax: 150,
 		hrvBaselineMin: 45,
 		hrvBaselineMax: 58,
+		lactateThresholdHr: 165 + (index % 2),
+		lactateThresholdSpeed: 3.4 + index * 0.01,
+		lactateThresholdPower: 265 + index,
+		fitnessAge: 29 - Math.floor(index / 4),
+		maxHrEstimate: 187,
 	}
 }
 

@@ -45,6 +45,11 @@ export type WellnessNumericMetric =
   | 'activeCalories'
   | 'bmrCalories'
   | 'avgStress'
+  | 'lactateThresholdHr'
+  | 'lactateThresholdSpeed'
+  | 'lactateThresholdPower'
+  | 'fitnessAge'
+  | 'maxHrEstimate'
   | 'loadFocusAerobicLow'
   | 'loadFocusAerobicLowMin'
   | 'loadFocusAerobicLowMax'
@@ -90,6 +95,11 @@ export const WELLNESS_METRIC_LABELS: Record<WellnessNumericMetric, string> = {
   activeCalories: 'Active Calories',
   bmrCalories: 'Resting Calories (BMR)',
   avgStress: 'Stress',
+  lactateThresholdHr: 'Lactate Threshold HR',
+  lactateThresholdSpeed: 'Lactate Threshold Pace',
+  lactateThresholdPower: 'Lactate Threshold Power',
+  fitnessAge: 'Fitness Age',
+  maxHrEstimate: 'Max Heart Rate Estimate',
   loadFocusAerobicLow: 'Low Aerobic',
   loadFocusAerobicLowMin: 'Low Aerobic (min)',
   loadFocusAerobicLowMax: 'Low Aerobic (max)',
@@ -126,6 +136,11 @@ export const WELLNESS_METRIC_UNITS: Record<WellnessNumericMetric, string> = {
   activeCalories: 'kcal',
   bmrCalories: 'kcal',
   avgStress: '',
+  lactateThresholdHr: 'bpm',
+  lactateThresholdSpeed: '',
+  lactateThresholdPower: 'W',
+  fitnessAge: 'yrs',
+  maxHrEstimate: 'bpm',
   loadFocusAerobicLow: '',
   loadFocusAerobicLowMin: '',
   loadFocusAerobicLowMax: '',
@@ -801,6 +816,13 @@ export function formatWellnessValue(value: number | null, metric: WellnessNumeri
   }
   if (metric === 'hillScore' || metric === 'enduranceScore') {
     return String(Math.round(value));
+  }
+  if (metric === 'lactateThresholdSpeed') {
+    if (value <= 0) return '—';
+    const paceMinPerKm = 1000 / (value * 60);
+    const minutes = Math.floor(paceMinPerKm);
+    const seconds = Math.round((paceMinPerKm - minutes) * 60);
+    return `${minutes}:${String(seconds).padStart(2, '0')} /km`;
   }
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(1);

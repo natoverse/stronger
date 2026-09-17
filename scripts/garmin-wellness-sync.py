@@ -4,9 +4,16 @@
 Writes one entry per day to yearly Firestore bucket documents with all of:
   HRV, sleep, body battery, training readiness, training status, acute/chronic
   load, steps, floors, resting HR, VO2 max (running), intensity minutes, hill
-  score, endurance score, daily average stress, and load focus (training load
+  score, endurance score, daily average stress, load focus (training load
   balance: low-aerobic / high-aerobic / anaerobic monthly load plus each
-  bucket's optimal target range).
+  bucket's optimal target range), running lactate threshold (heart rate,
+  speed, power), fitness age, and estimated max heart rate (the profile
+  ceiling used for zone calculation, not the day's observed peak).
+
+  Lactate threshold, fitness age, and max HR estimate are slow-moving,
+  profile-level values (Garmin only exposes a "latest" snapshot, not a
+  per-day history), but they are still fetched on every run of this same
+  hourly sync rather than a separate slow-cadence job/workflow.
 
 Environment variables (all required):
   GARMIN_TOKENS               – garminconnect token bundle
@@ -54,6 +61,13 @@ WELLNESS_FIELDS = [
     "heatAcclimationPct", "altitudeAcclimationPct", "currentAltitude",
     "activeCalories", "bmrCalories",
     "avgStress",
+    # Running lactate threshold (heart rate, speed, power) and the two
+    # slow-moving physiological estimates below are fetched every hourly run
+    # alongside everything else rather than on a separate cadence, since
+    # Garmin only exposes their latest/profile values anyway.
+    "lactateThresholdHr", "lactateThresholdSpeed", "lactateThresholdPower",
+    "fitnessAge",
+    "maxHrEstimate",
     # Load focus (training load balance) — monthly (rolling ~28-day) load per
     # intensity bucket plus Garmin's optimal target range (min/max) for each.
     "loadFocusAerobicLow", "loadFocusAerobicLowMin", "loadFocusAerobicLowMax",
@@ -536,6 +550,66 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
         return {}
 
 
+def _fetch_lactate_threshold(client, cdate: str) -> dict:
+    """Running lactate threshold: heart rate (bpm), speed (m/s), power (watts).
+
+    Garmin only exposes a single "latest" snapshot for this metric (no daily
+    history), so every hourly run re-fetches the same current value.
+    """
+    try:
+        data = client.get_lactate_threshold(latest=True) or {}
+        speed_and_hr = data.get("speed_and_heart_rate") or {}
+        power = data.get("power") or {}
+
+        result = {}
+        hr = speed_and_hr.get("heartRate")
+        if hr is not None:
+            result["lactateThresholdHr"] = _num(hr, 0)
+        speed = speed_and_hr.get("speed")
+        if speed is not None:
+            result["lactateThresholdSpeed"] = _num(speed, 3)
+        watts = _extract_metric_value(
+            power, "power", "value", "functionalThresholdPower", "wattsPerKilogram",
+        )
+        if watts is not None:
+            result["lactateThresholdPower"] = _num(watts, 0)
+        return result
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] lactate_threshold: {exc}", file=sys.stderr)
+        return {}
+
+
+def _fetch_fitness_age(client, cdate: str) -> dict:
+    """Garmin's Fitness Age estimate (years)."""
+    try:
+        data = client.get_fitnessage_data(cdate) or {}
+        # Some payload variants nest the score under a "fitnessAge" object
+        # (with an "age" field); others expose it as a direct scalar/value.
+        nested = data.get("fitnessAge") if isinstance(data, dict) else None
+        source = nested if isinstance(nested, dict) else data
+        val = _extract_metric_value(source, "age", "fitnessAge", "value")
+        return {"fitnessAge": _num(val, 1)} if val is not None else {}
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] fitness_age: {exc}", file=sys.stderr)
+        return {}
+
+
+def _fetch_max_hr(client, cdate: str) -> dict:
+    """Estimated max heart rate (bpm) — the physiological-ceiling value used
+    for Garmin's heart-rate zone calculation, not the day's observed peak.
+    """
+    try:
+        data = client.get_userprofile_settings() or {}
+        user_data = data.get("userData") if isinstance(data, dict) else None
+        val = _extract_metric_value(user_data, "maxHeartRate", "maxHr")
+        if val is None:
+            val = _extract_metric_value(data, "maxHeartRate", "maxHr")
+        return {"maxHrEstimate": _num(val, 0)} if val is not None else {}
+    except Exception as exc:
+        print(f"  WARNING [{cdate}] max_hr: {exc}", file=sys.stderr)
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Entry builder
 # ---------------------------------------------------------------------------
@@ -552,6 +626,9 @@ def build_entry(client, cdate: str) -> dict:
     metrics.update(_fetch_vo2max(client, cdate))
     metrics.update(_fetch_hill_score(client, cdate))
     metrics.update(_fetch_endurance_score(client, cdate))
+    metrics.update(_fetch_lactate_threshold(client, cdate))
+    metrics.update(_fetch_fitness_age(client, cdate))
+    metrics.update(_fetch_max_hr(client, cdate))
 
     return wellness_to_entry(metrics)
 

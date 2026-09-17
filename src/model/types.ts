@@ -475,6 +475,25 @@ export interface GarminWellnessEntry {
 	/** Daily average stress level (0–100), or null when no data. */
 	avgStress: number | null;
 
+	// Running lactate threshold (Garmin's "latest" snapshot; no daily
+	// history, so this repeats each hourly sync run until Garmin updates it).
+	/** Lactate threshold heart rate, in bpm. */
+	lactateThresholdHr: number | null;
+	/** Lactate threshold running speed, in m/s. */
+	lactateThresholdSpeed: number | null;
+	/** Lactate threshold power, in watts. */
+	lactateThresholdPower: number | null;
+
+	// Slow-moving profile estimates (also fetched every hourly run)
+	/** Garmin Fitness Age estimate, in years. */
+	fitnessAge: number | null;
+	/**
+	 * Estimated max heart rate, in bpm — the physiological-ceiling value
+	 * Garmin uses for heart-rate zone calculation. This is distinct from any
+	 * day's observed peak heart rate.
+	 */
+	maxHrEstimate: number | null;
+
 	// Load focus (training load balance)
 	// Each bucket is a monthly (rolling ~28-day) load total, with Garmin's
 	// optimal target range (min/max) that shifts daily with recent training.
