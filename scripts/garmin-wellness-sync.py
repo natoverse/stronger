@@ -563,15 +563,25 @@ def _fetch_lactate_threshold(client, cdate: str) -> dict:
         ) or {}
 
         def range_value(raw, *keys):
+            if isinstance(raw, list):
+                for item in raw:
+                    value = range_value(item, *keys)
+                    if value is not None:
+                        return value
+                return None
+            if not isinstance(raw, dict):
+                return None
+            entry_date = raw.get("calendarDate") or raw.get("date")
+            if entry_date is not None and str(entry_date) != cdate:
+                return None
             value = _extract_metric_value(raw, *keys)
             if value is not None:
                 return value
-            if isinstance(raw, dict):
-                for nested in raw.values():
-                    if isinstance(nested, (dict, list)):
-                        value = range_value(nested, *keys)
-                        if value is not None:
-                            return value
+            for nested in raw.values():
+                if isinstance(nested, (dict, list)):
+                    value = range_value(nested, *keys)
+                    if value is not None:
+                        return value
             return None
 
         result = {}
@@ -619,6 +629,23 @@ def _fetch_max_hr(client, cdate: str) -> dict:
     for Garmin's heart-rate zone calculation, not the day's observed peak.
     """
     try:
+        def zone_max_hr(zones):
+            if isinstance(zones, dict):
+                zones = [zones]
+            if not isinstance(zones, list):
+                return None
+            zone = next(
+                (
+                    item for sport in ("DEFAULT", "RUNNING")
+                    for item in zones
+                    if isinstance(item, dict) and item.get("sport") == sport
+                ),
+                next((item for item in zones if isinstance(item, dict)), None),
+            )
+            return _extract_metric_value(
+                zone, "maxHeartRateUsed", "maxHeartRate", "maxHr",
+            )
+
         data = client.get_userprofile_settings() or {}
         user_data = data.get("userData") if isinstance(data, dict) else None
         val = _extract_metric_value(user_data, "maxHeartRate", "maxHr")
@@ -626,22 +653,9 @@ def _fetch_max_hr(client, cdate: str) -> dict:
             val = _extract_metric_value(data, "maxHeartRate", "maxHr")
         if val is None:
             zones = data.get("heartRateZones") if isinstance(data, dict) else None
-            if not isinstance(zones, list):
-                zones = client.get_heart_rate_zones() or []
-            if isinstance(zones, dict):
-                zones = [zones]
-            if isinstance(zones, list):
-                zone = next(
-                    (
-                        item for sport in ("DEFAULT", "RUNNING")
-                        for item in zones
-                        if isinstance(item, dict) and item.get("sport") == sport
-                    ),
-                    next((item for item in zones if isinstance(item, dict)), None),
-                )
-                val = _extract_metric_value(
-                    zone, "maxHeartRateUsed", "maxHeartRate", "maxHr",
-                )
+            val = zone_max_hr(zones)
+        if val is None:
+            val = zone_max_hr(client.get_heart_rate_zones() or [])
         return {"maxHrEstimate": _num(val, 0)} if val is not None else {}
     except Exception as exc:
         print(f"  WARNING [{cdate}] max_hr: {exc}", file=sys.stderr)

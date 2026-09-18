@@ -294,11 +294,14 @@ def test_fetch_lactate_threshold_combines_hr_speed_and_power():
             assert aggregation == "daily"
             return {
                 "heart_rate": [{"calendarDate": "2026-07-14", "value": 165}],
-                "speed": {
-                    "values": [
-                        {"calendarDate": "2026-07-14", "value": 3.472},
-                    ],
-                },
+                "speed": [
+                    {
+                        "values": [
+                            {"calendarDate": "2026-07-13", "value": 9.999},
+                            {"calendarDate": "2026-07-14", "value": 3.472},
+                        ],
+                    },
+                ],
                 "power": [
                     {
                         "calendarDate": "2026-07-14",
@@ -379,6 +382,18 @@ def test_fetch_max_hr_falls_back_to_heart_rate_zones_endpoint():
 
     row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
     assert row == {"maxHrEstimate": "190"}, row
+
+
+def test_fetch_max_hr_falls_back_when_settings_zones_are_empty():
+    class FakeClient:
+        def get_userprofile_settings(self):
+            return {"heartRateZones": []}
+
+        def get_heart_rate_zones(self):
+            return [{"sport": "DEFAULT", "maxHeartRateUsed": 187}]
+
+    row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
+    assert row == {"maxHrEstimate": "187"}, row
 
 
 def test_fetch_max_hr_missing_returns_empty():
