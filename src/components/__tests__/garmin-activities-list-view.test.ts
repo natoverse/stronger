@@ -3,6 +3,7 @@ import {
   formatDistance,
   formatDuration,
   formatElevation,
+  formatActivityCount,
   garminActivityUrl,
   getDisplayedActivities,
   getSelectableActivityTypes,
@@ -92,6 +93,12 @@ describe('Garmin activity card formatting', () => {
   it('formats elevation with a single quotation mark', () => {
     expect(formatElevation(30.48)).toBe('100‘');
     expect(formatElevation(0)).toBe('');
+  });
+
+  it('formats displayed activity counts with correct pluralization', () => {
+    expect(formatActivityCount(0)).toBe('0 activities');
+    expect(formatActivityCount(1)).toBe('1 activity');
+    expect(formatActivityCount(2)).toBe('2 activities');
   });
 
   it('builds a Garmin Connect link from the activity id', () => {
