@@ -224,7 +224,7 @@ export function GarminActivitiesListView({ activities, range, selectedTypes, que
     <div className="activity-list-view">
       <h3 className="strava-section-title">
         Activity Log
-        <span className="strava-section-freshness">{formatActivityCount(displayed.length)}</span>
+        <span className="strava-section-count">{formatActivityCount(displayed.length)}</span>
       </h3>
 
       {displayed.length === 0 ? (
