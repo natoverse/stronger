@@ -20,6 +20,15 @@ export { generateBucketSlots, getRangeStart, getRangeEnd, getTimeRangeOptions };
 
 const METERS_PER_MILE = 1609.344;
 
+/**
+ * Below this speed, a lactate threshold pace would exceed 20:00/mi — far
+ * slower than any real running threshold test. Garmin's range API sometimes
+ * returns a stale placeholder value (e.g. ~0.35 m/s) when a period lacks
+ * sufficient running data, which otherwise renders as a nonsensical
+ * multi-hour-per-mile pace.
+ */
+const MIN_PLAUSIBLE_THRESHOLD_SPEED_MPS = METERS_PER_MILE / (20 * 60);
+
 // ---------------------------------------------------------------------------
 // Metric catalogue
 // ---------------------------------------------------------------------------
@@ -820,7 +829,10 @@ export function formatWellnessValue(value: number | null, metric: WellnessNumeri
     return String(Math.round(value));
   }
   if (metric === 'lactateThresholdSpeed') {
-    if (value <= 0) return '—';
+    // Garmin occasionally reports a stale/placeholder speed (well under a mile
+    // in 20 minutes) for periods without enough running data. Treat those as
+    // missing rather than rendering an implausible multi-hour-looking pace.
+    if (value <= 0 || value < MIN_PLAUSIBLE_THRESHOLD_SPEED_MPS) return '—';
     const paceSecondsPerMile = Math.round(METERS_PER_MILE / value);
     const minutes = Math.floor(paceSecondsPerMile / 60);
     const seconds = paceSecondsPerMile % 60;
