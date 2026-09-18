@@ -52,6 +52,11 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     loadFocusAnaerobicMax: null,
     hrvBaselineMin: null,
     hrvBaselineMax: null,
+    lactateThresholdHr: null,
+    lactateThresholdSpeed: null,
+    lactateThresholdPower: null,
+    fitnessAge: null,
+    maxHrEstimate: null,
     ...overrides,
   };
 }
