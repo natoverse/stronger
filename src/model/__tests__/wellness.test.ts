@@ -224,15 +224,18 @@ describe('formatWellnessValue', () => {
 
   it('formats lactate threshold speed as an imperial pace', () => {
     expect(formatWellnessValue(3.4, 'lactateThresholdSpeed')).toBe('7:53 /mi');
-    expect(formatWellnessValue(0, 'lactateThresholdSpeed')).toBe('—');
+    // The sync converts Garmin's raw range value 0.319 to 3.19 m/s.
+    expect(formatWellnessValue(3.19, 'lactateThresholdSpeed')).toBe('8:24 /mi');
+    expect(formatWellnessValue(3.472, 'lactateThresholdSpeed')).toBe('7:44 /mi');
   });
 
-  it('treats implausibly slow lactate threshold speed as missing data', () => {
-    // Garmin's range API sometimes returns a stale placeholder speed
-    // (e.g. ~0.35 m/s, a 76:38/mi pace) instead of a real threshold reading.
-    expect(formatWellnessValue(0.35, 'lactateThresholdSpeed')).toBe('—');
-    // A realistic, slower recreational threshold pace still renders normally.
+  it('does not hide positive speeds behind an arbitrary pace cutoff', () => {
+    expect(formatWellnessValue(1, 'lactateThresholdSpeed')).toBe('26:49 /mi');
     expect(formatWellnessValue(1.5, 'lactateThresholdSpeed')).toBe('17:53 /mi');
+  });
+
+  it.each([null, 0, -1, NaN, Infinity, -Infinity])('treats invalid threshold speed %s as missing', (value) => {
+    expect(formatWellnessValue(value, 'lactateThresholdSpeed')).toBe('—');
   });
 });
 

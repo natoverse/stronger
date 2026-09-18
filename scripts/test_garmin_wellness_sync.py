@@ -298,8 +298,8 @@ def test_fetch_lactate_threshold_combines_hr_speed_and_power():
                     {
                         "calendarDate": "2026-07-13",
                         "values": [
-                            {"value": 9.999},
-                            {"calendarDate": "2026-07-14", "value": 3.472},
+                            {"value": 0.9999},
+                            {"calendarDate": "2026-07-14", "value": 0.3472},
                         ],
                     },
                 ],
@@ -317,6 +317,52 @@ def test_fetch_lactate_threshold_combines_hr_speed_and_power():
         "lactateThresholdSpeed": "3.472",
         "lactateThresholdPower": "268",
     }, row
+
+
+def test_fetch_lactate_threshold_converts_range_speed_before_firestore_storage():
+    class FakeClient:
+        def get_lactate_threshold(self, **_kwargs):
+            return {
+                "speed": [
+                    {
+                        "from": "2026-07-13", "until": "2026-07-13",
+                        "series": "running", "value": 0.4, "updatedDate": "2026-07-13",
+                    },
+                    {
+                        "from": "2026-07-14", "until": "2026-07-14",
+                        "series": "running", "value": 0.319, "updatedDate": "2026-07-14",
+                    },
+                ],
+            }
+
+    metrics = garmin_wellness_sync._fetch_lactate_threshold(FakeClient(), "2026-07-14")
+    entry = garmin_wellness_sync.wellness_to_entry({"date": "2026-07-14", **metrics})
+    assert entry["lactateThresholdSpeed"] == 3.19, entry
+
+
+def test_lactate_threshold_speed_normalizes_numeric_values_without_magnitude_guessing():
+    for value, expected in [
+        (0.319, "3.19"), ("0.3472", "3.472"), (0.33611017, "3.361"),
+        (0.1, "1"), (1.5, "15"),
+    ]:
+        assert garmin_wellness_sync._lactate_threshold_speed_mps(value) == expected
+
+
+def test_fetch_lactate_threshold_invalid_speed_preserves_hr_and_power():
+    for value in (None, "", "invalid", 0, -1, float("nan"), float("inf"), -float("inf")):
+        class FakeClient:
+            def get_lactate_threshold(self, **_kwargs):
+                return {
+                    "heart_rate": [{"value": 165}],
+                    "speed": [{"value": value}],
+                    "power": [{"value": 268}],
+                }
+
+        metrics = garmin_wellness_sync._fetch_lactate_threshold(FakeClient(), "2026-07-14")
+        entry = garmin_wellness_sync.wellness_to_entry(metrics)
+        assert entry["lactateThresholdSpeed"] is None, entry
+        assert entry["lactateThresholdHr"] == 165, entry
+        assert entry["lactateThresholdPower"] == 268, entry
 
 
 def test_fetch_lactate_threshold_handles_missing_power():

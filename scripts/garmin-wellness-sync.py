@@ -36,6 +36,7 @@ import sys
 import time
 import tempfile
 from datetime import date, timedelta
+from math import isfinite
 from pathlib import Path
 
 from firestore_sync import (
@@ -116,6 +117,17 @@ def _stress(v) -> str:
         return str(int(round(f)))
     except (ValueError, TypeError):
         return ""
+
+
+def _lactate_threshold_speed_mps(value) -> str:
+    """Convert Garmin biometric range speed (m/s divided by 10) to stored m/s."""
+    try:
+        speed_mps = float(value) * 10
+    except (ValueError, TypeError, OverflowError):
+        return ""
+    if not isfinite(speed_mps) or speed_mps <= 0:
+        return ""
+    return _num(speed_mps, 3)
 
 
 TRAINING_STATUS_CODE_MAP = {
@@ -572,7 +584,7 @@ def _fetch_lactate_threshold(client, cdate: str) -> dict:
                 return None
             if not isinstance(raw, dict):
                 return None
-            entry_date = raw.get("calendarDate") or raw.get("date") or parent_date
+            entry_date = raw.get("calendarDate") or raw.get("date") or raw.get("from") or parent_date
             if entry_date is None or str(entry_date) == cdate:
                 value = _extract_metric_value(raw, *keys)
                 if value is not None:
@@ -596,7 +608,7 @@ def _fetch_lactate_threshold(client, cdate: str) -> dict:
             "lactateThresholdSpeed", "speed", "value",
         )
         if speed is not None:
-            result["lactateThresholdSpeed"] = _num(speed, 3)
+            result["lactateThresholdSpeed"] = _lactate_threshold_speed_mps(speed)
         watts = range_value(
             data.get("power"),
             "functionalThresholdPower", "power", "value",
