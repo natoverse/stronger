@@ -285,10 +285,26 @@ def test_fetch_endurance_score_from_nested_object():
 
 def test_fetch_lactate_threshold_combines_hr_speed_and_power():
     class FakeClient:
-        def get_lactate_threshold(self, *, latest=True):
+        def get_lactate_threshold(
+            self, *, latest, start_date, end_date, aggregation,
+        ):
+            assert latest is False
+            assert start_date == "2026-07-14"
+            assert end_date == "2026-07-14"
+            assert aggregation == "daily"
             return {
-                "speed_and_heart_rate": {"heartRate": 165, "speed": 3.472},
-                "power": {"power": 268},
+                "heart_rate": [{"calendarDate": "2026-07-14", "value": 165}],
+                "speed": {
+                    "values": [
+                        {"calendarDate": "2026-07-14", "value": 3.472},
+                    ],
+                },
+                "power": [
+                    {
+                        "calendarDate": "2026-07-14",
+                        "functionalThresholdPower": 268,
+                    },
+                ],
             }
 
     row = garmin_wellness_sync._fetch_lactate_threshold(FakeClient(), "2026-07-14")
@@ -301,8 +317,12 @@ def test_fetch_lactate_threshold_combines_hr_speed_and_power():
 
 def test_fetch_lactate_threshold_handles_missing_power():
     class FakeClient:
-        def get_lactate_threshold(self, *, latest=True):
-            return {"speed_and_heart_rate": {"heartRate": 160, "speed": None}, "power": {}}
+        def get_lactate_threshold(self, **_kwargs):
+            return {
+                "heart_rate": [{"lactateThresholdHeartRate": 160}],
+                "speed": [],
+                "power": {},
+            }
 
     row = garmin_wellness_sync._fetch_lactate_threshold(FakeClient(), "2026-07-14")
     assert row == {"lactateThresholdHr": "160"}, row
@@ -335,10 +355,39 @@ def test_fetch_max_hr_from_userdata():
     assert row == {"maxHrEstimate": "187"}, row
 
 
+def test_fetch_max_hr_from_default_heart_rate_zone():
+    class FakeClient:
+        def get_userprofile_settings(self):
+            return {
+                "heartRateZones": [
+                    {"sport": "RUNNING", "maxHeartRateUsed": 190},
+                    {"sport": "DEFAULT", "maxHeartRateUsed": 187},
+                ],
+            }
+
+    row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
+    assert row == {"maxHrEstimate": "187"}, row
+
+
+def test_fetch_max_hr_falls_back_to_heart_rate_zones_endpoint():
+    class FakeClient:
+        def get_userprofile_settings(self):
+            return {}
+
+        def get_heart_rate_zones(self):
+            return [{"sport": "RUNNING", "maxHeartRateUsed": 190}]
+
+    row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
+    assert row == {"maxHrEstimate": "190"}, row
+
+
 def test_fetch_max_hr_missing_returns_empty():
     class FakeClient:
         def get_userprofile_settings(self):
             return {"userData": {}}
+
+        def get_heart_rate_zones(self):
+            return []
 
     row = garmin_wellness_sync._fetch_max_hr(FakeClient(), "2026-07-14")
     assert row == {}, row
