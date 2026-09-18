@@ -819,10 +819,10 @@ export function formatWellnessValue(value: number | null, metric: WellnessNumeri
   }
   if (metric === 'lactateThresholdSpeed') {
     if (value <= 0) return '—';
-    const paceMinPerKm = 1000 / (value * 60);
-    const minutes = Math.floor(paceMinPerKm);
-    const seconds = Math.round((paceMinPerKm - minutes) * 60);
-    return `${minutes}:${String(seconds).padStart(2, '0')} /km`;
+    const paceSecondsPerMile = Math.round(1609.344 / value);
+    const minutes = Math.floor(paceSecondsPerMile / 60);
+    const seconds = paceSecondsPerMile % 60;
+    return `${minutes}:${String(seconds).padStart(2, '0')} /mi`;
   }
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(1);
