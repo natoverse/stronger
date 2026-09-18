@@ -296,6 +296,7 @@ def test_fetch_lactate_threshold_combines_hr_speed_and_power():
                 "heart_rate": [{"calendarDate": "2026-07-14", "value": 165}],
                 "speed": [
                     {
+                        "calendarDate": "2026-07-13",
                         "values": [
                             {"calendarDate": "2026-07-13", "value": 9.999},
                             {"calendarDate": "2026-07-14", "value": 3.472},

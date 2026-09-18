@@ -572,11 +572,10 @@ def _fetch_lactate_threshold(client, cdate: str) -> dict:
             if not isinstance(raw, dict):
                 return None
             entry_date = raw.get("calendarDate") or raw.get("date")
-            if entry_date is not None and str(entry_date) != cdate:
-                return None
-            value = _extract_metric_value(raw, *keys)
-            if value is not None:
-                return value
+            if entry_date is None or str(entry_date) == cdate:
+                value = _extract_metric_value(raw, *keys)
+                if value is not None:
+                    return value
             for nested in raw.values():
                 if isinstance(nested, (dict, list)):
                     value = range_value(nested, *keys)
@@ -640,8 +639,10 @@ def _fetch_max_hr(client, cdate: str) -> dict:
                     for item in zones
                     if isinstance(item, dict) and item.get("sport") == sport
                 ),
-                next((item for item in zones if isinstance(item, dict)), None),
+                None,
             )
+            if zone is None:
+                zone = next((item for item in zones if isinstance(item, dict)), None)
             return _extract_metric_value(
                 zone, "maxHeartRateUsed", "maxHeartRate", "maxHr",
             )
