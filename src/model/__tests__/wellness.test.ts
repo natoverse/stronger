@@ -221,6 +221,11 @@ describe('formatWellnessValue', () => {
   it('keeps VO2 max at one decimal place', () => {
     expect(formatWellnessValue(52, 'vo2Max')).toBe('52.0');
   });
+
+  it('formats lactate threshold speed as an imperial pace', () => {
+    expect(formatWellnessValue(3.4, 'lactateThresholdSpeed')).toBe('7:53 /mi');
+    expect(formatWellnessValue(0, 'lactateThresholdSpeed')).toBe('—');
+  });
 });
 
 describe('buildLoadFocusChartData', () => {
