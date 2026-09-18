@@ -33,6 +33,19 @@ Scheduled runs overwrite matching recent entries so partially populated days
 and edited activities are refreshed. Manual backfill runs fetch the configured
 full-history window and remain idempotent by source ID or date.
 
+### Refreshing lactate threshold pace after the unit correction
+
+Garmin's biometric range endpoint reports threshold speed at one tenth of m/s.
+The sync multiplies that value by 10 before storing m/s; the app then formats it
+as minutes per mile. For example, raw `0.319` becomes `3.19` m/s (`8:24 /mi`).
+
+After deploying this correction, the next scheduled wellness sync replaces the
+last 72 hours of incorrectly scaled data. To also repair older dates, run
+**Garmin Wellness Sync** from the updated branch with **backfill** enabled.
+Backfill implies overwrite and re-fetches the full wellness history since
+2021-01-01; it does not multiply existing Firestore values, so reruns cannot
+double-convert already corrected speeds.
+
 ## Troubleshooting
 
 | Symptom | Resolution |
