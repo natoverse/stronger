@@ -563,6 +563,7 @@ def _fetch_lactate_threshold(client, cdate: str) -> dict:
         ) or {}
 
         def range_value(raw, *keys, parent_date=None):
+            """Find a metric recursively, inheriting dates from its containers."""
             if isinstance(raw, list):
                 for item in raw:
                     value = range_value(item, *keys, parent_date=parent_date)
@@ -660,7 +661,9 @@ def _fetch_max_hr(client, cdate: str) -> dict:
             zones = data.get("heartRateZones") if isinstance(data, dict) else None
             val = zone_max_hr(zones)
         if val is None:
-            val = zone_max_hr(client.get_heart_rate_zones() or [])
+            get_zones = getattr(client, "get_heart_rate_zones", None)
+            if callable(get_zones):
+                val = zone_max_hr(get_zones() or [])
         return {"maxHrEstimate": _num(val, 0)} if val is not None else {}
     except Exception as exc:
         print(f"  WARNING [{cdate}] max_hr: {exc}", file=sys.stderr)
