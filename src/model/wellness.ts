@@ -18,6 +18,8 @@ import {
 export type { StravaAggregation as WellnessAggregation, StravaTimeRange as WellnessTimeRange } from './strava.js';
 export { generateBucketSlots, getRangeStart, getRangeEnd, getTimeRangeOptions };
 
+const METERS_PER_MILE = 1609.344;
+
 // ---------------------------------------------------------------------------
 // Metric catalogue
 // ---------------------------------------------------------------------------
@@ -819,7 +821,7 @@ export function formatWellnessValue(value: number | null, metric: WellnessNumeri
   }
   if (metric === 'lactateThresholdSpeed') {
     if (value <= 0) return '—';
-    const paceSecondsPerMile = Math.round(1609.344 / value);
+    const paceSecondsPerMile = Math.round(METERS_PER_MILE / value);
     const minutes = Math.floor(paceSecondsPerMile / 60);
     const seconds = paceSecondsPerMile % 60;
     return `${minutes}:${String(seconds).padStart(2, '0')} /mi`;
