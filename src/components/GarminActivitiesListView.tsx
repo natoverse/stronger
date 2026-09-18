@@ -62,6 +62,10 @@ export function formatElevation(meters: number): string {
   return `${formatMetricValue(feet, 'elevationGain')}‘`;
 }
 
+export function formatActivityCount(count: number): string {
+  return `${count} activit${count === 1 ? 'y' : 'ies'}`;
+}
+
 function formatDate(iso: string): string {
   // YYYY-MM-DD → e.g. "Jul 18, 2026"
   const [year, month, day] = iso.split('-').map(Number);
@@ -218,7 +222,10 @@ export function GarminActivitiesListView({ activities, range, selectedTypes, que
 
   return (
     <div className="activity-list-view">
-      <h3 className="strava-section-title">Activity Log</h3>
+      <h3 className="strava-section-title">
+        Activity Log
+        <span className="strava-section-freshness">{formatActivityCount(displayed.length)}</span>
+      </h3>
 
       {displayed.length === 0 ? (
         <p className="strava-empty">
