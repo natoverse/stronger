@@ -475,8 +475,7 @@ export interface GarminWellnessEntry {
 	/** Daily average stress level (0–100), or null when no data. */
 	avgStress: number | null;
 
-	// Running lactate threshold (Garmin's "latest" snapshot; no daily
-	// history, so this repeats each hourly sync run until Garmin updates it).
+	// Running lactate threshold history from Garmin's daily range endpoint.
 	/** Lactate threshold heart rate, in bpm. */
 	lactateThresholdHr: number | null;
 	/** Lactate threshold running speed, in m/s. */

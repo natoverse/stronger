@@ -10,10 +10,9 @@ Writes one entry per day to yearly Firestore bucket documents with all of:
   speed, power), fitness age, and estimated max heart rate (the profile
   ceiling used for zone calculation, not the day's observed peak).
 
-  Lactate threshold, fitness age, and max HR estimate are slow-moving,
-  profile-level values (Garmin only exposes a "latest" snapshot, not a
-  per-day history), but they are still fetched on every run of this same
-  hourly sync rather than a separate slow-cadence job/workflow.
+  Lactate threshold is fetched from Garmin's date-range endpoint so historical
+  changes are retained. Fitness age and max HR estimate are slow-moving,
+  profile-level values fetched on every run of this same hourly sync.
 
 Environment variables (all required):
   GARMIN_TOKENS               – garminconnect token bundle
@@ -61,10 +60,8 @@ WELLNESS_FIELDS = [
     "heatAcclimationPct", "altitudeAcclimationPct", "currentAltitude",
     "activeCalories", "bmrCalories",
     "avgStress",
-    # Running lactate threshold (heart rate, speed, power) and the two
-    # slow-moving physiological estimates below are fetched every hourly run
-    # alongside everything else rather than on a separate cadence, since
-    # Garmin only exposes their latest/profile values anyway.
+    # Running lactate threshold history and the two slow-moving physiological
+    # estimates below are fetched every hourly run alongside everything else.
     "lactateThresholdHr", "lactateThresholdSpeed", "lactateThresholdPower",
     "fitnessAge",
     "maxHrEstimate",
@@ -553,23 +550,56 @@ def _fetch_endurance_score(client, cdate: str) -> dict:
 def _fetch_lactate_threshold(client, cdate: str) -> dict:
     """Running lactate threshold: heart rate (bpm), speed (m/s), power (watts).
 
-    Garmin only exposes a single "latest" snapshot for this metric (no daily
-    history), so every hourly run re-fetches the same current value.
+    Garmin's range endpoint returns separate daily series for heart rate, speed,
+    and power. Querying the entry date prevents the latest value from being
+    copied onto every historical wellness row.
     """
     try:
-        data = client.get_lactate_threshold(latest=True) or {}
-        speed_and_hr = data.get("speed_and_heart_rate") or {}
-        power = data.get("power") or {}
+        data = client.get_lactate_threshold(
+            latest=False,
+            start_date=cdate,
+            end_date=cdate,
+            aggregation="daily",
+        ) or {}
+
+        def range_value(raw, *keys, parent_date=None):
+            """Find a metric recursively, inheriting dates from its containers."""
+            if isinstance(raw, list):
+                for item in raw:
+                    value = range_value(item, *keys, parent_date=parent_date)
+                    if value is not None:
+                        return value
+                return None
+            if not isinstance(raw, dict):
+                return None
+            entry_date = raw.get("calendarDate") or raw.get("date") or parent_date
+            if entry_date is None or str(entry_date) == cdate:
+                value = _extract_metric_value(raw, *keys)
+                if value is not None:
+                    return value
+            for nested in raw.values():
+                if isinstance(nested, (dict, list)):
+                    value = range_value(nested, *keys, parent_date=entry_date)
+                    if value is not None:
+                        return value
+            return None
 
         result = {}
-        hr = speed_and_hr.get("heartRate")
+        hr = range_value(
+            data.get("heart_rate"),
+            "lactateThresholdHeartRate", "heartRate", "value",
+        )
         if hr is not None:
             result["lactateThresholdHr"] = _num(hr, 0)
-        speed = speed_and_hr.get("speed")
+        speed = range_value(
+            data.get("speed"),
+            "lactateThresholdSpeed", "speed", "value",
+        )
         if speed is not None:
             result["lactateThresholdSpeed"] = _num(speed, 3)
-        watts = _extract_metric_value(
-            power, "power", "value", "functionalThresholdPower", "wattsPerKilogram",
+        watts = range_value(
+            data.get("power"),
+            "functionalThresholdPower", "power", "value",
         )
         if watts is not None:
             result["lactateThresholdPower"] = _num(watts, 0)
@@ -599,11 +629,41 @@ def _fetch_max_hr(client, cdate: str) -> dict:
     for Garmin's heart-rate zone calculation, not the day's observed peak.
     """
     try:
+        def zone_max_hr(zones):
+            if isinstance(zones, dict):
+                zones = [zones]
+            if not isinstance(zones, list):
+                return None
+            zone = None
+            for preferred_sport in ("DEFAULT", "RUNNING"):
+                zone = next(
+                    (
+                        item for item in zones
+                        if isinstance(item, dict)
+                        and item.get("sport") == preferred_sport
+                    ),
+                    None,
+                )
+                if zone is not None:
+                    break
+            if zone is None:
+                zone = next((item for item in zones if isinstance(item, dict)), None)
+            return _extract_metric_value(
+                zone, "maxHeartRateUsed", "maxHeartRate", "maxHr",
+            )
+
         data = client.get_userprofile_settings() or {}
         user_data = data.get("userData") if isinstance(data, dict) else None
         val = _extract_metric_value(user_data, "maxHeartRate", "maxHr")
         if val is None:
             val = _extract_metric_value(data, "maxHeartRate", "maxHr")
+        if val is None:
+            zones = data.get("heartRateZones") if isinstance(data, dict) else None
+            val = zone_max_hr(zones)
+        if val is None:
+            get_zones = getattr(client, "get_heart_rate_zones", None)
+            if callable(get_zones):
+                val = zone_max_hr(get_zones() or [])
         return {"maxHrEstimate": _num(val, 0)} if val is not None else {}
     except Exception as exc:
         print(f"  WARNING [{cdate}] max_hr: {exc}", file=sys.stderr)
