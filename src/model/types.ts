@@ -420,6 +420,12 @@ export interface GarminWellnessEntry {
 	sleepAwakeSec: number | null;
 	/** Overall sleep score (0–100). */
 	sleepScore: number | null;
+	/** Garmin wall-clock milliseconds, decoded with UTC accessors (not UTC instants). */
+	sleepStartTimestampLocal?: number | null;
+	sleepEndTimestampLocal?: number | null;
+	/** Actual UTC instants in milliseconds; optional for older wellness entries. */
+	sleepStartTimestampGMT?: number | null;
+	sleepEndTimestampGMT?: number | null;
 
 	// Body battery
 	/** Highest body battery reading during the day (0–100). */

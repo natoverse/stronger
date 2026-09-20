@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it, vi } from 'vitest';
+import type { GarminWellnessEntry } from '../../model/types.js';
 import {
+  GarminWellnessView,
   TRAINING_STATUS_LEGEND_ITEMS,
   baselineDomain,
   centeredDomain,
@@ -24,6 +28,67 @@ import {
   vo2MaxLegendLabel,
   vo2MaxColor,
 } from '../GarminWellnessView.js';
+
+vi.mock('../../hooks/useChartTooltip.js', () => ({
+  useChartTooltip: () => ({ activeIndex: 0, svgRef: { current: null }, containerHandlers: {} }),
+}));
+
+describe('Sleep Schedule chart', () => {
+  const entry: GarminWellnessEntry = {
+    date: '2025-01-01',
+    sleepStartTimestampLocal: Date.parse('2024-12-31T23:15:00Z'),
+    sleepEndTimestampLocal: Date.parse('2025-01-01T07:05:00Z'),
+    sleepDurationSec: 7 * 3600,
+    sleepDeepSec: null, sleepLightSec: null, sleepRemSec: null, sleepAwakeSec: null,
+    sleepScore: null,
+    bodyBatteryHigh: 90, bodyBatteryLow: 20,
+    hrvWeeklyAvg: null, hrvStatus: '',
+    readinessScore: null, trainingStatus: '',
+    trainingAcuteLoad: null, trainingChronicLoad: null,
+    steps: null, floors: null, restingHR: null, vo2Max: null,
+    intensityMinModerate: null, intensityMinVigorous: null,
+    hillScore: null, enduranceScore: null,
+    heatAcclimationPct: null, altitudeAcclimationPct: null, currentAltitude: null,
+    activeCalories: null, bmrCalories: null, avgStress: null,
+    lactateThresholdHr: null, lactateThresholdSpeed: null, lactateThresholdPower: null,
+    fitnessAge: null, maxHrEstimate: null,
+    loadFocusAerobicLow: null, loadFocusAerobicLowMin: null, loadFocusAerobicLowMax: null,
+    loadFocusAerobicHigh: null, loadFocusAerobicHighMin: null, loadFocusAerobicHighMax: null,
+    loadFocusAnaerobic: null, loadFocusAnaerobicMin: null, loadFocusAnaerobicMax: null,
+    hrvBaselineMin: null, hrvBaselineMax: null,
+  };
+
+  function render(aggregation: 'day' | 'week' | 'month', entries = [entry]) {
+    return renderToStaticMarkup(createElement(GarminWellnessView, { entries, range: '2025', aggregation }));
+  }
+
+  it('renders local header/hover times and clock ticks without changing Body Battery or sleep duration', () => {
+    const markup = render('day');
+    const sleepCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
+    expect(sleepCard).toContain('11:15 PM–7:05 AM');
+    expect(sleepCard).toContain('class="chart-tooltip-value">11:15 PM–7:05 AM');
+    expect(sleepCard).toContain('class="chart-tooltip-date">1/1');
+    expect(sleepCard).toContain('12:00 AM');
+    expect(sleepCard).toContain('aria-label="Sleep Schedule"');
+    expect(sleepCard).toContain('<rect');
+    const batteryCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Body Battery Range'))!;
+    expect(batteryCard).toContain('20–90');
+    const durationCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Sleep Duration'))!;
+    expect(durationCard).toContain('7h');
+    expect(markup).not.toContain('NaN');
+  });
+
+  it.each(['week', 'month'] as const)('labels averaged %s headers', (aggregation) => {
+    expect(render(aggregation)).toContain('Avg 11:15 PM–7:05 AM');
+  });
+
+  it('leaves legacy sleep windows empty rather than drawing zero-valued bars', () => {
+    const markup = render('day', [{ ...entry, sleepStartTimestampLocal: null }]);
+    const sleepCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
+    expect(sleepCard).not.toContain('<rect');
+    expect(sleepCard).toContain('class="chart-tooltip-value">—');
+  });
+});
 
 describe('altitude formatting', () => {
   it('converts Garmin altitude meters to rounded display feet', () => {

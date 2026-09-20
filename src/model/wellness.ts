@@ -251,6 +251,94 @@ function modalString(values: string[]): string {
 // Chart data builders
 // ---------------------------------------------------------------------------
 
+export interface SleepScheduleBucket {
+  label: string;
+  min: number | null;
+  max: number | null;
+}
+
+export interface SleepScheduleChartData {
+  buckets: SleepScheduleBucket[];
+  latest: SleepScheduleBucket | null;
+  average: SleepScheduleBucket | null;
+}
+
+/** Minutes on a noon-anchored clock: 23:00 = 1380, next-day 07:00 = 1860. */
+export function formatSleepTime(minutes: number | null): string {
+  if (minutes === null || !Number.isFinite(minutes)) return '—';
+  const clock = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const hour = Math.floor(clock / 60);
+  return `${hour % 12 || 12}:${String(clock % 60).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+}
+
+export function formatSleepScheduleRange(bucket: SleepScheduleBucket | null): string {
+  return bucket?.min == null || bucket.max == null
+    ? '—'
+    : `${formatSleepTime(bucket.min)}–${formatSleepTime(bucket.max)}`;
+}
+
+export function buildSleepScheduleChartData(
+  entries: GarminWellnessEntry[],
+  range: string,
+  aggregation: StravaAggregation,
+  today: Date = new Date(),
+): SleepScheduleChartData {
+  // Build from daily slots so week/month keys retain the year at range boundaries.
+  const days = generateBucketSlots(range, 'day', today);
+  const dayKeys = new Set(days.map(({ key }) => key));
+  const nights = new Map<string, { min: number; max: number }>();
+  for (const entry of entries) {
+    const start = entry.sleepStartTimestampLocal;
+    const end = entry.sleepEndTimestampLocal;
+    if (typeof start !== 'number' || typeof end !== 'number'
+      || !Number.isFinite(start) || !Number.isFinite(end) || start <= 0 || end <= start
+      || end - start > 86400000) continue;
+    const bedtime = new Date(start);
+    const wake = new Date(end);
+    if (!Number.isFinite(bedtime.getTime()) || !Number.isFinite(wake.getTime())) continue;
+    // Garmin's Local timestamps already encode local dates/times. Applying the
+    // viewer's timezone (or using GMT duration across DST) would shift the chart.
+    const date = wake.toISOString().slice(0, 10);
+    if (!dayKeys.has(date)) continue;
+    const clock = bedtime.getUTCHours() * 60 + bedtime.getUTCMinutes() + bedtime.getUTCSeconds() / 60;
+    // Unwrap around noon, not midnight, before averaging either endpoint.
+    const min = clock < 720 ? clock + 1440 : clock;
+    nights.set(date, { min, max: min + (end - start) / 60000 });
+  }
+
+  const groups = new Map<string, { label: string; starts: number[]; ends: number[] }>();
+  let latest: SleepScheduleBucket | null = null;
+  for (const day of days) {
+    const key = aggregation === 'day' ? day.key
+      : aggregation === 'week' ? weekStartKeyFor(day.key) : day.key.slice(0, 7);
+    const label = aggregation === 'day' ? day.label
+      : aggregation === 'week' ? getBucketKey(day.key, 'week')
+        : new Date(`${day.key}T12:00:00`).toLocaleString('en-US', { month: 'short' });
+    if (!groups.has(key)) groups.set(key, { label, starts: [], ends: [] });
+    const night = nights.get(day.key);
+    if (night) {
+      groups.get(key)!.starts.push(night.min);
+      groups.get(key)!.ends.push(night.max);
+      latest = { label: day.label, ...night };
+    }
+  }
+  const mean = (values: number[]): number | null =>
+    values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+  const buckets = [...groups.values()].map(({ label, starts, ends }) => ({
+    label, min: mean(starts), max: mean(ends),
+  }));
+  const allNights = [...nights.values()];
+  return {
+    buckets,
+    latest,
+    average: allNights.length ? {
+      label: 'Avg',
+      min: mean(allNights.map((night) => night.min)),
+      max: mean(allNights.map((night) => night.max)),
+    } : null,
+  };
+}
+
 /**
  * Build bar-chart data for a single numeric wellness metric.
  *

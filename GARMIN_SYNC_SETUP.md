@@ -33,6 +33,34 @@ Scheduled runs overwrite matching recent entries so partially populated days
 and edited activities are refreshed. Manual backfill runs fetch the configured
 full-history window and remain idempotent by source ID or date.
 
+### Populating historical Sleep Schedule data
+
+The wellness sync stores `sleepStartTimestampLocal`, `sleepEndTimestampLocal`,
+`sleepStartTimestampGMT`, and `sleepEndTimestampGMT` from Garmin's `dailySleepDTO`
+as numeric milliseconds, unchanged. Garmin's **Local** fields encode recorded
+wall-clock date/time as epoch-like milliseconds, not actual UTC instants.
+Decode those calendar components without applying the runner's or browser's
+timezone. The **GMT** fields represent UTC instants; the local/GMT difference
+can vary at each endpoint across daylight saving transitions or travel.
+Never infer missing local times from GMT without a recorded offset.
+Missing, nonnumeric, nonfinite, or nonpositive timestamps remain `null`;
+legacy entries without these fields remain usable but have no sleep schedule.
+
+After deploying this change, the hourly overwrite populates today and the
+previous three calendar days (the last-72-hours window). For older dates:
+
+1. Open **Actions -> Garmin Wellness Sync -> Run workflow**.
+2. Select the branch containing this change and enable **backfill**.
+3. Leave **overwrite** enabled and run the workflow.
+
+`--backfill` itself implies overwrite, even if the workflow's overwrite input
+is disabled. It re-fetches every date from **2021-01-01 through today** and
+replaces matching daily entries, including existing history; dates outside
+that range are preserved. This refreshes all wellness metrics, not just sleep.
+Dates with no available Garmin sleep timestamps remain `null`. A full backfill
+makes many provider requests and can take substantially longer than an hourly
+run. No manual Firestore migration or timezone correction is required.
+
 ### Refreshing lactate threshold pace after the unit correction
 
 Garmin's biometric range endpoint reports threshold speed at one tenth of m/s.
