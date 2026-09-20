@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GarminWellnessEntry } from '../types.js';
 import {
   buildWellnessChartData,
+  getWellnessHeaderFallback,
   buildIntensityMinCombinedChartData,
   buildTrainingLoadRatioChartData,
   buildLoadFocusChartData,
@@ -63,6 +64,57 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     ...overrides,
   };
 }
+
+describe('sparse wellness header fallback', () => {
+  const today = new Date(2025, 5, 20);
+
+  it.each(['vo2Max', 'lactateThresholdHr', 'lactateThresholdSpeed', 'lactateThresholdPower'] as const)(
+    'finds the newest valid %s reading in unsorted history without filling the chart',
+    (metric) => {
+      const entries = [
+        makeEntry({ date: '2025-02-01', [metric]: 50 }),
+        makeEntry({ date: '2025-05-01', [metric]: null }),
+        makeEntry({ date: '2025-04-01', [metric]: NaN }),
+        makeEntry({ date: '2025-03-01', [metric]: Infinity }),
+        makeEntry({ date: '2025-03-02', [metric]: 0 }),
+        makeEntry({ date: '2025-03-03', [metric]: -1 }),
+        makeEntry({ date: '2025-03-04', [metric]: undefined }),
+        makeEntry({ date: '2025-01-01', [metric]: 40 }),
+        makeEntry({ date: '2025-06-21', [metric]: 60 }),
+      ];
+      expect(getWellnessHeaderFallback(entries, metric, 'month', today)).toBe(50);
+      for (const aggregation of ['day', 'week', 'month'] as const) {
+        const data = buildWellnessChartData(entries, metric, 'month', aggregation, today);
+        expect(data.latestValue).toBeNull();
+        expect(data.summary).toBeNull();
+        expect(data.buckets.every((bucket) => bucket.value === null)).toBe(true);
+      }
+    },
+  );
+
+  it('respects the selected historical year, including its final day', () => {
+    const entries = [
+      makeEntry({ date: '2023-12-31', vo2Max: 40 }),
+      makeEntry({ date: '2025-01-01', vo2Max: 50 }),
+    ];
+    expect(getWellnessHeaderFallback(entries, 'vo2Max', '2023', today)).toBe(40);
+    expect(getWellnessHeaderFallback(entries, 'vo2Max', '2024', today)).toBe(40);
+    expect(getWellnessHeaderFallback(entries, 'vo2Max', '2022', today)).toBeNull();
+  });
+
+  it('leaves missing metrics and non-sparse metrics without a fallback', () => {
+    expect(getWellnessHeaderFallback([], 'vo2Max', 'month', today)).toBeNull();
+    expect(getWellnessHeaderFallback([makeEntry()], 'lactateThresholdSpeed', 'month', today)).toBeNull();
+    expect(getWellnessHeaderFallback(
+      [makeEntry({ date: '2025-01-01', steps: 10000, restingHR: 60 })],
+      'steps', 'month', today,
+    )).toBeNull();
+    expect(getWellnessHeaderFallback(
+      [makeEntry({ date: '2025-01-01', restingHR: 60 })],
+      'restingHR', 'month', today,
+    )).toBeNull();
+  });
+});
 
 describe('sleep schedule', () => {
   function night(start: string, end: string, overrides: Partial<GarminWellnessEntry> = {}) {

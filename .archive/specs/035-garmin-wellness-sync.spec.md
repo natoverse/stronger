@@ -168,3 +168,9 @@ Verified all fields against the real Garmin Connect API response structures usin
 - Fix the overnight axis at **9 PM–10 AM**, replacing the expanding 6 PM–noon domain. Clip outlying bars and use the existing accent-colored overflow hatch; entirely out-of-range windows remain thin marks at the nearest edge. Tooltips retain the actual times.
 - Draw average bedtime and wake-up boundaries with the HRV chart's dashed reference-line style and subtle gray band between them. Reuse the selected range's per-night, noon-unwrapped averages for every aggregation, including daily; do not average bucket averages or clamp observations before averaging. As in HRV, reference lines outside the axis are omitted, while the legend preserves their actual values.
 - Populate screenshot fixtures with local sleep windows on both sides of midnight, including a pre-9 PM bedtime and a post-10 AM wake-up. Screenshot checks verify the fixed axis, hatched bars, and average boundaries.
+
+### Sparse metric header fallback (2026-09-20)
+
+- When the selected range has no readings for VO₂ Max or lactate threshold HR, pace, or power, show that metric's latest valid recorded value in its chart header. Search loaded history independently per metric, ignoring missing, nonfinite, and nonpositive values and readings after the selected range's end.
+- Apply the fallback for daily, weekly, and monthly aggregation, retaining existing in-range latest values and averages when available. Preserve the usual units, imperial pace formatting, and daily VO₂ fitness-band label.
+- This is header-only: do not carry old values into chart buckets, tooltips, axes, or range averages. Other wellness metrics retain their existing behavior.
