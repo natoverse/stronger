@@ -40,8 +40,14 @@ function localDateOffset(offset: number, anchor = new Date()): string {
 }
 
 function wellnessEntry(date: string, index: number): GarminWellnessEntry {
+	// Noon-unwrapped wall-clock hours include an early bedtime and a late wake-up.
+	const sleepWindows = [[23, 31], [23.5, 31.5], [24.5, 32], [22.75, 30.75], [20.5, 30.5], [25.5, 34.5], [23.25, 31.25]]
+	const [sleepStart, sleepEnd] = sleepWindows[index % sleepWindows.length]
+	const previousMidnight = Date.parse(`${date}T00:00:00Z`) - 86400000
 	return {
 		date,
+		sleepStartTimestampLocal: previousMidnight + sleepStart * 3600000,
+		sleepEndTimestampLocal: previousMidnight + sleepEnd * 3600000,
 		hrvWeeklyAvg: 48 + index,
 		hrvStatus: index < 2 ? 'UNBALANCED' : 'BALANCED',
 		sleepDurationSec: (7 * 60 + 10 + index * 4) * 60,
