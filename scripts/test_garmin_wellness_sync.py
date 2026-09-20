@@ -69,13 +69,157 @@ def test_wellness_to_entry_matches_firestore_schema():
         "trainingStatus": "MAINTAINING_2",
         "steps": "8000",
     })
-    assert len(entry) == 45
+    assert len(entry) == 49
     assert entry["date"] == "2026-08-15"
     assert entry["hrvWeeklyAvg"] == 48
     assert entry["hrvStatus"] == "BALANCED"
     assert entry["trainingStatus"] == "MAINTAINING"
     assert entry["steps"] == 8000
     assert entry["sleepScore"] is None
+    for field in garmin_wellness_sync.SLEEP_TIMESTAMP_FIELDS:
+        assert entry[field] is None
+
+
+def test_fetch_sleep_preserves_milliseconds_through_firestore():
+    from firestore_sync import firestore_value, firestore_value_to_json
+
+    timestamps = {
+        "sleepStartTimestampLocal": 1769470048123,
+        "sleepEndTimestampLocal": 1769496015456,
+        "sleepStartTimestampGMT": 1769455648123,
+        "sleepEndTimestampGMT": 1769481615456,
+    }
+
+    class FakeClient:
+        def get_sleep_data(self, cdate):
+            assert cdate == "2026-01-27"
+            return {"dailySleepDTO": {
+                **timestamps,
+                "sleepTimeSeconds": 25967,
+                "deepSleepSeconds": 3600,
+                "lightSleepSeconds": 18000,
+                "remSleepSeconds": 4367,
+                "awakeSleepSeconds": 120,
+                "sleepScores": {"overall": {"value": 85}},
+            }}
+
+    metrics = garmin_wellness_sync._fetch_sleep(FakeClient(), "2026-01-27")
+    entry = garmin_wellness_sync.wellness_to_entry({"date": "2026-01-27", **metrics})
+    stored = firestore_value_to_json(firestore_value(entry))
+    for field, value in timestamps.items():
+        assert metrics[field] == stored[field] == value
+        assert isinstance(stored[field], int)
+    for field, value in {
+        "sleepDurationSec": 25967, "sleepDeepSec": 3600,
+        "sleepLightSec": 18000, "sleepRemSec": 4367,
+        "sleepAwakeSec": 120, "sleepScore": 85,
+    }.items():
+        assert stored[field] == value
+
+
+def test_sleep_timestamp_normalization_does_not_round_numbers():
+    for value in (1769470048123, 1769470048123.25):
+        entry = garmin_wellness_sync.wellness_to_entry({
+            field: value for field in garmin_wellness_sync.SLEEP_TIMESTAMP_FIELDS
+        })
+        for field in garmin_wellness_sync.SLEEP_TIMESTAMP_FIELDS:
+            assert entry[field] == value
+
+
+def test_fetch_sleep_rejects_malformed_timestamps_independently():
+    invalid_values = (
+        None, "", "1769470048123", "invalid", True, False, 0, -1,
+        float("nan"), float("inf"), -float("inf"), {}, [],
+    )
+    for field in garmin_wellness_sync.SLEEP_TIMESTAMP_FIELDS:
+        for value in invalid_values:
+            timestamps = {
+                key: 1769470048123 for key in garmin_wellness_sync.SLEEP_TIMESTAMP_FIELDS
+            }
+            timestamps[field] = value
+
+            class FakeClient:
+                def get_sleep_data(self, _cdate):
+                    return {"dailySleepDTO": {**timestamps, "sleepTimeSeconds": 28000}}
+
+            metrics = garmin_wellness_sync._fetch_sleep(FakeClient(), "2026-01-27")
+            entry = garmin_wellness_sync.wellness_to_entry(metrics)
+            direct = garmin_wellness_sync.wellness_to_entry(timestamps)
+            assert metrics[field] is None
+            assert entry[field] is None
+            assert direct[field] is None
+            assert entry["sleepDurationSec"] == 28000
+            for key in timestamps:
+                if key != field:
+                    assert entry[key] == 1769470048123
+
+
+def test_fetch_sleep_missing_payloads_and_timestamps_stay_null():
+    for payload in (None, {}, {"dailySleepDTO": None}, {"dailySleepDTO": {}},
+                    {"dailySleepDTO": {"sleepTimeSeconds": 28000}}):
+        class FakeClient:
+            def get_sleep_data(self, _cdate):
+                return payload
+
+        entry = garmin_wellness_sync.wellness_to_entry(
+            garmin_wellness_sync._fetch_sleep(FakeClient(), "2026-01-27")
+        )
+        for field in garmin_wellness_sync.SLEEP_TIMESTAMP_FIELDS:
+            assert entry[field] is None
+
+
+def test_fetch_sleep_does_not_infer_local_from_gmt_or_gmt_from_local():
+    for suffix, missing_suffix in (("GMT", "Local"), ("Local", "GMT")):
+        timestamps = {
+            f"sleepStartTimestamp{suffix}": 1769455648000,
+            f"sleepEndTimestamp{suffix}": 1769481615000,
+        }
+
+        class FakeClient:
+            def get_sleep_data(self, _cdate):
+                return {"dailySleepDTO": timestamps}
+
+        entry = garmin_wellness_sync.wellness_to_entry(
+            garmin_wellness_sync._fetch_sleep(FakeClient(), "2026-01-27")
+        )
+        for field, value in timestamps.items():
+            assert entry[field] == value
+        assert entry[f"sleepStartTimestamp{missing_suffix}"] is None
+        assert entry[f"sleepEndTimestamp{missing_suffix}"] is None
+
+
+def test_sleep_overnight_and_dst_preserve_local_and_gmt_independently():
+    from datetime import datetime, timezone
+
+    def encoded_ms(value):
+        return int(datetime.fromisoformat(value).replace(tzinfo=timezone.utc).timestamp() * 1000)
+
+    for start_local, end_local, start_gmt, end_gmt, elapsed_hours in (
+        ("2026-01-26T23:00", "2026-01-27T07:00",
+         "2026-01-27T04:00", "2026-01-27T12:00", 8),
+        ("2026-03-07T23:00", "2026-03-08T07:00",
+         "2026-03-08T04:00", "2026-03-08T11:00", 7),
+        ("2026-10-31T23:00", "2026-11-01T07:00",
+         "2026-11-01T03:00", "2026-11-01T12:00", 9),
+    ):
+        timestamps = {
+            "sleepStartTimestampLocal": encoded_ms(start_local),
+            "sleepEndTimestampLocal": encoded_ms(end_local),
+            "sleepStartTimestampGMT": encoded_ms(start_gmt),
+            "sleepEndTimestampGMT": encoded_ms(end_gmt),
+        }
+
+        class FakeClient:
+            def get_sleep_data(self, _cdate):
+                return {"dailySleepDTO": timestamps}
+
+        entry = garmin_wellness_sync.wellness_to_entry(
+            garmin_wellness_sync._fetch_sleep(FakeClient(), end_local[:10])
+        )
+        for field, value in timestamps.items():
+            assert entry[field] == value
+        assert entry["sleepEndTimestampLocal"] - entry["sleepStartTimestampLocal"] == 8 * 3600000
+        assert entry["sleepEndTimestampGMT"] - entry["sleepStartTimestampGMT"] == elapsed_hours * 3600000
 
 
 def test_build_entry_combines_provider_metrics_without_positional_fields():
@@ -83,7 +227,13 @@ def test_build_entry_combines_provider_metrics_without_positional_fields():
 
     fetchers = {
         "_fetch_hrv": {"hrvWeeklyAvg": "48", "hrvStatus": "BALANCED"},
-        "_fetch_sleep": {"sleepScore": "85"},
+        "_fetch_sleep": {
+            "sleepScore": "85",
+            "sleepStartTimestampLocal": 1786748400123,
+            "sleepEndTimestampLocal": 1786777200456,
+            "sleepStartTimestampGMT": 1786762800123,
+            "sleepEndTimestampGMT": 1786791600456,
+        },
         "_fetch_readiness": {"readinessScore": "72"},
         "_fetch_training_status": {"trainingStatus": "MAINTAINING_2"},
         "_fetch_daily_summary": {"steps": "8000"},
@@ -112,6 +262,48 @@ def test_build_entry_combines_provider_metrics_without_positional_fields():
     assert entry == garmin_wellness_sync.wellness_to_entry(expected)
     assert entry["vo2Max"] == 52.5
     assert entry["bodyBatteryHigh"] is None
+
+
+def test_backfill_overwrites_existing_history_without_overwrite_flag():
+    import sys
+    from unittest.mock import Mock, patch
+
+    dates = ["2021-01-01", "2021-01-02"]
+    entries = [
+        garmin_wellness_sync.wellness_to_entry({
+            "date": day,
+            "sleepStartTimestampLocal": 1609455600123 + index * 86400000,
+        })
+        for index, day in enumerate(dates)
+    ]
+    requests = Mock()
+    with (
+        patch.dict(os.environ, {
+            "GARMIN_TOKENS": "test-garmin",
+            "FIREBASE_SERVICE_ACCOUNT_KEY": "test-service-account",
+            "FIREBASE_USER_ID": "test-user",
+        }),
+        patch.dict(sys.modules, {"requests": requests}),
+        patch.object(sys, "argv", ["garmin-wellness-sync.py", "--backfill"]),
+        patch.object(garmin_wellness_sync, "login_from_tokens"),
+        patch.object(garmin_wellness_sync, "get_firestore_access",
+                     return_value=("test-project", "test-access")),
+        patch.object(garmin_wellness_sync, "_date_range", return_value=dates) as date_range,
+        patch.object(garmin_wellness_sync, "read_year_entries") as read,
+        patch.object(garmin_wellness_sync, "build_entry", side_effect=entries) as build,
+        patch.object(garmin_wellness_sync.time, "sleep"),
+        patch.object(garmin_wellness_sync, "merge_year_bucket_entries",
+                     return_value={"added": 0, "updated": 2}) as merge,
+        patch.object(garmin_wellness_sync, "_sync_goals"),
+    ):
+        garmin_wellness_sync.main()
+        date_range.assert_called_once_with("2021-01-01", garmin_wellness_sync.date.today().isoformat())
+        read.assert_not_called()
+        assert [call.args[1] for call in build.call_args_list] == dates
+        merge.assert_called_once_with(
+            requests.Session.return_value, "test-project", "test-access",
+            "test-user", "garminWellness", entries, "date", True, "date",
+        )
 
 
 def test_fetch_training_status_prefers_human_readable_fields():

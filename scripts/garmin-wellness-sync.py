@@ -46,12 +46,18 @@ from firestore_sync import (
     read_year_entries,
 )
 
+SLEEP_TIMESTAMP_FIELDS = (
+    "sleepStartTimestampLocal", "sleepEndTimestampLocal",
+    "sleepStartTimestampGMT", "sleepEndTimestampGMT",
+)
+
 # Fields persisted in the Firestore GarminWellnessEntry model.
 WELLNESS_FIELDS = [
     "date",
     "hrvWeeklyAvg", "hrvStatus",
     "sleepDurationSec", "sleepDeepSec", "sleepLightSec",
     "sleepRemSec", "sleepAwakeSec", "sleepScore",
+    *SLEEP_TIMESTAMP_FIELDS,
     "bodyBatteryHigh", "bodyBatteryLow",
     "readinessScore",
     "trainingStatus", "trainingAcuteLoad", "trainingChronicLoad",
@@ -100,6 +106,15 @@ def _num(v, decimals: int = 1) -> str:
         return txt or "0"
     except (ValueError, TypeError):
         return ""
+
+
+def _sleep_timestamp_ms(value) -> int | float | None:
+    """Preserve numeric milliseconds without rounding or timezone conversion."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if value <= 0 or (isinstance(value, float) and not isfinite(value)):
+        return None
+    return value
 
 
 def _stress(v) -> str:
@@ -303,6 +318,12 @@ def _fetch_sleep(client, cdate: str) -> dict:
             "sleepRemSec":      _num(dto.get("remSleepSeconds"), 0),
             "sleepAwakeSec":    _num(dto.get("awakeSleepSeconds"), 0),
             "sleepScore":       _num(score, 0),
+            # Local values encode wall time, not UTC instants. Keep each source
+            # independently; a missing local value cannot be inferred from GMT.
+            **{
+                field: _sleep_timestamp_ms(dto.get(field))
+                for field in SLEEP_TIMESTAMP_FIELDS
+            },
         }
     except Exception as exc:
         print(f"  WARNING [{cdate}] sleep: {exc}", file=sys.stderr)
@@ -688,7 +709,7 @@ def _fetch_max_hr(client, cdate: str) -> dict:
 
 def build_entry(client, cdate: str) -> dict:
     """Fetch all wellness metrics for a single date."""
-    metrics: dict[str, str] = {"date": cdate}
+    metrics: dict = {"date": cdate}
 
     metrics.update(_fetch_hrv(client, cdate))
     metrics.update(_fetch_sleep(client, cdate))
@@ -721,6 +742,8 @@ def wellness_to_entry(metrics):
             entry[field] = value
         elif field == "trainingStatus":
             entry[field] = normalize_training_status(value)
+        elif field in SLEEP_TIMESTAMP_FIELDS:
+            entry[field] = _sleep_timestamp_ms(value)
         else:
             entry[field] = _entry_number(value)
     return entry

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { GarminWellnessEntry } from '../types.js';
 import {
   buildWellnessChartData,
@@ -6,6 +6,9 @@ import {
   buildTrainingLoadRatioChartData,
   buildLoadFocusChartData,
   buildHrvRangeChartData,
+  buildSleepScheduleChartData,
+  formatSleepTime,
+  formatSleepScheduleRange,
   formatWellnessRatio,
   formatWellnessValue,
 } from '../wellness.js';
@@ -60,6 +63,145 @@ function makeEntry(overrides: Partial<GarminWellnessEntry> = {}): GarminWellness
     ...overrides,
   };
 }
+
+describe('sleep schedule', () => {
+  function night(start: string, end: string, overrides: Partial<GarminWellnessEntry> = {}) {
+    return makeEntry({
+      sleepStartTimestampLocal: Date.parse(`${start}Z`),
+      sleepEndTimestampLocal: Date.parse(`${end}Z`),
+      ...overrides,
+    });
+  }
+  const today = new Date(2025, 5, 20);
+
+  it('keeps overnight bars continuous and assigns them to the local wake date', () => {
+    const data = buildSleepScheduleChartData([
+      night('2025-06-14T23:15:00', '2025-06-15T07:05:00', { date: '2025-06-14' }),
+    ], 'month', 'day', today);
+    expect(data.buckets.find((b) => b.label === '6/14')?.min).toBeNull();
+    expect(data.buckets.find((b) => b.label === '6/15')).toEqual({
+      label: '6/15', min: 1395, max: 1865,
+    });
+    expect(formatSleepScheduleRange(data.latest)).toBe('11:15 PM–7:05 AM');
+  });
+
+  it.each(['week', 'month'] as const)('averages bedtimes across midnight for %s', (aggregation) => {
+    const data = buildSleepScheduleChartData([
+      night('2025-06-16T23:30:00', '2025-06-17T07:00:00'),
+      night('2025-06-18T00:30:00', '2025-06-18T08:00:00'),
+    ], 'month', aggregation, today);
+    expect(data.buckets.filter((b) => b.min !== null)).toEqual([
+      expect.objectContaining({ min: 1440, max: 1890 }),
+    ]);
+    expect(formatSleepScheduleRange(data.average)).toBe('12:00 AM–7:30 AM');
+    expect(formatSleepScheduleRange(data.latest)).toBe('12:30 AM–8:00 AM');
+  });
+
+  it('unwraps wake times too, rather than averaging 11:30 PM and 12:30 AM to noon', () => {
+    const data = buildSleepScheduleChartData([
+      night('2025-06-16T18:00:00', '2025-06-16T23:30:00'),
+      night('2025-06-17T18:00:00', '2025-06-18T00:30:00'),
+    ], 'month', 'week', today);
+    expect(formatSleepScheduleRange(data.average)).toBe('6:00 PM–12:00 AM');
+  });
+
+  it('weights the overall average by nights, not by nonempty buckets', () => {
+    const data = buildSleepScheduleChartData([
+      night('2025-06-01T22:00:00', '2025-06-02T06:00:00'),
+      night('2025-06-02T22:00:00', '2025-06-03T06:00:00'),
+      night('2025-06-16T01:00:00', '2025-06-16T09:00:00'),
+    ], 'month', 'week', today);
+    expect(formatSleepScheduleRange(data.average)).toBe('11:00 PM–7:00 AM');
+  });
+
+  it('skips legacy, partial, nonfinite, zero, reversed, and implausibly long windows', () => {
+    const valid = night('2025-06-14T23:00:00', '2025-06-15T07:00:00');
+    const data = buildSleepScheduleChartData([
+      makeEntry(),
+      { ...valid, sleepStartTimestampLocal: null },
+      { ...valid, sleepEndTimestampLocal: undefined },
+      { ...valid, sleepStartTimestampLocal: NaN },
+      { ...valid, sleepEndTimestampLocal: Infinity },
+      { ...valid, sleepStartTimestampLocal: 0 },
+      { ...valid, sleepEndTimestampLocal: valid.sleepStartTimestampLocal },
+      { ...valid, sleepEndTimestampLocal: Date.parse('2025-06-17T07:00:00Z') },
+      makeEntry({ sleepStartTimestampGMT: 1749942000000, sleepEndTimestampGMT: 1749970800000 }),
+    ], 'month', 'day', today);
+    expect(data.buckets.every((b) => b.min === null && b.max === null)).toBe(true);
+    expect(data.latest).toBeNull();
+    expect(data.average).toBeNull();
+    expect(formatSleepScheduleRange(data.latest)).toBe('—');
+  });
+
+  it.each([
+    ['2025-03-08', '2025-03-09', '2025-03-09T07:00:00Z', '2025-03-09T14:00:00Z'],
+    ['2025-11-01', '2025-11-02', '2025-11-02T06:00:00Z', '2025-11-02T15:00:00Z'],
+  ])('preserves local clock endpoints across DST starting %s', (startDate, endDate, utcStart, utcEnd) => {
+    const data = buildSleepScheduleChartData([
+      night(`${startDate}T23:00:00`, `${endDate}T07:00:00`, {
+        sleepStartTimestampGMT: Date.parse(utcStart),
+        sleepEndTimestampGMT: Date.parse(utcEnd),
+        sleepDurationSec: 6 * 3600,
+      }),
+    ], '2025', 'day', today);
+    expect(data.latest).toMatchObject({ min: 1380, max: 1860 });
+    expect(formatSleepScheduleRange(data.latest)).toBe('11:00 PM–7:00 AM');
+  });
+
+  it('uses the recorded local date even when the UTC instant is on another day', () => {
+    const data = buildSleepScheduleChartData([
+      night('2025-06-14T23:00:00', '2025-06-15T07:00:00', {
+        date: '2025-06-14',
+        sleepStartTimestampGMT: Date.parse('2025-06-14T14:00:00Z'),
+        sleepEndTimestampGMT: Date.parse('2025-06-14T22:00:00Z'),
+      }),
+    ], 'month', 'day', today);
+    expect(data.latest).toEqual({ label: '6/15', min: 1380, max: 1860 });
+  });
+
+  it.each(['UTC', 'America/Los_Angeles', 'Asia/Tokyo'])('does not shift recorded times in viewer timezone %s', (timezone) => {
+    vi.stubEnv('TZ', timezone);
+    try {
+      const data = buildSleepScheduleChartData([
+        night('2025-03-08T23:15:00', '2025-03-09T07:05:00'),
+      ], 'month', 'day', new Date(2025, 2, 10));
+      expect(data.latest).toEqual({ label: '3/9', min: 1395, max: 1865 });
+      expect(formatSleepScheduleRange(data.latest)).toBe('11:15 PM–7:05 AM');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('filters by wake date at year boundaries and finds latest independent of input order', () => {
+    const entries = [
+      night('2025-01-01T23:00:00', '2025-01-02T07:00:00'),
+      night('2024-12-31T23:00:00', '2025-01-01T07:00:00'),
+      night('2024-12-30T23:00:00', '2024-12-31T07:00:00'),
+    ];
+    const data = buildSleepScheduleChartData(entries, '2025', 'day', today);
+    expect(data.buckets.filter((b) => b.min !== null).map((b) => b.label)).toEqual(['1/1', '1/2']);
+    expect(data.latest?.label).toBe('1/2');
+  });
+
+  it('does not merge similarly named weeks in different years', () => {
+    const data = buildSleepScheduleChartData([
+      night('2024-12-30T23:00:00', '2024-12-31T07:00:00'),
+      night('2025-12-29T22:00:00', '2025-12-30T06:00:00'),
+    ], 'year', 'week', new Date(2025, 11, 30));
+    expect(data.buckets.filter((b) => b.min !== null)).toEqual([
+      { label: 'W1', min: 1380, max: 1860 },
+      { label: 'W1', min: 1320, max: 1800 },
+    ]);
+  });
+
+  it('formats noon, midnight, minute rounding, and missing times', () => {
+    expect(formatSleepTime(720)).toBe('12:00 PM');
+    expect(formatSleepTime(1440)).toBe('12:00 AM');
+    expect(formatSleepTime(1439.9)).toBe('12:00 AM');
+    expect(formatSleepTime(null)).toBe('—');
+    expect(formatSleepTime(NaN)).toBe('—');
+  });
+});
 
 describe('buildWellnessChartData', () => {
   it('uses weekly HRV values and same-row HRV status for day buckets', () => {

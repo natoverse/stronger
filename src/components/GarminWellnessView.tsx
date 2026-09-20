@@ -17,6 +17,9 @@ import {
   buildStackedCaloriesChartData,
   buildLoadFocusChartData,
   buildHrvRangeChartData,
+  buildSleepScheduleChartData,
+  formatSleepTime,
+  formatSleepScheduleRange,
   LOAD_FOCUS_AREA_LABELS,
   formatWellnessRatio,
   formatWellnessValue,
@@ -928,15 +931,16 @@ interface RangeBarChartProps {
   summaryLabel: string;
   legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
+  timeAxis?: boolean;
 }
 
-function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems, formatValue }: RangeBarChartProps) {
+function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems, formatValue, timeAxis = false }: RangeBarChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
   const values = buckets.flatMap((b) => [b.min, b.max]).filter((v): v is number => v !== null);
-  const rawMin = values.length > 0 ? Math.min(...values) : 0;
-  const rawMax = values.length > 0 ? Math.max(...values) : 1;
+  const rawMin = timeAxis ? Math.min(18 * 60, ...values) : values.length > 0 ? Math.min(...values) : 0;
+  const rawMax = timeAxis ? Math.max(36 * 60, ...values) : values.length > 0 ? Math.max(...values) : 1;
   const yMin = rawMin;
   const yMax = rawMax === rawMin ? rawMin + 1 : rawMax;
 
@@ -947,7 +951,10 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
   const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
   const yPos = (v: number) => CHART_PADDING.top + PLOT_H - ((v - yMin) / (yMax - yMin)) * PLOT_H;
 
-  const yTicks = niceTicksFor(yMin, yMax, 4);
+  const yTicks = timeAxis
+    ? Array.from({ length: Math.floor(yMax / 180) - Math.ceil(yMin / 180) + 1 },
+      (_, i) => (Math.ceil(yMin / 180) + i) * 180)
+    : niceTicksFor(yMin, yMax, 4);
 
   const maxLabels = Math.min(n, 8);
   const xLabelIndices: number[] = [];
@@ -977,6 +984,7 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
           className="strava-chart-svg"
           viewBox={`0 0 ${VIEW_BOX_W} ${CHART_HEIGHT}`}
           preserveAspectRatio="xMidYMid meet"
+          aria-label={label}
         >
           {yTicks.map((tick) => (
             <line
@@ -1597,6 +1605,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
 
   const sleepDurData    = useMemo(() => buildWellnessChartData(entries, 'sleepDurationSec',     range, aggregation, today), [entries, range, aggregation, today]);
   const sleepScoreData  = useMemo(() => buildWellnessChartData(entries, 'sleepScore',           range, aggregation, today), [entries, range, aggregation, today]);
+  const sleepScheduleData = useMemo(() => buildSleepScheduleChartData(entries, range, aggregation, today), [entries, range, aggregation, today]);
 
   const stepsData       = useMemo(() => buildWellnessChartData(entries, 'steps',                range, aggregation, today), [entries, range, aggregation, today]);
   const floorsData      = useMemo(() => buildWellnessChartData(entries, 'floors',               range, aggregation, today), [entries, range, aggregation, today]);
@@ -1881,6 +1890,16 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
 
       {/* Section: Sleep */}
       <h2 className="strava-section-title">Sleep</h2>
+      <WellnessRangeBarChart
+        label="Sleep Schedule"
+        unit=""
+        buckets={sleepScheduleData.buckets}
+        summaryLabel={aggregation === 'day'
+          ? formatSleepScheduleRange(sleepScheduleData.latest)
+          : `Avg ${formatSleepScheduleRange(sleepScheduleData.average)}`}
+        formatValue={formatSleepTime}
+        timeAxis
+      />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.sleepDurationSec}
         unit={WELLNESS_METRIC_UNITS.sleepDurationSec}
