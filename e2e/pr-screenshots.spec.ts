@@ -23,6 +23,13 @@ for (const view of views) {
 		await expect(page.getByText('Restoring session…')).toHaveCount(0)
 		await expect(page.getByText('Loading workout data…')).toHaveCount(0)
 		await expect(page.getByText('Something went wrong')).toHaveCount(0)
+		if (view.name === 'garmin-wellness') {
+			const sleepChart = page.locator('svg[aria-label="Sleep Schedule"]')
+			await expect(sleepChart.getByText('9:00 PM', { exact: true })).toBeVisible()
+			await expect(sleepChart.getByText('10:00 AM', { exact: true })).toBeVisible()
+			await expect(sleepChart.locator('rect[fill^="url("]').first()).toBeVisible()
+			await expect(sleepChart.locator('line.strava-goal-line')).toHaveCount(2)
+		}
 		await page.addStyleTag({
 			content: `
 				*, *::before, *::after {

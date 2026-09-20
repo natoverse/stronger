@@ -162,3 +162,9 @@ Verified all fields against the real Garmin Connect API response structures usin
 - Keep Sleep Duration and its goal behavior unchanged: the sleep window can include awake time, and its wall-clock span can differ from elapsed time across DST.
 - Existing scheduled overwrites populate recent dates. After deployment, run **Garmin Wellness Sync** manually with `backfill=true` to re-fetch older dates since 2021-01-01; no browser-side migration can reconstruct timestamps from duration alone.
 - Regression coverage includes timestamp extraction and normalization, legacy/missing/invalid fields, midnight-aware endpoint averages, local wake-date assignment, range/year boundaries, timezone independence, spring/fall DST, and time formatting.
+
+### Sleep Schedule display refinement (2026-09-20)
+
+- Fix the overnight axis at **9 PM–10 AM**, replacing the expanding 6 PM–noon domain. Clip outlying bars and use the existing accent-colored overflow hatch; entirely out-of-range windows remain thin marks at the nearest edge. Tooltips retain the actual times.
+- Draw average bedtime and wake-up boundaries with the HRV chart's dashed reference-line style and subtle gray band between them. Reuse the selected range's per-night, noon-unwrapped averages for every aggregation, including daily; do not average bucket averages or clamp observations before averaging. As in HRV, reference lines outside the axis are omitted, while the legend preserves their actual values.
+- Populate screenshot fixtures with local sleep windows on both sides of midnight, including a pre-9 PM bedtime and a post-10 AM wake-up. Screenshot checks verify the fixed axis, hatched bars, and average boundaries.

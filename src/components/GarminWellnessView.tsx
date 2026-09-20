@@ -932,28 +932,30 @@ interface RangeBarChartProps {
   legendItems?: LegendItem[];
   formatValue: (v: number | null) => string;
   timeAxis?: boolean;
+  averageRange?: WellnessMinMaxBucket | null;
 }
 
-function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems, formatValue, timeAxis = false }: RangeBarChartProps) {
+function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems, formatValue, timeAxis = false, averageRange = null }: RangeBarChartProps) {
+  const overflowPatternId = useId();
   const n = buckets.length;
   if (n === 0) return null;
 
   const values = buckets.flatMap((b) => [b.min, b.max]).filter((v): v is number => v !== null);
-  const rawMin = timeAxis ? Math.min(18 * 60, ...values) : values.length > 0 ? Math.min(...values) : 0;
-  const rawMax = timeAxis ? Math.max(36 * 60, ...values) : values.length > 0 ? Math.max(...values) : 1;
+  const rawMin = timeAxis ? 21 * 60 : values.length > 0 ? Math.min(...values) : 0;
+  const rawMax = timeAxis ? 34 * 60 : values.length > 0 ? Math.max(...values) : 1;
   const yMin = rawMin;
   const yMax = rawMax === rawMin ? rawMin + 1 : rawMax;
+  const hasOverflow = timeAxis && values.some((v) => v < yMin || v > yMax);
 
   const barWidth = PLOT_W / n;
   const barGap = Math.max(1, barWidth * 0.15);
   const barInner = barWidth - barGap * 2;
 
   const xCenter = (i: number) => CHART_PADDING.left + barWidth * i + barWidth / 2;
-  const yPos = (v: number) => CHART_PADDING.top + PLOT_H - ((v - yMin) / (yMax - yMin)) * PLOT_H;
+  const yPos = (v: number) => CHART_PADDING.top + PLOT_H - ((Math.min(Math.max(v, yMin), yMax) - yMin) / (yMax - yMin)) * PLOT_H;
 
   const yTicks = timeAxis
-    ? Array.from({ length: Math.floor(yMax / 180) - Math.ceil(yMin / 180) + 1 },
-      (_, i) => (Math.ceil(yMin / 180) + i) * 180)
+    ? [21, 24, 27, 30, 34].map((hour) => hour * 60)
     : niceTicksFor(yMin, yMax, 4);
 
   const maxLabels = Math.min(n, 8);
@@ -986,6 +988,19 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
           preserveAspectRatio="xMidYMid meet"
           aria-label={label}
         >
+          {hasOverflow && (
+            <defs>
+              <pattern id={overflowPatternId} width="6" height="6" patternUnits="userSpaceOnUse">
+                <rect width="6" height="6" fill={ACCENT} opacity={0.35} />
+                <path
+                  d="M-1 1L1 -1M0 6L6 0M5 7L7 5M-1 5L1 7M0 0L6 6M5 -1L7 1"
+                  fill="none"
+                  stroke={ACCENT}
+                  strokeWidth={1.25}
+                />
+              </pattern>
+            </defs>
+          )}
           {yTicks.map((tick) => (
             <line
               key={`grid-${tick}`}
@@ -1018,13 +1033,25 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
             </text>
           ))}
 
+          {averageRange?.min != null && averageRange.max != null
+            && averageRange.max >= yMin && averageRange.min <= yMax && (
+            <rect
+              x={CHART_PADDING.left}
+              y={yPos(averageRange.max)}
+              width={PLOT_W}
+              height={Math.max(yPos(averageRange.min) - yPos(averageRange.max), 1)}
+              fill={LOAD_FOCUS_BAND}
+              opacity={0.3}
+            />
+          )}
+
           {buckets.map((b, i) => {
             if (b.min === null && b.max === null) return null;
             const lowValue = (b.min ?? b.max)!;
             const highValue = (b.max ?? b.min)!;
             const low = Math.min(lowValue, highValue);
             const high = Math.max(lowValue, highValue);
-            const yTop = yPos(high);
+            const yTop = timeAxis ? Math.min(yPos(high), CHART_PADDING.top + PLOT_H - 1) : yPos(high);
             const yBottom = yPos(low);
             return (
               <rect
@@ -1034,9 +1061,23 @@ function WellnessRangeBarChart({ label, unit, buckets, summaryLabel, legendItems
                 width={Math.max(barInner, 1)}
                 // Keep zero-range days visible as a thin mark.
                 height={Math.max(yBottom - yTop, 1)}
-                fill={ACCENT}
+                fill={timeAxis && (low < yMin || high > yMax) ? `url(#${overflowPatternId})` : ACCENT}
                 opacity={i === activeIndex ? 1 : 0.75}
                 rx={2}
+              />
+            );
+          })}
+
+          {(['min', 'max'] as const).map((key) => {
+            const value = averageRange?.[key];
+            if (value == null || value < yMin || value > yMax) return null;
+            return (
+              <line
+                key={`average-${key}`}
+                x1={CHART_PADDING.left} y1={yPos(value)}
+                x2={VIEW_BOX_W - CHART_PADDING.right} y2={yPos(value)}
+                className="strava-goal-line"
+                aria-label={`Average ${key === 'min' ? 'start' : 'end'}: ${formatValue(value)}`}
               />
             );
           })}
@@ -1899,6 +1940,11 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
           : `Avg ${formatSleepScheduleRange(sleepScheduleData.average)}`}
         formatValue={formatSleepTime}
         timeAxis
+        averageRange={sleepScheduleData.average}
+        legendItems={sleepScheduleData.average ? [
+          { color: LOAD_FOCUS_BAND, label: `Avg start ${formatSleepTime(sleepScheduleData.average.min)}` },
+          { color: LOAD_FOCUS_BAND, label: `Avg end ${formatSleepTime(sleepScheduleData.average.max)}` },
+        ] : undefined}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.sleepDurationSec}

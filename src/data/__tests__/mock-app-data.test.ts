@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createMockAppData } from '../mock-app-data.ts'
 import { isMockMode } from '../mock-mode.ts'
+import { buildSleepScheduleChartData } from '../../model/wellness.ts'
 
 describe('mock review mode', () => {
 	it('requires an explicit enabled query flag', () => {
@@ -28,5 +29,21 @@ describe('mock review mode', () => {
 		expect(data.liftGoals.length).toBeGreaterThan(0)
 		expect(data.appSettings.showCalendarTab).toBe(true)
 		expect(data.appSettings.showGarminTab).toBe(true)
+	})
+
+	it('populates sleep screenshots with midnight-crossing and overflowing windows', () => {
+		const anchor = new Date(2026, 0, 3)
+		const { garminWellness } = createMockAppData(anchor)
+		const data = buildSleepScheduleChartData(garminWellness, 'month', 'day', anchor)
+		const nights = data.buckets.filter((bucket) => bucket.min !== null)
+		expect(nights).toHaveLength(7)
+		expect(nights.some((bucket) => bucket.min! < 21 * 60)).toBe(true)
+		expect(nights.some((bucket) => bucket.min! > 24 * 60)).toBe(true)
+		expect(nights.some((bucket) => bucket.max! > 34 * 60)).toBe(true)
+		expect(data.average?.min).toBeGreaterThan(21 * 60)
+		expect(data.average?.max).toBeLessThan(34 * 60)
+		for (const entry of garminWellness) {
+			expect(new Date(entry.sleepEndTimestampLocal!).toISOString().slice(0, 10)).toBe(entry.date)
+		}
 	})
 })

@@ -58,8 +58,8 @@ describe('Sleep Schedule chart', () => {
     hrvBaselineMin: null, hrvBaselineMax: null,
   };
 
-  function render(aggregation: 'day' | 'week' | 'month', entries = [entry]) {
-    return renderToStaticMarkup(createElement(GarminWellnessView, { entries, range: '2025', aggregation }));
+  function render(aggregation: 'day' | 'week' | 'month', entries = [entry], range = '2025') {
+    return renderToStaticMarkup(createElement(GarminWellnessView, { entries, range, aggregation }));
   }
 
   it('renders local header/hover times and clock ticks without changing Body Battery or sleep duration', () => {
@@ -69,6 +69,10 @@ describe('Sleep Schedule chart', () => {
     expect(sleepCard).toContain('class="chart-tooltip-value">11:15 PM–7:05 AM');
     expect(sleepCard).toContain('class="chart-tooltip-date">1/1');
     expect(sleepCard).toContain('12:00 AM');
+    expect(sleepCard).toContain('9:00 PM');
+    expect(sleepCard).toContain('10:00 AM');
+    expect(sleepCard).not.toContain('6:00 PM');
+    expect(sleepCard).not.toContain('12:00 PM');
     expect(sleepCard).toContain('aria-label="Sleep Schedule"');
     expect(sleepCard).toContain('<rect');
     const batteryCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Body Battery Range'))!;
@@ -86,7 +90,58 @@ describe('Sleep Schedule chart', () => {
     const markup = render('day', [{ ...entry, sleepStartTimestampLocal: null }]);
     const sleepCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
     expect(sleepCard).not.toContain('<rect');
+    expect(sleepCard).not.toContain('strava-goal-line');
     expect(sleepCard).toContain('class="chart-tooltip-value">—');
+  });
+
+  it.each([
+    ['2024-12-31T20:30:00Z', '2025-01-01T07:00:00Z'],
+    ['2024-12-31T23:00:00Z', '2025-01-01T10:30:00Z'],
+    ['2024-12-31T20:30:00Z', '2025-01-01T10:30:00Z'],
+    ['2025-01-01T12:30:00Z', '2025-01-01T20:00:00Z'],
+    ['2025-01-01T10:30:00Z', '2025-01-01T11:30:00Z'],
+  ])('hatches and bounds outlying bars from %s to %s', (start, end) => {
+    const markup = render('day', [{
+      ...entry, sleepStartTimestampLocal: Date.parse(start), sleepEndTimestampLocal: Date.parse(end),
+    }]);
+    const sleepCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
+    const bar = sleepCard.match(/<rect[^>]+fill="url\(#[^"]+\)"[^>]*>/)![0];
+    const top = Number(bar.match(/ y="([^"]+)"/)![1]);
+    const height = Number(bar.match(/ height="([^"]+)"/)![1]);
+    expect(top).toBeGreaterThanOrEqual(16);
+    expect(top + height).toBeLessThanOrEqual(100);
+    expect(height).toBeGreaterThan(0);
+    expect(sleepCard).toContain('9:00 PM');
+    expect(sleepCard).toContain('10:00 AM');
+  });
+
+  it('does not hatch bars exactly on the axis bounds', () => {
+    const markup = render('day', [{
+      ...entry,
+      sleepStartTimestampLocal: Date.parse('2024-12-31T21:00:00Z'),
+      sleepEndTimestampLocal: Date.parse('2025-01-01T10:00:00Z'),
+    }]);
+    const sleepCard = markup.split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
+    expect(sleepCard).not.toContain('<pattern');
+    expect(sleepCard.match(/class="strava-goal-line"/g)).toHaveLength(2);
+  });
+
+  it.each(['day', 'week', 'month'] as const)('uses range-filtered per-night averages for %s boundaries', (aggregation) => {
+    const entries = [
+      ['2024-12-31T22:00:00Z', '2025-01-01T06:00:00Z'],
+      ['2025-01-01T22:00:00Z', '2025-01-02T06:00:00Z'],
+      ['2025-02-01T01:00:00Z', '2025-02-01T09:00:00Z'],
+      ['2023-12-31T21:00:00Z', '2024-01-01T10:00:00Z'],
+    ].map(([start, end]) => ({
+      ...entry, sleepStartTimestampLocal: Date.parse(start), sleepEndTimestampLocal: Date.parse(end),
+    }));
+    const sleepCard = render(aggregation, entries).split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
+    expect(sleepCard).toContain('class="strava-goal-line" aria-label="Average start: 11:00 PM"');
+    expect(sleepCard).toContain('class="strava-goal-line" aria-label="Average end: 7:00 AM"');
+    expect(sleepCard).toContain('fill="rgba(255,255,255,0.25)" opacity="0.3"');
+    const otherRange = render(aggregation, entries, '2024').split('class="strava-chart-card"').find((card) => card.includes('Sleep Schedule'))!;
+    expect(otherRange).toContain('aria-label="Average start: 9:00 PM"');
+    expect(otherRange).toContain('aria-label="Average end: 10:00 AM"');
   });
 });
 
