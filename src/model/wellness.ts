@@ -418,6 +418,30 @@ export function buildWellnessChartData(
   return { metric, buckets, summary, latestValue };
 }
 
+/** Header-only fallback for infrequently recorded metrics; never fills chart buckets. */
+export function getWellnessHeaderFallback(
+  entries: GarminWellnessEntry[],
+  metric: WellnessNumericMetric,
+  range: string,
+  today: Date = new Date(),
+): number | null {
+  if (!['vo2Max', 'lactateThresholdHr', 'lactateThresholdSpeed', 'lactateThresholdPower'].includes(metric)) {
+    return null;
+  }
+  const end = getRangeEnd(range, today);
+  let latestDate = '';
+  let latestValue: number | null = null;
+  for (const entry of entries) {
+    const value = entry[metric];
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0
+      && entry.date > latestDate && new Date(entry.date + 'T00:00:00') <= end) {
+      latestDate = entry.date;
+      latestValue = value;
+    }
+  }
+  return latestValue;
+}
+
 export function buildTrainingLoadRatioChartData(
   entries: GarminWellnessEntry[],
   range: string,

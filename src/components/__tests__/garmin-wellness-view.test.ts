@@ -33,7 +33,7 @@ vi.mock('../../hooks/useChartTooltip.js', () => ({
   useChartTooltip: () => ({ activeIndex: 0, svgRef: { current: null }, containerHandlers: {} }),
 }));
 
-describe('Sleep Schedule chart', () => {
+describe('GarminWellnessView', () => {
   const entry: GarminWellnessEntry = {
     date: '2025-01-01',
     sleepStartTimestampLocal: Date.parse('2024-12-31T23:15:00Z'),
@@ -61,6 +61,61 @@ describe('Sleep Schedule chart', () => {
   function render(aggregation: 'day' | 'week' | 'month', entries = [entry], range = '2025') {
     return renderToStaticMarkup(createElement(GarminWellnessView, { entries, range, aggregation }));
   }
+
+  const sparseHeaders = [
+    ['VO₂ Max (Running)', '45.0 mL/kg/min'],
+    ['Lactate Threshold HR', '165 bpm'],
+    ['Lactate Threshold Pace', '8:24 /mi'],
+    ['Lactate Threshold Power', '300 W'],
+  ];
+  const oldReading = {
+    ...entry, date: '2024-12-31', vo2Max: 45,
+    lactateThresholdHr: 165, lactateThresholdSpeed: 3.19, lactateThresholdPower: 300,
+    restingHR: 60,
+  };
+  const chartCard = (markup: string, title: string) =>
+    markup.split('class="strava-chart-card"').find((card) => card.includes(title))!;
+
+  it.each(['day', 'week', 'month'] as const)(
+    'shows prior sparse readings only in headers for %s aggregation',
+    (aggregation) => {
+      const markup = render(aggregation, [entry, oldReading, { ...oldReading, date: '2026-01-01', vo2Max: 60 }]);
+      for (const [title, value] of sparseHeaders) {
+        const card = chartCard(markup, title);
+        expect(card).toContain(`class="strava-chart-total">${value}`);
+        expect(card).not.toContain('<circle');
+        expect(card).toContain('class="chart-tooltip-value">—');
+      }
+      if (aggregation === 'day') {
+        expect(chartCard(markup, 'VO₂ Max (Running)')).toContain('45.0 mL/kg/min · Good');
+      }
+      expect(chartCard(markup, 'Resting Heart Rate')).not.toContain('class="strava-chart-total"');
+    },
+  );
+
+  it.each(['day', 'week', 'month'] as const)(
+    'preserves in-range latest values and averages for %s aggregation',
+    (aggregation) => {
+      const markup = render(aggregation, [
+        oldReading,
+        { ...oldReading, date: '2025-01-01', vo2Max: 50, lactateThresholdHr: 170 },
+        { ...oldReading, date: '2025-01-02', vo2Max: 54, lactateThresholdHr: 174 },
+      ]);
+      expect(chartCard(markup, 'VO₂ Max (Running)')).toContain(
+        `class="strava-chart-total">${aggregation === 'day' ? '54.0' : '52.0'} mL/kg/min`,
+      );
+      expect(chartCard(markup, 'Lactate Threshold HR')).toContain(
+        `class="strava-chart-total">${aggregation === 'day' ? '174' : '172'} bpm`,
+      );
+    },
+  );
+
+  it('does not invent headers when no eligible historical readings exist', () => {
+    const markup = render('day', [entry, { ...oldReading, date: '2026-01-01' }]);
+    for (const [title] of sparseHeaders) {
+      expect(chartCard(markup, title)).not.toContain('class="strava-chart-total"');
+    }
+  });
 
   it('renders local header/hover times and clock ticks without changing Body Battery or sleep duration', () => {
     const markup = render('day');

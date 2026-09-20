@@ -11,6 +11,7 @@ import type { GarminWellnessEntry } from '../model/types.js';
 import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessStatusBucket, WellnessChartData, StackedCaloriesBucket, WellnessRangeBucket, LoadFocusArea } from '../model/wellness.js';
 import {
   buildWellnessChartData,
+  getWellnessHeaderFallback,
   buildTrainingLoadRatioChartData,
   buildStatusChartData,
   buildIntensityMinCombinedChartData,
@@ -1696,8 +1697,9 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     if (value === null) return '';
     return `${formatWellnessValue(value, metric)}${unit ? ` ${unit}` : ''}`;
   }
-  const summaryValue = (data: Pick<WellnessChartData, 'summary' | 'latestValue'>): number | null =>
-    aggregation === 'day' ? data.latestValue : data.summary;
+  const summaryValue = (data: Pick<WellnessChartData, 'summary' | 'latestValue'> & Partial<Pick<WellnessChartData, 'metric'>>): number | null =>
+    (aggregation === 'day' ? data.latestValue : data.summary)
+      ?? (data.metric ? getWellnessHeaderFallback(entries, data.metric, range, today) : null);
   const latestBodyBatteryRange = [...bbRangeBuckets].reverse().find((bucket) => bucket.min !== null || bucket.max !== null);
   const latestHrvStatus = [...hrvData.buckets].reverse().find((bucket) => bucket.value !== null && bucket.colorKey)?.colorKey ?? '';
   const latestHrvBaseline = hrvData.latestMin !== null || hrvData.latestMax !== null
