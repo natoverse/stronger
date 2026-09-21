@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ArrowDown, ArrowLeft, ArrowUp, MessageSquare, Plus, Trash2 } from 'lucide-react';
-import type { SetTemplate, WeightBasis, SetType, LiftConfig, ExerciseRole } from '../model/index.js';
+import { ArrowDown, ArrowLeft, ArrowUp, Copy, Eye, MessageSquare, Plus, Trash2 } from 'lucide-react';
+import type { SetTemplate, WeightBasis, SetType, LiftConfig, ExerciseRole, CycleBaseline, ExerciseTemplate } from '../model/types.js';
+import { computeSetWeight } from '../model/compute.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
 
 /** Local state for an exercise being edited. */
 export interface EditableExercise {
+	id?: string;
 	liftId: string;
 	role: ExerciseRole;
 	sets: SetTemplate[];
@@ -15,6 +17,19 @@ export interface EditableWorkout {
 	id: string;
 	name: string;
 	exercises: EditableExercise[];
+	cycle?: { baseline: CycleBaseline; weeks: EditableWeek[] };
+}
+
+export interface EditableExposure {
+	id: string;
+	name: string;
+	exercises: EditableExercise[];
+}
+
+export interface EditableWeek {
+	id: string;
+	name: string;
+	exposures: EditableExposure[];
 }
 
 interface WorkoutEditorProps {
@@ -26,6 +41,7 @@ interface WorkoutEditorProps {
 	allDefinitions: WorkoutDefinition[];
 	/** Available lifts from configs. */
 	configs: LiftConfig[];
+	roundWarmupPlateMath?: boolean;
 	onSave: (definition: WorkoutDefinition) => void;
 	onCancel: () => void;
 	/** Called when the user deletes this workout. Only available when editing an existing workout. */
@@ -55,7 +71,7 @@ function roleLabel(role: ExerciseRole): string {
 /**
  * Offset input for a `relative` weight basis. Uses local text state so that
  * an in-progress negative value (a lone "-") is not coerced to 0 mid-typing,
- * committing only when the text parses to a finite number.
+ * keeping incomplete input visible while validation blocks saving.
  */
 function RelativeOffsetInput({
 	offset,
@@ -72,6 +88,7 @@ function RelativeOffsetInput({
 	// keystroke and clobber a valid in-progress entry such as a lone "-".
 	// The guard skips the reset when the text already represents the offset.
 	useEffect(() => {
+		if (!Number.isFinite(offset)) return;
 		const parsed = Number(text);
 		if (Number.isFinite(parsed) && parsed === offset) return;
 		setText(String(offset));
@@ -90,7 +107,7 @@ function RelativeOffsetInput({
 				const raw = e.target.value;
 				setText(raw);
 				const n = Number(raw);
-				if (raw.trim() !== '' && Number.isFinite(n)) onCommit(n);
+				onCommit(raw.trim() !== '' && Number.isFinite(n) ? n : NaN);
 			}}
 		/>
 	);
@@ -117,7 +134,7 @@ function defaultSet(): SetTemplate {
 }
 
 /** Move a set to a new position without mutating the original list. */
-export function moveSet(sets: SetTemplate[], fromIndex: number, toIndex: number): SetTemplate[] {
+export function moveItem<T>(sets: T[], fromIndex: number, toIndex: number): T[] {
 	if (
 		fromIndex < 0
 		|| fromIndex >= sets.length
@@ -133,36 +150,194 @@ export function moveSet(sets: SetTemplate[], fromIndex: number, toIndex: number)
 	return reordered;
 }
 
+export const moveSet = moveItem<SetTemplate>;
+
+function editableExercises(templates: ExerciseTemplate[]): EditableExercise[] {
+	const occurrences = new Map<string, number>();
+	return templates.map((template) => {
+		const occurrence = occurrences.get(template.liftId) ?? 0;
+		occurrences.set(template.liftId, occurrence + 1);
+		return {
+			id: template.id ?? `${template.liftId}:${occurrence}`,
+			liftId: template.liftId,
+			role: template.role,
+			sets: structuredClone(template.sets),
+		};
+	});
+}
+
+export function copyExposure(source: EditableExposure, destination?: EditableWorkout): EditableExposure {
+	const copy = { ...structuredClone(source), id: crypto.randomUUID(), name: `${source.name} (Copy)` };
+	if (destination) {
+		const existing = destination.cycle?.weeks.flatMap((week) => week.exposures.flatMap((exposure) => exposure.exercises)) ?? destination.exercises;
+		const used = new Set<string>();
+		copy.exercises = copy.exercises.map((exercise) => {
+			const candidates = existing.filter((item) => item.liftId === exercise.liftId && item.id && !used.has(item.id));
+			const match = candidates.find((item) => item.id === exercise.id)
+				?? candidates.find((item) => item.role === exercise.role)
+				?? candidates[0];
+			const id = match?.id ?? exercise.id;
+			if (id) used.add(id);
+			return { ...exercise, ...(id ? { id } : {}) };
+		});
+	}
+	return copy;
+}
+
+export function copyWeek(source: EditableWeek, destination?: EditableWorkout): EditableWeek {
+	return {
+		...structuredClone(source),
+		id: crypto.randomUUID(),
+		name: `${source.name} (Copy)`,
+		exposures: source.exposures.map((exposure) => ({ ...copyExposure(exposure, destination), name: exposure.name })),
+	};
+}
+
+export function updateExposureExercises(
+	workout: EditableWorkout,
+	weekIndex: number,
+	exposureIndex: number,
+	update: (exercises: EditableExercise[]) => EditableExercise[],
+): EditableWorkout {
+	if (!workout.cycle) return { ...workout, exercises: update(workout.exercises) };
+	const cycle = {
+		...workout.cycle,
+		weeks: workout.cycle.weeks.map((week, wi) => wi !== weekIndex ? week : {
+			...week,
+			exposures: week.exposures.map((exposure, ei) => ei !== exposureIndex ? exposure : {
+				...exposure, exercises: update(exposure.exercises),
+			}),
+		}),
+	};
+	return { ...workout, cycle, exercises: cycle.weeks[0]?.exposures[0]?.exercises ?? [] };
+}
+
 /** Convert a WorkoutDefinition to the local editable format. */
 export function toEditable(def: WorkoutDefinition): EditableWorkout {
+	const weeks = def.cycle
+		? def.cycle.weeks.map((week) => ({
+			...week,
+			exposures: week.exposures.map((exposure) => ({
+				id: exposure.id, name: exposure.name, exercises: editableExercises(exposure.templates),
+			})),
+		}))
+		: [{ id: 'week-1', name: 'Week 1', exposures: [
+			{ id: 'session-1', name: 'Session 1', exercises: editableExercises(def.templates) },
+		] }];
 	return {
 		id: def.id,
 		name: def.name,
-		exercises: def.templates.map((t) => ({
-			liftId: t.liftId,
-			role: t.role,
-			sets: t.sets.map((s) => ({ ...s })),
-		})),
+		exercises: weeks[0]?.exposures[0]?.exercises ?? [],
+		cycle: { baseline: def.cycle?.baseline ?? 'topSet', weeks },
 	};
 }
 
 /** Convert the local editable format back to a WorkoutDefinition. */
 export function fromEditable(e: EditableWorkout, configs: LiftConfig[], existing?: WorkoutDefinition): WorkoutDefinition {
 	const liftMap = new Map(configs.map((c) => [c.id, c.name]));
+	const templates = (exercises: EditableExercise[]): ExerciseTemplate[] => exercises.map((ex) => ({
+		...(ex.id ? { id: ex.id } : {}),
+		liftId: ex.liftId,
+		name: liftMap.get(ex.liftId) ?? ex.liftId,
+		role: ex.role,
+		sets: structuredClone(ex.sets),
+	}));
+	const cycle = e.cycle ? {
+		baseline: e.cycle.baseline,
+		weeks: e.cycle.weeks.map((week) => ({
+			id: week.id, name: week.name.trim(),
+			exposures: week.exposures.map((exposure) => ({
+				id: exposure.id, name: exposure.name.trim(), templates: templates(exposure.exercises),
+			})),
+		})),
+	} : undefined;
 	return {
 		id: e.id,
-		name: e.name,
+		name: e.name.trim(),
 		favorite: existing?.favorite,
-		templates: e.exercises.map((ex) => {
-			const liftName = liftMap.get(ex.liftId) ?? ex.liftId;
-			return {
-				liftId: ex.liftId,
-				name: liftName,
-				role: ex.role,
-				sets: ex.sets,
-			};
-		}),
+		templates: cycle ? structuredClone(cycle.weeks[0]?.exposures[0]?.templates ?? []) : templates(e.exercises),
+		...(cycle ? { cycle } : {}),
 	};
+}
+
+export function validateEditableWorkout(workout: EditableWorkout, configs: LiftConfig[]): string[] {
+	const errors: string[] = [];
+	if (!workout.name.trim()) errors.push('Workout name is required');
+	const configMap = new Map(configs.map((config) => [config.id, config]));
+	const weeks = workout.cycle?.weeks ?? [{ name: 'Week 1', exposures: [{ name: 'Session 1', exercises: workout.exercises }] }];
+	if (!weeks.length) errors.push('Add at least one week');
+	weeks.forEach((week, wi) => {
+		const weekLabel = `Week ${wi + 1}`;
+		if (!week.name.trim()) errors.push(`${weekLabel}: enter a name`);
+		if (!week.exposures.length) errors.push(`${weekLabel}: add at least one session`);
+		week.exposures.forEach((exposure, ei) => {
+			const stage = `${weekLabel}, session ${ei + 1}`;
+			if (!exposure.name.trim()) errors.push(`${stage}: enter a name`);
+			if (!exposure.exercises.length) errors.push(`${stage}: add at least one exercise`);
+			const identities = new Set<string>();
+			exposure.exercises.forEach((exercise, xi) => {
+				const label = `${stage}, exercise ${xi + 1}`;
+				const config = configMap.get(exercise.liftId);
+				if (!config) errors.push(`${label}: select an available lift`);
+				if (exercise.id && identities.has(exercise.id)) errors.push(`${label}: duplicate exercise identity; remove and add this exercise again`);
+				if (exercise.id) identities.add(exercise.id);
+				if (!exercise.sets.length) errors.push(`${label}: add at least one set`);
+				if (config && (workout.cycle?.baseline === 'trainingMax' || exercise.sets.some((set) => set.weightBasis.kind === 'trainingMax'))) {
+					if (!Number.isFinite(config.trainingMax) || config.trainingMax! <= 0) {
+						errors.push(`${label}: set a positive Training Max (TM) for ${config.name} in Exercises`);
+					}
+					if (workout.cycle?.baseline === 'trainingMax' && (!Number.isFinite(config.trainingMaxIncrement) || config.trainingMaxIncrement! < 0)) {
+						errors.push(`${label}: set a nonnegative TM increment for ${config.name} in Exercises (0 means no increase)`);
+					}
+				}
+				exercise.sets.forEach((set, si) => {
+					const setLabel = `${label}, set ${si + 1}`;
+					if (!Number.isInteger(set.minReps) || set.minReps <= 0 || !Number.isInteger(set.maxReps) || set.maxReps < set.minReps) {
+						errors.push(`${setLabel}: enter positive whole-number reps with maximum at least minimum`);
+					}
+					const basis = set.weightBasis;
+					if (!['fixed', 'barWeight', 'relative'].includes(basis.kind) && (!Number.isFinite(set.percentage) || set.percentage <= 0)) {
+						errors.push(`${setLabel}: percentage must be finite and greater than zero`);
+					}
+					if (basis.kind === 'fixed' && (!Number.isFinite(basis.weight) || basis.weight < 0)) {
+						errors.push(`${setLabel}: fixed weight must be finite and nonnegative`);
+					}
+					if (basis.kind === 'relative' && !Number.isFinite(basis.offset)) errors.push(`${setLabel}: enter a finite weight offset`);
+					if (basis.kind === 'crossReference' && !configMap.has(basis.liftId)) errors.push(`${setLabel}: select an available cross-reference lift`);
+				});
+			});
+		});
+	});
+	return errors;
+}
+
+export function weightBasisLabel(set: SetTemplate, configs: LiftConfig[]): string {
+	const basis = set.weightBasis;
+	switch (basis.kind) {
+		case 'fixed': return `Fixed ${basis.weight} lbs`;
+		case 'barWeight': return 'Bar weight';
+		case 'relative': return `${basis.reference === 'topSet' ? 'Top set' : 'Backoff'} ${basis.offset < 0 ? '−' : '+'} ${Math.abs(basis.offset)} lbs`;
+		case 'crossReference': return `${set.percentage * 100}% of ${configs.find((config) => config.id === basis.liftId)?.name ?? basis.liftId} top set`;
+		case 'trainingMax': return `${Number((set.percentage * 100).toFixed(4))}% of Training Max (TM)`;
+		case 'backoff': return `${Number((set.percentage * 100).toFixed(4))}% of backoff`;
+		case 'topSet': return `${Number((set.percentage * 100).toFixed(4))}% of top set`;
+	}
+}
+
+export function previewExposure(exposure: EditableExposure, configs: LiftConfig[], roundWarmupPlateMath = false) {
+	const configMap = new Map(configs.map((config) => [config.id, config]));
+	return exposure.exercises.map((exercise) => {
+		const config = configMap.get(exercise.liftId);
+		if (!config) throw new Error(`Select an available lift for ${exercise.liftId || 'this exercise'}`);
+		return {
+			name: config.name,
+			sets: exercise.sets.map((set) => {
+				const weight = computeSetWeight(set, config, configMap, { roundWarmupPlateMath });
+				if (weight === null || !Number.isFinite(weight)) throw new Error(`${config.name}: check this set's weight basis and shared exercise settings`);
+				return { ...set, weight, basisLabel: weightBasisLabel(set, configs) };
+			}),
+		};
+	});
 }
 
 function initialEditableWorkout(
@@ -171,7 +346,7 @@ function initialEditableWorkout(
 ): EditableWorkout {
 	if (existing) return toEditable(existing);
 	if (initialDefinition) return toEditable(initialDefinition);
-	return { id: '', name: '', exercises: [] };
+	return toEditable({ id: '', name: '', templates: [] });
 }
 
 export function WorkoutEditor({
@@ -179,6 +354,7 @@ export function WorkoutEditor({
 	initialDefinition,
 	allDefinitions,
 	configs,
+	roundWarmupPlateMath = false,
 	onSave,
 	onCancel,
 	onDelete,
@@ -189,8 +365,27 @@ export function WorkoutEditor({
 	const [saving, setSaving] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [commentTarget, setCommentTarget] = useState<{ exerciseIdx: number; setIdx: number } | null>(null);
+	const [weekIndex, setWeekIndex] = useState(0);
+	const [exposureIndex, setExposureIndex] = useState(0);
+	const [showPreview, setShowPreview] = useState(false);
+	const cycle = workout.cycle!;
+	const week = cycle.weeks[weekIndex];
+	const exposure = week?.exposures[exposureIndex];
+	const exercises = exposure?.exercises ?? [];
 
 	const isNew = !existing;
+	const copySources = [
+		{ name: 'This cycle', workout },
+		...allDefinitions.filter((definition) => definition.id !== existing?.id).map((definition) => ({
+			name: definition.name, workout: toEditable(definition),
+		})),
+	];
+	const weekSources = copySources.flatMap((source) => source.workout.cycle!.weeks.map((sourceWeek) => ({
+		label: `${source.name} — ${sourceWeek.name}`, week: sourceWeek,
+	})));
+	const exposureSources = weekSources.flatMap((source) => source.week.exposures.map((sourceExposure) => ({
+		label: `${source.label} — ${sourceExposure.name}`, exposure: sourceExposure,
+	})));
 
 	// Available lifts sorted by name
 	const lifts = useMemo(
@@ -208,17 +403,58 @@ export function WorkoutEditor({
 	// Validation
 	const autoId = nameToId(workout.name);
 	const effectiveId = isNew ? (workout.id || autoId) : workout.id;
-	const errors: string[] = [];
-	if (!workout.name.trim()) errors.push('Workout name is required');
+	const errors = validateEditableWorkout(workout, configs);
 	if (!effectiveId) errors.push('Workout ID is required');
 	if (isNew && usedIds.has(effectiveId)) errors.push(`ID "${effectiveId}" is already in use`);
-	if (workout.exercises.length === 0) errors.push('Add at least one exercise');
-	for (let i = 0; i < workout.exercises.length; i++) {
-		const ex = workout.exercises[i];
-		if (!ex.liftId) errors.push(`Exercise ${i + 1}: select a lift`);
-		if (ex.sets.length === 0) errors.push(`Exercise ${i + 1}: add at least one set`);
-	}
 	const isValid = errors.length === 0;
+
+	const preview = (() => {
+		if (!showPreview || !week || !exposure) return { exercises: [], errors: [] };
+		const previewErrors = validateEditableWorkout({
+			...workout, cycle: { ...cycle, weeks: [{ ...week, exposures: [exposure] }] },
+		}, configs);
+		if (previewErrors.length) return { exercises: [], errors: previewErrors };
+		try {
+			return { exercises: previewExposure(exposure, configs, roundWarmupPlateMath), errors: [] };
+		} catch (error) {
+			return { exercises: [], errors: [error instanceof Error ? error.message : 'Check shared exercise weight settings'] };
+		}
+	})();
+
+	const updateWeeks = (update: (weeks: EditableWeek[]) => EditableWeek[]) => {
+		setCommentTarget(null);
+		setWorkout((previous) => {
+			const weeks = update(previous.cycle!.weeks);
+			return { ...previous, cycle: { ...previous.cycle!, weeks }, exercises: weeks[0]?.exposures[0]?.exercises ?? [] };
+		});
+	};
+	const updateExposures = (update: (exposures: EditableExposure[]) => EditableExposure[]) => {
+		updateWeeks((weeks) => weeks.map((item, index) => index === weekIndex ? { ...item, exposures: update(item.exposures) } : item));
+	};
+	const appendWeek = (newWeek?: EditableWeek) => {
+		setWeekIndex(cycle.weeks.length);
+		setExposureIndex(0);
+		updateWeeks((weeks) => [...weeks, newWeek ?? {
+			id: crypto.randomUUID(), name: `Week ${weeks.length + 1}`,
+			exposures: [{ id: crypto.randomUUID(), name: 'Session 1', exercises: [] }],
+		}]);
+	};
+	const appendExposure = (newExposure?: EditableExposure) => {
+		setExposureIndex(week.exposures.length);
+		updateExposures((items) => [...items, newExposure ?? {
+			id: crypto.randomUUID(), name: `Session ${items.length + 1}`, exercises: [],
+		}]);
+	};
+
+	const editExercises = useCallback((update: (items: EditableExercise[]) => EditableExercise[]) => {
+		setWorkout((previous) => updateExposureExercises(previous, weekIndex, exposureIndex, update));
+	}, [weekIndex, exposureIndex]);
+
+	const identityForLift = (liftId: string, remaining: EditableExercise[]) => {
+		const used = new Set(remaining.map((exercise) => exercise.id));
+		return cycle.weeks.flatMap((item) => item.exposures.flatMap((session) => session.exercises))
+			.find((exercise) => exercise.liftId === liftId && exercise.id && !used.has(exercise.id))?.id ?? crypto.randomUUID();
+	};
 
 	// --- Workout-level updates ---
 	const updateName = useCallback((name: string) => {
@@ -230,80 +466,58 @@ export function WorkoutEditor({
 	}, []);
 
 	// --- Exercise-level updates ---
-	const addExercise = useCallback(() => {
+	const addExercise = () => {
 		if (lifts.length === 0) return;
-		setWorkout((prev) => ({
-			...prev,
-			exercises: [
-				...prev.exercises,
-				{ liftId: lifts[0].id, role: 'assistance', sets: [defaultSet()] },
-			],
-		}));
-	}, [lifts]);
+		const id = identityForLift(lifts[0].id, exercises);
+		editExercises((items) => [...items, { id, liftId: lifts[0].id, role: 'assistance', sets: [defaultSet()] }]);
+	};
 
 	const removeExercise = useCallback((idx: number) => {
-		setWorkout((prev) => ({
-			...prev,
-			exercises: prev.exercises.filter((_, i) => i !== idx),
-		}));
-	}, []);
+		editExercises((items) => items.filter((_, i) => i !== idx));
+	}, [editExercises]);
 
 	const updateExercise = useCallback(
 		(idx: number, patch: Partial<EditableExercise>) => {
-			setWorkout((prev) => ({
-				...prev,
-				exercises: prev.exercises.map((ex, i) =>
+			editExercises((items) => items.map((ex, i) =>
 					i === idx ? { ...ex, ...patch } : ex,
-				),
-			}));
+			));
 		},
-		[],
+		[editExercises],
 	);
 
 	// --- Set-level updates ---
 	const addSet = useCallback((exerciseIdx: number) => {
-		setWorkout((prev) => ({
-			...prev,
-			exercises: prev.exercises.map((ex, i) => {
+		editExercises((items) => items.map((ex, i) => {
 				if (i !== exerciseIdx) return ex;
 				const last = ex.sets[ex.sets.length - 1];
 				return {
 					...ex,
-					sets: [...ex.sets, last ? { ...last } : defaultSet()],
+					sets: [...ex.sets, last ? structuredClone(last) : defaultSet()],
 				};
-			}),
-		}));
-	}, []);
+			}));
+	}, [editExercises]);
 
 	const removeSet = useCallback((exerciseIdx: number, setIdx: number) => {
-		setWorkout((prev) => ({
-			...prev,
-			exercises: prev.exercises.map((ex, i) => {
+		editExercises((items) => items.map((ex, i) => {
 				if (i !== exerciseIdx) return ex;
 				return {
 					...ex,
 					sets: ex.sets.filter((_, si) => si !== setIdx),
 				};
-			}),
-		}));
-	}, []);
+			}));
+	}, [editExercises]);
 
 	const reorderSet = useCallback((exerciseIdx: number, setIdx: number, direction: -1 | 1) => {
-		setWorkout((prev) => ({
-			...prev,
-			exercises: prev.exercises.map((ex, i) =>
+		editExercises((items) => items.map((ex, i) =>
 				i === exerciseIdx
 					? { ...ex, sets: moveSet(ex.sets, setIdx, setIdx + direction) }
 					: ex,
-			),
-		}));
-	}, []);
+			));
+	}, [editExercises]);
 
 	const updateSet = useCallback(
 		(exerciseIdx: number, setIdx: number, patch: Partial<SetTemplate>) => {
-			setWorkout((prev) => ({
-				...prev,
-				exercises: prev.exercises.map((ex, ei) => {
+			editExercises((items) => items.map((ex, ei) => {
 					if (ei !== exerciseIdx) return ex;
 					return {
 						...ex,
@@ -311,16 +525,18 @@ export function WorkoutEditor({
 							si === setIdx ? { ...s, ...patch } : s,
 						),
 					};
-				}),
-			}));
+				}));
 		},
-		[],
+		[editExercises],
 	);
 
 	const updateWeightBasis = useCallback(
 		(exerciseIdx: number, setIdx: number, kind: string, extraValue?: string) => {
 			let wb: WeightBasis;
 			switch (kind) {
+				case 'trainingMax':
+					wb = { kind: 'trainingMax' };
+					break;
 				case 'backoff':
 					wb = { kind: 'backoff' };
 					break;
@@ -334,13 +550,13 @@ export function WorkoutEditor({
 					break;
 				}
 				case 'fixed':
-					wb = { kind: 'fixed', weight: Number(extraValue) || 0 };
+					wb = { kind: 'fixed', weight: extraValue === undefined ? 0 : extraValue.trim() ? Number(extraValue) : NaN };
 					break;
 				case 'relative:topSet':
-					wb = { kind: 'relative', reference: 'topSet', offset: Number(extraValue) || 0 };
+					wb = { kind: 'relative', reference: 'topSet', offset: extraValue === undefined ? 0 : Number(extraValue) };
 					break;
 				case 'relative:backoff':
-					wb = { kind: 'relative', reference: 'backoff', offset: Number(extraValue) || 0 };
+					wb = { kind: 'relative', reference: 'backoff', offset: extraValue === undefined ? 0 : Number(extraValue) };
 					break;
 				default:
 					wb = { kind: 'topSet' };
@@ -418,16 +634,152 @@ export function WorkoutEditor({
 						/>
 					</label>
 				)}
+				<label className="editor-field">
+					<span className="editor-field-label">Progression baseline</span>
+					<select className="editor-select" value={cycle.baseline} onChange={(event) =>
+						setWorkout((previous) => ({ ...previous, cycle: { ...previous.cycle!, baseline: event.target.value as CycleBaseline } }))
+					}>
+						<option value="topSet">Top set / backoff</option>
+						<option value="trainingMax">Training Max (TM)</option>
+					</select>
+				</label>
+				<p className="cycle-editor-hint">
+					Each workout is a named cycle. Exercises progress independently when you confirm completed work.
+					{cycle.baseline === 'trainingMax'
+						? ' TM increases are reviewed only after each exercise finishes its final session, including deload weeks, using its separate TM increment.'
+						: ' Top-set and backoff increases use performance and the normal increment, reviewed at each exercise’s iteration boundary.'}
+					{' '}The baseline does not change individual set weight bases.
+				</p>
+				<p className="cycle-editor-hint">
+					Edits to templates and shared exercise inputs apply when each exercise begins its next iteration.
+					Pending prescriptions and unfinished sessions stay frozen. Copying creates independent prescriptions, not live links.
+				</p>
 			</section>
+
+			<section className="editor-section cycle-stage-editor" aria-label="Cycle weeks and sessions">
+				<h2>Weeks and sessions</h2>
+				<label className="editor-field">
+					<span className="editor-field-label">Week to edit or preview</span>
+					<select className="editor-select" value={week?.id ?? ''} onChange={(event) => {
+						setWeekIndex(cycle.weeks.findIndex((item) => item.id === event.target.value));
+						setExposureIndex(0);
+						setCommentTarget(null);
+					}}>
+						{!week && <option value="">Add a week below</option>}
+						{cycle.weeks.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.name || 'Unnamed week'}</option>)}
+					</select>
+				</label>
+				{week && <>
+					<label className="editor-field">
+						<span className="editor-field-label">Week name</span>
+						<input className="editor-text-input" value={week.name} onChange={(event) => updateWeeks((items) =>
+							items.map((item, index) => index === weekIndex ? { ...item, name: event.target.value } : item)
+						)} />
+					</label>
+					<div className="cycle-stage-actions">
+						<button type="button" disabled={weekIndex === 0} onClick={() => {
+							updateWeeks((items) => moveItem(items, weekIndex, weekIndex - 1));
+							setWeekIndex(weekIndex - 1);
+						}}><ArrowUp size={16} /> Move week up</button>
+						<button type="button" disabled={weekIndex === cycle.weeks.length - 1} onClick={() => {
+							updateWeeks((items) => moveItem(items, weekIndex, weekIndex + 1));
+							setWeekIndex(weekIndex + 1);
+						}}><ArrowDown size={16} /> Move week down</button>
+						<button type="button" onClick={() => appendWeek(copyWeek(week))}><Copy size={16} /> Duplicate week</button>
+						<button type="button" onClick={() => {
+							updateWeeks((items) => items.filter((_, index) => index !== weekIndex));
+							setWeekIndex(Math.max(0, weekIndex - 1));
+							setExposureIndex(0);
+						}}><Trash2 size={16} /> Delete week</button>
+					</div>
+				</>}
+				<button type="button" className="btn-add-exercise" onClick={() => appendWeek()}><Plus size={18} /> Add week</button>
+				<label className="editor-field">
+					<span className="editor-field-label">Copy week from</span>
+					<select className="editor-select" value="" onChange={(event) => {
+						if (event.target.value !== '') appendWeek(copyWeek(weekSources[Number(event.target.value)].week, workout));
+					}}>
+						<option value="">Choose a week to copy…</option>
+						{weekSources.map((source, index) => <option key={index} value={index}>{source.label}</option>)}
+					</select>
+				</label>
+				{week && <div className="cycle-exposure-editor">
+					<label className="editor-field">
+						<span className="editor-field-label">Within-week session to edit or preview</span>
+						<select className="editor-select" value={exposure?.id ?? ''} onChange={(event) => {
+							setExposureIndex(week.exposures.findIndex((item) => item.id === event.target.value));
+							setCommentTarget(null);
+						}}>
+							{!exposure && <option value="">Add a session below</option>}
+							{week.exposures.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.name || 'Unnamed session'}</option>)}
+						</select>
+					</label>
+					{exposure && <>
+						<label className="editor-field">
+							<span className="editor-field-label">Session name</span>
+							<input className="editor-text-input" value={exposure.name} onChange={(event) => updateExposures((items) =>
+								items.map((item, index) => index === exposureIndex ? { ...item, name: event.target.value } : item)
+							)} />
+						</label>
+						<div className="cycle-stage-actions">
+							<button type="button" disabled={exposureIndex === 0} onClick={() => {
+								updateExposures((items) => moveItem(items, exposureIndex, exposureIndex - 1));
+								setExposureIndex(exposureIndex - 1);
+							}}><ArrowUp size={16} /> Move session up</button>
+							<button type="button" disabled={exposureIndex === week.exposures.length - 1} onClick={() => {
+								updateExposures((items) => moveItem(items, exposureIndex, exposureIndex + 1));
+								setExposureIndex(exposureIndex + 1);
+							}}><ArrowDown size={16} /> Move session down</button>
+							<button type="button" onClick={() => appendExposure(copyExposure(exposure))}><Copy size={16} /> Duplicate session</button>
+							<button type="button" onClick={() => {
+								updateExposures((items) => items.filter((_, index) => index !== exposureIndex));
+								setExposureIndex(Math.max(0, exposureIndex - 1));
+							}}><Trash2 size={16} /> Delete session</button>
+						</div>
+					</>}
+					<button type="button" className="btn-add-exercise" onClick={() => appendExposure()}><Plus size={18} /> Add session</button>
+					<label className="editor-field">
+						<span className="editor-field-label">Copy session from</span>
+						<select className="editor-select" value="" onChange={(event) => {
+							if (event.target.value !== '') appendExposure(copyExposure(exposureSources[Number(event.target.value)].exposure, workout));
+						}}>
+							<option value="">Choose a session to copy…</option>
+							{exposureSources.map((source, index) => <option key={index} value={index}>{source.label}</option>)}
+						</select>
+					</label>
+				</div>}
+				<p className="cycle-editor-hint">Weeks are programming order, not calendar deadlines. Each exercise visits its sessions in order; individual sets are not progression steps.</p>
+			</section>
+
+			{exposure && <section className="editor-section cycle-preview">
+				<h2>Week {weekIndex + 1} of {cycle.weeks.length}: {week.name} · Session {exposureIndex + 1}: {exposure.name}</h2>
+				<button type="button" className="btn-add-exercise" aria-expanded={showPreview} onClick={() => setShowPreview(!showPreview)}>
+					<Eye size={18} /> {showPreview ? 'Hide preview' : 'Preview session'}
+				</button>
+				{showPreview && <>
+					<p className="cycle-editor-hint">Preview uses current shared inputs and rounding/minimum settings. It never starts or advances an exercise. Pending snapshots may differ.</p>
+					{preview.errors.length > 0 && <div role="alert">{preview.errors.map((error, index) => <p className="editor-error" key={index}>{error}</p>)}</div>}
+					{preview.exercises.map((exercise, index) => <div key={index}>
+						<h3>{exercise.name}</h3>
+						<ol className="cycle-preview-sets">{exercise.sets.map((set, index) => <li key={index}>
+							<span>{setTypeLabel(set.setType)} · {set.amrap ? `${set.minReps}+ (AMRAP)` : set.minReps === set.maxReps ? set.minReps : `${set.minReps}–${set.maxReps}`} reps</span>
+							<span>{set.basisLabel}</span>
+							<strong>{set.weight} lbs</strong>
+						</li>)}</ol>
+					</div>)}
+				</>}
+			</section>}
 
 			{/* Exercises */}
 			<>
-				{workout.exercises.map((exercise, exerciseIdx) => (
-						<section key={exerciseIdx} className="editor-exercise">
+				{exercises.map((exercise, exerciseIdx) => (
+						<section key={`${exposure?.id}:${exercise.id ?? exerciseIdx}`} className="editor-exercise">
 							<div className="editor-exercise-header">
 								<span className="editor-exercise-number">
 									Exercise {exerciseIdx + 1}
 								</span>
+								<button type="button" className="btn-move-set" aria-label={`Move exercise ${exerciseIdx + 1} up`} disabled={exerciseIdx === 0} onClick={() => editExercises((items) => moveItem(items, exerciseIdx, exerciseIdx - 1))}><ArrowUp size={16} /></button>
+								<button type="button" className="btn-move-set" aria-label={`Move exercise ${exerciseIdx + 1} down`} disabled={exerciseIdx === exercises.length - 1} onClick={() => editExercises((items) => moveItem(items, exerciseIdx, exerciseIdx + 1))}><ArrowDown size={16} /></button>
 								<button
 									type="button"
 									className="btn-remove-exercise"
@@ -444,7 +796,10 @@ export function WorkoutEditor({
 										className="editor-select"
 										value={exercise.liftId}
 										onChange={(e) =>
-											updateExercise(exerciseIdx, { liftId: e.target.value })
+											updateExercise(exerciseIdx, {
+												liftId: e.target.value,
+												id: identityForLift(e.target.value, exercises.filter((_, index) => index !== exerciseIdx)),
+											})
 										}
 									>
 										{!exercise.liftId && <option value="">Select…</option>}
@@ -492,6 +847,7 @@ export function WorkoutEditor({
 									<div key={setIdx} className="editor-set-row">
 										<select
 											className={`editor-set-type set-type-select set-type-${set.setType}`}
+											aria-label={`Type for set ${setIdx + 1}`}
 											value={set.setType}
 											onChange={(e) =>
 												updateSet(exerciseIdx, setIdx, {
@@ -505,11 +861,14 @@ export function WorkoutEditor({
 												</option>
 											))}
 										</select>
-										<input
+										<label className="editor-number-field">
+											<span className="editor-mobile-label">Percent</span>
+											<input
 											type="text"
 											inputMode="decimal"
 											className="editor-pct-input"
-											value={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative' ? '' : Math.round(set.percentage * 100)}
+											aria-label={`Percentage for set ${setIdx + 1}`}
+											value={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative' ? '' : Number((set.percentage * 100).toFixed(4))}
 											placeholder={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative' ? '—' : ''}
 											disabled={set.weightBasis.kind === 'barWeight' || set.weightBasis.kind === 'fixed' || set.weightBasis.kind === 'relative'}
 											onFocus={(e) => e.target.select()}
@@ -518,17 +877,19 @@ export function WorkoutEditor({
 													percentage: (Number(e.target.value) || 0) / 100,
 												})
 											}
-										/>
+											/>
+										</label>
 										<div className="editor-basis-group">
 											<select
 												className="editor-basis-select"
+												aria-label={`Weight basis for set ${setIdx + 1}`}
 												value={set.weightBasis.kind === 'relative' ? `relative:${set.weightBasis.reference}` : set.weightBasis.kind}
 												onChange={(e) => {
 													const wb = set.weightBasis;
 													const prevValue =
-														wb.kind === 'crossReference' ? wb.liftId
-														: wb.kind === 'fixed' ? String(wb.weight)
-														: wb.kind === 'relative' ? String(wb.offset)
+															wb.kind === 'crossReference' && e.target.value === 'crossReference' ? wb.liftId
+															: wb.kind === 'fixed' && e.target.value === 'fixed' ? String(wb.weight)
+															: wb.kind === 'relative' && e.target.value.startsWith('relative:') ? String(wb.offset)
 														: undefined;
 													updateWeightBasis(
 														exerciseIdx,
@@ -539,6 +900,7 @@ export function WorkoutEditor({
 												}}
 											>
 												<option value="topSet">Top set</option>
+												<option value="trainingMax">Training Max (TM)</option>
 												<option value="backoff">Backoff</option>
 												<option value="barWeight">Bar weight</option>
 												<option value="crossReference">Cross-ref</option>
@@ -571,7 +933,7 @@ export function WorkoutEditor({
 													type="text"
 													inputMode="decimal"
 													className="editor-basis-extra-input"
-													value={set.weightBasis.weight}
+													value={Number.isFinite(set.weightBasis.weight) ? set.weightBasis.weight : ''}
 													placeholder="lbs"
 													onFocus={(e) => e.target.select()}
 													onChange={(e) =>
@@ -601,10 +963,13 @@ export function WorkoutEditor({
 												);
 											})()}
 										</div>
-										<input
+										<label className="editor-number-field">
+											<span className="editor-mobile-label">Min reps</span>
+											<input
 											type="text"
 											inputMode="numeric"
 											className="editor-rep-input"
+											aria-label={`Minimum reps for set ${setIdx + 1}`}
 											value={set.minReps}
 											onFocus={(e) => e.target.select()}
 											onChange={(e) =>
@@ -612,11 +977,15 @@ export function WorkoutEditor({
 													minReps: Number(e.target.value) || 0,
 												})
 											}
-										/>
-										<input
+											/>
+										</label>
+										<label className="editor-number-field">
+											<span className="editor-mobile-label">Max reps</span>
+											<input
 											type="text"
 											inputMode="numeric"
 											className="editor-rep-input"
+											aria-label={`Maximum reps for set ${setIdx + 1}`}
 											value={set.maxReps}
 											onFocus={(e) => e.target.select()}
 											onChange={(e) =>
@@ -624,10 +993,12 @@ export function WorkoutEditor({
 													maxReps: Number(e.target.value) || 0,
 												})
 											}
-										/>
+											/>
+										</label>
 										<label className="editor-amrap-check">
 											<input
 												type="checkbox"
+												aria-label={`AMRAP for set ${setIdx + 1}`}
 												checked={set.amrap}
 												onChange={(e) =>
 													updateSet(exerciseIdx, setIdx, {
@@ -688,6 +1059,7 @@ export function WorkoutEditor({
 					<button
 						type="button"
 						className="btn-add-exercise"
+						disabled={!exposure || lifts.length === 0}
 						onClick={addExercise}
 					>
 						<Plus size={20} /> Add Exercise
@@ -741,7 +1113,7 @@ export function WorkoutEditor({
 			{/* Comment editing overlay */}
 			{commentTarget && (() => {
 				const { exerciseIdx, setIdx } = commentTarget;
-				const currentComment = workout.exercises[exerciseIdx]?.sets[setIdx]?.comment ?? '';
+				const currentComment = exercises[exerciseIdx]?.sets[setIdx]?.comment ?? '';
 				return (
 					<div className="comment-overlay" onClick={() => setCommentTarget(null)}>
 						<div className="comment-overlay-content" onClick={(e) => e.stopPropagation()}>

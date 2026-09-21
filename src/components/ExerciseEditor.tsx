@@ -5,6 +5,22 @@ import { nameToId, DEFAULT_STRENGTH_CONFIG } from './ExerciseLibrary.js';
 
 const GEAR_OPTIONS: GearType[] = ['barbell', 'dumbbell', 'band', 'bodyweight', 'other'];
 
+export function parseTrainingMaxFields(trainingMax: string, trainingMaxIncrement: string) {
+	const fields: Pick<LiftConfig, 'trainingMax' | 'trainingMaxIncrement'> = {};
+	const errors: string[] = [];
+	if (trainingMax.trim()) {
+		const value = Number(trainingMax);
+		if (!Number.isFinite(value) || value <= 0) errors.push('Training Max (TM) must be a finite weight greater than zero, or left blank.');
+		else fields.trainingMax = value;
+	}
+	if (trainingMaxIncrement.trim()) {
+		const value = Number(trainingMaxIncrement);
+		if (!Number.isFinite(value) || value < 0) errors.push('TM increment must be a finite, nonnegative weight, or left blank. Enter 0 for no increase.');
+		else fields.trainingMaxIncrement = value;
+	}
+	return { fields, errors };
+}
+
 interface ExerciseEditorProps {
 	existing?: LiftConfig;
 	allConfigs: LiftConfig[];
@@ -19,6 +35,8 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 	const [topSetWeight, setTopSetWeight] = useState(existing?.topSetWeight ?? DEFAULT_STRENGTH_CONFIG.topSetWeight);
 	const [backoffWeight, setBackoffWeight] = useState(existing?.backoffWeight ?? DEFAULT_STRENGTH_CONFIG.backoffWeight);
 	const [increment, setIncrement] = useState(existing?.increment ?? DEFAULT_STRENGTH_CONFIG.increment);
+	const [trainingMax, setTrainingMax] = useState(existing?.trainingMax === undefined ? '' : String(existing.trainingMax));
+	const [trainingMaxIncrement, setTrainingMaxIncrement] = useState(existing?.trainingMaxIncrement === undefined ? '' : String(existing.trainingMaxIncrement));
 	const [minimumWeight, setMinimumWeight] = useState(existing?.minimumWeight ?? DEFAULT_STRENGTH_CONFIG.minimumWeight);
 	const [roundingFactor, setRoundingFactor] = useState(existing?.roundingFactor ?? DEFAULT_STRENGTH_CONFIG.roundingFactor);
 	const [warmupRoundingFactor, setWarmupRoundingFactor] = useState(existing?.warmupRoundingFactor ?? DEFAULT_STRENGTH_CONFIG.warmupRoundingFactor);
@@ -34,7 +52,8 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 		return allConfigs.some((c) => c.id === autoId);
 	}, [isNew, allConfigs, autoId]);
 
-	const isValid = name.trim().length > 0 && !nameConflict;
+	const trainingMaxFields = useMemo(() => parseTrainingMaxFields(trainingMax, trainingMaxIncrement), [trainingMax, trainingMaxIncrement]);
+	const isValid = name.trim().length > 0 && !nameConflict && trainingMaxFields.errors.length === 0;
 
 	const handleSave = useCallback(() => {
 		if (!isValid || saving) return;
@@ -46,6 +65,7 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 			topSetWeight,
 			backoffWeight,
 			increment,
+			...trainingMaxFields.fields,
 			minimumWeight,
 			roundingFactor,
 			warmupRoundingFactor,
@@ -53,7 +73,7 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 			gear,
 		};
 		onSave(config);
-	}, [isValid, saving, effectiveId, name, topSetWeight, backoffWeight, increment, minimumWeight, roundingFactor, warmupRoundingFactor, barWeight, gear, onSave]);
+	}, [isValid, saving, effectiveId, name, topSetWeight, backoffWeight, increment, trainingMaxFields, minimumWeight, roundingFactor, warmupRoundingFactor, barWeight, gear, onSave]);
 
 	return (
 		<div className="exercise-editor">
@@ -130,6 +150,44 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 						onChange={(e) => setIncrement(Number(e.target.value) || 0)}
 					/>
 				</label>
+
+				<label className="editor-field">
+					<span className="editor-label">Training Max (TM, lbs) — optional</span>
+					<input
+						className="editor-input"
+						type="text"
+						inputMode="decimal"
+						value={trainingMax}
+						placeholder="Not configured"
+						aria-describedby="training-max-help training-max-errors"
+						onFocus={(e) => e.target.select()}
+						onChange={(e) => setTrainingMax(e.target.value)}
+					/>
+				</label>
+				<label className="editor-field">
+					<span className="editor-label">TM Increment (lbs) — optional</span>
+					<input
+						className="editor-input"
+						type="text"
+						inputMode="decimal"
+						value={trainingMaxIncrement}
+						placeholder="Not configured"
+						aria-describedby="training-max-help training-max-errors"
+						onFocus={(e) => e.target.select()}
+						onChange={(e) => setTrainingMaxIncrement(e.target.value)}
+					/>
+				</label>
+				<p id="training-max-help" className="cycle-editor-hint">
+					Enter TM directly; it is separate from top-set weight and estimated max.
+					TM-based progression also requires its own increment (0 means no increase), not the normal increment above.
+					Leave both blank for exercises that do not use TM.
+				</p>
+				<div id="training-max-errors" role="alert">
+					{trainingMaxFields.errors.map((error) => <p className="editor-error" key={error}>{error}</p>)}
+				</div>
+				<p className="cycle-editor-hint">
+					Shared input changes apply when each exercise begins its next iteration. Pending prescriptions and unfinished sessions stay frozen.
+				</p>
 
 				<label className="editor-field">
 					<span className="editor-label">Minimum Weight (lbs)</span>

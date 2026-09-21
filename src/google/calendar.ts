@@ -58,6 +58,31 @@ export function extractStrongerId(description: string | undefined): string | und
 	return id || undefined
 }
 
+type CycleEventMetadata = Pick<WorkoutScheduleEntry, 'cycleId' | 'occurrenceId'>
+
+/** Encoded tags survive Google date moves and recovery even when the local schedule is missing. */
+export function embedCycleMetadata(description: string, metadata: CycleEventMetadata): string {
+	let result = description.replace(/\n?\[stronger-(?:cycle|occurrence):[^\]\r\n]*\]/g, '')
+	if (metadata.cycleId) result += `\n[stronger-cycle:${encodeURIComponent(metadata.cycleId)}]`
+	if (metadata.occurrenceId) result += `\n[stronger-occurrence:${encodeURIComponent(metadata.occurrenceId)}]`
+	return result
+}
+
+export function extractCycleMetadata(description: string | undefined): CycleEventMetadata {
+	const metadata: CycleEventMetadata = {}
+	for (const [tag, key] of [['cycle', 'cycleId'], ['occurrence', 'occurrenceId']] as const) {
+		const match = description?.match(new RegExp(`\\[stronger-${tag}:([^\\]\\r\\n]+)\\]`))
+		if (!match) continue
+		try {
+			const value = decodeURIComponent(match[1])
+			if (value.trim()) metadata[key] = value
+		} catch {
+			// An edited or malformed tag must not prevent legacy event recovery.
+		}
+	}
+	return metadata
+}
+
 /** Extract a workout ID from a Stronger deep link in an event description. */
 export function extractWorkoutId(description: string | undefined): string | undefined {
 	if (!description) return undefined
@@ -226,10 +251,10 @@ export function buildDeepLink(
  * Build an event description that includes the deep link (for strength
  * workouts) and the Stronger ID tag for two-way sync tracking.
  */
-function buildEventDescription(workoutId: string, workoutName: string, strongerId: string): string {
+function buildEventDescription(workoutId: string, workoutName: string, strongerId: string, metadata: CycleEventMetadata = {}): string {
 	const deepLink = hasNoDeepLink(workoutId) ? null : buildDeepLink(workoutId)
 	const base = deepLink ? `Open workout: ${deepLink}` : workoutName
-	return embedStrongerId(base, strongerId)
+	return embedCycleMetadata(embedStrongerId(base, strongerId), metadata)
 }
 
 /**
@@ -626,6 +651,14 @@ export async function syncScheduleWithCalendar(
 
 		if (calEvent && calEvent.id) {
 			accountedEventIds.add(calEvent.id)
+			const remoteMetadata = extractCycleMetadata(calEvent.description)
+			const cycleId = entry.cycleId ?? remoteMetadata.cycleId
+			const occurrenceId = entry.occurrenceId ?? remoteMetadata.occurrenceId
+			const metadata: CycleEventMetadata = {
+				...(cycleId ? { cycleId } : {}),
+				...(occurrenceId ? { occurrenceId } : {}),
+			}
+			const reconciledEntry = { ...entry, ...metadata }
 
 			// A custom label always wins over the workout/activity name as the title.
 			const name = resolveWorkoutName(entry.workoutId)
@@ -635,16 +668,21 @@ export async function syncScheduleWithCalendar(
 			const calDate = getEventDate(calEvent)
 			const dateMoved = !!calDate && calDate !== entry.date
 			const titleStale = !!desiredTitle && calEvent.summary !== desiredTitle
+			const metadataStale = metadata.cycleId !== remoteMetadata.cycleId
+				|| metadata.occurrenceId !== remoteMetadata.occurrenceId
+			const description = metadataStale
+				? embedCycleMetadata(calEvent.description ?? '', metadata)
+				: calEvent.description
 
-			if (titleStale) {
+			if (titleStale || metadataStale) {
 				const eventDate = calDate ?? entry.date
 				try {
 					await gapi.client.calendar.events.update({
 						calendarId,
 						eventId: calEvent.id,
 						resource: {
-							summary: desiredTitle,
-							description: calEvent.description,
+							summary: desiredTitle ?? entry.workoutId,
+							description,
 							start: { date: eventDate },
 							end: { date: eventDate },
 						},
@@ -659,7 +697,7 @@ export async function syncScheduleWithCalendar(
 			if (dateMoved) {
 				// Date was moved in Google Calendar → update the schedule entry
 				updatedSyncable.push({
-					...entry,
+					...reconciledEntry,
 					date: calDate,
 					calendarEventId: calEvent.id,
 				})
@@ -667,11 +705,11 @@ export async function syncScheduleWithCalendar(
 			} else {
 				// Ensure calendarEventId is up to date
 				updatedSyncable.push({
-					...entry,
+					...reconciledEntry,
 					calendarEventId: calEvent.id,
 				})
 			}
-			if (titleStale) result.updated++
+			if (titleStale || metadataStale) result.updated++
 		} else if (entry.calendarEventId) {
 			if (options.allowRemoteDeletions) {
 				// A verified calendar no longer has this linked event.
@@ -690,7 +728,7 @@ export async function syncScheduleWithCalendar(
 			}
 
 			const title = entry.label?.trim() || name
-			const description = buildEventDescription(entry.workoutId, name, sid)
+			const description = buildEventDescription(entry.workoutId, name, sid, entry)
 			const event: CalendarEventResource = {
 				summary: title,
 				description,
@@ -725,6 +763,7 @@ export async function syncScheduleWithCalendar(
 			if (!calEvent.id || accountedEventIds.has(calEvent.id)) continue
 
 			const sid = extractStrongerId(calEvent.description)
+			const metadata = extractCycleMetadata(calEvent.description)
 
 			const calDate = getEventDate(calEvent)
 			const summary = calEvent.summary
@@ -746,7 +785,11 @@ export async function syncScheduleWithCalendar(
 
 			// Check if we already have this workout on this date (dedup)
 			const isDupe = updatedSyncable.some(
-				(e) => e.date === calDate && e.workoutId === workoutId,
+				(e) => (sid && e.strongerId === sid) || (
+					e.workoutId === workoutId && (metadata.occurrenceId
+						? e.occurrenceId === metadata.occurrenceId
+						: e.date === calDate)
+				),
 			)
 			if (isDupe) continue
 
@@ -757,6 +800,7 @@ export async function syncScheduleWithCalendar(
 				workoutId,
 				calendarEventId: calEvent.id,
 				strongerId: newSid,
+				...metadata,
 			}
 			const canonicalName = resolveWorkoutName(workoutId)
 			if (canonicalName && canonicalName !== summary) {
@@ -795,7 +839,7 @@ export async function syncScheduleWithCalendar(
 
 	// --- Phase 4: Dedup the syncable entries ---
 	// If the same strongerId appears multiple times, keep the first.
-	// Entries without a strongerId are only deduped by date+workoutId.
+	// Also dedup by occurrence identity, or date+workoutId for legacy entries.
 	const seenStrongerIds = new Set<string>()
 	const seenDateWorkoutKeys = new Set<string>()
 	const dedupedSyncable: WorkoutScheduleEntry[] = []
@@ -804,8 +848,10 @@ export async function syncScheduleWithCalendar(
 			if (seenStrongerIds.has(entry.strongerId)) continue
 			seenStrongerIds.add(entry.strongerId)
 		}
-		// Also dedup by date + workoutId (same workout on same date = keep first)
-		const dateWorkoutKey = `${entry.date}|${entry.workoutId}`
+		// Separate occurrences of the same named cycle may share a date.
+		const dateWorkoutKey = JSON.stringify(entry.occurrenceId
+			? ['occurrence', entry.workoutId, entry.occurrenceId]
+			: ['legacy', entry.date, entry.workoutId])
 		if (seenDateWorkoutKeys.has(dateWorkoutKey)) continue
 		seenDateWorkoutKeys.add(dateWorkoutKey)
 		dedupedSyncable.push(entry)

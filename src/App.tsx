@@ -1,6 +1,12 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
-import { computeProgression, REST_ID } from './model/index.js';
+import { REST_ID } from './model/index.js';
+import type { CycleProgress, CycleSessionSnapshot } from './model/types.js';
+import { createCycleSession, finishCycle, previewCycles } from './model/cycles.js';
+import type { BaselineUpdate, CycleFinish } from './model/cycles.js';
+import { createScheduleOpportunity } from './model/schedule.js';
+import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, finishCycleSession } from './firebase/index.js';
+import type { StoredCycleDraft } from './firebase/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './model/index.js';
 import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries } from './firebase/index.js';
 import type { DateWindow, FirestoreReadSource, YearBucketReadScope } from './firebase/index.js';
@@ -63,6 +69,14 @@ function AppContent() {
   const mockMode = isMockMode();
   const mockData = useMemo(() => mockMode ? createMockAppData() : null, [mockMode]);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
+  const [cycleProgress, setCycleProgress] = useState<CycleProgress[]>([]);
+  const cycleProgressRef = useRef<CycleProgress[]>([]);
+  const cycleDraftsRef = useRef<StoredCycleDraft[]>([]);
+  const [activeSnapshot, setActiveSnapshot] = useState<CycleSessionSnapshot | null>(null);
+  const [cycleFinish, setCycleFinish] = useState<CycleFinish | null>(null);
+  const [finishSaving, setFinishSaving] = useState(false);
+  const finishSavingRef = useRef(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const [previousSets, setPreviousSets] = useState<PreviousSetData[][] | null>(null);
   const [sessionReady, setSessionReady] = useState(mockMode);
   const [workouts, setWorkouts] = useState<Workout[]>(() => mockData?.workouts ?? []);
@@ -112,6 +126,7 @@ function AppContent() {
     workout: Workout;
     results: SetResult[][];
     endTime: string;
+    baselineConfigs: LiftConfig[];
   } | null>(null);
   const [appSettings, setAppSettings] = useState<AppSettings>(
     () => mockData?.appSettings ?? DEFAULT_APP_SETTINGS,
@@ -159,6 +174,15 @@ function AppContent() {
     const handleOnline = () => setOnlineGeneration((generation) => generation + 1);
     window.addEventListener('online', handleOnline);
     return () => window.removeEventListener('online', handleOnline);
+  }, []);
+
+  useEffect(() => {
+    const handleMutationError = (event: Event) => {
+      const { uid, message } = (event as CustomEvent<{ uid: string; message: string }>).detail;
+      if (uid === connectedUserRef.current) setDataLoadError(message);
+    };
+    window.addEventListener('stronger:mutation-error', handleMutationError);
+    return () => window.removeEventListener('stronger:mutation-error', handleMutationError);
   }, []);
 
   const queueSessionMutation = useCallback((key: string, mutation: () => Promise<void>): Promise<void> => {
@@ -209,6 +233,10 @@ function AppContent() {
       calendarWindowLoadRef.current = Promise.resolve();
       calendarMutationRef.current = Promise.resolve();
       setSettingsLoaded(false);
+      cycleProgressRef.current = [];
+      cycleDraftsRef.current = [];
+      setCycleProgress([]);
+      setActiveSnapshot(null);
     },
     [],
   );
@@ -262,6 +290,10 @@ function AppContent() {
     connectionGenerationRef.current += 1;
     clearDraft();
     setSessionReady(false);
+    cycleProgressRef.current = [];
+    cycleDraftsRef.current = [];
+    setCycleProgress([]);
+    setActiveSnapshot(null);
     setActiveWorkout(null);
     setPreviousSets(null);
     setWorkouts([]);
@@ -306,14 +338,14 @@ function AppContent() {
   }, [handleDisconnected, firebaseUid]);
 
   const loadPreviousSets = useCallback(
-    async (userId: string, workoutId: string) => {
+    async (userId: string, workoutId: string, snapshot?: CycleSessionSnapshot) => {
       try {
         if (connectedUserRef.current !== userId) return;
         // If log data is already loaded, use it directly
         const loadedScopes = logScopesLoadedRef.current;
         if (loadedScopes.has('all')
           || (loadedScopes.has('currentYear') && loadedScopes.has('otherYears'))) {
-          const prev = findPreviousWorkoutSets(logRows, workoutId);
+          const prev = findPreviousWorkoutSets(logRows, workoutId, snapshot);
           if (connectedUserRef.current !== userId) return;
           setPreviousSets(prev);
           return;
@@ -323,7 +355,7 @@ function AppContent() {
         if (connectedUserRef.current !== userId) return;
         setLogRows(rows);
         logScopesLoadedRef.current.add('all');
-        const prev = findPreviousWorkoutSets(rows, workoutId);
+        const prev = findPreviousWorkoutSets(rows, workoutId, snapshot);
         setPreviousSets(prev);
       } catch {
         // Silently ignore — previous data is optional context
@@ -332,100 +364,130 @@ function AppContent() {
     [logRows],
   );
 
-  const handleSelectWorkout = useCallback((workout: Workout) => {
-    // Check for an existing in-progress draft for this workout
-    const draft = loadDraft();
-    if (draft && draft.workoutId === workout.id) {
-      // Resume the previous session
-      setStartTime(draft.startTime);
-      setDraftResults(draft.results.length > 0 ? draft.results : null);
-    } else {
-      // Start a fresh session
-      const now = new Date().toISOString();
+  const handleSelectWorkout = useCallback((workout: Workout, occurrenceId?: string) => {
+    try {
+      const uid = firebaseUid ?? 'mock';
+      const definition = definitions.find((item) => item.id === workout.id);
+      if (!definition) throw new Error('This cycle definition is missing.');
+      const previous = cycleProgressRef.current.find((item) => item.workoutId === workout.id);
+      let local = loadDraft(uid, workout.id);
+      if (local?.snapshot?.id === previous?.lastSessionId) {
+        clearDraft(uid, workout.id);
+        local = null;
+      }
+      const remote = cycleDraftsRef.current.find((item) => item.workout.id === workout.id);
+      const restored = local?.snapshot ?? remote;
+      if (restored && previous && (restored.progress.revision !== previous.revision || restored.progress.revisionId !== previous.revisionId)) {
+        throw new Error('This unfinished cycle changed on another device. Your draft is preserved. Reload to review synchronized progress; do not repeat confirmation on another device.');
+      }
+      const snapshot = restored ?? createCycleSession(definition, configs, previous, {
+        roundWarmupPlateMath: roundWarmupPlateMathRef.current, occurrenceId,
+      });
+      const now = local?.startTime || remote?.startTime || new Date().toISOString();
+      const results = local?.results ?? remote?.results ?? [];
+      if (!restored) {
+        const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workout.id), snapshot.progress];
+        cycleProgressRef.current = updated;
+        setCycleProgress(updated);
+        cycleDraftsRef.current = [...cycleDraftsRef.current.filter((item) => item.workout.id !== workout.id), { ...snapshot, startTime: now }];
+        saveDraft({ workoutId: workout.id, startTime: now, results, snapshot }, uid);
+        if (firebaseUid) void queueSessionMutation(`cycle:${workout.id}`, () => writeCycleStart(firebaseUid, { ...snapshot, startTime: now })).catch((error) => setDataLoadError(String(error)));
+      }
       setStartTime(now);
-      setDraftResults(null);
-      // Persist the draft so a refresh can restore the active workout
-      saveDraft({ workoutId: workout.id, startTime: now, results: [] });
+      setDraftResults(results.length ? results : null);
+      setActiveSnapshot(snapshot);
+      setActiveWorkout(local?.executionWorkout ?? remote?.executionWorkout ?? snapshot.workout);
+      setPreviousSets(null);
+      setFinishError(null);
+      navigateTo({ view: 'workout', workoutId: workout.id });
+      if (firebaseUid) void loadPreviousSets(firebaseUid, workout.id, snapshot);
+    } catch (error) {
+      setDataLoadError(error instanceof Error ? error.message : String(error));
     }
-    setActiveWorkout(workout);
-    setPreviousSets(null);
-    navigateTo({ view: 'workout', workoutId: workout.id });
-    // Fire-and-forget: load previous workout data for context
+  }, [firebaseUid, loadPreviousSets, navigateTo, definitions, configs, queueSessionMutation]);
+
+  const handleDraftChange = useCallback((workout: Workout, results: SetResult[][]) => {
+    if (!activeSnapshot || !startTime) return;
+    saveDraft({ workoutId: workout.id, startTime, results, snapshot: activeSnapshot, executionWorkout: workout }, firebaseUid ?? 'mock');
     if (firebaseUid) {
-      void loadPreviousSets(firebaseUid, workout.id);
+      void queueSessionMutation(`cycle:${workout.id}`, () => writeCycleDraftResults(firebaseUid, activeSnapshot, results, startTime, workout));
     }
-  }, [firebaseUid, loadPreviousSets, navigateTo]);
+  }, [activeSnapshot, startTime, firebaseUid, queueSessionMutation]);
 
   const handleFinish = useCallback(
     (workout: Workout, results: SetResult[][]) => {
       const endTime = new Date().toISOString();
 
       // Store pending finish data — workout will be saved when user confirms
-      setPendingFinish({ workout, results, endTime });
-
-      // Compute progression proposals for the completed workout
-      const workoutDef = definitions.find((d) => d.id === workout.id);
-      if (workoutDef && configs.length > 0) {
-        const proposals = computeProgression(
-          workout.exercises,
-          results,
-          configs,
-          workoutDef.templates,
-        );
-        setProgressionProposals(proposals);
-      } else {
-        // Even with no proposals, show the confirm page
-        setProgressionProposals([]);
+      setPendingFinish({ workout, results, endTime, baselineConfigs: structuredClone(configs) });
+      setDraftResults(results);
+      setActiveWorkout(workout);
+      setFinishError(null);
+      if (activeSnapshot) {
+        try {
+          const review = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id));
+          review.trainingMaxProposals = review.trainingMaxProposals.map((proposal) => ({
+            ...proposal, frozen: proposal.current,
+            current: configs.find((config) => config.id === proposal.liftId)?.trainingMax ?? proposal.current,
+          }));
+          setCycleFinish(review);
+          setProgressionProposals(review.proposals);
+        } catch (error) {
+          setDataLoadError(error instanceof Error ? error.message : String(error));
+        }
       }
     },
-    [configs, definitions],
+    [activeSnapshot, configs],
   );
 
   const handleProgressionConfirm = useCallback(
-    (updates: Map<string, { topSetWeight: number; backoffWeight: number }>) => {
-      // Clear the in-progress draft and rest timer now that the workout is finalized
-      clearDraft();
-      clearTimerSentinel();
-
-      // Save the pending workout results to Firestore
-      if (pendingFinish && firebaseUid && startTime) {
-        const { workout, results, endTime } = pendingFinish;
-        const sid = firebaseUid;
-        void logWorkoutResults(
-          sid,
-          workout,
-          results,
-          startTime,
-          endTime,
-        ).then((savedRows) => {
-          if (connectedUserRef.current !== sid) return;
-          setLogRows((existing) => mergeWorkoutSessionRows(existing, savedRows));
-        });
+    async (updates: Map<string, BaselineUpdate>) => {
+      if (finishSavingRef.current || !pendingFinish || !activeSnapshot || !cycleFinish || !startTime) return;
+      finishSavingRef.current = true;
+      setFinishSaving(true);
+      setFinishError(null);
+      try {
+        const { workout, results, endTime, baselineConfigs } = pendingFinish;
+        const reviewed = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id));
+        const rows = workoutResultRows(workout, results, startTime, endTime, activeSnapshot.occurrenceId);
+        // Keeping a baseline produces no write and never overwrites a newer shared setting.
+        const changes = new Map<string, BaselineUpdate>();
+        for (const [id, update] of updates) {
+          const config = baselineConfigs.find((item) => item.id === id);
+          const changed = Object.fromEntries(Object.entries(update).filter(([field, value]) => config?.[field as keyof LiftConfig] !== value));
+          if (Object.keys(changed).length) changes.set(id, changed);
+        }
+        let savedRows = rows;
+        if (firebaseUid) {
+          await queueSessionMutation(`cycle:${workout.id}`, async () => {
+            savedRows = await finishCycleSession(firebaseUid, activeSnapshot, reviewed.progress, rows, changes, baselineConfigs);
+          });
+        }
+        if (firebaseUid && connectedUserRef.current !== firebaseUid) return;
+        const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workout.id), reviewed.progress];
+        cycleProgressRef.current = updated;
+        cycleDraftsRef.current = cycleDraftsRef.current.filter((item) => item.id !== activeSnapshot.id);
+        setCycleProgress(updated);
+        setLogRows((existing) => mergeWorkoutSessionRows(existing, savedRows));
+        setConfigs((current) => current.map((config) => ({ ...config, ...changes.get(config.id) })));
+        clearDraft(firebaseUid ?? 'mock', workout.id);
+        clearTimerSentinel();
+        setProgressionProposals(null);
+        setPendingFinish(null);
+        setCycleFinish(null);
+        setActiveSnapshot(null);
+        setActiveWorkout(null);
+        setStartTime(null);
+        setPreviousSets(null);
+        navigateTo({ view: 'list' });
+      } catch (error) {
+        setFinishError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setFinishSaving(false);
+        finishSavingRef.current = false;
       }
-
-      // Apply weight updates to configs
-      const updatedConfigs = configs.map((c) => {
-        const update = updates.get(c.id);
-        if (!update) return c;
-        return { ...c, topSetWeight: update.topSetWeight, backoffWeight: update.backoffWeight };
-      });
-
-      // Write updated configs back to Firestore
-      if (firebaseUid) {
-        void writeConfigValues(firebaseUid, updatedConfigs);
-      }
-
-      // Update local state so the next workout uses the new weights
-      setConfigs(updatedConfigs);
-      setWorkouts(buildWorkoutsFromConfigs(updatedConfigs, definitions, { roundWarmupPlateMath: roundWarmupPlateMathRef.current }));
-      setProgressionProposals(null);
-      setPendingFinish(null);
-      setActiveWorkout(null);
-      setStartTime(null);
-      setPreviousSets(null);
-      navigateTo({ view: 'list' });
     },
-    [firebaseUid, startTime, pendingFinish, configs, definitions, navigateTo],
+    [firebaseUid, startTime, pendingFinish, configs, navigateTo, activeSnapshot, cycleFinish, queueSessionMutation],
   );
 
   const handleProgressionBack = useCallback(() => {
@@ -718,7 +780,7 @@ function AppContent() {
   }, [firebaseUid]);
 
   const handleScheduleAssign = useCallback(
-    (date: string, workoutId: string) => {
+    (date: string, workoutId: string, occurrenceId?: string) => {
       const userId = firebaseUid;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
@@ -726,7 +788,8 @@ function AppContent() {
           ? await readWorkoutSchedule(userId, window)
           : [];
         if (userId && connectedUserRef.current !== userId) return;
-        const updatedDate = [...persisted, { date, workoutId, strongerId: generateStrongerId() }];
+        const opportunity = createScheduleOpportunity(date, workoutId);
+        const updatedDate = [...persisted, { ...opportunity, ...(occurrenceId ? { occurrenceId } : {}), strongerId: generateStrongerId() }];
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
         if (userId) {
           await writeWorkoutScheduleDates(userId, updatedDate, [date]);
@@ -762,10 +825,12 @@ function AppContent() {
         });
         for (const entry of toAdd) {
           const exists = updatedRange.some(
-            (current) => current.date === entry.date && current.workoutId === entry.workoutId,
+            (current) => entry.occurrenceId
+              ? current.occurrenceId === entry.occurrenceId
+              : current.date === entry.date && current.workoutId === entry.workoutId,
           );
           if (!exists) {
-            updatedRange.push({ ...entry, strongerId: entry.strongerId ?? generateStrongerId() });
+            updatedRange.push({ ...createScheduleOpportunity(entry.date, entry.workoutId), ...entry, strongerId: entry.strongerId ?? generateStrongerId() });
           }
         }
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedRange, window));
@@ -778,7 +843,7 @@ function AppContent() {
   );
 
   const handleScheduleRemove = useCallback(
-    (date: string, workoutId: string) => {
+    (date: string, workoutId: string, occurrenceId?: string) => {
       const userId = firebaseUid;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
@@ -788,7 +853,7 @@ function AppContent() {
         if (userId && connectedUserRef.current !== userId) return;
         let blanked = false;
         const updatedDate = persisted.map((entry) => {
-          if (!blanked && entry.workoutId === workoutId) {
+          if (!blanked && entry.workoutId === workoutId && (!occurrenceId || entry.occurrenceId === occurrenceId)) {
             blanked = true;
             return { ...entry, workoutId: '' };
           }
@@ -805,7 +870,7 @@ function AppContent() {
   );
 
   const handleUpdateLabel = useCallback(
-    (date: string, workoutId: string, label: string) => {
+    (date: string, workoutId: string, label: string, occurrenceId?: string) => {
       const trimmed = label.trim();
       const userId = firebaseUid;
       void queueCalendarMutation(async () => {
@@ -816,7 +881,7 @@ function AppContent() {
         if (userId && connectedUserRef.current !== userId) return;
         let updated = false;
         const updatedDate = persisted.map((entry) => {
-          if (!updated && entry.workoutId === workoutId) {
+          if (!updated && entry.workoutId === workoutId && (!occurrenceId || entry.occurrenceId === occurrenceId)) {
             updated = true;
             return { ...entry, ...(trimmed ? { label: trimmed } : { label: undefined }) };
           }
@@ -879,10 +944,10 @@ function AppContent() {
   );
 
   const handleCalendarOpenWorkout = useCallback(
-    (workoutId: string) => {
+    (workoutId: string, occurrenceId?: string) => {
       const match = workouts.find((w) => w.id === workoutId);
       if (match) {
-        handleSelectWorkout(match);
+        handleSelectWorkout(match, occurrenceId);
       }
     },
     [workouts, handleSelectWorkout],
@@ -1465,32 +1530,19 @@ function AppContent() {
   // If a draft exists in localStorage for this workout, restore startTime
   // and set results so the user doesn't lose progress after a refresh.
   useEffect(() => {
-    if (!sessionReady || workouts.length === 0) return;
+    if (!sessionReady || priorityLoadPending || dataLoadError || workouts.length === 0) return;
     if (route.view !== 'workout') return;
     // Already showing the right workout — nothing to do
     if (activeWorkout?.id === route.workoutId) return;
 
     const match = workouts.find((w) => w.id === route.workoutId);
     if (match) {
-      // Check for a saved draft from a previous session (page refresh)
-      const draft = loadDraft();
-      if (draft && draft.workoutId === match.id) {
-        setStartTime(draft.startTime);
-        setDraftResults(draft.results.length > 0 ? draft.results : null);
-      } else {
-        setStartTime(new Date().toISOString());
-        setDraftResults(null);
-      }
-      setActiveWorkout(match);
-      setPreviousSets(null);
-      if (firebaseUid) {
-        void loadPreviousSets(firebaseUid, match.id);
-      }
+      handleSelectWorkout(match);
     } else {
       // Invalid workout ID — redirect to list
       replaceTo({ view: 'list' });
     }
-  }, [sessionReady, workouts, route, activeWorkout?.id, firebaseUid, loadPreviousSets, replaceTo]);
+  }, [sessionReady, priorityLoadPending, dataLoadError, workouts, route, activeWorkout?.id, handleSelectWorkout, replaceTo]);
 
   // Sync state when the user presses the browser back button:
   // if the URL changed to list while a workout is active, clear React state
@@ -1523,6 +1575,20 @@ function AppContent() {
     switch (dataset) {
       case 'exercises': return loadExercisesData(userId, connectionGeneration, source);
       case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration, source);
+      case 'cycleProgress': return Promise.all([readCycleProgress(userId, source), readCycleDrafts(userId, source)]).then(([progress, drafts]) => {
+        if (connectedUserRef.current !== userId || connectionGenerationRef.current !== connectionGeneration) return;
+        // A late cache/server refresh must not roll optimistic pending batches backward.
+        const merged = progress.map((item) => {
+          const local = cycleProgressRef.current.find((existing) => existing.workoutId === item.workoutId);
+          return local && local.revision > item.revision ? local : item;
+        });
+        for (const local of cycleProgressRef.current) {
+          if (!merged.some((item) => item.workoutId === local.workoutId)) merged.push(local);
+        }
+        cycleProgressRef.current = merged;
+        setCycleProgress(merged);
+        cycleDraftsRef.current = drafts.filter((draft) => merged.find((item) => item.workoutId === draft.workout.id)?.lastSessionId !== draft.id);
+      });
       case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration, source);
       case 'schedule': return loadWorkoutScheduleData(
         userId,
@@ -1649,9 +1715,9 @@ function AppContent() {
   // Rebuild computed workouts whenever roundWarmupPlateMath changes so warmup weights update immediately.
   useEffect(() => {
     if (configs.length > 0) {
-      setWorkouts(buildWorkoutsFromConfigs(configs, definitions, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));
+      setWorkouts(previewCycles(configs, definitions, cycleProgress, { roundWarmupPlateMath: appSettings.roundWarmupPlateMath }));
     }
-  }, [appSettings.roundWarmupPlateMath, configs, definitions]);
+  }, [appSettings.roundWarmupPlateMath, configs, definitions, cycleProgress]);
 
   useEffect(() => {
     definitionsRef.current = definitions;
@@ -1789,6 +1855,10 @@ function AppContent() {
         totalSets={totalSets}
         onConfirm={handleProgressionConfirm}
         onBack={handleProgressionBack}
+        trainingMaxProposals={cycleFinish?.trainingMaxProposals}
+        transitions={cycleFinish?.transitions}
+        saving={finishSaving}
+        error={finishError}
       />
     );
   }
@@ -1804,6 +1874,8 @@ function AppContent() {
         configs={configs}
         onBack={handleBack}
         onFinish={handleFinish}
+        userId={firebaseUid ?? 'mock'}
+        onDraftChange={handleDraftChange}
       />
     );
   }
@@ -1885,6 +1957,7 @@ function AppContent() {
           key={editDef?.id ?? duplicateWorkoutDraft?.id ?? 'new'}
           existing={editDef}
           initialDefinition={editDef ? undefined : duplicateWorkoutDraft}
+          roundWarmupPlateMath={appSettings.roundWarmupPlateMath}
           allDefinitions={definitions}
           configs={configs}
           onSave={handleEditorSave}
@@ -1914,6 +1987,7 @@ function AppContent() {
         <CalendarView
           workouts={workouts}
           workoutDefinitions={definitions}
+          definitions={definitions}
           cardioActivities={cardioActivities}
           workoutSchedule={workoutSchedule}
           dayFlags={dayFlags}
@@ -2233,13 +2307,13 @@ export default App;
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-async function logWorkoutResults(
-  userId: string,
+function workoutResultRows(
   workout: Workout,
   results: SetResult[][],
   startTime: string,
   endTime: string,
-): Promise<ParsedLogRow[]> {
+  occurrenceId?: string,
+): ParsedLogRow[] {
   const now = new Date(endTime);
   const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const ctx = { date, startTime, endTime, workoutId: workout.id };
@@ -2247,7 +2321,7 @@ async function logWorkoutResults(
   const rows: ParsedLogRow[] = [];
   for (let ei = 0; ei < workout.exercises.length; ei++) {
     const exercise = workout.exercises[ei];
-    for (let si = 0; si < results[ei].length; si++) {
+    for (let si = 0; si < (results[ei]?.length ?? 0); si++) {
       const planned: ComputedSet =
         si < exercise.sets.length
           ? exercise.sets[si]
@@ -2259,7 +2333,7 @@ async function logWorkoutResults(
               amrap: false,
             };
       rows.push(
-        buildLogRow(
+        { ...buildLogRow(
           ctx,
           exercise.name,
           exercise.liftId,
@@ -2268,9 +2342,12 @@ async function logWorkoutResults(
           planned,
           results[ei][si],
         ),
+          ...(exercise.cycleStage ? { cycleStage: exercise.cycleStage } : {}),
+          ...(occurrenceId ? { occurrenceId } : {}),
+        },
       );
     }
   }
 
-  return appendLogRows(userId, rows);
+  return rows;
 }

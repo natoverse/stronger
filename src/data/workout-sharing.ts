@@ -1,10 +1,12 @@
 import type { ExerciseTemplate, SetTemplate, WeightBasis } from '../model/index.js';
 import type { WorkoutDefinition } from './sample-workouts.js';
+import type { CycleDefinition } from '../model/types.js';
 
 export interface SharedWorkout {
 	name: string;
 	favorite?: boolean;
 	templates: ExerciseTemplate[];
+	cycle?: CycleDefinition;
 }
 
 interface SharedWorkoutPayload {
@@ -19,6 +21,7 @@ export function encodeSharedWorkout(definition: WorkoutDefinition): string {
 			name: definition.name,
 			...(definition.favorite === undefined ? {} : { favorite: definition.favorite }),
 			templates: definition.templates,
+			...(definition.cycle ? { cycle: definition.cycle } : {}),
 		},
 	};
 	const bytes = new TextEncoder().encode(JSON.stringify(payload));
@@ -61,7 +64,21 @@ function isSharedWorkout(value: unknown): value is SharedWorkout {
 		&& (value.favorite === undefined || typeof value.favorite === 'boolean')
 		&& Array.isArray(value.templates)
 		&& value.templates.length > 0
-		&& value.templates.every(isExerciseTemplate);
+		&& value.templates.every(isExerciseTemplate)
+		&& (value.cycle === undefined || isCycle(value.cycle));
+}
+
+function isCycle(value: unknown): value is CycleDefinition {
+	return isRecord(value)
+		&& (value.baseline === 'topSet' || value.baseline === 'trainingMax')
+		&& Array.isArray(value.weeks) && value.weeks.length > 0
+		&& value.weeks.every((week) => isRecord(week) && typeof week.id === 'string'
+			&& typeof week.name === 'string' && week.name.trim().length > 0
+			&& Array.isArray(week.exposures) && week.exposures.length > 0
+			&& week.exposures.every((exposure) => isRecord(exposure) && typeof exposure.id === 'string'
+				&& typeof exposure.name === 'string' && exposure.name.trim().length > 0
+				&& Array.isArray(exposure.templates) && exposure.templates.length > 0
+				&& exposure.templates.every(isExerciseTemplate)));
 }
 
 function isExerciseTemplate(value: unknown): value is ExerciseTemplate {
@@ -90,7 +107,7 @@ function isSetTemplate(value: unknown): value is SetTemplate {
 
 function isWeightBasis(value: unknown): value is WeightBasis {
 	if (!isRecord(value) || typeof value.kind !== 'string') return false;
-	if (value.kind === 'topSet' || value.kind === 'backoff' || value.kind === 'barWeight') return true;
+	if (value.kind === 'topSet' || value.kind === 'backoff' || value.kind === 'barWeight' || value.kind === 'trainingMax') return true;
 	if (value.kind === 'crossReference') {
 		return typeof value.liftId === 'string' && value.liftId.trim().length > 0;
 	}

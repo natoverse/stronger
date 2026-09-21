@@ -1,4 +1,4 @@
-import type { ComputedSet, PreviousSetData, SetResult } from './types.ts'
+import type { ComputedSet, PreviousSetData, SetResult, ExerciseCycleStage, SetTemplate, CycleSessionSnapshot } from './types.ts'
 
 export interface LogContext {
 	date: string
@@ -18,6 +18,9 @@ export interface ParsedLogRow extends LogContext {
 	actualWeight: number
 	actualReps: number
 	completed: boolean
+	cycleStage?: ExerciseCycleStage
+	occurrenceId?: string
+	plannedTemplate?: SetTemplate
 }
 
 export function buildLogRow(
@@ -40,6 +43,7 @@ export function buildLogRow(
 		actualWeight: result.actualWeight,
 		actualReps: result.actualReps,
 		completed: result.completed,
+		...(planned.prescription ? { plannedTemplate: structuredClone(planned.prescription) } : {}),
 	}
 }
 
@@ -50,7 +54,27 @@ export function buildLogRow(
 export function findPreviousWorkoutSets(
 	logRows: ParsedLogRow[],
 	workoutId: string,
+	snapshot?: CycleSessionSnapshot,
 ): PreviousSetData[][] | null {
+	if (snapshot) {
+		const explicitStages = snapshot.progress.exercises.some((item) => item.steps.length > 1 || item.baseline === 'trainingMax');
+		if (explicitStages) {
+			return snapshot.workout.exercises.map((exercise, index) => {
+				const stage = exercise.cycleStage!;
+				const matching = logRows.filter((row) => row.workoutId === workoutId
+					&& row.cycleStage?.exerciseId === stage.exerciseId
+					&& row.cycleStage.iterationId === stage.iterationId
+					&& row.cycleStage.week === stage.week
+					&& row.cycleStage.exposure === stage.exposure);
+				const latest = matching.map((row) => row.startTime).sort().slice(-1)[0];
+				return exercise.sets.map((_set, setIndex) => {
+					const row = matching.find((row) => row.startTime === latest && row.setNumber === setIndex + 1
+						&& JSON.stringify(row.plannedTemplate) === JSON.stringify(snapshot.templates[index].sets[setIndex]));
+					return row ? { weight: row.actualWeight, reps: row.actualReps } : undefined;
+				}) as PreviousSetData[];
+			});
+		}
+	}
 	const matching = logRows.filter((r) => r.workoutId === workoutId)
 	if (matching.length === 0) return null
 

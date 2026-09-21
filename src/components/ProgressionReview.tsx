@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Check, Minus, Plus } from 'lucide-react';
 import type { ProgressionProposal } from '../model/index.js';
+import type { BaselineUpdate, CycleTransition, TrainingMaxProposal } from '../model/cycles.js';
 
 const DEFAULT_STEP = 5;
 
@@ -9,9 +10,13 @@ interface ProgressionReviewProps {
 	completedSets: number;
 	totalSets: number;
 	onConfirm: (
-		updates: Map<string, { topSetWeight: number; backoffWeight: number }>,
+		updates: Map<string, BaselineUpdate>,
 	) => void;
 	onBack: () => void;
+	trainingMaxProposals?: TrainingMaxProposal[];
+	transitions?: CycleTransition[];
+	saving?: boolean;
+	error?: string | null;
 }
 
 export function ProgressionReview({
@@ -20,7 +25,14 @@ export function ProgressionReview({
 	totalSets,
 	onConfirm,
 	onBack,
+	trainingMaxProposals = [],
+	transitions = [],
+	saving = false,
+	error,
 }: ProgressionReviewProps) {
+	const [trainingMaxEdits, setTrainingMaxEdits] = useState(
+		() => new Map(trainingMaxProposals.map((proposal) => [proposal.liftId, proposal.proposed])),
+	);
 	const [edits, setEdits] = useState<
 		Map<string, { topSetWeight: number; backoffWeight: number }>
 	>(
@@ -74,6 +86,35 @@ export function ProgressionReview({
 					Tap <strong>Confirm</strong> to save your results, or go back to continue your workout.
 				</p>
 			</div>
+
+			{transitions.length > 0 && (
+				<div className="progression-list" aria-label="Next exercise stages">
+					{transitions.map((transition) => (
+						<section key={transition.exerciseId} className="progression-card">
+							<h2 className="progression-lift-name">{transition.name}</h2>
+							<p>{transition.current} → {transition.next}</p>
+							{!transition.completed && <p>Incomplete: repeat this entire prescription next time.</p>}
+							{transition.boundary && <p>Iteration complete. Next time uses approved shared baselines and the current cycle definition.</p>}
+						</section>
+					))}
+				</div>
+			)}
+			{trainingMaxProposals.map((proposal) => (
+				<section className="progression-card" key={proposal.liftId}>
+					<h2 className="progression-lift-name">{proposal.liftName} — Training max</h2>
+					<p>Completed cycle: {proposal.frozen ?? proposal.current} + {proposal.increment} = {proposal.proposed} lbs.
+						This is the cycle's separate TM increment, not a work-set or AMRAP adjustment.</p>
+					<p>Current shared training max: {proposal.current} lbs.</p>
+					<label>Next training max (lbs)
+						<input type="number" className="progression-input" min="0.01" step="any"
+							aria-label={`${proposal.liftName} next training max`}
+							value={trainingMaxEdits.get(proposal.liftId) ?? ''}
+							onChange={(event) => setTrainingMaxEdits((previous) => new Map(previous).set(proposal.liftId, Number(event.target.value)))} />
+					</label>
+					<button className="btn-link" onClick={() => setTrainingMaxEdits((previous) => new Map(previous).set(proposal.liftId, proposal.current))}>Keep training max</button>
+					<button className="btn-link" onClick={() => setTrainingMaxEdits((previous) => new Map(previous).set(proposal.liftId, proposal.proposed))}>Use suggested training max</button>
+				</section>
+			))}
 
 			{proposals.length > 0 && (
 			<>
@@ -231,13 +272,20 @@ export function ProgressionReview({
 			)}
 
 			<div className="progression-actions">
+				{error && <p role="alert">{error}</p>}
 				<button
 					className="btn-primary"
-					onClick={() => onConfirm(edits)}
+					disabled={saving || [...trainingMaxEdits.values()].some((value) => !Number.isFinite(value) || value <= 0)
+						|| [...edits.values()].some((edit) => Object.values(edit).some((value) => !Number.isFinite(value) || value < 0))}
+					onClick={() => {
+						const updates = new Map<string, BaselineUpdate>(edits);
+						for (const [id, trainingMax] of trainingMaxEdits) updates.set(id, { trainingMax });
+						onConfirm(updates);
+					}}
 				>
-					Confirm
+					{saving ? 'Saving…' : 'Confirm'}
 				</button>
-				<button className="btn-back finish-go-back" onClick={onBack}>
+				<button className="btn-back finish-go-back" onClick={onBack} disabled={saving}>
 					<ArrowLeft size={20} /> Go Back
 				</button>
 			</div>

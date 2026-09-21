@@ -17,6 +17,8 @@ interface WorkoutViewProps {
 	configs: LiftConfig[];
 	onBack: () => void;
 	onFinish: (workout: Workout, results: SetResult[][]) => void;
+	userId?: string;
+	onDraftChange?: (workout: Workout, results: SetResult[][]) => void;
 }
 
 /**
@@ -25,6 +27,13 @@ interface WorkoutViewProps {
  */
 function buildComment(set: ComputedSet): string | undefined {
 	const parts: string[] = [];
+	if (set.prescription) {
+		const { percentage, weightBasis } = set.prescription;
+		if (['trainingMax', 'topSet', 'backoff', 'crossReference'].includes(weightBasis.kind)) {
+			const label = weightBasis.kind === 'trainingMax' ? 'Training max (TM)' : weightBasis.kind;
+			parts.push(`${Math.round(percentage * 10000) / 100}% ${label}`);
+		}
+	}
 	const hasRange = set.minReps !== set.maxReps;
 	if (hasRange) {
 		parts.push(`${set.minReps}–${set.maxReps} reps`);
@@ -66,7 +75,7 @@ function initResults(workout: Workout): SetResult[][] {
 	);
 }
 
-export function WorkoutView({ workout, previousSets, startTime, draftResults, appSettings, configs, onBack, onFinish }: WorkoutViewProps) {
+export function WorkoutView({ workout, previousSets, startTime, draftResults, appSettings, configs, onBack, onFinish, userId, onDraftChange }: WorkoutViewProps) {
 	const { active: wakeLockActive, reacquire: reacquireWakeLock } = useWakeLock(appSettings.keepScreenOn);
 
 	const [results, setResults] = useState<SetResult[][]>(() => {
@@ -98,7 +107,13 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 	/** The full exercise list: planned exercises + any user-added ones. */
 	const allExercises = [...workout.exercises, ...addedExercises];
 	/** A virtual workout object that includes added exercises. */
-	const effectiveWorkout: Workout = { ...workout, exercises: allExercises };
+	const effectiveWorkout: Workout = { ...workout, exercises: allExercises.map((exercise, index) => ({
+		...exercise, sets: [...exercise.sets, ...(addedSets[index] ?? [])],
+	})) };
+	const draftChangeRef = useRef(onDraftChange);
+	draftChangeRef.current = onDraftChange;
+	const effectiveWorkoutRef = useRef(effectiveWorkout);
+	effectiveWorkoutRef.current = effectiveWorkout;
 
 	// Persist results to localStorage on every change so a refresh doesn't lose progress.
 	const isFirstRender = useRef(true);
@@ -108,8 +123,9 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 			isFirstRender.current = false;
 			return;
 		}
-		saveDraft({ workoutId: workout.id, startTime, results });
-	}, [results, workout.id, startTime]);
+		if (draftChangeRef.current) draftChangeRef.current(effectiveWorkoutRef.current, results);
+		else saveDraft({ workoutId: workout.id, startTime, results }, userId);
+	}, [results, workout.id, startTime, userId]);
 
 	function updateSet(
 		exerciseIdx: number,
@@ -251,6 +267,13 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 						{exercise.name}
 						<span className={`role-tag role-${exercise.role}`}>{exercise.role}</span>
 					</h2>
+					{exercise.cycleStage && (exercise.cycleStage.weekCount > 1 || exercise.cycleStage.exposureCount > 1) && (
+						<p className="finish-note">
+							Week {exercise.cycleStage.week}/{exercise.cycleStage.weekCount} — {exercise.cycleStage.weekName}
+							{' · '}Session {exercise.cycleStage.exposure}/{exercise.cycleStage.exposureCount} — {exercise.cycleStage.exposureName}
+							{' · '}Iteration {exercise.cycleStage.iteration}
+						</p>
+					)}
 					<div className="sets-list">
 						{allSets.map((set, setIdx) => {
 							const result = results[exerciseIdx][setIdx];

@@ -25,17 +25,21 @@ import type {
 	WithingsMeasurement,
 	WorkoutScheduleEntry,
 } from '../model/index.ts'
-import type { StravaActivity } from '../model/types.ts'
+import type { CycleProgress, CycleSessionSnapshot, ExerciseCycleStage, SetResult, SetTemplate, StravaActivity } from '../model/types.ts'
 import type { WorkoutDefinition } from '../data/sample-workouts.ts'
 import type { ParsedLogRow } from '../model/logs.ts'
 import { firestore } from './client.ts'
-import { trackMutation } from './offline.ts'
+import { readFailedMutationRecoveries, trackMutation } from './offline.ts'
+import { loadDraft, saveDraft } from '../hooks/useWorkoutDraft.ts'
 
 export const SCHEMA_VERSION = 2
 const BATCH_WRITE_LIMIT = 400
 const TRANSACTIONAL_WRITE_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 export type FirestoreReadSource = 'cacheFirst' | 'server'
+export type StoredCycleDraft = CycleSessionSnapshot & { results?: SetResult[][]; startTime?: string; executionWorkout?: CycleSessionSnapshot['workout'] }
+export type CycleConfigUpdate = { topSetWeight?: number; backoffWeight?: number; trainingMax?: number }
+type FirestoreCycleDraft = Omit<StoredCycleDraft, 'results'> & { results?: Array<{ sets: SetResult[] }> }
 export type DateWindow = {
 	startDate: string
 	endDate: string
@@ -84,12 +88,13 @@ type StoredWorkoutSet = Pick<
 	| 'actualWeight'
 	| 'actualReps'
 	| 'completed'
->
+> & { plannedTemplate?: SetTemplate }
 
 type StoredWorkoutExercise = {
 	liftId: string
 	exerciseName: string
 	sets: StoredWorkoutSet[]
+	cycleStage?: ExerciseCycleStage
 }
 
 type StoredWorkoutSession = {
@@ -101,6 +106,8 @@ type StoredWorkoutSession = {
 	endTime: string
 	workoutId: string
 	exercises: StoredWorkoutExercise[]
+	occurrenceId?: string
+	cycleSnapshot?: FirestoreCycleDraft
 }
 
 type StoredScheduleDay = {
@@ -111,6 +118,8 @@ type StoredScheduleDay = {
 type CollectionName =
 	| 'exercises'
 	| 'workouts'
+	| 'cycleProgress'
+	| 'workoutDrafts'
 	| 'workoutSessions'
 	| 'dayFlags'
 	| 'schedule'
@@ -135,6 +144,7 @@ function cleanValue<T>(data: DocumentData): T {
 	const value = { ...data }
 	delete value.createdAt
 	delete value.updatedAt
+	delete value._cycleUpdate
 	return value as T
 }
 
@@ -399,6 +409,173 @@ export function writeConfigValues(uid: string, configs: LiftConfig[]): Promise<v
 	return writeDefaultConfig(uid, configs)
 }
 
+export function readCycleProgress(
+	uid: string,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<CycleProgress[]> {
+	return readCollection<CycleProgress>(uid, 'cycleProgress', source)
+}
+
+export async function readCycleDrafts(
+	uid: string,
+	source: FirestoreReadSource = 'cacheFirst',
+): Promise<StoredCycleDraft[]> {
+	const [documents, recovery] = await Promise.all([
+		readCollection<FirestoreCycleDraft>(uid, 'workoutDrafts', source),
+		readFailedMutationRecoveries<StoredCycleDraft>(uid),
+	])
+	const stored = documents.map(({ results, ...context }): StoredCycleDraft => ({
+		...context,
+		...(results ? { results: results.map((exercise) => exercise.sets) } : {}),
+	}))
+	const drafts = new Map(stored.map((item) => [item.workout.id, item]))
+	for (const item of recovery) {
+		if (item.id && item.workout?.id && item.progress?.workoutId === item.workout.id) drafts.set(item.workout.id, item)
+	}
+	return [...drafts.values()]
+}
+
+function validateCycleSnapshot(snapshot: CycleSessionSnapshot): void {
+	if (!snapshot.id || !snapshot.workout.id || snapshot.workout.id !== snapshot.progress.workoutId
+		|| !Number.isInteger(snapshot.progress.revision) || snapshot.progress.revision < 1) {
+		throw new Error('The cycle snapshot has an invalid identity or revision.')
+	}
+}
+
+function frozenValue<T>(value: T): T {
+	return JSON.parse(JSON.stringify(value)) as T
+}
+
+function serializeCycleDraft(snapshot: StoredCycleDraft): FirestoreCycleDraft {
+	const { results, ...context } = snapshot
+	// Firestore does not support an array nested directly inside another array.
+	return { ...context, ...(results ? { results: results.map((sets) => ({ sets })) } : {}) }
+}
+
+function recoveryDraft(uid: string, snapshot: StoredCycleDraft): StoredCycleDraft {
+	const local = loadDraft(uid, snapshot.workout.id)
+	return frozenValue({
+		...snapshot,
+		...(local?.snapshot?.id === snapshot.id ? {
+			results: local.results, startTime: local.startTime,
+			...(local.executionWorkout ? { executionWorkout: local.executionWorkout } : {}),
+		} : {}),
+	})
+}
+
+function restoreRecoveryDraft(uid: string, snapshot: StoredCycleDraft): void {
+	const existing = loadDraft(uid, snapshot.workout.id)
+	if (existing?.snapshot && existing.snapshot.id !== snapshot.id) return
+	saveDraft({
+		workoutId: snapshot.workout.id,
+		startTime: snapshot.startTime ?? '',
+		results: snapshot.results ?? snapshot.workout.exercises.map((exercise) => exercise.sets.map((set) => ({
+			actualWeight: set.weight, actualReps: set.minReps, completed: false, actualSetType: set.setType,
+		}))),
+		snapshot,
+		...(snapshot.executionWorkout ? { executionWorkout: snapshot.executionWorkout } : {}),
+	}, uid)
+}
+
+export async function writeCycleStart(uid: string, snapshot: StoredCycleDraft): Promise<void> {
+	validateCycleSnapshot(snapshot)
+	const frozen = recoveryDraft(uid, snapshot)
+	const workoutId = idPart(snapshot.workout.id)
+	await trackMutation(uid, `cycleStart:${snapshot.id}`, () => {
+		const batch = writeBatch(firestore)
+		batch.set(doc(userCollection(uid, 'cycleProgress'), workoutId), frozen.progress)
+		batch.set(doc(userCollection(uid, 'workoutDrafts'), workoutId), serializeCycleDraft(frozen))
+		return batch.commit()
+	}, {
+		receipt: { path: ['users', uid, 'workoutDrafts', workoutId], field: 'id', value: snapshot.id },
+		recovery: frozen,
+		onRejected: () => restoreRecoveryDraft(uid, frozen),
+	})
+}
+
+export async function writeCycleDraftResults(
+	uid: string,
+	snapshot: StoredCycleDraft,
+	results: SetResult[][],
+	startTime: string,
+	executionWorkout?: CycleSessionSnapshot['workout'],
+): Promise<void> {
+	validateCycleSnapshot(snapshot)
+	const frozen = frozenValue({ ...snapshot, results, startTime, ...(executionWorkout ? { executionWorkout } : {}) })
+	restoreRecoveryDraft(uid, frozen)
+	const workoutId = idPart(snapshot.workout.id)
+	await trackMutation(uid, `cycleDraft:${snapshot.id}`, () =>
+		setDoc(doc(userCollection(uid, 'workoutDrafts'), workoutId), serializeCycleDraft(frozen)), {
+		receipt: { path: ['users', uid, 'workoutDrafts', workoutId], field: 'id', value: snapshot.id },
+		recovery: frozen,
+		onRejected: () => restoreRecoveryDraft(uid, frozen),
+	})
+}
+
+export async function finishCycleSession(
+	uid: string,
+	snapshot: StoredCycleDraft,
+	nextProgress: CycleProgress,
+	rows: ParsedLogRow[],
+	updates: Map<string, CycleConfigUpdate>,
+	configs: LiftConfig[],
+): Promise<ParsedLogRow[]> {
+	validateCycleSnapshot(snapshot)
+	if (nextProgress.workoutId !== snapshot.workout.id
+		|| nextProgress.revision !== snapshot.progress.revision + 1
+		|| nextProgress.lastSessionId !== snapshot.id) {
+		throw new Error('Cycle confirmation must advance its revision once and retain the session identity.')
+	}
+	const sessions = groupWorkoutSessionRows(rows)
+	if (sessions.length !== 1 || sessions[0].workoutId !== snapshot.workout.id) {
+		throw new Error('Cycle confirmation must contain exactly one matching workout session.')
+	}
+	const changes = [...updates].map(([liftId, values]) => {
+		if (!configs.some((config) => config.id === liftId)) throw new Error(`Missing shared exercise baseline for ${liftId}.`)
+		if (Object.entries(values).some(([key, value]) =>
+			!['topSetWeight', 'backoffWeight', 'trainingMax'].includes(key)
+			|| typeof value !== 'number' || !Number.isFinite(value) || value < 0
+			|| (key === 'trainingMax' && value === 0))) {
+			throw new Error(`Invalid shared exercise baseline update for ${liftId}.`)
+		}
+		return { liftId, values: { ...values } }
+	}).filter(({ values }) => Object.keys(values).length > 0)
+	if (changes.length + 3 > BATCH_WRITE_LIMIT) throw new Error('Cycle confirmation is too large to save atomically.')
+	const frozen = frozenValue({
+		...recoveryDraft(uid, snapshot),
+		startTime: sessions[0].startTime,
+		results: sessions[0].exercises.map((exercise) => exercise.sets.map((set) => ({
+			actualWeight: set.actualWeight, actualReps: set.actualReps,
+			actualSetType: set.setType as SetResult['actualSetType'], completed: set.completed,
+		}))),
+	})
+	const progress = frozenValue(nextProgress)
+	const session = frozenValue({
+		...sessions[0],
+		...(snapshot.occurrenceId ? { occurrenceId: snapshot.occurrenceId } : {}),
+		cycleSnapshot: serializeCycleDraft(frozen),
+		year: yearForDate(sessions[0].date),
+	})
+	const sessionDocumentId = idPart(`cycle:${snapshot.id}`)
+	const workoutDocumentId = idPart(snapshot.workout.id)
+	await trackMutation(uid, `cycleFinish:${snapshot.id}`, () => {
+		const batch = writeBatch(firestore)
+		batch.set(doc(userCollection(uid, 'cycleProgress'), workoutDocumentId), progress)
+		batch.set(doc(userCollection(uid, 'workoutSessions'), sessionDocumentId), session)
+		batch.delete(doc(userCollection(uid, 'workoutDrafts'), workoutDocumentId))
+		for (const { liftId, values } of changes) {
+			batch.update(doc(userCollection(uid, 'exercises'), idPart(liftId)), values)
+		}
+		return batch.commit()
+	}, {
+		receipt: { path: ['users', uid, 'workoutSessions', sessionDocumentId], field: 'cycleSnapshot.id', value: snapshot.id },
+		recovery: frozen,
+		supersedes: [`cycleStart:${snapshot.id}`, `cycleDraft:${snapshot.id}`],
+		onRejected: () => restoreRecoveryDraft(uid, frozen),
+	})
+	return flattenWorkoutSessions([session])
+}
+
 export function readWorkoutDefs(
 	uid: string,
 	_liftNames?: Map<string, string>,
@@ -443,6 +620,22 @@ function workoutSessionDocumentId(
 	return idPart(workoutSessionKey(session))
 }
 
+async function findStoredWorkoutSession(
+	uid: string,
+	session: Pick<ParsedLogRow, 'date' | 'startTime' | 'workoutId'>,
+) {
+	const cached = await getDocsFromCache(query(
+		userCollection(uid, 'workoutSessions'),
+		where('date', '==', session.date),
+		where('startTime', '==', session.startTime),
+		where('workoutId', '==', session.workoutId),
+	))
+	return cached.docs.find((item) => {
+		const data = item.data() as StoredWorkoutSession
+		return workoutSessionKey(data) === workoutSessionKey(session) && !data.deleted
+	})
+}
+
 export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSession[] {
 	const sessions = new Map<string, StoredWorkoutSession>()
 	for (const row of rows) {
@@ -453,6 +646,7 @@ export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSess
 				startTime: row.startTime,
 				endTime: row.endTime,
 				workoutId: row.workoutId,
+				...(row.occurrenceId ? { occurrenceId: row.occurrenceId } : {}),
 				exercises: [],
 			})
 		}
@@ -464,13 +658,15 @@ export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSess
 		const sameExercise = previousExercise !== undefined
 			&& previousExercise.liftId === row.liftId
 			&& previousExercise.exerciseName === row.exerciseName
+			&& JSON.stringify(previousExercise.cycleStage) === JSON.stringify(row.cycleStage)
 			&& previousSet !== undefined
 			&& row.setNumber > previousSet.setNumber
-		const exercise = sameExercise
+		const exercise: StoredWorkoutExercise = sameExercise
 			? previousExercise
 			: {
 				liftId: row.liftId,
 				exerciseName: row.exerciseName,
+				...(row.cycleStage ? { cycleStage: row.cycleStage } : {}),
 				sets: [],
 			}
 		if (!sameExercise) session.exercises.push(exercise)
@@ -482,6 +678,7 @@ export function groupWorkoutSessionRows(rows: ParsedLogRow[]): StoredWorkoutSess
 			actualWeight: row.actualWeight,
 			actualReps: row.actualReps,
 			completed: row.completed,
+			...(row.plannedTemplate ? { plannedTemplate: row.plannedTemplate } : {}),
 		})
 	}
 	return [...sessions.values()]
@@ -500,6 +697,8 @@ export function flattenWorkoutSessions(sessions: StoredWorkoutSession[]): Parsed
 					workoutId: session.workoutId,
 					exerciseName: exercise.exerciseName,
 					liftId: exercise.liftId,
+					...(session.occurrenceId ? { occurrenceId: session.occurrenceId } : {}),
+					...(exercise.cycleStage ? { cycleStage: exercise.cycleStage } : {}),
 					...set,
 				}))))
 }
@@ -585,9 +784,12 @@ export async function updateLogRows(
 		workoutId: sessionWorkoutId,
 		startTime: sessionStartTime,
 	})
-	const originalId = idPart(originalKey)
-	const updatedId = workoutSessionDocumentId(session)
-	await trackMutation(uid, `workoutSession:${originalId}`, async () => {
+	await trackMutation(uid, `workoutSession:${idPart(originalKey)}`, async () => {
+		const original = await findStoredWorkoutSession(uid, {
+			date: sessionDate, workoutId: sessionWorkoutId, startTime: sessionStartTime,
+		})
+		const originalId = original?.id ?? idPart(originalKey)
+		const updatedId = original?.data().cycleSnapshot ? originalId : workoutSessionDocumentId(session)
 		const batch = writeBatch(firestore)
 		if (originalId !== updatedId) {
 			batch.delete(doc(userCollection(uid, 'workoutSessions'), originalId))
@@ -597,7 +799,7 @@ export async function updateLogRows(
 			year: yearForDate(session.date),
 			...(originalKey === workoutSessionKey(session) ? {} : { replaces: originalKey }),
 			updatedAt: new Date().toISOString(),
-		})
+		}, { merge: true })
 		await batch.commit()
 	})
 }
@@ -614,8 +816,11 @@ export async function deleteLogSession(
 		startTime: sessionStartTime,
 	})
 	const targetId = idPart(targetKey)
-	await trackMutation(uid, `workoutSession:${targetId}`, () =>
-		setDoc(doc(userCollection(uid, 'workoutSessions'), targetId), {
+	await trackMutation(uid, `workoutSession:${targetId}`, async () => {
+		const original = await findStoredWorkoutSession(uid, {
+			date: sessionDate, workoutId: sessionWorkoutId, startTime: sessionStartTime,
+		})
+		await setDoc(original?.ref ?? doc(userCollection(uid, 'workoutSessions'), targetId), {
 			date: sessionDate,
 			year: yearForDate(sessionDate),
 			startTime: sessionStartTime,
@@ -624,7 +829,8 @@ export async function deleteLogSession(
 			exercises: [],
 			deleted: true,
 			updatedAt: new Date().toISOString(),
-		}))
+		}, { merge: true })
+	})
 }
 
 export function readFlags(

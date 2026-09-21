@@ -4,6 +4,7 @@ import type { Route } from '../hooks/useHashRouter.ts'
 export type FirebaseDataset =
 	| 'exercises'
 	| 'workouts'
+	| 'cycleProgress'
 	| 'cardioActivities'
 	| 'schedule'
 	| 'dayFlags'

@@ -112,6 +112,12 @@ export function computeSetWeight(
 		case 'topSet':
 			return roundCalculatedWeight(set.percentage * liftConfig.topSetWeight);
 
+		case 'trainingMax':
+			if (!Number.isFinite(liftConfig.trainingMax) || (liftConfig.trainingMax ?? 0) <= 0) {
+				throw new Error(`${liftConfig.name}: enter a positive training max in the exercise editor.`);
+			}
+			return roundCalculatedWeight(set.percentage * liftConfig.trainingMax!);
+
 		case 'backoff':
 			return roundCalculatedWeight(set.percentage * liftConfig.backoffWeight);
 

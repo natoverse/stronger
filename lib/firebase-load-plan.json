@@ -2,6 +2,7 @@
   "datasetOrder": [
     "exercises",
     "workouts",
+    "cycleProgress",
     "cardioActivities",
     "schedule",
     "dayFlags",
@@ -25,10 +26,10 @@
   "initialDateWindowAnchor": "monthStart",
   "dateWindowIncrementDays": 30,
   "routes": {
-    "list": ["exercises", "workouts", "cardioActivities", "schedule", "workoutSessions", "settings"],
-    "workout": ["exercises", "workouts", "workoutSessions", "settings"],
+    "list": ["exercises", "workouts", "cycleProgress", "cardioActivities", "schedule", "workoutSessions", "settings"],
+    "workout": ["exercises", "workouts", "cycleProgress", "workoutSessions", "settings"],
     "import": ["workouts", "exercises", "settings"],
-    "calendar": ["schedule", "dayFlags", "workoutSessions", "exercises", "workouts", "cardioActivities", "settings"],
+    "calendar": ["schedule", "dayFlags", "workoutSessions", "exercises", "workouts", "cycleProgress", "cardioActivities", "settings"],
     "editor": ["workouts", "exercises", "settings"],
     "exercises": ["exercises", "settings"],
     "exerciseEditor": ["exercises", "settings"],
