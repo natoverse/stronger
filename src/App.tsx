@@ -71,6 +71,7 @@ function AppContent() {
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [cycleProgress, setCycleProgress] = useState<CycleProgress[]>([]);
   const cycleProgressRef = useRef<CycleProgress[]>([]);
+  const cycleMutationVersionRef = useRef(0);
   const cycleDraftsRef = useRef<StoredCycleDraft[]>([]);
   const [activeSnapshot, setActiveSnapshot] = useState<CycleSessionSnapshot | null>(null);
   const [cycleFinish, setCycleFinish] = useState<CycleFinish | null>(null);
@@ -234,6 +235,7 @@ function AppContent() {
       calendarMutationRef.current = Promise.resolve();
       setSettingsLoaded(false);
       cycleProgressRef.current = [];
+      cycleMutationVersionRef.current += 1;
       cycleDraftsRef.current = [];
       setCycleProgress([]);
       setActiveSnapshot(null);
@@ -291,6 +293,7 @@ function AppContent() {
     clearDraft();
     setSessionReady(false);
     cycleProgressRef.current = [];
+    cycleMutationVersionRef.current += 1;
     cycleDraftsRef.current = [];
     setCycleProgress([]);
     setActiveSnapshot(null);
@@ -377,8 +380,8 @@ function AppContent() {
       }
       const remote = cycleDraftsRef.current.find((item) => item.workout.id === workout.id);
       const restored = local?.snapshot ?? remote;
-      if (restored && previous && (restored.progress.revision !== previous.revision || restored.progress.revisionId !== previous.revisionId)) {
-        throw new Error('This unfinished cycle changed on another device. Your draft is preserved. Reload to review synchronized progress; do not repeat confirmation on another device.');
+      if (restored && previous && restored.progress.revision !== previous.revision) {
+        throw new Error('This saved workout no longer matches current cycle progress. Your draft is preserved; it cannot overwrite a newer local session.');
       }
       const snapshot = restored ?? createCycleSession(definition, configs, previous, {
         roundWarmupPlateMath: roundWarmupPlateMathRef.current, occurrenceId,
@@ -388,6 +391,7 @@ function AppContent() {
       if (!restored) {
         const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workout.id), snapshot.progress];
         cycleProgressRef.current = updated;
+        cycleMutationVersionRef.current += 1;
         setCycleProgress(updated);
         cycleDraftsRef.current = [...cycleDraftsRef.current.filter((item) => item.workout.id !== workout.id), { ...snapshot, startTime: now }];
         saveDraft({ workoutId: workout.id, startTime: now, results, snapshot }, uid);
@@ -466,6 +470,7 @@ function AppContent() {
         if (firebaseUid && connectedUserRef.current !== firebaseUid) return;
         const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workout.id), reviewed.progress];
         cycleProgressRef.current = updated;
+        cycleMutationVersionRef.current += 1;
         cycleDraftsRef.current = cycleDraftsRef.current.filter((item) => item.id !== activeSnapshot.id);
         setCycleProgress(updated);
         setLogRows((existing) => mergeWorkoutSessionRows(existing, savedRows));
@@ -1575,20 +1580,19 @@ function AppContent() {
     switch (dataset) {
       case 'exercises': return loadExercisesData(userId, connectionGeneration, source);
       case 'workouts': return loadWorkoutDefinitionsData(userId, connectionGeneration, source);
-      case 'cycleProgress': return Promise.all([readCycleProgress(userId, source), readCycleDrafts(userId, source)]).then(([progress, drafts]) => {
-        if (connectedUserRef.current !== userId || connectionGenerationRef.current !== connectionGeneration) return;
-        // A late cache/server refresh must not roll optimistic pending batches backward.
-        const merged = progress.map((item) => {
-          const local = cycleProgressRef.current.find((existing) => existing.workoutId === item.workoutId);
-          return local && local.revision > item.revision ? local : item;
-        });
-        for (const local of cycleProgressRef.current) {
-          if (!merged.some((item) => item.workoutId === local.workoutId)) merged.push(local);
-        }
-        cycleProgressRef.current = merged;
-        setCycleProgress(merged);
-        cycleDraftsRef.current = drafts.filter((draft) => merged.find((item) => item.workoutId === draft.workout.id)?.lastSessionId !== draft.id);
-      });
+      case 'cycleProgress': {
+        const mutationVersion = cycleMutationVersionRef.current;
+        return Promise.all([...sessionMutationRef.current.values()])
+          .then(() => Promise.all([readCycleProgress(userId, source), readCycleDrafts(userId, source)]))
+          .then(([progress, drafts]) => {
+            if (connectedUserRef.current !== userId || connectionGenerationRef.current !== connectionGeneration
+              || cycleMutationVersionRef.current !== mutationVersion) return;
+            // Last committed entity mutation wins. Only discard reads overtaken by a local write.
+            cycleProgressRef.current = progress;
+            setCycleProgress(progress);
+            cycleDraftsRef.current = drafts.filter((draft) => progress.find((item) => item.workoutId === draft.workout.id)?.lastSessionId !== draft.id);
+          });
+      }
       case 'cardioActivities': return loadCardioActivitiesData(userId, connectionGeneration, source);
       case 'schedule': return loadWorkoutScheduleData(
         userId,
