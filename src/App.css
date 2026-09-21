@@ -4341,3 +4341,153 @@ body {
 	font-weight: 600;
 	text-align: right;
 }
+
+.cycle-editor-hint {
+	color: var(--color-text-muted, #aaa);
+	font-size: 0.85rem;
+	line-height: 1.5;
+}
+
+.cycle-stage-editor h2,
+.cycle-preview h2 {
+	font-size: 1rem;
+	line-height: 1.5;
+	margin: 0 0 1rem;
+}
+
+.cycle-stage-editor .editor-field {
+	margin-bottom: 0.75rem;
+	min-width: 0;
+}
+
+.cycle-stage-editor .editor-select {
+	width: 100%;
+	min-height: 44px;
+	min-width: 0;
+}
+
+.cycle-stage-actions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.5rem;
+	margin-bottom: 0.75rem;
+}
+
+.cycle-stage-actions button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 0.35rem;
+	min-height: 44px;
+	padding: 0.5rem;
+	border: 1px solid var(--color-primary);
+	border-radius: 6px;
+	background: var(--color-surface);
+	color: var(--color-primary);
+	font: inherit;
+	font-size: 0.8rem;
+	cursor: pointer;
+}
+
+.cycle-stage-actions button:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+.cycle-exposure-editor {
+	border-top: 1px solid var(--color-border, #333);
+	margin-top: 1rem;
+	padding-top: 1rem;
+}
+
+.cycle-preview-sets {
+	padding-left: 1.5rem;
+}
+
+.cycle-preview-sets li {
+	margin: 0.75rem 0;
+}
+
+.cycle-preview-sets span {
+	display: block;
+	font-size: 0.85rem;
+	line-height: 1.5;
+}
+
+.cycle-preview-sets strong {
+	color: var(--color-primary);
+}
+
+.editor-number-field {
+	display: contents;
+}
+
+.editor-mobile-label {
+	display: none;
+}
+
+@media (max-width: 480px) {
+	.workout-editor .editor-sets-header {
+		display: none;
+	}
+
+	.workout-editor .editor-set-row {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.5rem;
+		padding: 0.75rem 0;
+		border-top: 1px solid var(--color-border, #333);
+	}
+
+	.workout-editor .editor-set-row > select,
+	.workout-editor .editor-set-row > input,
+	.workout-editor .editor-number-field input,
+	.workout-editor .editor-basis-select,
+	.workout-editor .editor-basis-extra,
+	.workout-editor .editor-basis-extra-input {
+		width: 100%;
+		min-width: 0;
+		min-height: 44px;
+	}
+
+	.workout-editor .editor-basis-group {
+		grid-column: span 2;
+		min-width: 0;
+	}
+
+	.workout-editor .editor-amrap-check::after {
+		content: 'AMRAP';
+		font-size: 0.6rem;
+	}
+
+	.workout-editor .editor-amrap-check {
+		width: auto;
+		flex-direction: column;
+	}
+
+	.workout-editor .editor-set-move {
+		flex-direction: row;
+		grid-column: span 2;
+		width: auto;
+	}
+
+	.workout-editor .editor-number-field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+	}
+
+	.workout-editor .editor-mobile-label {
+		display: block;
+		color: var(--color-text-muted);
+		font-size: 0.7rem;
+	}
+
+	.workout-editor .btn-move-set,
+	.workout-editor .btn-remove-set,
+	.workout-editor .btn-set-comment {
+		min-width: 44px;
+		min-height: 44px;
+		width: auto;
+	}
+}

@@ -81,6 +81,21 @@ describe('workout sharing', () => {
 		expect(getImportedWorkoutName('Push', ['Push'])).toBe('Push copy');
 		expect(getImportedWorkoutName('Push', ['Push', 'Push copy'])).toBe('Push copy 2');
 	});
+
+	it('does not silently truncate cycle stages or reject the shared training-max basis', () => {
+		const cycle = structuredClone(workout);
+		cycle.templates[0].sets[1].weightBasis = { kind: 'trainingMax' };
+		cycle.cycle = { baseline: 'trainingMax', weeks: [1, 2].map((week) => ({
+			id: `w${week}`, name: `Week ${week}`, exposures: [{
+				id: 'main', name: 'Main', templates: structuredClone(cycle.templates),
+			}],
+		})) };
+		const decoded = decodeSharedWorkout(encodeSharedWorkout(cycle));
+		expect(decoded?.cycle).toEqual(cycle.cycle);
+		expect(decoded?.templates[0].sets[1].weightBasis.kind).toBe('trainingMax');
+		cycle.cycle.weeks = [];
+		expect(decodeSharedWorkout(encodeSharedWorkout(cycle))).toBeNull();
+	});
 });
 
 function encodePayload(payload: unknown): string {

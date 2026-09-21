@@ -4,9 +4,12 @@ import { REST_ID, BLOCKER_ID } from '../model/index.js';
 import { CheckCircle, CalendarCheck } from 'lucide-react';
 import { CalendarClear } from './CalendarClear.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
+import type { WorkoutDefinition } from '../data/sample-workouts.js';
+import { createScheduleOpportunity, cycleOpportunityCount, planWholeCycle } from '../model/schedule.js';
 
 interface CalendarPushProps {
   workouts: Workout[];
+  definitions?: WorkoutDefinition[];
   cardioActivities: CardioActivity[];
   onUpdateSchedule: (entries: WorkoutScheduleEntry[]) => void;
   onClear: (options: ClearOptions) => Promise<ClearResult>;
@@ -23,12 +26,16 @@ function today(): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onClear }: CalendarPushProps) {
+export function CalendarPush({ workouts, definitions = [], cardioActivities, onUpdateSchedule, onClear }: CalendarPushProps) {
   // Weekly day → activity mapping (7 entries)
   // '' = no action (skip), '__rest__' = clear workouts, REST_ID = plan a Rest day, otherwise = workout/cardio id
   const [daySlots, setDaySlots] = useState<string[]>(Array(7).fill(''));
   const [weeks, setWeeks] = useState(4);
   const [startDate, setStartDate] = useState(today);
+  const [mode, setMode] = useState<'weekly' | 'cycle'>('weekly');
+  const [cycleId, setCycleId] = useState('');
+  const [cycleDays, setCycleDays] = useState<number[]>([0]);
+  const selectedCycle = definitions.find((definition) => definition.id === cycleId);
 
   const handleDayChange = useCallback((dayIndex: number, workoutId: string) => {
     setDaySlots((prev) => {
@@ -38,13 +45,16 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
     });
   }, []);
 
-  const hasSlots = daySlots.some((id) => id !== '');
+  const hasSlots = mode === 'cycle'
+    ? !!selectedCycle && cycleOpportunityCount(selectedCycle) > 0 && cycleDays.length > 0
+    : daySlots.some((id) => id !== '');
 
   // Generate WorkoutScheduleEntry[] from the weekly planner.
   // Additive: only emits entries for days with a selection (skips empty/no-action days).
   // __rest__ signals clearing all workouts for that date.
   // Aligns each day-of-week to its correct calendar date regardless of start date.
   const generateScheduleEntries = useCallback((): WorkoutScheduleEntry[] => {
+    if (mode === 'cycle') return selectedCycle ? planWholeCycle(selectedCycle, startDate, cycleDays) : [];
     const entries: WorkoutScheduleEntry[] = [];
     const [sy, sm, sd] = startDate.split('-').map(Number);
     const start = new Date(sy, sm - 1, sd);
@@ -58,11 +68,11 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
         const offset = (targetDow - startDow + 7) % 7;
         const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset + week * 7);
         const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        entries.push({ date: dateStr, workoutId: wid });
+        entries.push(createScheduleOpportunity(dateStr, wid));
       }
     }
     return entries;
-  }, [daySlots, startDate, weeks]);
+  }, [daySlots, startDate, weeks, mode, selectedCycle, cycleDays]);
 
   const [scheduleUpdated, setScheduleUpdated] = useState(false);
 
@@ -79,8 +89,47 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
         <h3>Plan</h3>
       </div>
 
+      {definitions.length > 0 && (
+        <div className="calendar-push-section">
+          <label className="calendar-push-label" htmlFor="push-mode">Planning mode</label>
+          <select id="push-mode" className="calendar-push-select" value={mode}
+            onChange={(event) => setMode(event.target.value as 'weekly' | 'cycle')}>
+            <option value="weekly">Repeat weekly schedule</option>
+            <option value="cycle">Plan a whole cycle</option>
+          </select>
+        </div>
+      )}
+      {mode === 'cycle' && (
+        <div className="calendar-push-section">
+          <label className="calendar-push-label" htmlFor="push-cycle">Named workout / cycle</label>
+          <select id="push-cycle" className="calendar-push-select" value={cycleId}
+            onChange={(event) => setCycleId(event.target.value)}>
+            <option value="">Choose a workout</option>
+            {definitions.map((definition) => (
+              <option key={definition.id} value={definition.id}>{definition.name}</option>
+            ))}
+          </select>
+          <fieldset>
+            <legend>Workout opportunity days</legend>
+            {DAY_NAMES.map((name, index) => (
+              <label key={name} className="calendar-push-day-row">
+                <input type="checkbox" checked={cycleDays.includes(index)}
+                  onChange={() => setCycleDays((days) => days.includes(index)
+                    ? days.filter((day) => day !== index) : [...days, index])} />
+                {name}
+              </label>
+            ))}
+          </fieldset>
+          {selectedCycle && (
+            <p>{cycleOpportunityCount(selectedCycle)} opportunities covering all ordered exposures
+              across {selectedCycle.cycle?.weeks.length ?? 1} program weeks.</p>
+          )}
+          <p>Each date opens the next uncompleted prescription for each exercise.
+            Missing a date does not skip a stage or add catch-up workouts.</p>
+        </div>
+      )}
       {/* Weekly schedule */}
-      <div className="calendar-push-section">
+      {mode === 'weekly' && <div className="calendar-push-section">
         <label className="calendar-push-label">Weekly schedule</label>
         <div className="calendar-push-days">
           {DAY_NAMES.map((name, i) => (
@@ -115,7 +164,7 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Start date */}
       <div className="calendar-push-section">
@@ -132,7 +181,7 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
       </div>
 
       {/* Number of weeks */}
-      <div className="calendar-push-section">
+      {mode === 'weekly' && <div className="calendar-push-section">
         <label className="calendar-push-label" htmlFor="push-weeks">
           Number of weeks
         </label>
@@ -148,13 +197,13 @@ export function CalendarPush({ workouts, cardioActivities, onUpdateSchedule, onC
             </option>
           ))}
         </select>
-      </div>
+      </div>}
 
       {/* Update Schedule button */}
       <button
         className="calendar-push-btn"
         onClick={handleUpdateSchedule}
-        disabled={!hasSlots}
+        disabled={!hasSlots || !startDate}
       >
         {scheduleUpdated ? (
           <>

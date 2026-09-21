@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { nameToId, DEFAULT_STRENGTH_CONFIG } from '../ExerciseLibrary.js';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ExerciseLibrary, nameToId, DEFAULT_STRENGTH_CONFIG } from '../ExerciseLibrary.js';
 import type { LiftConfig } from '../../model/index.js';
 
 /* ------------------------------------------------------------------ */
@@ -34,5 +36,13 @@ describe('DEFAULT_STRENGTH_CONFIG', () => {
 		expect(DEFAULT_STRENGTH_CONFIG.increment).toBeGreaterThan(0);
 		expect(DEFAULT_STRENGTH_CONFIG.warmupRoundingFactor).toBe(5);
 		expect(DEFAULT_STRENGTH_CONFIG.gear).toBe('barbell');
+	});
+
+	it('labels top-set weight and optional TM settings distinctly in library cards', () => {
+		const config: LiftConfig = { ...DEFAULT_STRENGTH_CONFIG, id: 'bench', name: 'Bench', trainingMax: 200, trainingMaxIncrement: 0 };
+		const markup = renderToStaticMarkup(createElement(ExerciseLibrary, { configs: [config], onEdit: () => {}, onNew: () => {} }));
+		expect(markup).toContain('Top set 45 lbs');
+		expect(markup).toContain('TM 200 lbs');
+		expect(markup).toContain('TM increment 0 lbs');
 	});
 });

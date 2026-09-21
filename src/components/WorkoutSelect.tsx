@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { REST_ID, BLOCKER_ID } from '../model/index.js';
+import { matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 import type { ParsedLogRow } from '../model/index.js';
 import type { LogSession } from './CalendarView.js';
 import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
@@ -18,7 +19,7 @@ interface WorkoutSelectProps {
 	onImportDefaultWorkouts?: () => void;
 	onShowDefaultWorkoutImportPrompt?: () => void;
 	onDismissDefaultWorkoutImportPrompt?: () => void;
-	onSelect: (workout: Workout) => void;
+	onSelect: (workout: Workout, occurrenceId?: string) => void;
 	onViewSession?: (session: LogSession) => void;
 	onEdit?: (workoutId: string) => void;
 	onDuplicate?: (workoutId: string) => void;
@@ -64,8 +65,10 @@ function WorkoutCard({
 	}, [menuOpen]);
 
 	const hasMenu = onEdit || onDuplicate || onShare || onDelete;
+	const cycleLabels = workoutCycleLabels(w);
 
 	return (
+		<>
 		<div className={`workout-card-wrapper${done ? ' workout-card-wrapper-done' : ''}`}>
 			{onToggleFavorite && (
 				<button
@@ -79,9 +82,13 @@ function WorkoutCard({
 			<button
 				className={`workout-card${done ? ' workout-card-done' : ''}`}
 				onClick={() => onSelect(w)}
+				disabled={!!w.error && !done}
 			>
 				<span className="strength-badge"><BicepsFlexed size={24} /></span>
-				<span className="workout-name">{w.name}</span>
+				<span className="workout-name">
+					{w.name}
+					{cycleLabels.map((label, index) => <small key={index}><br />{label}</small>)}
+				</span>
 			</button>
 			{hasMenu && (
 				<div className="workout-menu-container" ref={menuRef}>
@@ -119,6 +126,13 @@ function WorkoutCard({
 				</div>
 			)}
 		</div>
+		{w.error && (
+			<p className="auth-error" role="alert">
+				{w.error} Check the workout and shared exercise settings before starting.
+				{onEdit && <button className="btn-link" onClick={() => onEdit(w.id)}>Edit workout</button>}
+			</p>
+		)}
+		</>
 	);
 }
 
@@ -130,7 +144,7 @@ function todayDateString(): string {
 
 /** A single item in today's plan, shown on the home page. */
 export type TodayPlanItem =
-	| { kind: 'strength'; workoutId: string; workout: Workout; done: boolean }
+	| { kind: 'strength'; workoutId: string; workout: Workout; done: boolean; occurrenceId?: string }
 	| { kind: 'cardio' | 'rest' | 'blocker'; workoutId: string; name: string };
 
 /**
@@ -158,11 +172,6 @@ export function buildTodaysPlan({
 	const workoutMap = new Map(workouts.map((w) => [w.id, w]));
 	const cardioNameByWorkoutId = new Map((cardioActivities ?? []).map((c) => [`cardio:${c.id}`, c.name]));
 
-	const completedIds = new Set<string>();
-	for (const row of logRows ?? []) {
-		if (row.date === date) completedIds.add(row.workoutId);
-	}
-
 	const items: TodayPlanItem[] = [];
 	for (const e of entries) {
 		const wid = e.workoutId;
@@ -176,7 +185,11 @@ export function buildTodaysPlan({
 		} else {
 			const workout = workoutMap.get(wid);
 			if (!workout) continue;
-			items.push({ kind: 'strength', workoutId: wid, workout, done: completedIds.has(wid) });
+			items.push({
+				kind: 'strength', workoutId: wid, workout,
+				done: (logRows ?? []).some((row) => matchesScheduledOccurrence(e, row)),
+				...(scheduleOccurrenceId(e) ? { occurrenceId: scheduleOccurrenceId(e) } : {}),
+			});
 		}
 	}
 
@@ -242,29 +255,24 @@ export function WorkoutSelect({
 		[workoutSchedule, logRows, workouts, cardioActivities, today],
 	);
 
-	/** Build a map of today's sessions for completed workouts. */
-	const todaySessions = useMemo(() => {
-		if (!logRows) return new Map<string, LogSession>();
+	const sessions = useMemo(() => {
+		if (!logRows) return [];
 		const workoutNames = new Map(workouts.map((w) => [w.id, w.name]));
 		const byDate = groupLogByDate(logRows, workoutNames);
-		const todayList = byDate.get(today) ?? [];
-		const map = new Map<string, LogSession>();
-		for (const session of todayList) {
-			// Keep the latest session per workoutId
-			map.set(session.key.workoutId, session);
-		}
-		return map;
-	}, [logRows, workouts, today]);
+		return [...byDate.values()].flat();
+	}, [logRows, workouts]);
 
-	const handleTodayCardClick = (workout: Workout, done: boolean) => {
+	const handleTodayCardClick = (workout: Workout, done: boolean, occurrenceId?: string) => {
 		if (done && onViewSession) {
-			const session = todaySessions.get(workout.id);
+			const matching = sessions.filter((session) => session.rows.some((row) =>
+				matchesScheduledOccurrence({ date: today, workoutId: workout.id, occurrenceId }, row)));
+			const session = matching[matching.length - 1];
 			if (session) {
 				onViewSession(session);
 				return;
 			}
 		}
-		onSelect(workout);
+		if (!workout.error) onSelect(workout, occurrenceId);
 	};
 
 	const [moreOpen, setMoreOpen] = useState(false);
@@ -283,7 +291,7 @@ export function WorkoutSelect({
 								<WorkoutCard
 									key={`plan-${item.workoutId}-${idx}`}
 									w={item.workout}
-									onSelect={() => handleTodayCardClick(item.workout, item.done)}
+									onSelect={() => handleTodayCardClick(item.workout, item.done, item.occurrenceId)}
 									done={item.done}
 								/>
 							) : (

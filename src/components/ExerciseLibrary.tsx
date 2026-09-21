@@ -45,7 +45,9 @@ function ExerciseCard({
 				<div className="exercise-card-info">
 					<span className="exercise-name">{config.name}</span>
 					<span className="exercise-detail">
-						{config.topSetWeight} lbs · {config.gear}
+						Top set {config.topSetWeight} lbs · {config.gear}
+						{config.trainingMax !== undefined && <> · TM {config.trainingMax} lbs</>}
+						{config.trainingMaxIncrement !== undefined && <> · TM increment {config.trainingMaxIncrement} lbs</>}
 					</span>
 				</div>
 			</button>

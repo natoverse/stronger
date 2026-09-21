@@ -184,7 +184,9 @@ export function GoogleAuth({
 	if (hideConnectedUi) return null
 
 	const onOpenGarminWellness = onOpenGarmin || onOpenWellness
-	const syncState = !syncStatus.online
+	const syncState = syncStatus.error
+		? 'error'
+		: !syncStatus.online
 		? 'offline'
 		: reauthRequired
 			? 'reauth'
@@ -193,7 +195,9 @@ export function GoogleAuth({
 				: syncStatus.pendingCount > 0
 					? 'pending'
 					: 'synced'
-	const syncLabel = syncState === 'offline'
+	const syncLabel = syncState === 'error'
+		? 'Sync error — saved workout retained'
+		: syncState === 'offline'
 		? 'Offline'
 		: syncState === 'reauth'
 			? 'Sign in to sync'
@@ -202,7 +206,9 @@ export function GoogleAuth({
 				: syncState === 'pending'
 					? `${syncStatus.pendingCount} ${syncStatus.pendingCount === 1 ? 'change' : 'changes'} pending`
 					: 'Synced'
-	const syncIcon = syncState === 'offline'
+	const syncIcon = syncState === 'error'
+		? <CloudUpload size={18} />
+		: syncState === 'offline'
 		? <WifiOff size={18} />
 		: syncState === 'reauth'
 			? <LogIn size={18} />
@@ -211,9 +217,9 @@ export function GoogleAuth({
 				: syncState === 'pending'
 					? <CloudUpload size={18} />
 					: <Check size={18} />
-	const syncTitle = syncStatus.lastSyncedAt
+	const syncTitle = syncStatus.error ?? (syncStatus.lastSyncedAt
 		? `Last synced ${new Date(syncStatus.lastSyncedAt).toLocaleString()}`
-		: 'Retry synchronization'
+		: 'Retry synchronization')
 	return (
 		<div className="auth-connected">
 			<div className="toolbar-nav">
@@ -228,7 +234,7 @@ export function GoogleAuth({
 			</div>
 			<button
 				className={`sync-status sync-status-${syncState}`}
-				onClick={() => void (reauthRequired ? handleSignIn() : retryPendingWrites())}
+				onClick={() => syncStatus.error ? window.alert(syncStatus.error) : void (reauthRequired ? handleSignIn() : retryPendingWrites())}
 				aria-label={syncLabel}
 				title={`${syncLabel}. ${syncTitle}`}
 				disabled={syncStatus.syncing}

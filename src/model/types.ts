@@ -31,6 +31,10 @@ export interface LiftConfig {
 	backoffWeight: number;
 	/** Weight added on successful progression (e.g. 2.5 or 5 lbs). */
 	increment: number;
+	/** Optional shared training max; defaults to topSetWeight when omitted. */
+	trainingMax?: number;
+	/** Cycle-boundary increase; defaults to 10 for squat/deadlift, 5 for bench/press, otherwise 1. */
+	trainingMaxIncrement?: number;
 	/** Starting minimum — no set will be programmed below this weight (lbs). */
 	minimumWeight: number;
 	/** All calculated weights are rounded to the nearest multiple of this value. */
@@ -68,6 +72,7 @@ export type SetType = 'warmup' | 'work' | 'backoff' | 'joker';
  */
 export type WeightBasis =
 	| { kind: 'topSet' }
+	| { kind: 'trainingMax' }
 	| { kind: 'backoff' }
 	| { kind: 'crossReference'; liftId: string }
 	| { kind: 'fixed'; weight: number }
@@ -103,6 +108,8 @@ export type ExerciseRole = 'primary' | 'secondary' | 'assistance';
  * Combined with a LiftConfig it fully determines every set weight.
  */
 export interface ExerciseTemplate {
+	/** Stable identity across a cycle's week/exposure variations. */
+	id?: string;
 	/** References a LiftConfig.id — the lift whose config governs this exercise. */
 	liftId: string;
 	/** Display name (e.g. "Bench Press"). */
@@ -126,6 +133,7 @@ export interface ComputedSet {
 	maxReps: number;
 	amrap: boolean;
 	comment?: string;
+	prescription?: SetTemplate;
 }
 
 /** A fully computed exercise for a specific week. */
@@ -138,6 +146,7 @@ export interface ComputedExercise {
 	role: ExerciseRole;
 	/** Ordered computed sets. */
 	sets: ComputedSet[];
+	cycleStage?: ExerciseCycleStage;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +163,79 @@ export interface Workout {
 	favorite: boolean;
 	/** Ordered list of exercises for this workout. */
 	exercises: ComputedExercise[];
+	/** Actionable configuration error; invalid prescriptions cannot be started. */
+	error?: string;
+}
+
+export type CycleBaseline = 'topSet' | 'trainingMax';
+
+export interface CycleExposure {
+	id: string;
+	name: string;
+	templates: ExerciseTemplate[];
+}
+
+export interface CycleWeek {
+	id: string;
+	name: string;
+	exposures: CycleExposure[];
+}
+
+export interface CycleDefinition {
+	baseline: CycleBaseline;
+	weeks: CycleWeek[];
+}
+
+export interface ExerciseCycleStage {
+	exerciseId: string;
+	iterationId: string;
+	iteration: number;
+	week: number;
+	weekCount: number;
+	exposure: number;
+	exposureCount: number;
+	weekName: string;
+	exposureName: string;
+}
+
+export interface FrozenExerciseStep {
+	week: number;
+	weekCount: number;
+	exposure: number;
+	exposureCount: number;
+	weekName: string;
+	exposureName: string;
+	template: ExerciseTemplate;
+}
+
+export interface ExerciseCycleProgress {
+	exerciseId: string;
+	iterationId: string;
+	iteration: number;
+	cursor: number;
+	baseline: CycleBaseline;
+	steps: FrozenExerciseStep[];
+	configs: LiftConfig[];
+	roundWarmupPlateMath: boolean;
+	/** A boundary waits for the next load to snapshot approved shared inputs. */
+	complete: boolean;
+	/** Actual results from completed exposures, evaluated together at the boundary. */
+	completedResults?: Array<{ step: number; results: SetResult[] }>;
+}
+
+export interface CycleProgress {
+	workoutId: string;
+	revision: number;
+	exercises: ExerciseCycleProgress[];
+	lastSessionId?: string;
+}
+
+export interface CycleSessionSnapshot {
+	id: string;
+	workout: Workout;
+	templates: ExerciseTemplate[];
+	progress: CycleProgress;
+	occurrenceId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -232,6 +314,10 @@ export interface WorkoutScheduleEntry {
 	 * `workoutId` still determines which workout/activity is opened or logged.
 	 */
 	label?: string;
+	/** Recurring opportunities always open the cycle's current pending stages. */
+	cycleId?: string;
+	/** Read compatibility; new calendar entries use strongerId as their occurrence identity. */
+	occurrenceId?: string;
 }
 
 /**

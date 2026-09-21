@@ -34,6 +34,7 @@ describe('Firebase route load plan', () => {
 			{ dataset: 'workoutSessions', scope: 'currentYear' },
 			{ dataset: 'exercises', scope: 'all' },
 			{ dataset: 'workouts', scope: 'all' },
+			{ dataset: 'cycleProgress', scope: 'all' },
 			{ dataset: 'cardioActivities', scope: 'all' },
 			{ dataset: 'settings', scope: 'all' },
 		])
@@ -42,7 +43,7 @@ describe('Firebase route load plan', () => {
 		expect(queue.deferred).toContainEqual({ dataset: 'dayFlags', scope: 'all' })
 		expect(queue.deferred).not.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
 		expect(queue.deferred).not.toContainEqual({ dataset: 'dayFlags', scope: 'initialWindow' })
-		expect(new Set([...queue.priority, ...queue.deferred].map(({ dataset }) => dataset)).size).toBe(10)
+		expect(new Set([...queue.priority, ...queue.deferred].map(({ dataset }) => dataset)).size).toBe(11)
 	})
 
 	it('loads workout history for home-screen completion state', () => {
@@ -50,6 +51,16 @@ describe('Firebase route load plan', () => {
 			.toContainEqual({ dataset: 'workoutSessions', scope: 'currentYear' })
 		expect(buildFirebaseLoadQueue('list').priority)
 			.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
+	})
+
+	it.each(['list', 'workout', 'calendar', 'editor'] as const)('loads cycle state before rendering %s', (view) => {
+		expect(buildFirebaseLoadQueue(view).priority)
+			.toContainEqual({ dataset: 'cycleProgress', scope: 'all' })
+	})
+
+	it.each(['settings', 'progress', 'garmin-activities'] as const)('warms cycle state on %s', (view) => {
+		expect(buildFirebaseLoadQueue(view).deferred)
+			.toContainEqual({ dataset: 'cycleProgress', scope: 'all' })
 	})
 
 	it('background-loads complete date collections before they are visited', () => {

@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { loadDraft, saveDraft, clearDraft } from '../../hooks/useWorkoutDraft.js';
 import type { WorkoutDraft } from '../../hooks/useWorkoutDraft.js';
+import type { CycleSessionSnapshot } from '../../model/types.js';
 
 function makeDraft(overrides?: Partial<WorkoutDraft>): WorkoutDraft {
 	return {
@@ -115,5 +116,67 @@ describe('workout draft persistence', () => {
 		});
 		saveDraft(draft);
 		expect(loadDraft()).toEqual(draft);
+	});
+
+	it('isolates each user and unfinished workout without reading the legacy draft', () => {
+		saveDraft(makeDraft());
+		expect(loadDraft('alice', 'rss-bench')).toBeNull();
+		saveDraft(makeDraft(), 'alice');
+		saveDraft(makeDraft({ workoutId: 'squat' }), 'alice');
+		saveDraft(makeDraft({ startTime: 'bob-start' }), 'bob');
+		expect(loadDraft('alice', 'rss-bench')?.startTime).toBe(makeDraft().startTime);
+		expect(loadDraft('bob', 'rss-bench')?.startTime).toBe('bob-start');
+		clearDraft('alice', 'rss-bench');
+		expect(loadDraft('alice', 'rss-bench')).toBeNull();
+		expect(loadDraft('alice', 'squat')?.workoutId).toBe('squat');
+		expect(loadDraft('bob', 'rss-bench')).not.toBeNull();
+		expect(loadDraft()).not.toBeNull();
+		expect(loadDraft('alice')).toBeNull();
+	});
+
+	it('preserves frozen snapshots when the workout view saves only results', () => {
+		const snapshot: CycleSessionSnapshot = {
+			id: 'session-1',
+			workout: { id: 'rss-bench', name: 'Bench', favorite: false, exercises: [] },
+			templates: [],
+			progress: { workoutId: 'rss-bench', revision: 1, exercises: [] },
+		};
+		saveDraft(makeDraft({ snapshot }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')?.draftVersion).toBe(1);
+		snapshot.workout.name = 'Changed elsewhere';
+		saveDraft(makeDraft({ results: [] }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')?.snapshot?.workout.name).toBe('Bench');
+		expect(loadDraft('alice', 'rss-bench')?.draftVersion).toBe(2);
+		saveDraft(makeDraft({ startTime: 'new-session', results: [] }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')?.snapshot).toBeUndefined();
+	});
+	it('continues versioning after restoring a remote cycle draft', () => {
+		const snapshot: CycleSessionSnapshot = {
+			id: 'session-1',
+			workout: { id: 'rss-bench', name: 'Bench', favorite: false, exercises: [] },
+			templates: [],
+			progress: { workoutId: 'rss-bench', revision: 1, exercises: [] },
+		};
+		expect(saveDraft(makeDraft({ snapshot, draftVersion: 8 }), 'alice')).toBe(8);
+		expect(saveDraft(makeDraft({ snapshot }), 'alice')).toBe(9);
+		expect(loadDraft('alice', 'rss-bench')?.draftVersion).toBe(9);
+	});
+
+	it('rejects corrupt snapshots rather than resuming a newly resolved prescription', () => {
+		saveDraft(makeDraft({ snapshot: { id: 'bad' } as CycleSessionSnapshot }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')).toBeNull();
+	});
+
+	it('retains ad-hoc exercise/set structure with its results but never carries it into a new session', () => {
+		const executionWorkout = { id: 'rss-bench', name: 'Bench', favorite: false, exercises: [
+			{ liftId: 'added', name: 'Added', role: 'assistance' as const, sets: [
+				{ setType: 'work' as const, weight: 10, minReps: 5, maxReps: 5, amrap: false },
+			] },
+		] };
+		saveDraft(makeDraft({ executionWorkout }), 'alice');
+		saveDraft(makeDraft({ results: [] }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')?.executionWorkout).toEqual(executionWorkout);
+		saveDraft(makeDraft({ startTime: 'new-session' }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')?.executionWorkout).toBeUndefined();
 	});
 });

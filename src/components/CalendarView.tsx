@@ -9,18 +9,21 @@ import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
 import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
+import type { WorkoutDefinition } from '../data/sample-workouts.js';
+import { createScheduleOpportunity, formatCycleStage, matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
 	workoutDefinitions?: ReadonlyArray<{ id: string; name: string }>;
+	definitions?: WorkoutDefinition[];
 	cardioActivities: CardioActivity[];
 	workoutSchedule: WorkoutScheduleEntry[];
 	dayFlags: DayFlagEntry[];
 	logRows: ParsedLogRow[];
-	onAssign: (date: string, workoutId: string) => void;
-	onRemove: (date: string, workoutId: string) => void;
-	onUpdateLabel: (date: string, workoutId: string, label: string) => void;
-	onOpenWorkout: (workoutId: string) => void;
+	onAssign: (date: string, workoutId: string, occurrenceId?: string) => void;
+	onRemove: (date: string, workoutId: string, occurrenceId?: string) => void;
+	onUpdateLabel: (date: string, workoutId: string, label: string, occurrenceId?: string) => void;
+	onOpenWorkout: (workoutId: string, occurrenceId?: string) => void;
 	onUpdateLogRows: (
 		sessionDate: string,
 		sessionWorkoutId: string,
@@ -108,6 +111,7 @@ interface SessionKey {
 	date: string;
 	workoutId: string;
 	startTime: string;
+	occurrenceId?: string;
 }
 
 /** A grouped workout session for a single (date, workoutId, startTime). */
@@ -124,11 +128,14 @@ export interface LogSession {
 export function groupLogByDate(logRows: ParsedLogRow[], workoutNames?: Map<string, string>): Map<string, LogSession[]> {
 	const sessionMap = new Map<string, LogSession>();
 	for (const row of logRows) {
-		const key = `${row.date}|${row.workoutId}|${row.startTime}`;
+		const key = JSON.stringify([row.date, row.workoutId, row.startTime, row.occurrenceId]);
 		let session = sessionMap.get(key);
 		if (!session) {
 			session = {
-				key: { date: row.date, workoutId: row.workoutId, startTime: row.startTime },
+				key: {
+					date: row.date, workoutId: row.workoutId, startTime: row.startTime,
+					...(row.occurrenceId ? { occurrenceId: row.occurrenceId } : {}),
+				},
 				workoutName: workoutNames?.get(row.workoutId) ?? row.workoutId,
 				rows: [],
 			};
@@ -383,12 +390,12 @@ export function SessionDetail({
 	const exerciseOrder: string[] = [];
 	const exerciseMap = new Map<string, number[]>();
 	for (let i = 0; i < editRows.length; i++) {
-		const eName = editRows[i].exerciseName;
-		if (!exerciseMap.has(eName)) {
-			exerciseOrder.push(eName);
-			exerciseMap.set(eName, []);
+		const exerciseKey = editRows[i].cycleStage?.exerciseId ?? editRows[i].exerciseName;
+		if (!exerciseMap.has(exerciseKey)) {
+			exerciseOrder.push(exerciseKey);
+			exerciseMap.set(exerciseKey, []);
 		}
-		exerciseMap.get(eName)!.push(i);
+		exerciseMap.get(exerciseKey)!.push(i);
 	}
 
 	return (
@@ -412,11 +419,15 @@ export function SessionDetail({
 			{saveError && <p className="auth-error">{saveError}</p>}
 
 			<div className="session-detail-exercises">
-				{exerciseOrder.map((eName) => {
-					const indices = exerciseMap.get(eName)!;
+				{exerciseOrder.map((exerciseKey) => {
+					const indices = exerciseMap.get(exerciseKey)!;
+					const first = editRows[indices[0]];
 					return (
-						<div key={eName} className="session-detail-exercise">
-							<div className="session-detail-exercise-name">{eName}</div>
+						<div key={exerciseKey} className="session-detail-exercise">
+							<div className="session-detail-exercise-name">{first.exerciseName}</div>
+							{first.cycleStage && (
+								<p>{formatCycleStage(first.cycleStage)} · Iteration {first.cycleStage.iteration}</p>
+							)}
 							<div className="session-detail-sets">
 								<div className="session-detail-set-header">
 									<span className="session-detail-set-num">#</span>
@@ -427,8 +438,15 @@ export function SessionDetail({
 								</div>
 								{indices.map((idx) => {
 									const row = editRows[idx];
+									const template = row.plannedTemplate;
+									const plannedReps = template
+										? template.amrap ? `${template.minReps}+`
+											: template.minReps === template.maxReps ? `${template.minReps}`
+												: `${template.minReps}–${template.maxReps}`
+										: `${row.plannedReps}`;
 									return (
-										<div key={idx} className={`session-detail-set-row session-detail-set-${row.setType}`}>
+										<div key={idx}>
+										<div className={`session-detail-set-row session-detail-set-${row.setType}`}>
 											<span className="session-detail-set-num">{row.setNumber}</span>
 											<select
 												className="session-detail-set-type-input"
@@ -460,6 +478,11 @@ export function SessionDetail({
 												{row.completed ? <Check size={14} /> : ''}
 											</button>
 										</div>
+										<small>Planned: {row.plannedWeight} × {plannedReps}
+											{template?.weightBasis.kind === 'trainingMax'
+												? ` (${Math.round(template.percentage * 10000) / 100}% TM)` : ''}
+										</small>
+										</div>
 									);
 								})}
 							</div>
@@ -474,6 +497,7 @@ export function SessionDetail({
 export function CalendarView({
 	workouts,
 	workoutDefinitions = [],
+	definitions,
 	cardioActivities,
 	workoutSchedule,
 	dayFlags,
@@ -498,7 +522,7 @@ export function CalendarView({
 	const [activeSession, setActiveSession] = useState<LogSession | null>(null);
 	const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null);
 	const [sessionMutationError, setSessionMutationError] = useState<string | null>(null);
-	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string } | null>(null);
+	const [editingLabel, setEditingLabel] = useState<{ date: string; workoutId: string; occurrenceId?: string } | null>(null);
 	const [labelDraft, setLabelDraft] = useState('');
 	const [visibleMonthOffsets, setVisibleMonthOffsets] = useState([0, 1, 2]);
 	const [monthDayScrollTarget, setMonthDayScrollTarget] = useState<{ date: string } | null>(null);
@@ -521,6 +545,17 @@ export function CalendarView({
 			const existing = map.get(entry.date) ?? [];
 			existing.push(entry.workoutId);
 			map.set(entry.date, existing);
+		}
+		return map;
+	}, [workoutSchedule]);
+
+	const scheduleEntriesByDate = useMemo(() => {
+		const map = new Map<string, WorkoutScheduleEntry[]>();
+		for (const entry of workoutSchedule) {
+			if (!entry.workoutId) continue;
+			const entries = map.get(entry.date) ?? [];
+			entries.push(entry);
+			map.set(entry.date, entries);
 		}
 		return map;
 	}, [workoutSchedule]);
@@ -549,7 +584,7 @@ export function CalendarView({
 	// Build a map of workoutId → workout name for display
 	const workoutNames = useMemo(() => {
 		const map = new Map<string, string>();
-		for (const definition of workoutDefinitions) {
+		for (const definition of definitions ?? workoutDefinitions) {
 			map.set(definition.id, definition.name);
 		}
 		for (const w of workouts) {
@@ -561,7 +596,7 @@ export function CalendarView({
 		map.set(REST_ID, 'Rest');
 		map.set(BLOCKER_ID, 'Blocker');
 		return map;
-	}, [workouts, workoutDefinitions, cardioActivities]);
+	}, [workouts, workoutDefinitions, definitions, cardioActivities]);
 	const displayWorkoutName = useCallback(
 		(workoutId: string) =>
 			workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId),
@@ -602,15 +637,17 @@ export function CalendarView({
 
 	// Build log sessions grouped by date, using workout names for display
 	const logByDate = useMemo(() => groupLogByDate(logRows, workoutNames), [logRows, workoutNames]);
+	const allSessions = useMemo(() => [...logByDate.values()].flat(), [logByDate]);
+	const workoutById = useMemo(() => new Map(workouts.map((workout) => [workout.id, workout])), [workouts]);
 
-	const handleStartEditLabel = useCallback((date: string, workoutId: string, currentLabel: string) => {
-		setEditingLabel({ date, workoutId });
+	const handleStartEditLabel = useCallback((date: string, workoutId: string, currentLabel: string, occurrenceId?: string) => {
+		setEditingLabel({ date, workoutId, occurrenceId });
 		setLabelDraft(currentLabel);
 	}, []);
 
 	const handleSaveLabel = useCallback(() => {
 		if (editingLabel) {
-			onUpdateLabel(editingLabel.date, editingLabel.workoutId, labelDraft);
+			onUpdateLabel(editingLabel.date, editingLabel.workoutId, labelDraft, editingLabel.occurrenceId);
 		}
 		setEditingLabel(null);
 		setLabelDraft('');
@@ -624,7 +661,8 @@ export function CalendarView({
 	const handleAssign = useCallback(
 		(workoutId: string) => {
 			if (addingForDate) {
-				onAssign(addingForDate, workoutId);
+				const entry = createScheduleOpportunity(addingForDate, workoutId);
+				onAssign(addingForDate, workoutId, scheduleOccurrenceId(entry));
 				setAddingForDate(null);
 			}
 		},
@@ -764,6 +802,7 @@ export function CalendarView({
 				{activePanel === 'plan' && (
 					<CalendarPush
 						workouts={workouts}
+						definitions={definitions}
 						cardioActivities={cardioActivities}
 						onUpdateSchedule={onBulkSchedule}
 						onClear={onClearSchedule}
@@ -902,17 +941,10 @@ export function CalendarView({
 					const today = isToday(dayInfo.date);
 					const weekend = isWeekend(dayInfo.date);
 					const isPast = dayInfo.date < todayStr();
-					const scheduledWorkouts = orderScheduledWorkouts(dayInfo.scheduled);
-
-					// Deduplicate: collect all workout IDs that appear (scheduled + logged)
-					const loggedWorkoutIds = new Set(dayInfo.sessions.map((s) => s.key.workoutId));
-					// Map workoutId → session for quick lookup (use first matching session)
-					const sessionByWorkoutId = new Map<string, LogSession>();
-					for (const s of dayInfo.sessions) {
-						if (!sessionByWorkoutId.has(s.key.workoutId)) {
-							sessionByWorkoutId.set(s.key.workoutId, s);
-						}
-					}
+					const scheduledWorkouts = [...(scheduleEntriesByDate.get(dayInfo.date) ?? [])]
+						.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId));
+					const unscheduledSessions = dayInfo.sessions.filter((session) =>
+						!scheduledWorkouts.some((entry) => session.rows.some((row) => matchesScheduledOccurrence(entry, row))));
 
 					return (
 						<div
@@ -960,21 +992,27 @@ export function CalendarView({
 							{/* Scheduled workouts */}
 							{scheduledWorkouts.length > 0 && (
 								<div className="calendar-workouts">
-									{scheduledWorkouts.map((wid, idx) => {
+									{scheduledWorkouts.map((entry, idx) => {
+										const wid = entry.workoutId;
+										const occurrenceId = scheduleOccurrenceId(entry);
 										const isCardio = wid.startsWith('cardio:');
 										const isRest = wid === REST_ID;
 										const isBlocker = wid === BLOCKER_ID;
-										const hasLog = loggedWorkoutIds.has(wid);
-										const session = sessionByWorkoutId.get(wid);
+										const session = (occurrenceId ? allSessions : dayInfo.sessions)
+											.find((session) => session.rows.some((row) => matchesScheduledOccurrence(entry, row)));
+										const hasLog = !!session;
+										const workout = workoutById.get(wid);
+										const cycleLabels = workout ? workoutCycleLabels(workout) : [];
 										const deleteKey = session ? sessionKeyStr(session) : null;
 										const isConfirming = deleteKey !== null && confirmDeleteKey === deleteKey;
 										const Icon = isRest ? Moon : isBlocker ? Ban : isCardio ? HeartPulse : Dumbbell;
 										const workoutName = displayWorkoutName(wid);
-										const customLabel = dayInfo.labels?.[wid];
+										const customLabel = entry.label;
 										const displayName = customLabel || workoutName;
 										const isEditingThisLabel = !isRest
 											&& editingLabel?.date === dayInfo.date
-											&& editingLabel.workoutId === wid;
+											&& editingLabel.workoutId === wid
+											&& editingLabel.occurrenceId === occurrenceId;
 
 										if (isEditingThisLabel) {
 											return (
@@ -1104,28 +1142,26 @@ export function CalendarView({
 														</span>
 														<ChevronRight size={14} />
 													</button>
-												) : isPast ? (
-													<span className="calendar-workout-link">
-														<Icon size={14} />
-														<span className="calendar-workout-name">
-															{displayName}
-														</span>
-													</span>
 												) : (
 													<button
 														className="calendar-workout-link calendar-workout-link-strength"
-														onClick={() => onOpenWorkout(wid)}
+														onClick={() => onOpenWorkout(wid, occurrenceId)}
+														disabled={!workout || !!workout.error}
 													>
 														<Icon size={14} />
 														<span className="calendar-workout-name">
 															{displayName}
+															{cycleLabels.map((label, index) => <small key={index}><br />{label}</small>)}
+															{workout?.error && <small className="auth-error" role="alert">
+																<br />{workout.error} Check the workout and shared exercise settings before starting.
+															</small>}
 														</span>
 														<ChevronRight size={14} />
 													</button>
 												)}
 												<button
 													className="calendar-label-edit-btn"
-													onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '')}
+													onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '', occurrenceId)}
 													aria-label={`Edit label for ${workoutName}`}
 												>
 													<Pencil size={14} />
@@ -1150,7 +1186,7 @@ export function CalendarView({
 												{!isPast && !hasLog && (
 													<button
 														className="calendar-remove-btn"
-														onClick={() => onRemove(dayInfo.date, wid)}
+														onClick={() => onRemove(dayInfo.date, wid, occurrenceId)}
 														aria-label={`Remove ${workoutName}`}
 													>
 														<X size={14} />
@@ -1163,10 +1199,9 @@ export function CalendarView({
 							)}
 
 							{/* Logged sessions not already shown via schedule */}
-							{dayInfo.sessions.filter((s) => !dayInfo.scheduled.includes(s.key.workoutId)).length > 0 && (
+							{unscheduledSessions.length > 0 && (
 								<div className="calendar-workouts">
-									{dayInfo.sessions
-										.filter((s) => !dayInfo.scheduled.includes(s.key.workoutId))
+									{unscheduledSessions
 										.map((session, idx) => {
 											const name = workoutNames.get(session.key.workoutId) ?? session.workoutName;
 											const deleteKey = sessionKeyStr(session);
