@@ -205,6 +205,31 @@ describe('normalization and policy compatibility', () => {
 		expect(review.proposals[0]).toMatchObject({ proposedTopSetWeight: 152.5, proposedBackoffWeight: 100 });
 		expect(review.progress.exercises[0].complete).toBe(false);
 	});
+	it('keeps newer shared baselines when a frozen ordinary workout is skipped', () => {
+		const snapshot = start(ordinary(), [bench]);
+		const skipped = completed(snapshot).map((sets) => sets.map((result) => ({ ...result, completed: false })));
+		const shared = { ...bench, topSetWeight: 160, backoffWeight: 110 };
+		const review = finishCycle(snapshot, skipped, snapshot.progress, [shared]);
+		expect(review.proposals[0]).toMatchObject({
+			currentTopSetWeight: 160, proposedTopSetWeight: 160,
+			currentBackoffWeight: 110, proposedBackoffWeight: 110,
+		});
+		expect(review.progress.exercises[0].configs[0].topSetWeight).toBe(150);
+	});
+	it('retains actual-weight proposals without reverting an unchanged backoff field', () => {
+		const snapshot = start(ordinary(), [bench]);
+		const results = completed(snapshot);
+		results[0][0].actualWeight = 175;
+		results[0][0].actualReps = 0;
+		results[0][1].completed = false;
+		const review = finishCycle(snapshot, results, snapshot.progress, [{
+			...bench, topSetWeight: 160, backoffWeight: 110,
+		}]);
+		expect(review.proposals[0]).toMatchObject({
+			currentTopSetWeight: 175, proposedTopSetWeight: 175,
+			currentBackoffWeight: 110, proposedBackoffWeight: 110,
+		});
+	});
 	it('defers multi-exposure top-set progression until its exercise boundary', () => {
 		const def = ordinary();
 		def.cycle = normalizeCycle(def);

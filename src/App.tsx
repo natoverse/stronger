@@ -429,7 +429,7 @@ function AppContent() {
       setFinishError(null);
       if (activeSnapshot) {
         try {
-          const review = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id));
+          const review = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id), configs);
           review.trainingMaxProposals = review.trainingMaxProposals.map((proposal) => ({
             ...proposal, frozen: proposal.current,
             current: configs.find((config) => config.id === proposal.liftId)?.trainingMax ?? proposal.current,
@@ -452,7 +452,7 @@ function AppContent() {
       setFinishError(null);
       try {
         const { workout, results, endTime, baselineConfigs } = pendingFinish;
-        const reviewed = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id));
+        const reviewed = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id), baselineConfigs);
         const rows = workoutResultRows(workout, results, startTime, endTime, activeSnapshot.occurrenceId);
         // Keeping a baseline produces no write and never overwrites a newer shared setting.
         const changes = new Map<string, BaselineUpdate>();
@@ -1965,6 +1965,7 @@ function AppContent() {
           initialDefinition={editDef ? undefined : duplicateWorkoutDraft}
           roundWarmupPlateMath={appSettings.roundWarmupPlateMath}
           allDefinitions={definitions}
+          reservedIds={[...cycleProgress.map((item) => item.workoutId), ...logRows.map((row) => row.workoutId)]}
           configs={configs}
           onSave={handleEditorSave}
           onCancel={handleEditorCancel}

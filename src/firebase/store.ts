@@ -465,7 +465,8 @@ function recoveryDraft(uid: string, snapshot: StoredCycleDraft): StoredCycleDraf
 
 function restoreRecoveryDraft(uid: string, snapshot: StoredCycleDraft): void {
 	const existing = loadDraft(uid, snapshot.workout.id)
-	if (existing?.snapshot && existing.snapshot.id !== snapshot.id) return
+	// Local edits are saved immediately; a queued write or rejection may be older.
+	if (existing?.snapshot) return
 	saveDraft({
 		workoutId: snapshot.workout.id,
 		startTime: snapshot.startTime ?? '',

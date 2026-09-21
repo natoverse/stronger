@@ -257,6 +257,15 @@ describe('cycle storage', () => {
 		expect(loadDraft('alice', '531')?.results).toEqual(results)
 		expect(loadDraft('alice', '531')?.snapshot?.progress.revision).toBe(1)
 	})
+	it.each([false, true])('does not replace newer local edits when an older draft write rejects=%s', async (reject) => {
+		const snapshot = makeSnapshot()
+		const older: SetResult[][] = [[{ actualWeight: 120, actualReps: 3, actualSetType: 'work', completed: false }]]
+		const latest: SetResult[][] = [[{ actualWeight: 125, actualReps: 5, actualSetType: 'work', completed: true }]]
+		saveDraft({ workoutId: '531', snapshot, results: latest, startTime: 'start-time' }, 'alice')
+		state.reject = reject
+		await writeCycleDraftResults('alice', snapshot, older, 'start-time')
+		expect(loadDraft('alice', '531')?.results).toEqual(latest)
+	})
 
 	it('edits and deletes snapshot-keyed history at its existing stable document ID', async () => {
 		const snapshot = makeSnapshot()

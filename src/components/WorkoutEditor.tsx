@@ -39,6 +39,8 @@ interface WorkoutEditorProps {
 	initialDefinition?: WorkoutDefinition;
 	/** All current definitions (used for ID uniqueness checks). */
 	allDefinitions: WorkoutDefinition[];
+	/** IDs with saved progress remain reserved even after their definition is deleted. */
+	reservedIds?: string[];
 	/** Available lifts from configs. */
 	configs: LiftConfig[];
 	roundWarmupPlateMath?: boolean;
@@ -355,6 +357,7 @@ export function WorkoutEditor({
 	existing,
 	initialDefinition,
 	allDefinitions,
+	reservedIds = [],
 	configs,
 	roundWarmupPlateMath = false,
 	onSave,
@@ -397,10 +400,10 @@ export function WorkoutEditor({
 
 	// IDs already used by other definitions (excluding current if editing)
 	const usedIds = useMemo(() => {
-		const ids = new Set(allDefinitions.map((d) => d.id));
+		const ids = new Set([...allDefinitions.map((d) => d.id), ...reservedIds]);
 		if (existing) ids.delete(existing.id);
 		return ids;
-	}, [allDefinitions, existing]);
+	}, [allDefinitions, existing, reservedIds]);
 
 	// Validation
 	const autoId = nameToId(workout.name);

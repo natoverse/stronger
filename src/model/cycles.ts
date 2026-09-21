@@ -229,7 +229,12 @@ function stageLabel(step: FrozenExerciseStep): string {
 }
 
 /** A confirmation advances each completed exercise once, never once per set/date. */
-export function finishCycle(snapshot: CycleSessionSnapshot, results: SetResult[][], current?: CycleProgress): CycleFinish {
+export function finishCycle(
+	snapshot: CycleSessionSnapshot,
+	results: SetResult[][],
+	current?: CycleProgress,
+	sharedConfigs: LiftConfig[] = [],
+): CycleFinish {
 	if (current?.lastSessionId === snapshot.id) {
 		return { progress: structuredClone(current), proposals: [], trainingMaxProposals: [], transitions: [] };
 	}
@@ -292,7 +297,21 @@ export function finishCycle(snapshot: CycleSessionSnapshot, results: SetResult[]
 	const trainingMaxLifts = new Set(progress.exercises
 		.filter((item) => item.baseline === 'trainingMax').map((item) => item.steps[0].template.liftId));
 	const proposals = computeProgression(evaluationExercises, evaluationResults, [...evaluationConfigs.values()], evaluationTemplates)
-		.filter((proposal) => !trainingMaxLifts.has(proposal.liftId));
+		.filter((proposal) => !trainingMaxLifts.has(proposal.liftId))
+		.map((proposal) => {
+			const frozen = evaluationConfigs.get(proposal.liftId)!;
+			const shared = sharedConfigs.find((config) => config.id === proposal.liftId) ?? frozen;
+			// A skipped/unchanged field must not revert another cycle's accepted increase.
+			const keepTop = proposal.currentTopSetWeight === frozen.topSetWeight
+				&& proposal.proposedTopSetWeight === frozen.topSetWeight;
+			const keepBackoff = proposal.currentBackoffWeight === frozen.backoffWeight
+				&& proposal.proposedBackoffWeight === frozen.backoffWeight;
+			return {
+				...proposal,
+				...(keepTop ? { currentTopSetWeight: shared.topSetWeight, proposedTopSetWeight: shared.topSetWeight } : {}),
+				...(keepBackoff ? { currentBackoffWeight: shared.backoffWeight, proposedBackoffWeight: shared.backoffWeight } : {}),
+			};
+		});
 	return { progress, proposals, trainingMaxProposals: [...trainingMaxProposals.values()], transitions };
 }
 

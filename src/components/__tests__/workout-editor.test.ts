@@ -281,6 +281,19 @@ describe('fromEditable', () => {
 			expect(previewExposure(draft.cycle!.weeks[0].exposures[1], [config])[0].sets[0].weight).toBe(100);
 			expect(draft).toEqual(before);
 		});
+		it('reserves deleted cycle IDs without blocking edits to the existing cycle', () => {
+			const def = definition();
+			const props = {
+				allDefinitions: [], reservedIds: [def.id], configs: [config],
+				onSave: () => {}, onCancel: () => {},
+			};
+			const recreated = renderToStaticMarkup(createElement(WorkoutEditor, { ...props, initialDefinition: def }));
+			expect(recreated).toContain('is already in use');
+			expect(recreated).toMatch(/class="btn-finish" disabled=""/);
+			const editing = renderToStaticMarkup(createElement(WorkoutEditor, { ...props, existing: def }));
+			expect(editing).not.toContain('is already in use');
+			expect(editing).not.toMatch(/class="btn-finish" disabled=""/);
+		});
 
 		it('previews configured rounding and floors while keeping fixed/bar weights exact', () => {
 			const exposure = toEditable(definition()).cycle!.weeks[0].exposures[0];
