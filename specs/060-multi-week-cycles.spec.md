@@ -1,14 +1,14 @@
 # Feature: Multi-week training cycles
 
-> Define explicit week-by-week sets, reps, and weights so a reusable strength plan can change structure, not just increase load.
+> Define and schedule reusable week-by-week strength plans with shared training-max inputs, frozen run prescriptions, and an explicit end-cycle progression review.
 
 ## What
 
-A **cycle** is a named, ordered sequence of program weeks; a **week** contains named workout slots, each describing one session's exercises and sets. A **run** is one attempt at that cycle. Program weeks are stages, not calendar weeks: elapsed time and completing a workout never advance the plan automatically.
+A **cycle** is a named, ordered sequence of one or more program weeks; each **week** is a stage containing named workout slots. A **run** is one attempt at a cycle. Users author cycles by copying workouts and duplicating/editing weeks, preview prescriptions, and schedule a whole run's slots on dates. Calendar and Today's Plan launches resolve the assigned run/stage/slot, not whichever week happens to be current.
 
-Users author cycles by copying existing workouts and duplicating/editing weeks, preview every week's prescriptions, then start or resume a run from the workout list. Within the current week, they choose which workout to perform and explicitly advance when ready. Ordinary workouts remain independent and unchanged.
+**Training max (TM)** is an optional shared exercise setting, editable alongside other `LiftConfig` fields and available as a `trainingMax` weight basis in any workout. It is distinct from top-set/backoff weights and estimated max; only prescriptions using TM require it. Cycles do not own TM defaults. Starting a run confirms and freezes its definition and shared calculation/progression inputs; explicit run-only overrides never silently overwrite shared settings.
 
-For this first version, a run retains the cycle definition and all weight-calculation inputs accepted at its start. Later template or lift-setting edits affect future runs, not the active run. Cycle sessions do not trigger ordinary post-workout weight increases; prescribed weeks alone control progression within a run.
+Progression policies and triggers are data, not separate ordinary/cycle execution paths. Prescribed multi-week progression holds inputs constant within a run and offers a TM review at its completed boundary. Shared cycle/week/slot and execution/progression infrastructure, representing ordinary workouts as one-week cycles, is the **proposed approach**, subject to the representation decision below. Existing ordinary post-workout top/backoff progression and frictionless ad hoc use must remain intact.
 
 ### Required example: classic four-week 5/3/1
 
@@ -27,38 +27,55 @@ The base rep targets are 5/5/5, 3/3/3, 5/3/1, and 5/5/5. A `+` uses the existing
 
 For a 200 lb TM, 5 lb work-set rounding, and a 45 lb minimum, the resolved work sets are 130/150/170 lb, 140/160/180 lb, 150/170/190 lb, and 80/100/120 lb respectively. Percentages always apply to TM, never to the preceding set or week's working weight. A floor that raises a deload weight still follows existing calculation rules and is visible in the preview.
 
-Before starting another run, users can explicitly change each lift's TM without changing ordinary workout weights. Automatic between-cycle increases and later 5/3/1 variants are not required for this version.
+At the completed run boundary, a prescribed multi-week trigger suggests a TM increment for explicit accept/keep/custom-value review. Accepted TM changes affect future TM-based calculations, not top/backoff fields or frozen runs. There are no automatic TM changes or assumed performance thresholds; later 5/3/1 variants are not required.
 
 ## Acceptance Criteria
 
 - [ ] The phone-friendly editor can create, name, save, and edit cycles; add/remove/duplicate weeks and workout slots; and edit each week's exercises and ordered sets independently. Copying a workout or week does not create a live link or modify its source.
 - [ ] Each week explicitly specifies set counts, set types, fixed/ranged rep targets, AMRAP, and weight prescriptions. A three-week example of 3×8 at 70%, 4×6 at 75%, and 3×5 at 80% produces those exact structures; lighter recovery weeks are equally valid.
-- [ ] Prescriptions reuse every existing `WeightBasis` option: top set, backoff, cross-reference, fixed, bar weight, and relative offset. Calculated loads retain existing rounding, warmup rounding, and minimum rules; fixed/bar-weight values retain their existing exact-value behavior.
-- [ ] Cycle prescriptions additionally support an explicit training-max weight basis for the exercise's lift. Each cycle stores editable per-lift TM defaults, and starting a run confirms or overrides and snapshots those values. A missing, non-finite, or non-positive required TM blocks start/weight preview with an actionable error; no fallback to top-set weight is allowed. Ordinary workouts do not require a TM.
+- [ ] Prescriptions reuse every existing `WeightBasis` option (top set, backoff, cross-reference, fixed, bar weight, relative offset) and add `trainingMax` everywhere bases are supported, including ordinary workouts. Calculated loads retain existing rounding, warmup rounding, and minimum rules; fixed/bar-weight values remain exact.
+- [ ] TM is optional on shared exercise `LiftConfig` and editable in normal exercise configuration, with no cycle-owned defaults. A missing, non-finite, or non-positive TM blocks preview/start only where required by a prescription, with an actionable error and no top-set fallback. Run start confirms/snapshots shared inputs and any explicit run-only overrides without writing them back.
 - [ ] The editor can express the complete four-week 5/3/1 table above, including independent percentages on all three sets, last-set AMRAP in weeks 1–3, and a non-AMRAP deload. Preview and execution show the week, rep target/AMRAP, percentage, clearly labeled TM basis, and resolved weight.
-- [ ] Save/start validation rejects unnamed cycles/workouts, fewer than two weeks, empty weeks/workouts/exercises, invalid rep ranges or weight prescriptions, and unresolved lift references, with actionable errors rather than silently dropping sets.
-- [ ] Users can preview any week, including resolved weights, without starting or advancing. Starting confirms the plan and calculation inputs, begins at week 1, and allows only one active run. The active view identifies cycle, week number/total, and workout, and shows which slots have logged sessions.
-- [ ] Completing, skipping, or repeating workouts leaves the current week unchanged. Repeating a workout or staying on a week records separate sessions with the same prescription. “Next week” moves exactly one stage after confirmation, warning about unperformed slots without requiring them to be completed.
-- [ ] The last week offers explicit finish rather than automatic wraparound; users may also end a run early. Repeating the whole cycle starts a new run at week 1 after previewing the latest definition/current inputs, including explicitly editable per-lift TMs, without automatic weight increases or erasing history. Run-only TM overrides do not silently replace the cycle's saved defaults. Finish/end/advance cannot retarget an unfinished session: finish or discard it first.
-- [ ] Finishing a cycle workout still confirms and saves results but offers no weight-progression proposals and changes no shared lift weights, even after successful 100% sets or manual weight overrides. Ordinary workouts retain their existing progression; their weight updates cannot alter an active cycle run.
-- [ ] Editing a cycle, its source workouts, or calculation inputs mid-run leaves the active plan, previews, and unfinished session unchanged. The UI explains that edits apply to the next run.
-- [ ] User-scoped cycle definitions, run inputs/current week/status, and cycle session context survive reload and synchronization through existing Firestore/offline behavior. Resuming an unfinished session restores its original prescription and results. Data without cycle fields remains valid; existing workouts, schedules, and history are not converted.
-- [ ] History retains cycle/run/week/workout identity, the performed session's planned structure and resolved targets, and actual results independently of later edits or runs. Cycle “previous session” comparisons use only the same run/week/workout and corresponding exercise/set; absent or changed matches show no value, never another week's set at the same array position.
-- [ ] Automated tests cover all 12 work-set prescriptions and resolved weights in the 5/3/1 example, distinct TMs for different lifts, AMRAP/deload behavior, rounding/minimums, invalid or missing TMs, variable set counts, manual advancement/repeats, frozen inputs/history, offline persistence, and unchanged ordinary-workout progression.
+- [ ] Save/start validation accepts one or more weeks and rejects unnamed cycles/workouts, zero weeks, empty weeks/workouts/exercises, invalid rep ranges or weight prescriptions, and unresolved lift references with actionable errors, never silently dropping sets.
+- [ ] Users preview any week without starting/advancing, and start/resume from the workout list. A new multi-week run begins at week 1; views identify cycle, run, stage number/total, slot, and logged sessions. At most one active multi-week run is allowed; ordinary one-week/ad hoc workouts remain available without repetitive run setup/end screens.
+- [ ] Users plan an entire run's workout slots on the internal calendar. Every occurrence retains stable cycle/run/stage/slot identity and its own occurrence identity, even when source workouts repeat. Calendar and Today's Plan launch the correct frozen prescription; completion matches that occurrence, never date/workout ID alone.
+- [ ] Moving dates or repeating a slot never silently relabels its prescription; repeats create separate occurrences/sessions. Planning preserves unrelated dates/events and existing cardio/rest/blocker semantics. Existing Google Calendar sync retains cycle context and distinct occurrences across synchronization.
+- [ ] Stage controls support explicit navigation/advancement with warnings for unperformed slots; elapsed calendar time alone does not advance prescriptions. Missed-slot handling and completion follow the decisions below once confirmed. Finish/end/advance cannot retarget an unfinished session: finish or discard it first. Early ending is distinct from completion; repeating the cycle starts a new run with the latest confirmed definition/inputs and preserves history.
+- [ ] Finishing a workout saves results and applies its prescribed progression trigger. Under a multi-week TM policy, individual sessions do not propose ordinary top/backoff bumps, including after successful 100% sets or manual load overrides. Ordinary eligible workouts retain existing per-session top/backoff proposals, never a new calendar-week delay.
+- [ ] At a completed run boundary, each lift with a prescribed TM increment receives one review per lift/run boundary: accept the suggested value, keep TM, or confirm a custom valid value. Only explicit acceptance/custom confirmation updates shared TM; no automatic change or unapproved performance gate is introduced. Persisted review outcomes prevent duplicate application after reload, retry, or synchronization; completed snapshots/history remain immutable.
+- [ ] Mid-run edits to templates, shared inputs (including cross-references/rounding), or ordinary progression leave frozen run previews, execution, and unfinished sessions unchanged. The UI explains that changed inputs apply to future runs; run-only overrides never silently replace shared settings.
+- [ ] User-scoped definitions, frozen inputs, run stage/status, planned identities, session context, and TM review state survive reload and existing Firestore/offline synchronization. Unfinished sessions restore original prescriptions/results; Google Calendar operations retain their existing online-only behavior.
+- [ ] Existing workouts, schedules, and logs without cycle fields remain usable without destructive migration. History retains cycle/run/stage/slot/occurrence identity, planned structure/resolved targets, and actual results independently of edits. Multi-week previous-session comparisons require the same run/stage/slot and corresponding exercise/set; absent or changed matches show no value rather than another stage's set at the same index. Ordinary workouts retain existing comparisons across sessions.
+- [ ] Automated tests cover all 12 example weights/prescriptions, distinct lift TMs, optional/invalid TM, AMRAP/deload, rounding/minimums, variable sets, confirmed lifecycle policies/repeats, calendar identity/moves/reused workouts, Google sync preservation, frozen history/offline restoration, idempotent TM review, and unchanged ordinary progression/compatibility.
 
 ## Scope
 
 ### In scope
-- Explicit cycle authoring, per-lift training-max inputs, preview, manual run controls, workout execution, persistence, and accurate session history.
+- Cycle authoring/validation, shared TM basis, frozen runs, internal whole-run scheduling and existing Google sync compatibility, execution/history/offline persistence, and prescribed end-cycle TM review.
+- Data-driven progression triggers and shared execution; proposed ordinary one-week representation subject to confirmation below.
 
 ### Out of scope
-- Cycle scheduling or Google Calendar integration; existing ordinary-workout planning stays unchanged.
-- Calendar-driven advancement, automatic catch-up, adaptive programming, failure-based deloads, or automatic between-cycle increases.
-- Multiple simultaneous runs, editing an active run's prescriptions, cycle sharing/import formats, and bundled training programs.
+- Broader external-calendar auto-advancement, adaptive programming, failure-based deloads, or automatic TM changes. Missed-slot rescheduling is unresolved, not silently excluded.
+- Multiple simultaneous multi-week runs, editing frozen prescriptions, cycle sharing/import formats, and bundled programs.
+
+## Open decisions — provisional recommendations
+
+Resolve these lifecycle choices before implementation; recommendations are **not accepted decisions**.
+
+1. **Missed workouts:** keep each entry's assigned stage with explicit move/skip, or automatically shift subsequent dates? **Recommend:** retain assignments and require explicit move/skip; never silently relabel stages.
+2. **Completion:** explicit finish of the final stage with missed-slot warnings, or automatic completion when all scheduled slots are done? **Recommend:** explicit finish; early ending does not count as completion or trigger the completion TM review.
+3. **TM increment:** reuse the existing per-lift increment or configure a separate TM increment? **Recommend:** reuse it as the initial default unless a separate amount is wanted.
+4. **Ordinary one-week cycles:** each workout as a transparently repeating one-week cycle, or a multi-workout weekly plan whose progression waits for the whole week? **Recommend:** per-workout representation retaining per-session bumps. A week-delayed alternative would require explicitly revising the compatibility criteria above.
+
+## Iteration decisions — 2026-09-21
+
+- User feedback supersedes cycle-owned TM defaults: TM belongs to shared exercises and any weight prescription; runs freeze inputs without implicit writeback.
+- Internal scheduling and boundary TM suggestions are now in scope, replacing their original exclusions. Stable occurrence identity prevents reused workouts, moves, or sync from selecting the wrong stage; suggestions require explicit review, not automatic increases.
+- One-week cycles are valid and a common execution model is proposed to avoid ordinary/cycle branching. This replaces the two-week minimum and strict model separation, not existing behavior guarantees; lifecycle and ordinary representation choices remain open above.
 
 ## Notes
 
-- Assumptions: one active strength cycle, frozen run inputs (including cross-referenced lifts and rounding settings), and conservative same-week comparisons keep this one bounded PR. Calendar placement and richer cross-week comparisons can follow separately.
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.
+- Existing “weekly” top/backoff bumps actually trigger when eligible workouts finish, not on a calendar-week timer (`src/model/progression.ts:46–179`; archived spec 011). Unification must not silently change that cadence or let the active multi-week run block ordinary sessions.
 - The 5/3/1 table describes the classic four-week main-lift template, not every program bearing that name; supporting this acceptance fixture does not require shipping a bundled program. Reference: [5/3/1 program overview](https://barbend.com/5-3-1-program/).
 - Related: archived specs 001 (model), 005 (definitions), 011 (weight progression), 020 (editor), 030 (relative basis); spec 058 (offline). Grounding: `src/model/{types,compute,progression,logs}.ts`, `src/data/sample-workouts.ts`, `src/components/{WorkoutEditor,WorkoutView,CalendarView}.tsx`, `src/App.tsx`, and `src/firebase/store.ts`.
