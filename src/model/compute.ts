@@ -5,6 +5,7 @@ import type {
 	LiftConfig,
 	SetTemplate,
 } from './types.js';
+import { getTrainingMax } from './training-max.js';
 
 // ---------------------------------------------------------------------------
 // Weight calculation helpers
@@ -112,11 +113,13 @@ export function computeSetWeight(
 		case 'topSet':
 			return roundCalculatedWeight(set.percentage * liftConfig.topSetWeight);
 
-		case 'trainingMax':
-			if (!Number.isFinite(liftConfig.trainingMax) || (liftConfig.trainingMax ?? 0) <= 0) {
+		case 'trainingMax': {
+			const trainingMax = getTrainingMax(liftConfig);
+			if (!Number.isFinite(trainingMax) || trainingMax <= 0) {
 				throw new Error(`${liftConfig.name}: enter a positive training max in the exercise editor.`);
 			}
-			return roundCalculatedWeight(set.percentage * liftConfig.trainingMax!);
+			return roundCalculatedWeight(set.percentage * trainingMax);
+		}
 
 		case 'backoff':
 			return roundCalculatedWeight(set.percentage * liftConfig.backoffWeight);

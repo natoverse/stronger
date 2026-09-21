@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, Copy, Eye, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import type { SetTemplate, WeightBasis, SetType, LiftConfig, ExerciseRole, CycleBaseline, ExerciseTemplate } from '../model/types.js';
 import { computeSetWeight } from '../model/compute.js';
+import { getTrainingMax, getTrainingMaxIncrement } from '../model/training-max.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
 
 /** Local state for an exercise being edited. */
@@ -285,12 +286,12 @@ export function validateEditableWorkout(workout: EditableWorkout, configs: LiftC
 				if (exercise.id) identities.add(exercise.id);
 				if (!exercise.sets.length) errors.push(`${label}: add at least one set`);
 				if (config && exercise.sets.some((set) => set.weightBasis.kind === 'trainingMax')) {
-					if (!Number.isFinite(config.trainingMax) || config.trainingMax! <= 0) {
+					if (!Number.isFinite(getTrainingMax(config)) || getTrainingMax(config) <= 0) {
 						errors.push(`${label}: set a positive Training Max (TM) for ${config.name} in Exercises`);
 					}
 					if (workout.cycle?.baseline === 'trainingMax'
 						&& exercise.sets.some((set) => set.setType !== 'warmup' && set.weightBasis.kind === 'trainingMax')
-						&& (!Number.isFinite(config.trainingMaxIncrement) || config.trainingMaxIncrement! < 0)) {
+						&& (!Number.isFinite(getTrainingMaxIncrement(config)) || getTrainingMaxIncrement(config) < 0)) {
 						errors.push(`${label}: set a nonnegative TM increment for ${config.name} in Exercises (0 means no increase)`);
 					}
 				}

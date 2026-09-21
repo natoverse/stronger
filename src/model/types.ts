@@ -31,9 +31,9 @@ export interface LiftConfig {
 	backoffWeight: number;
 	/** Weight added on successful progression (e.g. 2.5 or 5 lbs). */
 	increment: number;
-	/** Optional shared training max, independent of working weights. */
+	/** Optional shared training max; defaults to topSetWeight when omitted. */
 	trainingMax?: number;
-	/** Increase proposed only at a completed training-max cycle boundary. */
+	/** Cycle-boundary increase; defaults to 10 for squat/deadlift, 5 for bench/press, otherwise 1. */
 	trainingMaxIncrement?: number;
 	/** Starting minimum — no set will be programmed below this weight (lbs). */
 	minimumWeight: number;

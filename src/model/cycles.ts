@@ -6,6 +6,7 @@ import type {
 } from './types.js';
 import { computeExercise } from './compute.js';
 import { computeProgression } from './progression.js';
+import { getTrainingMax, getTrainingMaxIncrement } from './training-max.js';
 
 export interface TrainingMaxProposal {
 	liftId: string;
@@ -90,10 +91,10 @@ function validateTemplate(template: ExerciseTemplate, configs: LiftConfig[], bas
 	if (!config) throw new Error(`${template.name || template.liftId}: select an existing exercise in the cycle editor.`);
 	if (!template.name.trim() || !template.sets.length) throw new Error(`${config.name}: add a named exercise with at least one set.`);
 	if (baseline === 'trainingMax' && hasTrainingMaxWork(template)) {
-		if (!Number.isFinite(config.trainingMax) || (config.trainingMax ?? 0) <= 0) {
+		if (!Number.isFinite(getTrainingMax(config)) || getTrainingMax(config) <= 0) {
 			throw new Error(`${config.name}: enter a positive training max in the exercise editor.`);
 		}
-		if (!Number.isFinite(config.trainingMaxIncrement) || (config.trainingMaxIncrement ?? -1) < 0) {
+		if (!Number.isFinite(getTrainingMaxIncrement(config)) || getTrainingMaxIncrement(config) < 0) {
 			throw new Error(`${config.name}: set a separate training-max increment (zero keeps TM unchanged).`);
 		}
 	}
@@ -266,10 +267,14 @@ export function finishCycle(
 		});
 		const config = item.configs.find((config) => config.id === step.template.liftId)!;
 		if (item.baseline === 'trainingMax') {
-			if (boundary && item.steps.some((entry) => hasTrainingMaxWork(entry.template))) trainingMaxProposals.set(config.id, {
-				liftId: config.id, liftName: config.name, current: config.trainingMax!,
-				proposed: config.trainingMax! + config.trainingMaxIncrement!, increment: config.trainingMaxIncrement!,
-			});
+			if (boundary && item.steps.some((entry) => hasTrainingMaxWork(entry.template))) {
+				const trainingMax = getTrainingMax(config);
+				const increment = getTrainingMaxIncrement(config);
+				trainingMaxProposals.set(config.id, {
+					liftId: config.id, liftName: config.name, current: trainingMax,
+					proposed: trainingMax + increment, increment,
+				});
+			}
 		} else if (item.steps.length === 1) {
 			evaluationExercises.push(snapshot.workout.exercises[index]);
 			evaluationResults.push(results[index] ?? []);
@@ -312,7 +317,13 @@ export function finishCycle(
 				...(keepBackoff ? { currentBackoffWeight: shared.backoffWeight, proposedBackoffWeight: shared.backoffWeight } : {}),
 			};
 		});
-	return { progress, proposals, trainingMaxProposals: [...trainingMaxProposals.values()], transitions };
+	return {
+		progress, proposals, transitions,
+		trainingMaxProposals: [...trainingMaxProposals.values()].map((proposal) => {
+			const shared = sharedConfigs.find((config) => config.id === proposal.liftId);
+			return shared ? { ...proposal, frozen: proposal.current, current: getTrainingMax(shared) } : proposal;
+		}),
+	};
 }
 
 export function previewCycles(

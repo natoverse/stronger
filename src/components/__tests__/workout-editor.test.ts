@@ -391,21 +391,31 @@ describe('fromEditable', () => {
 			expect(validateEditableWorkout(draft, [{ ...config, trainingMax: undefined, trainingMaxIncrement: undefined }])).toEqual([]);
 		});
 
-		it.each([undefined, 0, -10, NaN, Infinity])('requires a positive finite TM when a set uses TM (%s)', (trainingMax) => {
+		it.each([0, -10, NaN, Infinity])('requires a positive finite explicit TM when a set uses TM (%s)', (trainingMax) => {
 			const draft = toEditable(definition());
 			draft.exercises[0].sets[0].weightBasis = { kind: 'trainingMax' };
 			expect(validateEditableWorkout(draft, [{ ...config, trainingMax }]).join(' ')).toContain('Training Max (TM) for Bench Press in Exercises');
 		});
 
-		it('requires a separate increment only for TM policy, and accepts explicit zero', () => {
+		it('validates explicit TM increments and accepts the default or explicit zero', () => {
 			const draft = toEditable(definition());
 			draft.exercises[0].sets[0].weightBasis = { kind: 'trainingMax' };
 			expect(validateEditableWorkout(draft, [{ ...config, trainingMaxIncrement: undefined }])).toEqual([]);
 			draft.cycle!.baseline = 'trainingMax';
-			for (const trainingMaxIncrement of [undefined, -5, NaN, Infinity]) {
+			expect(validateEditableWorkout(draft, [{ ...config, trainingMaxIncrement: undefined }])).toEqual([]);
+			for (const trainingMaxIncrement of [-5, NaN, Infinity]) {
 				expect(validateEditableWorkout(draft, [{ ...config, trainingMaxIncrement }]).join(' ')).toContain('nonnegative TM increment');
 			}
 			expect(validateEditableWorkout(draft, [{ ...config, trainingMaxIncrement: 0 }])).toEqual([]);
+		});
+		it('saves and previews TM prescriptions without requiring explicit TM fields', () => {
+			const draft = toEditable(definition());
+			draft.cycle!.baseline = 'trainingMax';
+			draft.exercises[0].sets[0].weightBasis = { kind: 'trainingMax' };
+			const legacy = { ...config, trainingMax: undefined, trainingMaxIncrement: undefined, topSetWeight: 200 };
+			expect(validateEditableWorkout(draft, [legacy])).toEqual([]);
+			expect(previewExposure(draft.cycle!.weeks[0].exposures[0], [legacy])[0].sets[0].weight).toBe(140);
+			expect(validateEditableWorkout(draft, [{ ...legacy, topSetWeight: 0 }]).join(' ')).toContain('positive Training Max');
 		});
 
 		it('leaves non-TM assistance valid under TM policy and requires no increment for TM warmups', () => {

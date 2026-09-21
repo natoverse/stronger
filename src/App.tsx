@@ -3,6 +3,7 @@ import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, Prog
 import { REST_ID } from './model/index.js';
 import type { CycleProgress, CycleSessionSnapshot } from './model/types.js';
 import { createCycleSession, finishCycle, previewCycles } from './model/cycles.js';
+import { getTrainingMax } from './model/training-max.js';
 import type { BaselineUpdate, CycleFinish } from './model/cycles.js';
 import { createScheduleOpportunity, scheduleOccurrenceId } from './model/schedule.js';
 import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, finishCycleSession } from './firebase/index.js';
@@ -439,10 +440,6 @@ function AppContent() {
       if (activeSnapshot) {
         try {
           const review = finishCycle(activeSnapshot, results, cycleProgressRef.current.find((item) => item.workoutId === workout.id), configs);
-          review.trainingMaxProposals = review.trainingMaxProposals.map((proposal) => ({
-            ...proposal, frozen: proposal.current,
-            current: configs.find((config) => config.id === proposal.liftId)?.trainingMax ?? proposal.current,
-          }));
           setCycleFinish(review);
           setProgressionProposals(review.proposals);
         } catch (error) {
@@ -467,7 +464,8 @@ function AppContent() {
         const changes = new Map<string, BaselineUpdate>();
         for (const [id, update] of updates) {
           const config = baselineConfigs.find((item) => item.id === id);
-          const changed = Object.fromEntries(Object.entries(update).filter(([field, value]) => config?.[field as keyof LiftConfig] !== value));
+          const changed = Object.fromEntries(Object.entries(update).filter(([field, value]) =>
+            (config && field === 'trainingMax' ? getTrainingMax(config) : config?.[field as keyof LiftConfig]) !== value));
           if (Object.keys(changed).length) changes.set(id, changed);
         }
         let savedRows = rows;

@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import type { LiftConfig, GearType } from '../model/index.js';
 import { ArrowLeft } from 'lucide-react';
 import { nameToId, DEFAULT_STRENGTH_CONFIG } from './ExerciseLibrary.js';
+import { getTrainingMaxIncrement } from '../model/training-max.js';
 
 const GEAR_OPTIONS: GearType[] = ['barbell', 'dumbbell', 'band', 'bodyweight', 'other'];
 
@@ -158,7 +159,7 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 						type="text"
 						inputMode="decimal"
 						value={trainingMax}
-						placeholder="Not configured"
+						placeholder={`Default: ${topSetWeight} lbs (top set)`}
 						aria-describedby="training-max-help training-max-errors"
 						onFocus={(e) => e.target.select()}
 						onChange={(e) => setTrainingMax(e.target.value)}
@@ -171,16 +172,17 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 						type="text"
 						inputMode="decimal"
 						value={trainingMaxIncrement}
-						placeholder="Not configured"
+						placeholder={`Default: ${getTrainingMaxIncrement({ id: effectiveId, name })} lbs`}
 						aria-describedby="training-max-help training-max-errors"
 						onFocus={(e) => e.target.select()}
 						onChange={(e) => setTrainingMaxIncrement(e.target.value)}
 					/>
 				</label>
 				<p id="training-max-help" className="cycle-editor-hint">
-					Enter TM directly; it is separate from top-set weight and estimated max.
-					TM-based progression also requires its own increment (0 means no increase), not the normal increment above.
-					Leave both blank for exercises that do not use TM.
+					Leave TM blank to use top-set weight. Leave TM increment blank to use
+					10 lbs for squat/deadlift, 5 lbs for bench/press, or 1 lb for other exercises.
+					Explicit values override these defaults; a TM increment of 0 means no increase.
+					The normal increment above is unchanged.
 				</p>
 				<div id="training-max-errors" role="alert">
 					{trainingMaxFields.errors.map((error) => <p className="editor-error" key={error}>{error}</p>)}

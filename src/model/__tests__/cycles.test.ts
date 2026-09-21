@@ -317,11 +317,57 @@ describe('normalization and policy compatibility', () => {
 });
 
 describe('validation and history', () => {
-	it.each([undefined, 0, -1, Infinity, NaN])('rejects required TM %s with an actionable error', (trainingMax) => {
+	it.each([0, -1, Infinity, NaN])('rejects invalid explicit TM %s with an actionable error', (trainingMax) => {
 		expect(() => start(definition(), [{ ...bench, trainingMax }, squat])).toThrow('training max');
 	});
-	it('never substitutes the normal increment for a missing separate TM increment', () => {
-		expect(() => start(definition(), [{ ...bench, trainingMaxIncrement: undefined }, squat])).toThrow('separate training-max increment');
+	it('defaults TM and its increment independently without using the normal increment', () => {
+		const def = definition();
+		def.cycle!.weeks = [def.cycle!.weeks[0]];
+		const snapshot = start(def, [
+			{ ...bench, trainingMax: undefined, increment: 99 },
+			{ ...squat, trainingMaxIncrement: undefined, increment: 99 },
+		]);
+		const review = finishCycle(snapshot, completed(snapshot));
+		expect(review.trainingMaxProposals).toMatchObject([
+			{ current: 150, proposed: 155, increment: 5 },
+			{ current: 300, proposed: 310, increment: 10 },
+		]);
+	});
+	it('uses frozen defaults through all twelve 5/3/1 work sets and only adopts edits next iteration', () => {
+		const { trainingMax: _tm, trainingMaxIncrement: _increment, ...legacyBench } = bench;
+		const { trainingMax: _squatTm, trainingMaxIncrement: _squatIncrement, ...legacySquat } = squat;
+		const configs = [{ ...legacyBench, topSetWeight: 200 }, { ...legacySquat, topSetWeight: 300 }];
+		const expected = [[130, 150, 170], [140, 160, 180], [150, 170, 190], [80, 100, 120]];
+		let progress: CycleProgress | undefined;
+		for (let week = 0; week < 4; week++) {
+			const current = week === 0 ? configs : configs.map((config) => ({
+				...config, topSetWeight: 500, trainingMaxIncrement: 99,
+			}));
+			const snapshot = start(definition(), current, progress);
+			expect(snapshot.workout.exercises[0].sets.map((set) => set.weight)).toEqual(expected[week]);
+			const review = finishCycle(snapshot, completed(snapshot));
+			expect(review.trainingMaxProposals).toHaveLength(week === 3 ? 2 : 0);
+			if (week === 3) {
+				expect(review.trainingMaxProposals.map((proposal) => proposal.proposed)).toEqual([205, 310]);
+			}
+			progress = review.progress;
+		}
+		const next = start(definition(), configs.map((config) => ({ ...config, topSetWeight: 400 })), progress);
+		expect(next.workout.exercises[0].sets[0].weight).toBe(260);
+		expect(configs[0]).not.toHaveProperty('trainingMax');
+		expect(configs[0]).not.toHaveProperty('trainingMaxIncrement');
+	});
+	it('offers the current shared default when keeping TM without altering the frozen proposal', () => {
+		const def = definition();
+		def.cycle!.weeks = [def.cycle!.weeks[0]];
+		const snapshot = start(def, [bench, squat]);
+		const review = finishCycle(snapshot, completed(snapshot), snapshot.progress, [
+			{ ...bench, trainingMax: undefined, topSetWeight: 225 }, squat,
+		]);
+		expect(review.trainingMaxProposals[0]).toMatchObject({ frozen: 200, current: 225, proposed: 205 });
+	});
+	it.each([0, -1, Infinity, NaN])('rejects invalid default TM from top-set weight %s', (topSetWeight) => {
+		expect(() => start(definition(), [{ ...bench, trainingMax: undefined, topSetWeight }, squat])).toThrow('training max');
 	});
 	it.each([-1, Infinity, NaN])('rejects invalid TM progression increment %s', (trainingMaxIncrement) => {
 		expect(() => start(definition(), [{ ...bench, trainingMaxIncrement }, squat])).toThrow('separate training-max increment');
@@ -358,14 +404,16 @@ describe('validation and history', () => {
 			progress = review.progress;
 		}
 	});
-	it('requires TM for a TM warmup calculation but not a progression increment or TM bump', () => {
+	it('defaults TM for warmup calculations without proposing a TM bump', () => {
 		const def = definition();
 		def.cycle!.weeks = [def.cycle!.weeks[0]];
 		def.cycle!.weeks[0].exposures[0].templates = [def.cycle!.weeks[0].exposures[0].templates[0]];
 		def.cycle!.weeks[0].exposures[0].templates[0].sets = [{ ...set(.5, 5), setType: 'warmup' }];
 		const snapshot = start(def, [{ ...bench, trainingMaxIncrement: undefined }]);
 		expect(finishCycle(snapshot, completed(snapshot)).trainingMaxProposals).toEqual([]);
-		expect(() => start(def, [{ ...bench, trainingMax: undefined, trainingMaxIncrement: undefined }])).toThrow('training max');
+		const defaulted = start(def, [{ ...bench, trainingMax: undefined, trainingMaxIncrement: undefined }]);
+		expect(defaulted.workout.exercises[0].sets[0].weight).toBe(80);
+		expect(finishCycle(defaulted, completed(defaulted)).trainingMaxProposals).toEqual([]);
 	});
 	it('uses rounding/minimums for TM and retains exact fixed/bar weights', () => {
 		const config = { ...bench, trainingMax: 101, minimumWeight: 45 };
