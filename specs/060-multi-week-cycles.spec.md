@@ -92,6 +92,18 @@ Programs may also prescribe multiple different exposures for one exercise within
 - IDs with saved cycle progress remain reserved after definition deletion, and that reservation data loads before the editor becomes usable. Reusing a name requires a different ID, so a new cycle cannot resume the deleted cycle's unfinished session or inherit its progress; historical logs remain unchanged.
 - Review feedback replaces the requirement to enter TM and TM increment explicitly: missing TM uses top-set weight, while the missing increment uses the 5/3/1 defaults (squat/deadlift 10 lb, bench/press 5 lb) or 1 lb otherwise. Recognize canonical exercise IDs or names case-insensitively, including the seeded `bench-press`/`Bench Press` and `overhead-press`/`Overhead Press` aliases; unrelated exercises such as leg press remain at 1 lb. Resolve from frozen exercise inputs during an iteration, retain explicit overrides, and treat keeping the current default TM as no shared-setting write.
 
+### Single-workout weeks and default programs — 2026-09-21
+
+These decisions supersede the earlier within-week exposure requirements and the exclusion of bundled programs:
+
+- Each program week contains exactly one planned workout. Remove within-week session selection, names, and add/copy/reorder controls; exercises and sets belong directly to the selected week in the editor. Use separate cycles for additional weekly workouts. Whole-cycle planning creates one opportunity every seven days; actual progression remains completion-driven, not calendar-driven.
+- Retain the persisted exposure wrapper for compatibility, with one exposure per normalized week. Expand older multi-exposure definitions into successive single-workout weeks without dropping prescriptions. Existing frozen iterations, unfinished sessions, and historical stage identities remain unchanged until the next iteration.
+- Bundle four independently editable classic four-week 5/3/1 cycles: squat, bench press, deadlift, and overhead press. Each week includes warmups at 40% × 5, 50% × 5, and 60% × 3 of TM, followed by the three work sets in the table above. Only the final work set in weeks 1–3 is AMRAP; the deload is not.
+- Provide an explicit exercise-editor calculator for starting TM: 90% of an entered one-rep max. Apply this reduction once when setting TM, then apply each set's percentage to that TM. Never assume top-set weight is 1RM, silently replace shared inputs during import, or apply another 90% reduction to an already configured TM. Existing rounding/minimum rules still apply.
+- Provide an always-available, initially collapsed default-program library alongside the user's workout library. It includes repository starter workouts and the four 5/3/1 cycles. Copy opens an independent draft with a fresh ID; review/edit/save explicitly before persisting. Imports never overwrite existing workouts, progress, or exercise weights. Missing exercises remain visible validation errors so users can map them before saving.
+- Use the bundled-library alternative rather than arbitrary URL fetching. Repository JSON remains the source of default prescriptions; no new remote-fetch format, dependency, or automatic seeding is needed.
+- Regression coverage must verify single-workout authoring/planning, lossless legacy normalization and frozen-progress preservation, all four default programs' warmup/work percentages and reps, one-time 90% TM setup, AMRAP/deload behavior, and deeply independent copied drafts.
+
 ## Notes
 
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.

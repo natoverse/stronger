@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { getTrainingMax, getTrainingMaxIncrement } from '../training-max.js';
+import { getTrainingMax, getTrainingMaxIncrement, trainingMaxFromOneRepMax } from '../training-max.js';
+
+describe('starting training max calculator', () => {
+	it('applies 90% once without rounding before set calculation', () => {
+		expect(trainingMaxFromOneRepMax(200)).toBe(180);
+		expect(trainingMaxFromOneRepMax(225)).toBe(202.5);
+		expect(trainingMaxFromOneRepMax(137.5)).toBe(123.75);
+		expect(getTrainingMax({ topSetWeight: 200, trainingMax: trainingMaxFromOneRepMax(200) })).toBe(180);
+	});
+
+	it.each([0, -200, NaN, Infinity, -Infinity])('rejects invalid 1RM %s', (value) => {
+		expect(() => trainingMaxFromOneRepMax(value)).toThrow('positive, finite one-rep max');
+	});
+});
 
 describe('training max defaults', () => {
 	it('defaults only missing TM to top-set weight', () => {

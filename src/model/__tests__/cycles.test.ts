@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
-import { createCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, validateCycle } from '../cycles.js';
+import { createCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, validateCycle, workoutFromProgress } from '../cycles.js';
 import { computeSetWeight } from '../compute.js';
 import { computeProgression } from '../progression.js';
 import { findPreviousWorkoutSets, buildLogRow } from '../logs.js';
@@ -84,7 +84,7 @@ describe('classic four-week training max cycle', () => {
 		expect(finishCycle(next, skipped).progress.exercises.map((item) => item.cursor)).toEqual([1, 0]);
 	});
 
-	it('advances within-week exposure order with variable sets, not by date or individual set', () => {
+	it('advances flattened legacy workouts as successive weeks, not by date or individual set', () => {
 		const def = definition();
 		const extra = structuredClone(def.cycle!.weeks[0].exposures[0]);
 		extra.id = 'second'; extra.name = 'Volume';
@@ -92,7 +92,7 @@ describe('classic four-week training max cycle', () => {
 		def.cycle!.weeks[0].exposures.push(extra);
 		const first = start(def);
 		const next = start(def, [bench, squat], finishCycle(first, completed(first)).progress);
-		expect(next.workout.exercises[0].cycleStage).toMatchObject({ week: 1, exposure: 2, exposureCount: 2 });
+		expect(next.workout.exercises[0].cycleStage).toMatchObject({ week: 2, weekCount: 5, exposure: 1, exposureCount: 1 });
 		expect(next.workout.exercises[0].sets).toHaveLength(4);
 		const partial = completed(next);
 		partial[0][3].completed = false;
@@ -159,12 +159,12 @@ describe('classic four-week training max cycle', () => {
 		const squatTemplate = week.exposures[0].templates.pop()!;
 		week.exposures.push({ id: 'squat-only', name: 'B', templates: [squatTemplate] });
 		const first = start(def);
-		expect(first.workout.exercises.map((exercise) => exercise.cycleStage?.exposure)).toEqual([1, 2]);
+		expect(first.workout.exercises.map((exercise) => exercise.cycleStage?.week)).toEqual([1, 2]);
 		const results = completed(first);
 		results[0].forEach((result) => { result.completed = false; });
 		const next = start(def, [bench, squat], finishCycle(first, results).progress);
 		expect(next.workout.exercises.map((exercise) => [exercise.cycleStage?.week, exercise.cycleStage?.exposure]))
-			.toEqual([[1, 1], [2, 1]]);
+			.toEqual([[1, 1], [3, 1]]);
 	});
 
 	it('supports parallel named cycles and immutable idempotent completion', () => {
@@ -196,6 +196,69 @@ describe('normalization and policy compatibility', () => {
 		expect(def.templates[0].id).toBeUndefined();
 		const snapshot = start(def, [{ ...bench, trainingMax: undefined, trainingMaxIncrement: undefined }]);
 		expect(snapshot.workout.exercises[0].sets.map((s) => s.weight)).toEqual([150, 100]);
+	});
+	it('flattens every legacy prescription losslessly with deterministic, unique week identities and names', () => {
+		const def = definition();
+		const extra = structuredClone(def.cycle!.weeks[0].exposures[0]);
+		extra.templates[0].sets = [set(.5, 10)];
+		def.cycle!.weeks[0].exposures.push(extra, structuredClone(extra));
+		def.cycle!.weeks[1].id = `${def.cycle!.weeks[0].id}-${extra.id}`;
+		def.cycle!.weeks[1].name = `${def.cycle!.weeks[0].name} — ${extra.name}`;
+		const before = structuredClone(def);
+		const normalized = normalizeCycle(def);
+		expect(normalized.weeks).toHaveLength(6);
+		expect(normalized.weeks.every((week) => week.exposures.length === 1)).toBe(true);
+		expect(normalized.weeks.flatMap((week) => week.exposures)).toEqual(before.cycle!.weeks.flatMap((week) => week.exposures));
+		expect(new Set(normalized.weeks.map((week) => week.id)).size).toBe(6);
+		expect(new Set(normalized.weeks.map((week) => week.name)).size).toBe(6);
+		expect(normalized.weeks[3].id).toBe(before.cycle!.weeks[1].id);
+		expect(normalizeCycle(def)).toEqual(normalized);
+		expect(normalizeCycle({ ...def, cycle: normalized })).toEqual(normalized);
+		expect(() => validateCycle({ ...def, cycle: normalized }, [bench, squat])).not.toThrow();
+		normalized.weeks[1].exposures[0].templates[0].sets[0].percentage = .1;
+		expect(def).toEqual(before);
+	});
+	it('assigns consistent missing exercise identities across flattened weeks', () => {
+		const def = definition();
+		def.cycle!.weeks[0].exposures.push(structuredClone(def.cycle!.weeks[0].exposures[0]));
+		for (const week of def.cycle!.weeks) {
+			for (const exposure of week.exposures) {
+				for (const template of exposure.templates) delete template.id;
+			}
+		}
+		expect(normalizeCycle(def).weeks.map((week) => week.exposures[0].templates.map((template) => template.id)))
+			.toEqual(Array.from({ length: 5 }, () => ['bench:0', 'squat:0']));
+		expect(def.cycle!.weeks[0].exposures[0].templates[0].id).toBeUndefined();
+	});
+	it('preserves legacy frozen iteration stages and restored snapshots until the next iteration', () => {
+		const def = definition();
+		def.cycle!.weeks[0].exposures.push(structuredClone(def.cycle!.weeks[0].exposures[0]));
+		const legacy = start(def);
+		for (const exercise of legacy.progress.exercises) {
+			exercise.steps.forEach((step, index) => {
+				step.weekCount = 4;
+				step.week = index < 2 ? 1 : index;
+				step.exposure = index === 1 ? 2 : 1;
+				step.exposureCount = index < 2 ? 2 : 1;
+				step.weekName = def.cycle!.weeks[step.week - 1].name;
+			});
+		}
+		legacy.workout = workoutFromProgress(def, legacy.progress);
+		const restored: CycleSessionSnapshot = JSON.parse(JSON.stringify(legacy));
+		const before = structuredClone(restored);
+		const normalized = { ...def, cycle: normalizeCycle(def) };
+		const firstReview = finishCycle(restored, completed(restored));
+		expect(firstReview.transitions[0]).toMatchObject({ current: 'Week 1/4 · Session 1/2', next: 'Week 1/4 · Session 2/2' });
+		let next = start(normalized, [{ ...bench, trainingMax: 999 }, squat], firstReview.progress);
+		expect(next.workout.exercises[0].cycleStage).toMatchObject({ week: 1, weekCount: 4, exposure: 2, exposureCount: 2 });
+		expect(next.progress.exercises[0].steps).toEqual(restored.progress.exercises[0].steps);
+		expect(next.workout.exercises[0].sets[0].weight).toBe(130);
+		expect(restored).toEqual(before);
+		for (let index = 1; index < 5; index++) {
+			next = start(normalized, [bench, squat], finishCycle(next, completed(next)).progress);
+		}
+		expect(next.workout.exercises[0].cycleStage).toMatchObject({ iteration: 2, week: 1, weekCount: 5, exposure: 1, exposureCount: 1 });
+		expect(legacy).toEqual(before);
 	});
 	it('retains ordinary top/backoff eligible-set progression despite other incomplete sets', () => {
 		const snapshot = start(ordinary(), [bench]);
@@ -438,6 +501,20 @@ describe('validation and history', () => {
 		const cards = previewCycles([], [definition()], []);
 		expect(cards[0].error).toContain('existing exercise');
 		expect(cards[0].id).toBe('531');
+	});
+	it('keeps an empty legacy week editable without silently dropping it and rejects missing exercises', () => {
+		const def = definition();
+		def.cycle!.weeks[0].exposures = [];
+		const normalized = normalizeCycle(def);
+		expect(normalized.weeks).toHaveLength(4);
+		expect(normalized.weeks[0].exposures).toHaveLength(1);
+		expect(normalized.weeks[0].exposures[0].templates).toEqual([]);
+		expect(() => validateCycle(def, [bench, squat])).toThrow('at least one exercise');
+	});
+	it('does not require legacy session names for the single weekly workout', () => {
+		const def = definition();
+		def.cycle!.weeks[0].exposures[0].name = '';
+		expect(() => validateCycle(def, [bench, squat])).not.toThrow();
 	});
 	it('only compares matching exercise/iteration/week/exposure and planned structure', () => {
 		const first = start();

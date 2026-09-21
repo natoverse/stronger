@@ -6,7 +6,7 @@ import type { ExerciseCycleStage, Workout, WorkoutScheduleEntry } from '../types
 import type { ParsedLogRow } from '../logs.js';
 import {
 	createScheduleOpportunity, cycleOpportunityCount, matchesScheduledOccurrence,
-	planWholeCycle, scheduleOccurrenceId, workoutCycleLabels,
+	planWholeCycle, scheduleOccurrenceId, workoutCycleLabels, formatCycleStage,
 } from '../schedule.js';
 import { buildTodaysPlan, WorkoutSelect } from '../../components/WorkoutSelect.js';
 import { CalendarView, groupLogByDate, SessionDetail } from '../../components/CalendarView.js';
@@ -52,13 +52,23 @@ describe('whole-cycle opportunity planning', () => {
 		expect(definition).toEqual(before);
 	});
 
-	it('counts every ordered within-week exposure and aligns selected weekdays from any start date', () => {
+	it('flattens legacy sessions to successive weekly opportunities, using day selections only for the first date', () => {
 		const varied = structuredClone(definition);
 		varied.cycle!.weeks[0].exposures.push({ id: 'light', name: 'Light', templates: [] });
 		expect(cycleOpportunityCount(varied)).toBe(5);
 		expect(planWholeCycle(varied, '2026-09-23', [0, 3]).map((entry) => entry.date)).toEqual([
-			'2026-09-24', '2026-09-28', '2026-10-01', '2026-10-08', '2026-10-15',
+			'2026-09-24', '2026-10-01', '2026-10-08', '2026-10-15', '2026-10-22',
 		]);
+		expect(varied.cycle!.weeks).toHaveLength(4);
+		expect(varied.cycle!.weeks[0].exposures).toHaveLength(2);
+	});
+
+	it('plans one opportunity per week even with several legacy weekday selections', () => {
+		expect(cycleOpportunityCount(definition)).toBe(4);
+		expect(planWholeCycle(definition, '2026-09-23', [0, 2, 4]).map((entry) => entry.date)).toEqual([
+			'2026-09-23', '2026-09-30', '2026-10-07', '2026-10-14',
+		]);
+		expect(planWholeCycle({ ...definition, cycle: { ...definition.cycle!, weeks: [] } }, '2026-09-21', [0])).toEqual([]);
 	});
 
 	it('supports ordinary one-week workouts and rejects empty days/invalid dates', () => {
@@ -155,6 +165,10 @@ describe('occurrence-aware schedule completion', () => {
 });
 
 describe('cycle stage labels and history', () => {
+	it('omits redundant session information for normalized single-workout weeks', () => {
+		expect(formatCycleStage(stage())).toBe('Week 2/4 — 3s');
+		expect(formatCycleStage(stage({ exposure: 2, exposureCount: 2 }))).toBe('Week 2/4 — 3s · Exposure 2/2 — Main');
+	});
 	it('leaves single-week cards unchanged and shows a shared week only for aligned exercises', () => {
 		expect(workoutCycleLabels({ ...workout, exercises: [{ ...workout.exercises[0], cycleStage: stage({ week: 1, weekCount: 1 }) }] })).toEqual([]);
 		expect(workoutCycleLabels(workout)).toEqual(['Week 2/4']);

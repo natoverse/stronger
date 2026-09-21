@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo } from 'react';
 import type { LiftConfig, GearType } from '../model/index.js';
 import { ArrowLeft } from 'lucide-react';
 import { nameToId, DEFAULT_STRENGTH_CONFIG } from './ExerciseLibrary.js';
-import { getTrainingMaxIncrement } from '../model/training-max.js';
+import { getTrainingMaxIncrement, trainingMaxFromOneRepMax } from '../model/training-max.js';
 
 const GEAR_OPTIONS: GearType[] = ['barbell', 'dumbbell', 'band', 'bodyweight', 'other'];
 
@@ -38,6 +38,7 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 	const [increment, setIncrement] = useState(existing?.increment ?? DEFAULT_STRENGTH_CONFIG.increment);
 	const [trainingMax, setTrainingMax] = useState(existing?.trainingMax === undefined ? '' : String(existing.trainingMax));
 	const [trainingMaxIncrement, setTrainingMaxIncrement] = useState(existing?.trainingMaxIncrement === undefined ? '' : String(existing.trainingMaxIncrement));
+	const [oneRepMax, setOneRepMax] = useState('');
 	const [minimumWeight, setMinimumWeight] = useState(existing?.minimumWeight ?? DEFAULT_STRENGTH_CONFIG.minimumWeight);
 	const [roundingFactor, setRoundingFactor] = useState(existing?.roundingFactor ?? DEFAULT_STRENGTH_CONFIG.roundingFactor);
 	const [warmupRoundingFactor, setWarmupRoundingFactor] = useState(existing?.warmupRoundingFactor ?? DEFAULT_STRENGTH_CONFIG.warmupRoundingFactor);
@@ -54,6 +55,7 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 	}, [isNew, allConfigs, autoId]);
 
 	const trainingMaxFields = useMemo(() => parseTrainingMaxFields(trainingMax, trainingMaxIncrement), [trainingMax, trainingMaxIncrement]);
+	const validOneRepMax = oneRepMax.trim() !== '' && Number.isFinite(Number(oneRepMax)) && Number(oneRepMax) > 0;
 	const isValid = name.trim().length > 0 && !nameConflict && trainingMaxFields.errors.length === 0;
 
 	const handleSave = useCallback(() => {
@@ -187,6 +189,33 @@ export function ExerciseEditor({ existing, allConfigs, onSave, onCancel }: Exerc
 				<div id="training-max-errors" role="alert">
 					{trainingMaxFields.errors.map((error) => <p className="editor-error" key={error}>{error}</p>)}
 				</div>
+				<details className="tm-calculator">
+					<summary>Set starting TM from 1RM (90%)</summary>
+					<label className="editor-field">
+						<span className="editor-label">One-rep max (lbs)</span>
+						<input
+							className="editor-input"
+							type="text"
+							inputMode="decimal"
+							value={oneRepMax}
+							onChange={(event) => setOneRepMax(event.target.value)}
+						/>
+					</label>
+					<button
+						type="button"
+						className="btn-secondary"
+						disabled={!validOneRepMax}
+						onClick={() => setTrainingMax(String(trainingMaxFromOneRepMax(Number(oneRepMax))))}
+					>
+						Use 90% as TM
+					</button>
+					{oneRepMax.trim() && !validOneRepMax && <p className="editor-error" role="alert">Enter a positive, finite one-rep max.</p>}
+					<p className="cycle-editor-hint">
+						Classic 5/3/1 starts with TM = 90% of 1RM. Set percentages then use TM,
+						without another 90% reduction. This fills the TM field; Save applies it.
+						Top-set weight is not assumed to be your 1RM.
+					</p>
+				</details>
 				<p className="cycle-editor-hint">
 					Shared input changes apply when each exercise begins its next iteration. Pending prescriptions and unfinished sessions stay frozen.
 				</p>

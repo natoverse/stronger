@@ -39,13 +39,38 @@ export function hasTrainingMaxWork(template: ExerciseTemplate): boolean {
 	return template.sets.some((set) => set.setType !== 'warmup' && set.weightBasis.kind === 'trainingMax');
 }
 
-/** Legacy workouts participate in the same repeating one-exposure lifecycle. */
+/** Normalize definitions only; frozen iterations and session snapshots keep their original stages. */
 export function normalizeCycle(definition: WorkoutDefinition): CycleDefinition {
 	const cycle: CycleDefinition = structuredClone(definition.cycle ?? {
 		baseline: 'topSet',
 		weeks: [{ id: 'week-1', name: 'Week 1', exposures: [
-			{ id: 'session-1', name: 'Session 1', templates: definition.templates },
+			{ id: 'session-1', name: 'Workout', templates: definition.templates },
 		] }],
+	});
+	const reservedIds = new Set(cycle.weeks.map((week) => week.id));
+	const reservedNames = new Set(cycle.weeks.map((week) => week.name));
+	const usedIds = new Set<string>();
+	const usedNames = new Set<string>();
+	const unique = (base: string, used: Set<string>, reserved: Set<string>, original = false) => {
+		let value = base;
+		let suffix = 2;
+		while (used.has(value) || (reserved.has(value) && (!original || value !== base))) value = `${base} (${suffix++})`;
+		used.add(value);
+		return value;
+	};
+	cycle.weeks = cycle.weeks.flatMap((week) => {
+		const exposures = week.exposures.length ? week.exposures : [
+			{ id: `${week.id}-workout`, name: 'Workout', templates: [] },
+		];
+		return exposures.map((exposure, index) => ({
+			...week,
+			id: unique(index === 0 ? week.id : `${week.id}-${exposure.id || index + 1}`, usedIds, reservedIds, index === 0),
+			name: !week.name.trim() ? week.name : unique(
+				exposures.length > 1 ? `${week.name} — ${exposure.name || `Workout ${index + 1}`}` : week.name,
+				usedNames, reservedNames, exposures.length === 1,
+			),
+			exposures: [exposure],
+		}));
 	});
 	for (const week of cycle.weeks) {
 		for (const exposure of week.exposures) {
@@ -67,16 +92,17 @@ export function validateCycle(definition: WorkoutDefinition, configs: LiftConfig
 	if (cycle.weeks.length === 0) throw new Error('Add at least one week.');
 	const liftIds = new Map<string, string>();
 	for (const week of cycle.weeks) {
-		if (!week.name.trim() || week.exposures.length === 0) throw new Error('Each week needs a name and at least one session.');
+		if (!week.name.trim()) throw new Error('Each week needs a name.');
+		if (week.exposures.length !== 1) throw new Error(`${week.name}: each week must contain exactly one workout.`);
 		for (const exposure of week.exposures) {
-			if (!exposure.name.trim() || exposure.templates.length === 0) throw new Error(`${week.name}: add a named session with exercises.`);
+			if (exposure.templates.length === 0) throw new Error(`${week.name}: add at least one exercise to the workout.`);
 			const ids = new Set<string>();
 			for (const template of exposure.templates) {
 				const id = template.id!;
-				if (ids.has(id)) throw new Error(`${exposure.name}: exercise identities must be unique.`);
+				if (ids.has(id)) throw new Error(`${week.name}: exercise identities must be unique.`);
 				ids.add(id);
 				if (liftIds.has(id) && liftIds.get(id) !== template.liftId) {
-					throw new Error(`${template.name}: the same cycle exercise must reference the same lift in every session.`);
+					throw new Error(`${template.name}: the same cycle exercise must reference the same lift in every week.`);
 				}
 				liftIds.set(id, template.liftId);
 				validateTemplate(template, configs, cycle.baseline);

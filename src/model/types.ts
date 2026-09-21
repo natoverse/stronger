@@ -178,6 +178,7 @@ export interface CycleExposure {
 export interface CycleWeek {
 	id: string;
 	name: string;
+	/** One workout after normalization; the array remains readable for legacy definitions. */
 	exposures: CycleExposure[];
 }
 

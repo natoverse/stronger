@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
 	WorkoutEditor, nameToId, toEditable, fromEditable, moveSet, moveItem,
-	copyWeek, copyExposure, updateExposureExercises, validateEditableWorkout,
+	copyWeek, updateWeekExercises, validateEditableWorkout,
 	previewExposure, weightBasisLabel,
 } from '../WorkoutEditor.js';
 import type { EditableWorkout } from '../WorkoutEditor.js';
@@ -189,7 +189,6 @@ describe('fromEditable', () => {
 					weeks: [
 						{ id: 'week-1', name: 'Volume', exposures: [
 							{ id: 'session-1', name: 'A', templates: [{ id: 'bench-main', name: 'Bench', liftId: 'bench', role: 'primary', sets: Array.from({ length: 3 }, () => structuredClone(set)) }] },
-							{ id: 'session-2', name: 'B', templates: [{ id: 'bench-main', name: 'Bench', liftId: 'bench', role: 'primary', sets: [{ ...structuredClone(set), percentage: 0.5 }] }] },
 						] },
 						{ id: 'week-2', name: 'Strength', exposures: [
 							{ id: 'session-3', name: 'A', templates: [{ id: 'bench-main', name: 'Bench', liftId: 'bench', role: 'primary', sets: Array.from({ length: 4 }, () => ({ ...structuredClone(set), percentage: 0.75, minReps: 6, maxReps: 6 })) }] },
@@ -202,7 +201,7 @@ describe('fromEditable', () => {
 			};
 		}
 
-		it('normalizes legacy definitions into a single independently editable week/session', () => {
+		it('normalizes ordinary definitions into a single independently editable week', () => {
 			const legacy = { id: 'legacy', name: 'Legacy', templates: definition().cycle!.weeks[0].exposures[0].templates };
 			const draft = toEditable(legacy);
 			expect(draft.cycle?.baseline).toBe('topSet');
@@ -219,34 +218,52 @@ describe('fromEditable', () => {
 			expect(result.cycle?.weeks.map((week) => week.exposures[0].templates[0].sets.length)).toEqual([3, 4, 3]);
 			expect(result.cycle?.weeks.map((week) => week.exposures[0].templates[0].sets[0].minReps)).toEqual([8, 6, 5]);
 			expect(result.cycle?.weeks.map((week) => week.exposures[0].templates[0].sets[0].percentage)).toEqual([0.7, 0.75, 0.8]);
-			expect(result.cycle?.weeks[0].exposures[1].templates[0].id).toBe('bench-main');
+			expect(result.cycle?.weeks.every((week) => week.exposures.length === 1)).toBe(true);
+			expect(result.cycle?.weeks[1].exposures[0].templates[0].id).toBe('bench-main');
 			expect(result.templates).toEqual(result.cycle?.weeks[0].exposures[0].templates);
 			expect(result.templates).not.toBe(result.cycle?.weeks[0].exposures[0].templates);
 		});
 
-		it('edits a selected later session without changing the first session or source', () => {
+		it('flattens legacy sessions into independently editable weeks without losing prescriptions', () => {
+			const source = definition();
+			const extra = structuredClone(source.cycle!.weeks[0].exposures[0]);
+			extra.id = 'light'; extra.name = 'Light';
+			extra.templates[0].sets[0].percentage = 0.5;
+			source.cycle!.weeks[0].exposures.push(extra);
+			const before = structuredClone(source);
+			const draft = toEditable(source);
+			const saved = fromEditable(draft, [config], source);
+			expect(draft.cycle!.weeks.map((week) => week.exposures.length)).toEqual([1, 1, 1, 1]);
+			expect(saved.cycle!.weeks.map((week) => week.exposures[0].templates[0].sets[0].percentage))
+				.toEqual([0.7, 0.5, 0.75, 0.8]);
+			expect(saved.cycle!.weeks.every((week) => week.exposures[0].templates[0].id === 'bench-main')).toBe(true);
+			expect(validateEditableWorkout(draft, [config])).toEqual([]);
+			expect(toEditable(saved)).toEqual(draft);
+			expect(source).toEqual(before);
+		});
+
+		it('edits a selected later week without changing the first week or source', () => {
 			const source = definition();
 			const draft = toEditable(source);
-			const edited = updateExposureExercises(draft, 0, 1, (exercises) => exercises.map((exercise) => ({
+			const edited = updateWeekExercises(draft, 1, (exercises) => exercises.map((exercise) => ({
 				...exercise, sets: [{ ...exercise.sets[0], percentage: 0.6, amrap: true }],
 			})));
 			const saved = fromEditable(edited, [config]);
-			expect(saved.cycle?.weeks[0].exposures[1].templates[0].sets[0].percentage).toBe(0.6);
+			expect(saved.cycle?.weeks[1].exposures[0].templates[0].sets[0].percentage).toBe(0.6);
 			expect(saved.templates[0].sets[0].percentage).toBe(0.7);
-			expect(draft.cycle?.weeks[0].exposures[1].exercises[0].sets[0].percentage).toBe(0.5);
-			expect(source.cycle?.weeks[0].exposures[1].templates[0].sets[0].amrap).toBe(false);
+			expect(draft.cycle?.weeks[1].exposures[0].exercises[0].sets[0].percentage).toBe(0.75);
+			expect(source.cycle?.weeks[1].exposures[0].templates[0].sets[0].amrap).toBe(false);
 		});
 
-		it('copies weeks and sessions deeply with new stage IDs and retained exercise identity', () => {
+		it('copies weeks deeply with new stage IDs and retained exercise identity', () => {
 			const source = toEditable(definition()).cycle!.weeks[0];
 			const copied = copyWeek(source);
-			const sessionCopy = copyExposure(source.exposures[0]);
 			expect(copied.id).not.toBe(source.id);
 			expect(copied.exposures[0].id).not.toBe(source.exposures[0].id);
-			expect(sessionCopy.id).not.toBe(source.exposures[0].id);
+			expect(copied.exposures).toHaveLength(1);
 			expect(copied.exposures[0].exercises[0].id).toBe('bench-main');
 			copied.exposures[0].exercises[0].sets[0].weightBasis.kind = 'trainingMax';
-			sessionCopy.exercises[0].sets[0].percentage = 0.95;
+			copied.exposures[0].exercises[0].sets[0].percentage = 0.95;
 			expect(source.exposures[0].exercises[0].sets[0].weightBasis.kind).toBe('topSet');
 			expect(source.exposures[0].exercises[0].sets[0].percentage).toBe(0.7);
 		});
@@ -256,21 +273,20 @@ describe('fromEditable', () => {
 			const source = structuredClone(destination.cycle!.weeks[0]);
 			for (const exposure of source.exposures) exposure.exercises[0].id = 'another-cycle-bench';
 			const copy = copyWeek(source, destination);
-			expect(copy.exposures.map((exposure) => exposure.exercises[0].id)).toEqual(['bench-main', 'bench-main']);
+			expect(copy.exposures.map((exposure) => exposure.exercises[0].id)).toEqual(['bench-main']);
 			copy.exposures[0].exercises[0].sets[0].percentage = 0.9;
 			expect(source.exposures[0].exercises[0].sets[0].percentage).toBe(0.7);
 			expect(destination.exercises[0].sets[0].percentage).toBe(0.7);
 		});
 
-		it('reorders weeks and sessions without mutating them and mirrors the new first session', () => {
+		it('reorders weeks without mutating them and mirrors the new first workout', () => {
 			const draft = toEditable(definition());
+			const originalWeeks = draft.cycle!.weeks;
 			draft.cycle!.weeks = moveItem(draft.cycle!.weeks, 2, 0);
 			const saved = fromEditable(draft, [config]);
 			expect(saved.cycle?.weeks.map((week) => week.id)).toEqual(['week-3', 'week-1', 'week-2']);
 			expect(saved.templates[0].sets[0].percentage).toBe(0.8);
-			const sessions = draft.cycle!.weeks[1].exposures;
-			expect(moveItem(sessions, 1, 0).map((session) => session.name)).toEqual(['B', 'A']);
-			expect(sessions.map((session) => session.name)).toEqual(['A', 'B']);
+			expect(originalWeeks.map((week) => week.id)).toEqual(['week-1', 'week-2', 'week-3']);
 		});
 
 		it('previews any stage using its own percentages without mutating the draft', () => {
@@ -278,7 +294,6 @@ describe('fromEditable', () => {
 			const before = structuredClone(draft);
 			const weights = draft.cycle!.weeks.map((week) => previewExposure(week.exposures[0], [config])[0].sets.map((set) => set.weight));
 			expect(weights).toEqual([[140, 140, 140], [150, 150, 150, 150], [160, 160, 160]]);
-			expect(previewExposure(draft.cycle!.weeks[0].exposures[1], [config])[0].sets[0].weight).toBe(100);
 			expect(draft).toEqual(before);
 		});
 		it('reserves deleted cycle IDs without blocking edits to the existing cycle', () => {
@@ -346,21 +361,27 @@ describe('fromEditable', () => {
 		it('validates all stages rather than only the selected or compatibility templates', () => {
 			const draft = toEditable(definition());
 			draft.cycle!.weeks[2].exposures[0].exercises[0].sets = [];
-			expect(validateEditableWorkout(draft, [config])).toContain('Week 3, session 1, exercise 1: add at least one set');
+			expect(validateEditableWorkout(draft, [config])).toContain('Week 3, exercise 1: add at least one set');
 		});
 
 		it.each([
 			['unnamed workout', (draft: EditableWorkout) => { draft.name = ' '; }, 'Workout name'],
 			['zero weeks', (draft: EditableWorkout) => { draft.cycle!.weeks = []; }, 'Add at least one week'],
 			['unnamed week', (draft: EditableWorkout) => { draft.cycle!.weeks[0].name = ''; }, 'enter a name'],
-			['empty week', (draft: EditableWorkout) => { draft.cycle!.weeks[0].exposures = []; }, 'add at least one session'],
-			['unnamed session', (draft: EditableWorkout) => { draft.cycle!.weeks[0].exposures[0].name = ''; }, 'enter a name'],
-			['empty session', (draft: EditableWorkout) => { draft.cycle!.weeks[0].exposures[0].exercises = []; }, 'add at least one exercise'],
+			['empty week', (draft: EditableWorkout) => { draft.cycle!.weeks[0].exposures = []; }, 'exactly one workout'],
+			['multiple workouts in a week', (draft: EditableWorkout) => { draft.cycle!.weeks[0].exposures.push(structuredClone(draft.cycle!.weeks[0].exposures[0])); }, 'exactly one workout'],
+			['empty workout', (draft: EditableWorkout) => { draft.cycle!.weeks[0].exposures[0].exercises = []; }, 'add at least one exercise'],
 			['missing lift', (draft: EditableWorkout) => { draft.exercises[0].liftId = 'missing'; }, 'available lift'],
 		] as const)('rejects %s with an actionable error', (_, change, message) => {
 			const draft = toEditable(definition());
 			change(draft);
 			expect(validateEditableWorkout(draft, [config]).join(' ')).toContain(message);
+		});
+
+		it('does not require an internal legacy session name that cannot be edited', () => {
+			const draft = toEditable(definition());
+			draft.cycle!.weeks[0].exposures[0].name = '';
+			expect(validateEditableWorkout(draft, [config])).toEqual([]);
 		});
 
 		it.each([
@@ -431,9 +452,10 @@ describe('fromEditable', () => {
 			const markup = renderToStaticMarkup(createElement(WorkoutEditor, {
 				existing: definition(), allDefinitions: [], configs: [config], onSave: () => {}, onCancel: () => {},
 			}));
-			for (const text of ['Progression baseline', 'Training Max (TM)', 'Duplicate week', 'Copy week from', 'Duplicate session', 'Copy session from', 'Preview session', 'Pending prescriptions and unfinished sessions stay frozen']) {
+			for (const text of ['Progression baseline', 'Training Max (TM)', 'Duplicate week', 'Copy week from', 'Preview week', 'Pending prescriptions and unfinished sessions stay frozen', 'Each program week contains one workout', 'Use separate cycles for additional weekly workouts']) {
 				expect(markup).toContain(text);
 			}
+			expect(markup).not.toMatch(/Within-week|Session name|Add session|Duplicate session|Copy session|Move session|Delete session|Preview session/);
 			expect(markup).not.toMatch(/>Start (?:run|cycle)<|>Advance|>Finish cycle</i);
 		});
 	});

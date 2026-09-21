@@ -4491,3 +4491,26 @@ body {
 		width: auto;
 	}
 }
+.default-program-library,
+.tm-calculator {
+	margin: 1rem 0;
+	padding: 1rem;
+	border: 1px solid var(--color-border);
+	border-radius: 8px;
+	background: var(--color-surface);
+}
+
+.default-program-library summary,
+.tm-calculator summary {
+	cursor: pointer;
+	color: var(--color-primary);
+	font-weight: 600;
+}
+
+.default-program-library .btn-new-workout {
+	text-align: left;
+}
+
+.tm-calculator .editor-field {
+	margin-top: 1rem;
+}
