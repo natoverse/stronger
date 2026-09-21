@@ -20,7 +20,7 @@ import { authorizeCalendar, disconnectCalendar, syncScheduleWithCalendar, genera
 import type { CalendarSyncResult } from './google/index.js';
 import type { WorkoutDefinition } from './data/sample-workouts.js';
 import type { ParsedLogRow } from './model/index.js';
-import { buildWorkoutsFromConfigs, createDefaultWorkoutImportDrafts, createDuplicateWorkoutDraft, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
+import { buildWorkoutsFromConfigs, createDefaultWorkoutImportDrafts, createDuplicateWorkoutDraft, createLibraryWorkoutDraft, defaultWorkoutLibrary, workoutDefinitions, defaultCardioActivities } from './data/sample-workouts.js';
 import { decodeSharedWorkout, encodeSharedWorkout, getImportedWorkoutName } from './data/workout-sharing.js';
 import type { SharedWorkout } from './data/workout-sharing.js';
 import { WorkoutSelect } from './components/WorkoutSelect.js';
@@ -1414,6 +1414,15 @@ function AppContent() {
     [definitions],
   );
 
+  const handleCopyDefaultProgram = useCallback((programId: string) => {
+    const source = defaultWorkoutLibrary.find((definition) => definition.id === programId);
+    if (!source) return;
+    setDuplicateWorkoutDraft(createLibraryWorkoutDraft(
+      source, generateStrongerId(), definitions.map((definition) => definition.name),
+    ));
+    navigateTo({ view: 'editor' });
+  }, [definitions, navigateTo]);
+
   const handleImportWorkout = useCallback(
     (shared: SharedWorkout) => {
       const imported: WorkoutDefinition = {
@@ -2282,6 +2291,8 @@ function AppContent() {
       />
       <WorkoutSelect
         workouts={workouts}
+        defaultPrograms={defaultWorkoutLibrary}
+        onCopyDefaultProgram={handleCopyDefaultProgram}
         missingLiftIds={missingLiftIds}
         workoutSchedule={workoutSchedule}
         logRows={logRows}

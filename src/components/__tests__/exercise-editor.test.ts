@@ -43,6 +43,11 @@ describe('optional shared training max inputs', () => {
 		expect(markup).toContain('value="200"');
 		expect(markup).toContain('value="10"');
 		expect(markup).toContain('Pending prescriptions and unfinished sessions stay frozen');
+		expect(markup).toContain('Set starting TM from 1RM (90%)');
+		expect(markup).toContain('One-rep max (lbs)');
+		expect(markup).toContain('Use 90% as TM');
+		expect(markup).toContain('without another 90% reduction');
+		expect(markup).toContain('Top-set weight is not assumed to be your 1RM');
 	});
 	it.each([
 		['squat', 'Squat', 10],

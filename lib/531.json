@@ -1,0 +1,48 @@
+{
+	"name": "5/3/1",
+	"lifts": [
+		{ "id": "squat", "name": "Squat" },
+		{ "id": "bench-press", "name": "Bench Press" },
+		{ "id": "deadlift", "name": "Deadlift" },
+		{ "id": "overhead-press", "name": "Overhead Press" }
+	],
+	"warmups": [
+		{ "setType": "warmup", "percentage": 0.4, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+		{ "setType": "warmup", "percentage": 0.5, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+		{ "setType": "warmup", "percentage": 0.6, "weightBasis": { "kind": "trainingMax" }, "minReps": 3, "maxReps": 3, "amrap": false }
+	],
+	"weeks": [
+		{
+			"name": "5s",
+			"sets": [
+				{ "setType": "work", "percentage": 0.65, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+				{ "setType": "work", "percentage": 0.75, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+				{ "setType": "work", "percentage": 0.85, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": true }
+			]
+		},
+		{
+			"name": "3s",
+			"sets": [
+				{ "setType": "work", "percentage": 0.7, "weightBasis": { "kind": "trainingMax" }, "minReps": 3, "maxReps": 3, "amrap": false },
+				{ "setType": "work", "percentage": 0.8, "weightBasis": { "kind": "trainingMax" }, "minReps": 3, "maxReps": 3, "amrap": false },
+				{ "setType": "work", "percentage": 0.9, "weightBasis": { "kind": "trainingMax" }, "minReps": 3, "maxReps": 3, "amrap": true }
+			]
+		},
+		{
+			"name": "5/3/1",
+			"sets": [
+				{ "setType": "work", "percentage": 0.75, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+				{ "setType": "work", "percentage": 0.85, "weightBasis": { "kind": "trainingMax" }, "minReps": 3, "maxReps": 3, "amrap": false },
+				{ "setType": "work", "percentage": 0.95, "weightBasis": { "kind": "trainingMax" }, "minReps": 1, "maxReps": 1, "amrap": true }
+			]
+		},
+		{
+			"name": "Deload",
+			"sets": [
+				{ "setType": "work", "percentage": 0.4, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+				{ "setType": "work", "percentage": 0.5, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
+				{ "setType": "work", "percentage": 0.6, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false }
+			]
+		}
+	]
+}

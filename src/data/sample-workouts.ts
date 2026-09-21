@@ -6,12 +6,14 @@
  */
 
 import type { ExerciseTemplate, LiftConfig, Workout, ComputedExercise, CardioActivity } from '../model/index.js';
-import type { CycleDefinition } from '../model/types.js';
+import type { CycleDefinition, SetTemplate } from '../model/types.js';
 import { computeExercise } from '../model/index.js';
+import { getImportedWorkoutName } from './workout-sharing.js';
 
 import exercisesJson from '../../lib/exercises.json';
 import workoutsJson from '../../lib/workouts.json';
 import cardioJson from '../../lib/cardio.json';
+import classic531Json from '../../lib/531.json';
 
 // ---------------------------------------------------------------------------
 // Lift configurations — defaults written to Firestore during setup
@@ -40,6 +42,39 @@ export interface WorkoutDefinition {
 
 export const workoutDefinitions: WorkoutDefinition[] = workoutsJson as WorkoutDefinition[];
 
+export const default531Cycles: WorkoutDefinition[] = classic531Json.lifts.map((lift) => {
+	const weeks = classic531Json.weeks.map((week, index) => ({
+		id: `week-${index + 1}`,
+		name: week.name,
+		exposures: [{
+			id: `workout-${index + 1}`,
+			name: lift.name,
+			templates: [{
+				id: `${lift.id}:0`, liftId: lift.id, name: lift.name, role: 'primary' as const,
+				sets: structuredClone([...classic531Json.warmups, ...week.sets]) as SetTemplate[],
+			}],
+		}],
+	}));
+	return {
+		id: `531-${lift.id}`, name: `${classic531Json.name} — ${lift.name}`, favorite: false,
+		templates: structuredClone(weeks[0].exposures[0].templates),
+		cycle: { baseline: 'trainingMax', weeks },
+	};
+});
+
+export const defaultWorkoutLibrary: WorkoutDefinition[] = [...default531Cycles, ...workoutDefinitions];
+
+export function createLibraryWorkoutDraft(
+	source: WorkoutDefinition,
+	id: string,
+	existingNames: string[],
+): WorkoutDefinition {
+	return {
+		...structuredClone(source), id,
+		name: getImportedWorkoutName(source.name, existingNames), favorite: false,
+	};
+}
+
 export function createDuplicateWorkoutDraft(
 	source: WorkoutDefinition,
 	id: string,
@@ -51,7 +86,7 @@ export function createDefaultWorkoutImportDrafts(
 	definitions: WorkoutDefinition[],
 	createId: () => string,
 ): WorkoutDefinition[] {
-	return definitions.map((definition) => ({ ...definition, id: createId() }));
+	return definitions.map((definition) => ({ ...structuredClone(definition), id: createId() }));
 }
 
 // ---------------------------------------------------------------------------

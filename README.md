@@ -31,6 +31,33 @@ See **[Firebase Setup](FIREBASE_SETUP.md)** for application and shared-project
 configuration. Optional Calendar synchronization uses the separate
 **[Google Calendar OAuth Setup](GOOGLE_SETUP.md)**.
 
+## Cycles and default programs
+
+A cycle contains one planned workout per program week. Create separate cycles
+for additional weekly workouts. Confirmed exercise completion advances the plan;
+missing a calendar date does not skip a week.
+
+Expand **Default program library** on the workout page to copy a repository
+program into an editable draft, then save it to your library. Copies get fresh
+identities and never overwrite your workouts, progress, or shared exercise weights.
+The library remains available even after setup. Starter workouts live in
+`lib/workouts.json`; `lib/531.json` supplies four classic four-week 5/3/1 cycles
+for squat, bench press, deadlift, and overhead press.
+
+For 5/3/1, set each lift's **Training Max** in its exercise editor. The optional
+**Set starting TM from 1RM (90%)** calculator applies the 90% modifier once:
+a 200 lb 1RM becomes a 180 lb TM. Each set then uses its percentage of TM,
+not another 90% reduction. A blank TM still defaults to top-set weight, which
+is not assumed to be 1RM. Warmups are 40% × 5, 50% × 5, and 60% × 3 each week;
+the work sets follow the classic 5s, 3s, 5/3/1, and deload progression.
+Existing rounding and minimum-weight settings apply, so check the preview,
+especially for light warmups and deloads. TM increases remain reviewed after
+completing the deload: 10 lb for squat/deadlift and 5 lb for bench/press by default.
+
+Older multi-session week definitions open as successive single-workout weeks
+without dropping prescriptions. Already-started iterations and historical
+workouts retain their original frozen prescriptions.
+
 ## Development model
 
 - **Spec-driven.** Every feature starts as a spec in `specs/`. Completed specs live in `.archive/specs/`.

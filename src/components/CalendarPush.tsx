@@ -34,7 +34,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
   const [startDate, setStartDate] = useState(today);
   const [mode, setMode] = useState<'weekly' | 'cycle'>('weekly');
   const [cycleId, setCycleId] = useState('');
-  const [cycleDays, setCycleDays] = useState<number[]>([0]);
+  const [cycleDay, setCycleDay] = useState(0);
   const selectedCycle = definitions.find((definition) => definition.id === cycleId);
 
   const handleDayChange = useCallback((dayIndex: number, workoutId: string) => {
@@ -46,7 +46,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
   }, []);
 
   const hasSlots = mode === 'cycle'
-    ? !!selectedCycle && cycleOpportunityCount(selectedCycle) > 0 && cycleDays.length > 0
+    ? !!selectedCycle && cycleOpportunityCount(selectedCycle) > 0
     : daySlots.some((id) => id !== '');
 
   // Generate WorkoutScheduleEntry[] from the weekly planner.
@@ -54,7 +54,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
   // __rest__ signals clearing all workouts for that date.
   // Aligns each day-of-week to its correct calendar date regardless of start date.
   const generateScheduleEntries = useCallback((): WorkoutScheduleEntry[] => {
-    if (mode === 'cycle') return selectedCycle ? planWholeCycle(selectedCycle, startDate, cycleDays) : [];
+    if (mode === 'cycle') return selectedCycle ? planWholeCycle(selectedCycle, startDate, [cycleDay]) : [];
     const entries: WorkoutScheduleEntry[] = [];
     const [sy, sm, sd] = startDate.split('-').map(Number);
     const start = new Date(sy, sm - 1, sd);
@@ -72,7 +72,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
       }
     }
     return entries;
-  }, [daySlots, startDate, weeks, mode, selectedCycle, cycleDays]);
+  }, [daySlots, startDate, weeks, mode, selectedCycle, cycleDay]);
 
   const [scheduleUpdated, setScheduleUpdated] = useState(false);
 
@@ -109,23 +109,19 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
               <option key={definition.id} value={definition.id}>{definition.name}</option>
             ))}
           </select>
-          <fieldset>
-            <legend>Workout opportunity days</legend>
+          <label className="calendar-push-label" htmlFor="push-cycle-day">Weekly workout day</label>
+          <select id="push-cycle-day" className="calendar-push-select" value={cycleDay}
+            onChange={(event) => setCycleDay(Number(event.target.value))}>
             {DAY_NAMES.map((name, index) => (
-              <label key={name} className="calendar-push-day-row">
-                <input type="checkbox" checked={cycleDays.includes(index)}
-                  onChange={() => setCycleDays((days) => days.includes(index)
-                    ? days.filter((day) => day !== index) : [...days, index])} />
-                {name}
-              </label>
+              <option key={name} value={index}>{name}</option>
             ))}
-          </fieldset>
+          </select>
           {selectedCycle && (
-            <p>{cycleOpportunityCount(selectedCycle)} opportunities covering all ordered exposures
-              across {selectedCycle.cycle?.weeks.length ?? 1} program weeks.</p>
+            <p>{cycleOpportunityCount(selectedCycle)} program weeks, with one workout every 7 days.</p>
           )}
           <p>Each date opens the next uncompleted prescription for each exercise.
-            Missing a date does not skip a stage or add catch-up workouts.</p>
+            Missing a date does not skip a stage or add catch-up workouts.
+            Use separate cycles for additional weekly workouts.</p>
         </div>
       )}
       {/* Weekly schedule */}

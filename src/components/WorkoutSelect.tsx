@@ -7,10 +7,13 @@ import type { LogSession } from './CalendarView.js';
 import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
 import { Banner } from './Banner.js';
 import { MotivationalQuote } from './MotivationalQuote.js';
+import type { WorkoutDefinition } from '../data/sample-workouts.js';
 import { BicepsFlexed, ChevronDown, Pencil, Plus, Star, Bike, Trash2, Check, X, Copy, MoreVertical, Share2, HeartPulse, Moon, Ban } from 'lucide-react';
 
 interface WorkoutSelectProps {
 	workouts: Workout[];
+	defaultPrograms?: WorkoutDefinition[];
+	onCopyDefaultProgram?: (programId: string) => void;
 	missingLiftIds?: string[];
 	workoutSchedule?: WorkoutScheduleEntry[];
 	logRows?: ParsedLogRow[];
@@ -218,6 +221,8 @@ function PlanInfoCard({ kind, name }: { kind: 'cardio' | 'rest' | 'blocker'; nam
 
 export function WorkoutSelect({
 	workouts,
+	defaultPrograms,
+	onCopyDefaultProgram,
 	missingLiftIds,
 	workoutSchedule,
 	logRows,
@@ -361,6 +366,35 @@ export function WorkoutSelect({
 						</button>
 					)}
 				</div>
+			)}
+			{defaultPrograms && onCopyDefaultProgram && (
+				<details className="default-program-library">
+					<summary>Default program library</summary>
+					<p className="cycle-editor-hint">
+						Copy a program, review its weeks and exercises, then save to your library.
+						Your existing workouts and exercise weights stay unchanged.
+					</p>
+					<p className="cycle-editor-hint">
+						5/3/1: one lift per cycle, one workout per week for four weeks.
+						Set each lift&apos;s starting TM to 90% of its one-rep max in Exercises
+						(the TM calculator applies this once). All warmup and work percentages
+						use TM; your exercise rounding and minimum weights still apply.
+					</p>
+					<div className="workout-list">
+						{defaultPrograms.map((program) => (
+							<button
+								key={program.id}
+								type="button"
+								className="btn-new-workout"
+								onClick={() => onCopyDefaultProgram(program.id)}
+								aria-label={`Copy ${program.name} to my library`}
+							>
+								<Copy size={18} />
+								<span>{program.name} · {program.cycle?.weeks.length ?? 1} week{program.cycle && program.cycle.weeks.length !== 1 ? 's' : ''}</span>
+							</button>
+						))}
+					</div>
+				</details>
 			)}
 			{cardioActivities && onCardioSave && (
 				<CardioSection activities={cardioActivities} onSave={onCardioSave} />

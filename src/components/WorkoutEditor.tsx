@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { ArrowDown, ArrowLeft, ArrowUp, Copy, Eye, MessageSquare, Plus, Trash2 } from 'lucide-react';
 import type { SetTemplate, WeightBasis, SetType, LiftConfig, ExerciseRole, CycleBaseline, ExerciseTemplate } from '../model/types.js';
 import { computeSetWeight } from '../model/compute.js';
+import { normalizeCycle } from '../model/cycles.js';
 import { getTrainingMax, getTrainingMaxIncrement } from '../model/training-max.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
 
@@ -169,8 +170,8 @@ function editableExercises(templates: ExerciseTemplate[]): EditableExercise[] {
 	});
 }
 
-export function copyExposure(source: EditableExposure, destination?: EditableWorkout): EditableExposure {
-	const copy = { ...structuredClone(source), id: crypto.randomUUID(), name: `${source.name} (Copy)` };
+function copyExposure(source: EditableExposure, destination?: EditableWorkout): EditableExposure {
+	const copy = { ...structuredClone(source), id: crypto.randomUUID() };
 	if (destination) {
 		const existing = destination.cycle?.weeks.flatMap((week) => week.exposures.flatMap((exposure) => exposure.exercises)) ?? destination.exercises;
 		const used = new Set<string>();
@@ -192,14 +193,13 @@ export function copyWeek(source: EditableWeek, destination?: EditableWorkout): E
 		...structuredClone(source),
 		id: crypto.randomUUID(),
 		name: `${source.name} (Copy)`,
-		exposures: source.exposures.map((exposure) => ({ ...copyExposure(exposure, destination), name: exposure.name })),
+		exposures: source.exposures.map((exposure) => copyExposure(exposure, destination)),
 	};
 }
 
-export function updateExposureExercises(
+export function updateWeekExercises(
 	workout: EditableWorkout,
 	weekIndex: number,
-	exposureIndex: number,
 	update: (exercises: EditableExercise[]) => EditableExercise[],
 ): EditableWorkout {
 	if (!workout.cycle) return { ...workout, exercises: update(workout.exercises) };
@@ -207,9 +207,9 @@ export function updateExposureExercises(
 		...workout.cycle,
 		weeks: workout.cycle.weeks.map((week, wi) => wi !== weekIndex ? week : {
 			...week,
-			exposures: week.exposures.map((exposure, ei) => ei !== exposureIndex ? exposure : {
+			exposures: week.exposures.map((exposure) => ({
 				...exposure, exercises: update(exposure.exercises),
-			}),
+			})),
 		}),
 	};
 	return { ...workout, cycle, exercises: cycle.weeks[0]?.exposures[0]?.exercises ?? [] };
@@ -217,21 +217,18 @@ export function updateExposureExercises(
 
 /** Convert a WorkoutDefinition to the local editable format. */
 export function toEditable(def: WorkoutDefinition): EditableWorkout {
-	const weeks = def.cycle
-		? def.cycle.weeks.map((week) => ({
-			...week,
-			exposures: week.exposures.map((exposure) => ({
-				id: exposure.id, name: exposure.name, exercises: editableExercises(exposure.templates),
-			})),
-		}))
-		: [{ id: 'week-1', name: 'Week 1', exposures: [
-			{ id: 'session-1', name: 'Session 1', exercises: editableExercises(def.templates) },
-		] }];
+	const cycle = normalizeCycle(def);
+	const weeks = cycle.weeks.map((week) => ({
+		...week,
+		exposures: week.exposures.map((exposure) => ({
+			id: exposure.id, name: exposure.name, exercises: editableExercises(exposure.templates),
+		})),
+	}));
 	return {
 		id: def.id,
 		name: def.name,
 		exercises: weeks[0]?.exposures[0]?.exercises ?? [],
-		cycle: { baseline: def.cycle?.baseline ?? 'topSet', weeks },
+		cycle: { baseline: cycle.baseline, weeks },
 	};
 }
 
@@ -267,19 +264,17 @@ export function validateEditableWorkout(workout: EditableWorkout, configs: LiftC
 	const errors: string[] = [];
 	if (!workout.name.trim()) errors.push('Workout name is required');
 	const configMap = new Map(configs.map((config) => [config.id, config]));
-	const weeks = workout.cycle?.weeks ?? [{ name: 'Week 1', exposures: [{ name: 'Session 1', exercises: workout.exercises }] }];
+	const weeks = workout.cycle?.weeks ?? [{ name: 'Week 1', exposures: [{ exercises: workout.exercises }] }];
 	if (!weeks.length) errors.push('Add at least one week');
 	weeks.forEach((week, wi) => {
 		const weekLabel = `Week ${wi + 1}`;
 		if (!week.name.trim()) errors.push(`${weekLabel}: enter a name`);
-		if (!week.exposures.length) errors.push(`${weekLabel}: add at least one session`);
-		week.exposures.forEach((exposure, ei) => {
-			const stage = `${weekLabel}, session ${ei + 1}`;
-			if (!exposure.name.trim()) errors.push(`${stage}: enter a name`);
-			if (!exposure.exercises.length) errors.push(`${stage}: add at least one exercise`);
+		if (week.exposures.length !== 1) errors.push(`${weekLabel}: each week must contain exactly one workout`);
+		week.exposures.forEach((exposure) => {
+			if (!exposure.exercises.length) errors.push(`${weekLabel}: add at least one exercise`);
 			const identities = new Set<string>();
 			exposure.exercises.forEach((exercise, xi) => {
-				const label = `${stage}, exercise ${xi + 1}`;
+				const label = `${weekLabel}, exercise ${xi + 1}`;
 				const config = configMap.get(exercise.liftId);
 				if (!config) errors.push(`${label}: select an available lift`);
 				if (exercise.id && identities.has(exercise.id)) errors.push(`${label}: duplicate exercise identity; remove and add this exercise again`);
@@ -372,11 +367,10 @@ export function WorkoutEditor({
 	const [confirmDelete, setConfirmDelete] = useState(false);
 	const [commentTarget, setCommentTarget] = useState<{ exerciseIdx: number; setIdx: number } | null>(null);
 	const [weekIndex, setWeekIndex] = useState(0);
-	const [exposureIndex, setExposureIndex] = useState(0);
 	const [showPreview, setShowPreview] = useState(false);
 	const cycle = workout.cycle!;
 	const week = cycle.weeks[weekIndex];
-	const exposure = week?.exposures[exposureIndex];
+	const exposure = week?.exposures[0];
 	const exercises = exposure?.exercises ?? [];
 
 	const isNew = !existing;
@@ -388,9 +382,6 @@ export function WorkoutEditor({
 	];
 	const weekSources = copySources.flatMap((source) => source.workout.cycle!.weeks.map((sourceWeek) => ({
 		label: `${source.name} — ${sourceWeek.name}`, week: sourceWeek,
-	})));
-	const exposureSources = weekSources.flatMap((source) => source.week.exposures.map((sourceExposure) => ({
-		label: `${source.label} — ${sourceExposure.name}`, exposure: sourceExposure,
 	})));
 
 	// Available lifts sorted by name
@@ -434,27 +425,17 @@ export function WorkoutEditor({
 			return { ...previous, cycle: { ...previous.cycle!, weeks }, exercises: weeks[0]?.exposures[0]?.exercises ?? [] };
 		});
 	};
-	const updateExposures = (update: (exposures: EditableExposure[]) => EditableExposure[]) => {
-		updateWeeks((weeks) => weeks.map((item, index) => index === weekIndex ? { ...item, exposures: update(item.exposures) } : item));
-	};
 	const appendWeek = (newWeek?: EditableWeek) => {
 		setWeekIndex(cycle.weeks.length);
-		setExposureIndex(0);
 		updateWeeks((weeks) => [...weeks, newWeek ?? {
 			id: crypto.randomUUID(), name: `Week ${weeks.length + 1}`,
-			exposures: [{ id: crypto.randomUUID(), name: 'Session 1', exercises: [] }],
-		}]);
-	};
-	const appendExposure = (newExposure?: EditableExposure) => {
-		setExposureIndex(week.exposures.length);
-		updateExposures((items) => [...items, newExposure ?? {
-			id: crypto.randomUUID(), name: `Session ${items.length + 1}`, exercises: [],
+			exposures: [{ id: crypto.randomUUID(), name: 'Workout', exercises: [] }],
 		}]);
 	};
 
 	const editExercises = useCallback((update: (items: EditableExercise[]) => EditableExercise[]) => {
-		setWorkout((previous) => updateExposureExercises(previous, weekIndex, exposureIndex, update));
-	}, [weekIndex, exposureIndex]);
+		setWorkout((previous) => updateWeekExercises(previous, weekIndex, update));
+	}, [weekIndex]);
 
 	const identityForLift = (liftId: string, remaining: EditableExercise[]) => {
 		const used = new Set(remaining.map((exercise) => exercise.id));
@@ -652,7 +633,7 @@ export function WorkoutEditor({
 				<p className="cycle-editor-hint">
 					Each workout is a named cycle. Exercises progress independently when you confirm completed work.
 					{cycle.baseline === 'trainingMax'
-						? ' TM increases are reviewed only after each exercise finishes its final session, including deload weeks, using its separate TM increment.'
+						? ' TM increases are reviewed only after each exercise finishes its final week, including deload weeks, using its separate TM increment.'
 						: ' Top-set and backoff increases use performance and the normal increment, reviewed at each exercise’s iteration boundary.'}
 					{' '}The baseline does not change individual set weight bases.
 				</p>
@@ -662,13 +643,12 @@ export function WorkoutEditor({
 				</p>
 			</section>
 
-			<section className="editor-section cycle-stage-editor" aria-label="Cycle weeks and sessions">
-				<h2>Weeks and sessions</h2>
+			<section className="editor-section cycle-stage-editor" aria-label="Cycle weeks">
+				<h2>Program weeks</h2>
 				<label className="editor-field">
 					<span className="editor-field-label">Week to edit or preview</span>
 					<select className="editor-select" value={week?.id ?? ''} onChange={(event) => {
 						setWeekIndex(cycle.weeks.findIndex((item) => item.id === event.target.value));
-						setExposureIndex(0);
 						setCommentTarget(null);
 					}}>
 						{!week && <option value="">Add a week below</option>}
@@ -695,7 +675,6 @@ export function WorkoutEditor({
 						<button type="button" onClick={() => {
 							updateWeeks((items) => items.filter((_, index) => index !== weekIndex));
 							setWeekIndex(Math.max(0, weekIndex - 1));
-							setExposureIndex(0);
 						}}><Trash2 size={16} /> Delete week</button>
 					</div>
 				</>}
@@ -709,58 +688,16 @@ export function WorkoutEditor({
 						{weekSources.map((source, index) => <option key={index} value={index}>{source.label}</option>)}
 					</select>
 				</label>
-				{week && <div className="cycle-exposure-editor">
-					<label className="editor-field">
-						<span className="editor-field-label">Within-week session to edit or preview</span>
-						<select className="editor-select" value={exposure?.id ?? ''} onChange={(event) => {
-							setExposureIndex(week.exposures.findIndex((item) => item.id === event.target.value));
-							setCommentTarget(null);
-						}}>
-							{!exposure && <option value="">Add a session below</option>}
-							{week.exposures.map((item, index) => <option key={item.id} value={item.id}>{index + 1}. {item.name || 'Unnamed session'}</option>)}
-						</select>
-					</label>
-					{exposure && <>
-						<label className="editor-field">
-							<span className="editor-field-label">Session name</span>
-							<input className="editor-text-input" value={exposure.name} onChange={(event) => updateExposures((items) =>
-								items.map((item, index) => index === exposureIndex ? { ...item, name: event.target.value } : item)
-							)} />
-						</label>
-						<div className="cycle-stage-actions">
-							<button type="button" disabled={exposureIndex === 0} onClick={() => {
-								updateExposures((items) => moveItem(items, exposureIndex, exposureIndex - 1));
-								setExposureIndex(exposureIndex - 1);
-							}}><ArrowUp size={16} /> Move session up</button>
-							<button type="button" disabled={exposureIndex === week.exposures.length - 1} onClick={() => {
-								updateExposures((items) => moveItem(items, exposureIndex, exposureIndex + 1));
-								setExposureIndex(exposureIndex + 1);
-							}}><ArrowDown size={16} /> Move session down</button>
-							<button type="button" onClick={() => appendExposure(copyExposure(exposure))}><Copy size={16} /> Duplicate session</button>
-							<button type="button" onClick={() => {
-								updateExposures((items) => items.filter((_, index) => index !== exposureIndex));
-								setExposureIndex(Math.max(0, exposureIndex - 1));
-							}}><Trash2 size={16} /> Delete session</button>
-						</div>
-					</>}
-					<button type="button" className="btn-add-exercise" onClick={() => appendExposure()}><Plus size={18} /> Add session</button>
-					<label className="editor-field">
-						<span className="editor-field-label">Copy session from</span>
-						<select className="editor-select" value="" onChange={(event) => {
-							if (event.target.value !== '') appendExposure(copyExposure(exposureSources[Number(event.target.value)].exposure, workout));
-						}}>
-							<option value="">Choose a session to copy…</option>
-							{exposureSources.map((source, index) => <option key={index} value={index}>{source.label}</option>)}
-						</select>
-					</label>
-				</div>}
-				<p className="cycle-editor-hint">Weeks are programming order, not calendar deadlines. Each exercise visits its sessions in order; individual sets are not progression steps.</p>
+				<p className="cycle-editor-hint">
+					Each program week contains one workout. Use separate cycles for additional weekly workouts.
+					Weeks are programming order, not calendar deadlines. Exercises advance independently when completed, not by date or individual set.
+				</p>
 			</section>
 
 			{exposure && <section className="editor-section cycle-preview">
-				<h2>Week {weekIndex + 1} of {cycle.weeks.length}: {week.name} · Session {exposureIndex + 1}: {exposure.name}</h2>
+				<h2>Week {weekIndex + 1} of {cycle.weeks.length}: {week.name}</h2>
 				<button type="button" className="btn-add-exercise" aria-expanded={showPreview} onClick={() => setShowPreview(!showPreview)}>
-					<Eye size={18} /> {showPreview ? 'Hide preview' : 'Preview session'}
+					<Eye size={18} /> {showPreview ? 'Hide preview' : 'Preview week'}
 				</button>
 				{showPreview && <>
 					<p className="cycle-editor-hint">Preview uses current shared inputs and rounding/minimum settings. It never starts or advances an exercise. Pending snapshots may differ.</p>

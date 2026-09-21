@@ -2,6 +2,7 @@ import type { WorkoutDefinition } from '../data/sample-workouts.js';
 import type { ParsedLogRow } from './logs.js';
 import type { ExerciseCycleStage, Workout, WorkoutScheduleEntry } from './types.js';
 import { BLOCKER_ID, REST_ID } from './types.js';
+import { normalizeCycle } from './cycles.js';
 
 export function createScheduleOpportunity(date: string, workoutId: string): WorkoutScheduleEntry {
 	if (!workoutId || workoutId === '__rest__' || workoutId === REST_ID
@@ -22,12 +23,10 @@ export function scheduleOccurrenceId(entry: WorkoutScheduleEntry): string | unde
 }
 
 export function cycleOpportunityCount(definition: WorkoutDefinition): number {
-	return definition.cycle
-		? definition.cycle.weeks.reduce((count, week) => count + week.exposures.length, 0)
-		: 1;
+	return normalizeCycle(definition).weeks.length;
 }
 
-/** Dates are opportunities, not prescribed stages; missed dates never create catch-up work. */
+/** One opportunity every seven days; legacy day selections only align the first date. */
 export function planWholeCycle(
 	definition: WorkoutDefinition,
 	startDate: string,
@@ -39,19 +38,12 @@ export function planWholeCycle(
 	const date = new Date(year, month - 1, day);
 	if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return [];
 	const entries: WorkoutScheduleEntry[] = [];
-	const weeks = definition.cycle?.weeks ?? [{ exposures: [{}] }];
-	for (let index = 0; index < weeks.length; index++) {
-		const earliest = new Date(year, month - 1, day + index * 7);
-		if (date < earliest) date.setTime(earliest.getTime());
-		let remaining = weeks[index].exposures.length;
-		while (remaining > 0) {
-			if (selected.has((date.getDay() + 6) % 7)) {
-				const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-				entries.push(createScheduleOpportunity(iso, definition.id));
-				remaining -= 1;
-			}
-			date.setDate(date.getDate() + 1);
-		}
+	while (!selected.has((date.getDay() + 6) % 7)) date.setDate(date.getDate() + 1);
+	const count = cycleOpportunityCount(definition);
+	for (let index = 0; index < count; index++) {
+		const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+		entries.push(createScheduleOpportunity(iso, definition.id));
+		date.setDate(date.getDate() + 7);
 	}
 	return entries;
 }
@@ -70,8 +62,9 @@ export function matchesScheduledOccurrence(
 export function formatCycleStage(stage: ExerciseCycleStage): string {
 	return `Week ${stage.week}/${stage.weekCount}`
 		+ (stage.weekName ? ` — ${stage.weekName}` : '')
-		+ ` · Exposure ${stage.exposure}/${stage.exposureCount}`
-		+ (stage.exposureName ? ` — ${stage.exposureName}` : '');
+		+ (stage.exposureCount > 1
+			? ` · Exposure ${stage.exposure}/${stage.exposureCount}${stage.exposureName ? ` — ${stage.exposureName}` : ''}`
+			: '');
 }
 
 /** One-week cards stay familiar; independently progressing exercises must not imply a global stage. */

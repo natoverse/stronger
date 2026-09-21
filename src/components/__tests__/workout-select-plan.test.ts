@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { buildTodaysPlan, WorkoutSelect } from '../WorkoutSelect.js';
 import type { Workout, WorkoutScheduleEntry } from '../../model/index.js';
+import { defaultWorkoutLibrary } from '../../data/sample-workouts.js';
 
 const workout: Workout = { id: 'A', name: 'Squat Day', exercises: [], favorite: false };
 
@@ -52,6 +53,21 @@ describe('buildTodaysPlan', () => {
 });
 
 describe('WorkoutSelect today plan rendering', () => {
+	it.each([{ workouts: [] }, { workouts: [workout] }])('offers a collapsed defaults library with or without user workouts', ({ workouts }) => {
+		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
+			workouts, defaultPrograms: defaultWorkoutLibrary,
+			onCopyDefaultProgram: () => {}, onSelect: () => {},
+		}));
+		expect(markup).toContain('<details class="default-program-library">');
+		expect(markup).not.toContain('<details class="default-program-library" open');
+		expect(markup).toContain('Default program library');
+		expect(markup).toContain('Copy 5/3/1 — Squat to my library');
+		expect(markup).toContain('Copy 5/3/1 — Bench Press to my library');
+		expect(markup).toContain('Copy 5/3/1 — Deadlift to my library');
+		expect(markup).toContain('Copy 5/3/1 — Overhead Press to my library');
+		expect(markup).toContain('90% of its one-rep max');
+	});
+
 	it('renders cardio, rest and blocker items without buttons', () => {
 		const today = new Date();
 		const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;

@@ -1,5 +1,12 @@
 import type { LiftConfig } from './types.js';
 
+export function trainingMaxFromOneRepMax(oneRepMax: number): number {
+	if (!Number.isFinite(oneRepMax) || oneRepMax <= 0) {
+		throw new Error('Enter a positive, finite one-rep max.');
+	}
+	return oneRepMax * 0.9;
+}
+
 export function getTrainingMax(config: Pick<LiftConfig, 'trainingMax' | 'topSetWeight'>): number {
 	return config.trainingMax ?? config.topSetWeight;
 }
