@@ -53,12 +53,12 @@ describe('Firebase route load plan', () => {
 			.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
 	})
 
-	it.each(['list', 'workout', 'calendar'] as const)('loads cycle state before rendering %s', (view) => {
+	it.each(['list', 'workout', 'calendar', 'editor'] as const)('loads cycle state before rendering %s', (view) => {
 		expect(buildFirebaseLoadQueue(view).priority)
 			.toContainEqual({ dataset: 'cycleProgress', scope: 'all' })
 	})
 
-	it.each(['settings', 'progress', 'editor', 'garmin-activities'] as const)('warms cycle state on %s', (view) => {
+	it.each(['settings', 'progress', 'garmin-activities'] as const)('warms cycle state on %s', (view) => {
 		expect(buildFirebaseLoadQueue(view).deferred)
 			.toContainEqual({ dataset: 'cycleProgress', scope: 'all' })
 	})

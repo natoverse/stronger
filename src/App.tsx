@@ -379,15 +379,18 @@ function AppContent() {
         local = null;
       }
       const remote = cycleDraftsRef.current.find((item) => item.workout.id === workout.id);
-      const restored = local?.snapshot ?? remote;
+      const useRemote = remote && (!local?.snapshot || (remote.id === local.snapshot.id
+        && (remote.draftVersion ?? 0) > (local.draftVersion ?? 0)));
+      const restored = useRemote ? remote : local?.snapshot ?? remote;
       if (restored && previous && restored.progress.revision !== previous.revision) {
         throw new Error('This saved workout no longer matches current cycle progress. Your draft is preserved; it cannot overwrite a newer local session.');
       }
       const snapshot = restored ?? createCycleSession(definition, configs, previous, {
         roundWarmupPlateMath: roundWarmupPlateMathRef.current, occurrenceId,
       });
-      const now = local?.startTime || remote?.startTime || new Date().toISOString();
-      const results = local?.results ?? remote?.results ?? [];
+      const draft = useRemote ? remote : local;
+      const now = draft?.startTime || new Date().toISOString();
+      const results = draft?.results ?? [];
       if (!restored) {
         const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workout.id), snapshot.progress];
         cycleProgressRef.current = updated;
@@ -396,11 +399,17 @@ function AppContent() {
         cycleDraftsRef.current = [...cycleDraftsRef.current.filter((item) => item.workout.id !== workout.id), { ...snapshot, startTime: now }];
         saveDraft({ workoutId: workout.id, startTime: now, results, snapshot }, uid);
         if (firebaseUid) void queueSessionMutation(`cycle:${workout.id}`, () => writeCycleStart(firebaseUid, { ...snapshot, startTime: now })).catch((error) => setDataLoadError(String(error)));
+      } else if (useRemote) {
+        saveDraft({
+          workoutId: workout.id, startTime: now, results, snapshot,
+          draftVersion: remote?.draftVersion ?? 0,
+          ...(remote?.executionWorkout ? { executionWorkout: remote.executionWorkout } : {}),
+        }, uid);
       }
       setStartTime(now);
       setDraftResults(results.length ? results : null);
       setActiveSnapshot(snapshot);
-      setActiveWorkout(local?.executionWorkout ?? remote?.executionWorkout ?? snapshot.workout);
+      setActiveWorkout(draft?.executionWorkout ?? snapshot.workout);
       setPreviousSets(null);
       setFinishError(null);
       navigateTo({ view: 'workout', workoutId: workout.id });
@@ -412,9 +421,9 @@ function AppContent() {
 
   const handleDraftChange = useCallback((workout: Workout, results: SetResult[][]) => {
     if (!activeSnapshot || !startTime) return;
-    saveDraft({ workoutId: workout.id, startTime, results, snapshot: activeSnapshot, executionWorkout: workout }, firebaseUid ?? 'mock');
+    const draftVersion = saveDraft({ workoutId: workout.id, startTime, results, snapshot: activeSnapshot, executionWorkout: workout }, firebaseUid ?? 'mock');
     if (firebaseUid) {
-      void queueSessionMutation(`cycle:${workout.id}`, () => writeCycleDraftResults(firebaseUid, activeSnapshot, results, startTime, workout));
+      void queueSessionMutation(`cycle:${workout.id}`, () => writeCycleDraftResults(firebaseUid, { ...activeSnapshot, draftVersion }, results, startTime, workout));
     }
   }, [activeSnapshot, startTime, firebaseUid, queueSessionMutation]);
 
@@ -1965,7 +1974,7 @@ function AppContent() {
           initialDefinition={editDef ? undefined : duplicateWorkoutDraft}
           roundWarmupPlateMath={appSettings.roundWarmupPlateMath}
           allDefinitions={definitions}
-          reservedIds={[...cycleProgress.map((item) => item.workoutId), ...logRows.map((row) => row.workoutId)]}
+          reservedIds={cycleProgress.map((item) => item.workoutId)}
           configs={configs}
           onSave={handleEditorSave}
           onCancel={handleEditorCancel}

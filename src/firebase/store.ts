@@ -37,7 +37,7 @@ const BATCH_WRITE_LIMIT = 400
 const TRANSACTIONAL_WRITE_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
 export type FirestoreReadSource = 'cacheFirst' | 'server'
-export type StoredCycleDraft = CycleSessionSnapshot & { results?: SetResult[][]; startTime?: string; executionWorkout?: CycleSessionSnapshot['workout'] }
+export type StoredCycleDraft = CycleSessionSnapshot & { results?: SetResult[][]; startTime?: string; executionWorkout?: CycleSessionSnapshot['workout']; draftVersion?: number }
 export type CycleConfigUpdate = { topSetWeight?: number; backoffWeight?: number; trainingMax?: number }
 type FirestoreCycleDraft = Omit<StoredCycleDraft, 'results'> & { results?: Array<{ sets: SetResult[] }> }
 export type DateWindow = {
@@ -430,7 +430,10 @@ export async function readCycleDrafts(
 	}))
 	const drafts = new Map(stored.map((item) => [item.workout.id, item]))
 	for (const item of recovery) {
-		if (item.id && item.workout?.id && item.progress?.workoutId === item.workout.id) drafts.set(item.workout.id, item)
+		if (!item.id || !item.workout?.id || item.progress?.workoutId !== item.workout.id) continue
+		const existing = drafts.get(item.workout.id)
+		if (existing?.id === item.id && (existing.draftVersion ?? 0) > (item.draftVersion ?? 0)) continue
+		drafts.set(item.workout.id, item)
 	}
 	return [...drafts.values()]
 }
@@ -458,6 +461,7 @@ function recoveryDraft(uid: string, snapshot: StoredCycleDraft): StoredCycleDraf
 		...snapshot,
 		...(local?.snapshot?.id === snapshot.id ? {
 			results: local.results, startTime: local.startTime,
+			...(local.draftVersion !== undefined ? { draftVersion: local.draftVersion } : {}),
 			...(local.executionWorkout ? { executionWorkout: local.executionWorkout } : {}),
 		} : {}),
 	})
@@ -465,10 +469,12 @@ function recoveryDraft(uid: string, snapshot: StoredCycleDraft): StoredCycleDraf
 
 function restoreRecoveryDraft(uid: string, snapshot: StoredCycleDraft): void {
 	const existing = loadDraft(uid, snapshot.workout.id)
-	// Local edits are saved immediately; a queued write or rejection may be older.
-	if (existing?.snapshot) return
+	// Recovery may improve an earlier rejected start, but never replace newer edits.
+	if (existing?.snapshot && (existing.snapshot.id !== snapshot.id
+		|| (existing.draftVersion ?? 0) >= (snapshot.draftVersion ?? 0))) return
 	saveDraft({
 		workoutId: snapshot.workout.id,
+		draftVersion: snapshot.draftVersion ?? 0,
 		startTime: snapshot.startTime ?? '',
 		results: snapshot.results ?? snapshot.workout.exercises.map((exercise) => exercise.sets.map((set) => ({
 			actualWeight: set.weight, actualReps: set.minReps, completed: false, actualSetType: set.setType,
@@ -542,8 +548,10 @@ export async function finishCycleSession(
 		return { liftId, values: { ...values } }
 	}).filter(({ values }) => Object.keys(values).length > 0)
 	if (changes.length + 3 > BATCH_WRITE_LIMIT) throw new Error('Cycle confirmation is too large to save atomically.')
+	const draft = recoveryDraft(uid, snapshot)
 	const frozen = frozenValue({
-		...recoveryDraft(uid, snapshot),
+		...draft,
+		draftVersion: (draft.draftVersion ?? 0) + 1,
 		startTime: sessions[0].startTime,
 		results: sessions[0].exercises.map((exercise) => exercise.sets.map((set) => ({
 			actualWeight: set.actualWeight, actualReps: set.actualReps,

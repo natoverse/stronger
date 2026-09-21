@@ -142,11 +142,24 @@ describe('workout draft persistence', () => {
 			progress: { workoutId: 'rss-bench', revision: 1, exercises: [] },
 		};
 		saveDraft(makeDraft({ snapshot }), 'alice');
+		expect(loadDraft('alice', 'rss-bench')?.draftVersion).toBe(1);
 		snapshot.workout.name = 'Changed elsewhere';
 		saveDraft(makeDraft({ results: [] }), 'alice');
 		expect(loadDraft('alice', 'rss-bench')?.snapshot?.workout.name).toBe('Bench');
+		expect(loadDraft('alice', 'rss-bench')?.draftVersion).toBe(2);
 		saveDraft(makeDraft({ startTime: 'new-session', results: [] }), 'alice');
 		expect(loadDraft('alice', 'rss-bench')?.snapshot).toBeUndefined();
+	});
+	it('continues versioning after restoring a remote cycle draft', () => {
+		const snapshot: CycleSessionSnapshot = {
+			id: 'session-1',
+			workout: { id: 'rss-bench', name: 'Bench', favorite: false, exercises: [] },
+			templates: [],
+			progress: { workoutId: 'rss-bench', revision: 1, exercises: [] },
+		};
+		expect(saveDraft(makeDraft({ snapshot, draftVersion: 8 }), 'alice')).toBe(8);
+		expect(saveDraft(makeDraft({ snapshot }), 'alice')).toBe(9);
+		expect(loadDraft('alice', 'rss-bench')?.draftVersion).toBe(9);
 	});
 
 	it('rejects corrupt snapshots rather than resuming a newly resolved prescription', () => {

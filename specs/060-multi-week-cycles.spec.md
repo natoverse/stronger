@@ -88,8 +88,8 @@ Programs may also prescribe multiple different exposures for one exercise within
 - Freeze each exercise's own iteration rather than a globally synchronized run. This permits one exercise to finish its deload and begin a new TM while another is still performing a missed earlier prescription.
 - Ordered exposures within a week and independent per-set percentages are explicit. The classic 5/3/1 main-lift table advances once per completed row, and a configurable second exposure in a week must finish before that exercise advances to the next week.
 - An unchanged top-set/backoff review field retains the current shared baseline rather than writing back an older frozen value. Explicit actual-weight proposals remain reviewable; skipping an older workout must not undo another cycle's accepted increase.
-- Local draft edits are saved immediately. Queued writes and rejection recovery must not replace a newer local draft, including newer edits to the same session.
-- IDs with saved cycle progress or workout history remain reserved after definition deletion. Reusing a name requires a different ID, so a new cycle cannot resume the deleted cycle's unfinished session or inherit its progress.
+- Local draft edits are saved immediately with a per-session version. Queued writes and rejection recovery must not replace a newer local draft, while a rejected finish can restore newer results than an earlier rejected start.
+- IDs with saved cycle progress remain reserved after definition deletion, and that reservation data loads before the editor becomes usable. Reusing a name requires a different ID, so a new cycle cannot resume the deleted cycle's unfinished session or inherit its progress; historical logs remain unchanged.
 
 ## Notes
 

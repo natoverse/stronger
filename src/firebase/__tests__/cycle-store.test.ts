@@ -142,6 +142,12 @@ describe('cycle storage', () => {
 		state.cache.set('/users/alice/workoutDrafts', [{ ...snapshot, results: results.map((sets) => ({ sets })) }])
 		expect((await readCycleDrafts('alice'))[0]).toEqual({ ...snapshot, results })
 	})
+	it('keeps a newer stored edit over an older failed write for the same session', async () => {
+		const snapshot = makeSnapshot()
+		state.cache.set('/users/alice/workoutDrafts', [{ ...snapshot, draftVersion: 3 }])
+		state.recoveries = [{ ...snapshot, draftVersion: 2 }]
+		expect((await readCycleDrafts('alice'))[0].draftVersion).toBe(3)
+	})
 
 	it('atomically freezes the start without changing its revision and retries byte-identically', async () => {
 		const snapshot = makeSnapshot()
@@ -265,6 +271,20 @@ describe('cycle storage', () => {
 		state.reject = reject
 		await writeCycleDraftResults('alice', snapshot, older, 'start-time')
 		expect(loadDraft('alice', '531')?.results).toEqual(latest)
+	})
+	it.each([false, true])('restores the finished results regardless of rejection order (finish first: %s)', async (finishFirst) => {
+		const snapshot = makeSnapshot()
+		await writeCycleStart('alice', snapshot)
+		saveDraft({ workoutId: '531', snapshot, results: [], startTime: 'start-time' }, 'alice')
+		await finishCycleSession('alice', snapshot, next(snapshot), [makeRow()], new Map(), [config])
+		clearDraft('alice', '531')
+		const calls = vi.mocked(trackMutation).mock.calls
+		const order = finishFirst ? [1, 0] : [0, 1]
+		for (const index of order) calls[index][3]?.onRejected?.()
+		expect(loadDraft('alice', '531')?.results).toEqual([[
+			{ actualWeight: 125, actualReps: 4, actualSetType: 'work', completed: true },
+		]])
+		expect(loadDraft('alice', '531')?.draftVersion).toBe(2)
 	})
 
 	it('edits and deletes snapshot-keyed history at its existing stable document ID', async () => {

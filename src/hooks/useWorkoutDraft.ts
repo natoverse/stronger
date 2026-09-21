@@ -15,6 +15,7 @@ export interface WorkoutDraft {
 	results: SetResult[][];
 	snapshot?: CycleSessionSnapshot;
 	executionWorkout?: Workout;
+	draftVersion?: number;
 }
 
 function draftKey(uid?: string, workoutId?: string): string {
@@ -38,7 +39,8 @@ export function loadDraft(uid?: string, workoutId?: string): WorkoutDraft | null
 }
 
 /** Persist the current workout state to localStorage. */
-export function saveDraft(draft: WorkoutDraft, uid?: string): void {
+export function saveDraft(draft: WorkoutDraft, uid?: string): number {
+	let draftVersion = draft.draftVersion ?? 1;
 	try {
 		const previous = loadDraft(uid, uid ? draft.workoutId : undefined);
 		const snapshot = draft.snapshot ?? (
@@ -46,9 +48,12 @@ export function saveDraft(draft: WorkoutDraft, uid?: string): void {
 				? previous.snapshot
 				: undefined
 		);
+		draftVersion = draft.draftVersion ?? (
+			previous?.snapshot?.id === snapshot?.id ? previous?.draftVersion ?? 0 : 0
+		) + 1;
 		localStorage.setItem(draftKey(uid, draft.workoutId), JSON.stringify({
 			...draft,
-			...(snapshot ? { snapshot } : {}),
+			...(snapshot ? { snapshot, draftVersion } : {}),
 			...(draft.executionWorkout ? { executionWorkout: draft.executionWorkout }
 				: previous?.startTime === draft.startTime && previous?.executionWorkout
 					? { executionWorkout: previous.executionWorkout } : {}),
@@ -56,6 +61,7 @@ export function saveDraft(draft: WorkoutDraft, uid?: string): void {
 	} catch {
 		// Quota exceeded or private browsing — silently ignore
 	}
+	return draftVersion;
 }
 
 /** Remove the draft from localStorage. */
@@ -88,6 +94,9 @@ function isDraft(v: unknown): v is WorkoutDraft {
 	const o = v as Record<string, unknown>;
 	if (typeof o.workoutId !== 'string' || typeof o.startTime !== 'string') return false;
 	if (!Array.isArray(o.results)) return false;
+	if (o.draftVersion !== undefined && (
+		typeof o.draftVersion !== 'number' || !Number.isSafeInteger(o.draftVersion) || o.draftVersion < 0
+	)) return false;
 	if (o.snapshot !== undefined) {
 		if (typeof o.snapshot !== 'object' || o.snapshot === null) return false;
 		const snapshot = o.snapshot as Partial<CycleSessionSnapshot>;
