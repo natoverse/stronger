@@ -4,7 +4,7 @@ import { REST_ID } from './model/index.js';
 import type { CycleProgress, CycleSessionSnapshot } from './model/types.js';
 import { createCycleSession, finishCycle, previewCycles } from './model/cycles.js';
 import type { BaselineUpdate, CycleFinish } from './model/cycles.js';
-import { createScheduleOpportunity } from './model/schedule.js';
+import { createScheduleOpportunity, scheduleOccurrenceId } from './model/schedule.js';
 import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, finishCycleSession } from './firebase/index.js';
 import type { StoredCycleDraft } from './firebase/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './model/index.js';
@@ -794,7 +794,7 @@ function AppContent() {
           : [];
         if (userId && connectedUserRef.current !== userId) return;
         const opportunity = createScheduleOpportunity(date, workoutId);
-        const updatedDate = [...persisted, { ...opportunity, ...(occurrenceId ? { occurrenceId } : {}), strongerId: generateStrongerId() }];
+        const updatedDate = [...persisted, { ...opportunity, strongerId: occurrenceId ?? opportunity.strongerId ?? generateStrongerId() }];
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
         if (userId) {
           await writeWorkoutScheduleDates(userId, updatedDate, [date]);
@@ -829,13 +829,15 @@ function AppContent() {
           return entry;
         });
         for (const entry of toAdd) {
+          const occurrenceId = scheduleOccurrenceId(entry);
           const exists = updatedRange.some(
-            (current) => entry.occurrenceId
-              ? current.occurrenceId === entry.occurrenceId
+            (current) => occurrenceId
+              ? scheduleOccurrenceId(current) === occurrenceId
               : current.date === entry.date && current.workoutId === entry.workoutId,
           );
           if (!exists) {
-            updatedRange.push({ ...createScheduleOpportunity(entry.date, entry.workoutId), ...entry, strongerId: entry.strongerId ?? generateStrongerId() });
+            const opportunity = createScheduleOpportunity(entry.date, entry.workoutId);
+            updatedRange.push({ ...opportunity, ...entry, strongerId: entry.strongerId ?? entry.occurrenceId ?? opportunity.strongerId ?? generateStrongerId() });
           }
         }
         setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedRange, window));
@@ -858,7 +860,7 @@ function AppContent() {
         if (userId && connectedUserRef.current !== userId) return;
         let blanked = false;
         const updatedDate = persisted.map((entry) => {
-          if (!blanked && entry.workoutId === workoutId && (!occurrenceId || entry.occurrenceId === occurrenceId)) {
+          if (!blanked && entry.workoutId === workoutId && (!occurrenceId || scheduleOccurrenceId(entry) === occurrenceId)) {
             blanked = true;
             return { ...entry, workoutId: '' };
           }
@@ -886,7 +888,7 @@ function AppContent() {
         if (userId && connectedUserRef.current !== userId) return;
         let updated = false;
         const updatedDate = persisted.map((entry) => {
-          if (!updated && entry.workoutId === workoutId && (!occurrenceId || entry.occurrenceId === occurrenceId)) {
+          if (!updated && entry.workoutId === workoutId && (!occurrenceId || scheduleOccurrenceId(entry) === occurrenceId)) {
             updated = true;
             return { ...entry, ...(trimmed ? { label: trimmed } : { label: undefined }) };
           }
@@ -997,7 +999,7 @@ function AppContent() {
 
       const scheduleWithIds = persistedSchedule.map((entry) =>
         entry.workoutId && !entry.strongerId
-          ? { ...entry, strongerId: generateStrongerId() }
+          ? { ...entry, strongerId: entry.occurrenceId ?? generateStrongerId() }
           : entry,
       );
       if (scheduleWithIds.some((entry, index) => entry !== persistedSchedule[index])) {

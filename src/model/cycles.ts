@@ -34,6 +34,10 @@ export interface CycleFinish {
 
 export type BaselineUpdate = { topSetWeight?: number; backoffWeight?: number; trainingMax?: number };
 
+export function hasTrainingMaxWork(template: ExerciseTemplate): boolean {
+	return template.sets.some((set) => set.setType !== 'warmup' && set.weightBasis.kind === 'trainingMax');
+}
+
 /** Legacy workouts participate in the same repeating one-exposure lifecycle. */
 export function normalizeCycle(definition: WorkoutDefinition): CycleDefinition {
 	const cycle: CycleDefinition = structuredClone(definition.cycle ?? {
@@ -85,7 +89,7 @@ function validateTemplate(template: ExerciseTemplate, configs: LiftConfig[], bas
 	const config = map.get(template.liftId);
 	if (!config) throw new Error(`${template.name || template.liftId}: select an existing exercise in the cycle editor.`);
 	if (!template.name.trim() || !template.sets.length) throw new Error(`${config.name}: add a named exercise with at least one set.`);
-	if (baseline === 'trainingMax') {
+	if (baseline === 'trainingMax' && hasTrainingMaxWork(template)) {
 		if (!Number.isFinite(config.trainingMax) || (config.trainingMax ?? 0) <= 0) {
 			throw new Error(`${config.name}: enter a positive training max in the exercise editor.`);
 		}
@@ -235,10 +239,14 @@ export function finishCycle(snapshot: CycleSessionSnapshot, results: SetResult[]
 	const progress = structuredClone(snapshot.progress);
 	progress.revision += 1;
 	progress.lastSessionId = snapshot.id;
-	const proposals = new Map<string, ProgressionProposal>();
+	const evaluationExercises: Workout['exercises'] = [];
+	const evaluationResults: SetResult[][] = [];
+	const evaluationTemplates: ExerciseTemplate[] = [];
+	const evaluationConfigs = new Map<string, LiftConfig>();
 	const trainingMaxProposals = new Map<string, TrainingMaxProposal>();
 	const transitions: CycleTransition[] = [];
 	progress.exercises.forEach((item, index) => {
+		const completedStep = item.cursor;
 		const step = item.steps[item.cursor];
 		const completed = exerciseCompleted(step.template, results[index]);
 		const boundary = completed && item.cursor === item.steps.length - 1;
@@ -253,45 +261,39 @@ export function finishCycle(snapshot: CycleSessionSnapshot, results: SetResult[]
 		});
 		const config = item.configs.find((config) => config.id === step.template.liftId)!;
 		if (item.baseline === 'trainingMax') {
-			if (boundary) trainingMaxProposals.set(config.id, {
+			if (boundary && item.steps.some((entry) => hasTrainingMaxWork(entry.template))) trainingMaxProposals.set(config.id, {
 				liftId: config.id, liftName: config.name, current: config.trainingMax!,
 				proposed: config.trainingMax! + config.trainingMaxIncrement!, increment: config.trainingMaxIncrement!,
 			});
-		} else if (completed || item.steps.length === 1) {
-			const signals = computeProgression(
-				[snapshot.workout.exercises[index]], [results[index] ?? []], item.configs, [step.template],
-			);
-			if (item.steps.length > 1) {
-				const held = new Map(item.progressionProposals?.map((proposal) => [proposal.liftId, proposal]));
-				for (const proposal of signals) {
-					const previous = held.get(proposal.liftId);
-					held.set(proposal.liftId, previous ? {
-						...proposal,
-						proposedTopSetWeight: Math.max(previous.proposedTopSetWeight, proposal.proposedTopSetWeight),
-						proposedBackoffWeight: Math.max(previous.proposedBackoffWeight, proposal.proposedBackoffWeight),
-						topSetHit: previous.topSetHit || proposal.topSetHit,
-						backoffHit: previous.backoffHit || proposal.backoffHit,
-					} : proposal);
+		} else if (item.steps.length === 1) {
+			evaluationExercises.push(snapshot.workout.exercises[index]);
+			evaluationResults.push(results[index] ?? []);
+			evaluationTemplates.push(step.template);
+			evaluationConfigs.set(config.id, config);
+		} else if (completed) {
+			item.completedResults = [
+				...(item.completedResults ?? []),
+				{ step: completedStep, results: structuredClone(results[index] ?? []) },
+			];
+			if (boundary) {
+				const frozenConfigs = new Map(item.configs.map((config) => [config.id, config]));
+				for (const performance of item.completedResults) {
+					const template = item.steps[performance.step].template;
+					const exercise = computeExercise(template, frozenConfigs, { roundWarmupPlateMath: item.roundWarmupPlateMath });
+					if (!exercise) throw new Error(`${template.name}: saved progression prescription cannot be resolved.`);
+					evaluationExercises.push(exercise);
+					evaluationResults.push(performance.results);
+					evaluationTemplates.push(template);
 				}
-				item.progressionProposals = [...held.values()];
-			}
-			for (const proposal of boundary ? item.progressionProposals ?? signals : item.steps.length === 1 ? signals : []) {
-				const existing = proposals.get(proposal.liftId);
-				proposals.set(proposal.liftId, existing ? {
-					...proposal,
-					proposedTopSetWeight: Math.max(existing.proposedTopSetWeight, proposal.proposedTopSetWeight),
-					proposedBackoffWeight: Math.max(existing.proposedBackoffWeight, proposal.proposedBackoffWeight),
-					topSetHit: existing.topSetHit || proposal.topSetHit,
-					backoffHit: existing.backoffHit || proposal.backoffHit,
-				} : proposal);
+				evaluationConfigs.set(config.id, config);
 			}
 		}
 	});
-	// A TM-governed lift never receives work/backoff changes in the same review.
-	for (const item of progress.exercises) {
-		if (item.baseline === 'trainingMax') proposals.delete(item.steps[0].template.liftId);
-	}
-	return { progress, proposals: [...proposals.values()], trainingMaxProposals: [...trainingMaxProposals.values()], transitions };
+	const trainingMaxLifts = new Set(progress.exercises
+		.filter((item) => item.baseline === 'trainingMax').map((item) => item.steps[0].template.liftId));
+	const proposals = computeProgression(evaluationExercises, evaluationResults, [...evaluationConfigs.values()], evaluationTemplates)
+		.filter((proposal) => !trainingMaxLifts.has(proposal.liftId));
+	return { progress, proposals, trainingMaxProposals: [...trainingMaxProposals.values()], transitions };
 }
 
 export function previewCycles(

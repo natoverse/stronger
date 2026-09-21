@@ -70,6 +70,24 @@ describe('calendar cycle metadata', () => {
 		]);
 	});
 
+	it('reuses Stronger IDs alone for new cycle appointments and recovers same-day occurrences', async () => {
+		const schedule = ['first', 'second'].map((strongerId) => ({
+			date: '2026-09-21', workoutId: 'squat', cycleId: 'squat', strongerId,
+		}));
+		const events = mockCalendar();
+		const pushed = await syncScheduleWithCalendar('primary', schedule, name, id);
+		expect(pushed.updatedSchedule).toHaveLength(2);
+		expect(pushed.updatedSchedule.every((entry) => !entry.occurrenceId)).toBe(true);
+		const remote = events.insert.mock.calls.map(([request], index) => ({
+			...request.resource, id: `google-${index}`, start: { date: '2026-10-01' },
+		}));
+		mockCalendar(remote);
+		const recovered = await syncScheduleWithCalendar('primary', [], name, id);
+		expect(recovered.updatedSchedule).toHaveLength(2);
+		expect(recovered.updatedSchedule.map((entry) => entry.strongerId)).toEqual(['first', 'second']);
+		expect(recovered.updatedSchedule.every((entry) => entry.date === '2026-10-01' && entry.cycleId === 'squat' && !entry.occurrenceId)).toBe(true);
+	});
+
 	it('preserves identity when Google moves a linked appointment', async () => {
 		mockCalendar([event('first', { start: { date: '2026-10-05' } })]);
 		const entry = {

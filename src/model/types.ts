@@ -219,8 +219,8 @@ export interface ExerciseCycleProgress {
 	roundWarmupPlateMath: boolean;
 	/** A boundary waits for the next load to snapshot approved shared inputs. */
 	complete: boolean;
-	/** Eligible performance signals held until a top-set cycle boundary. */
-	progressionProposals?: ProgressionProposal[];
+	/** Actual results from completed exposures, evaluated together at the boundary. */
+	completedResults?: Array<{ step: number; results: SetResult[] }>;
 }
 
 export interface CycleProgress {
@@ -316,6 +316,7 @@ export interface WorkoutScheduleEntry {
 	label?: string;
 	/** Recurring opportunities always open the cycle's current pending stages. */
 	cycleId?: string;
+	/** Read compatibility; new calendar entries use strongerId as their occurrence identity. */
 	occurrenceId?: string;
 }
 

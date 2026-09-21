@@ -395,6 +395,15 @@ describe('fromEditable', () => {
 			expect(validateEditableWorkout(draft, [{ ...config, trainingMaxIncrement: 0 }])).toEqual([]);
 		});
 
+		it('leaves non-TM assistance valid under TM policy and requires no increment for TM warmups', () => {
+			const draft = toEditable(definition());
+			draft.cycle!.baseline = 'trainingMax';
+			expect(validateEditableWorkout(draft, [{ ...config, trainingMax: undefined, trainingMaxIncrement: undefined }])).toEqual([]);
+			draft.exercises[0].sets[0].weightBasis = { kind: 'trainingMax' };
+			draft.exercises[0].sets[0].setType = 'warmup';
+			expect(validateEditableWorkout(draft, [{ ...config, trainingMaxIncrement: undefined }])).toEqual([]);
+		});
+
 		it('renders stage editing, preview and TM basis without manual progression actions', () => {
 			const markup = renderToStaticMarkup(createElement(WorkoutEditor, {
 				existing: definition(), allDefinitions: [], configs: [config], onSave: () => {}, onCancel: () => {},

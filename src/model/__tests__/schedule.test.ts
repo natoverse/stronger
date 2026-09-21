@@ -6,7 +6,7 @@ import type { ExerciseCycleStage, Workout, WorkoutScheduleEntry } from '../types
 import type { ParsedLogRow } from '../logs.js';
 import {
 	createScheduleOpportunity, cycleOpportunityCount, matchesScheduledOccurrence,
-	planWholeCycle, workoutCycleLabels,
+	planWholeCycle, scheduleOccurrenceId, workoutCycleLabels,
 } from '../schedule.js';
 import { buildTodaysPlan, WorkoutSelect } from '../../components/WorkoutSelect.js';
 import { CalendarView, groupLogByDate, SessionDetail } from '../../components/CalendarView.js';
@@ -46,7 +46,8 @@ describe('whole-cycle opportunity planning', () => {
 		const entries = planWholeCycle(definition, '2026-09-21', [0]);
 		expect(entries.map((entry) => entry.date)).toEqual(['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12']);
 		expect(entries.every((entry) => entry.workoutId === 'squat' && entry.cycleId === 'squat')).toBe(true);
-		expect(new Set(entries.map((entry) => entry.occurrenceId)).size).toBe(4);
+		expect(new Set(entries.map((entry) => entry.strongerId)).size).toBe(4);
+		expect(entries.every((entry) => !entry.occurrenceId && scheduleOccurrenceId(entry) === entry.strongerId)).toBe(true);
 		expect(entries.every((entry) => !('week' in entry) && !('exposure' in entry))).toBe(true);
 		expect(definition).toEqual(before);
 	});
@@ -77,7 +78,7 @@ describe('whole-cycle opportunity planning', () => {
 		}
 		const first = createScheduleOpportunity('2026-09-21', 'squat');
 		const second = createScheduleOpportunity('2026-09-21', 'squat');
-		expect(first.occurrenceId).not.toBe(second.occurrenceId);
+		expect(first.strongerId).not.toBe(second.strongerId);
 	});
 
 	it('exposes whole-cycle planning inside the existing planner', () => {
@@ -91,6 +92,17 @@ describe('whole-cycle opportunity planning', () => {
 });
 
 describe('occurrence-aware schedule completion', () => {
+	it('uses the existing Stronger ID for new cycle occurrences without breaking legacy logs', () => {
+		const entry = createScheduleOpportunity('2026-09-21', 'squat');
+		expect(entry.occurrenceId).toBeUndefined();
+		expect(matchesScheduledOccurrence(entry, row({ occurrenceId: entry.strongerId }))).toBe(true);
+		expect(matchesScheduledOccurrence({ ...entry, date: '2026-10-01' }, row({ occurrenceId: entry.strongerId }))).toBe(true);
+		expect(matchesScheduledOccurrence(entry, row())).toBe(false);
+		expect(matchesScheduledOccurrence({ date: '2026-09-21', workoutId: 'squat', strongerId: 'old-calendar-entry' }, row())).toBe(true);
+		const plan = buildTodaysPlan({ date: entry.date, workouts: [workout], workoutSchedule: [entry] });
+		expect(plan[0]).toMatchObject({ kind: 'strength', occurrenceId: entry.strongerId });
+	});
+
 	it('matches identity across date moves, not a different appointment for the same workout', () => {
 		const entry = { date: '2026-09-28', workoutId: 'squat', occurrenceId: 'first' };
 		expect(matchesScheduledOccurrence(entry, row({ occurrenceId: 'first' }))).toBe(true);

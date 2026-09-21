@@ -9,6 +9,7 @@
 import type { CalendarListEntry, CalendarEventResource, CalendarEventItem } from './types.ts'
 import type { WorkoutScheduleEntry } from '../model/types.ts'
 import { REST_ID, BLOCKER_ID } from '../model/types.ts'
+import { scheduleOccurrenceId } from '../model/schedule.ts'
 
 /** Returns true for schedule entries that have no in-app workout to deep-link to (cardio, rest). */
 function hasNoDeepLink(workoutId: string): boolean {
@@ -784,10 +785,11 @@ export async function syncScheduleWithCalendar(
 			if (!workoutId) continue // Not a recognized workout name, skip
 
 			// Check if we already have this workout on this date (dedup)
+			const occurrenceId = metadata.occurrenceId ?? (metadata.cycleId ? sid : undefined)
 			const isDupe = updatedSyncable.some(
 				(e) => (sid && e.strongerId === sid) || (
-					e.workoutId === workoutId && (metadata.occurrenceId
-						? e.occurrenceId === metadata.occurrenceId
+					e.workoutId === workoutId && (occurrenceId
+						? scheduleOccurrenceId(e) === occurrenceId
 						: e.date === calDate)
 				),
 			)
@@ -849,8 +851,9 @@ export async function syncScheduleWithCalendar(
 			seenStrongerIds.add(entry.strongerId)
 		}
 		// Separate occurrences of the same named cycle may share a date.
-		const dateWorkoutKey = JSON.stringify(entry.occurrenceId
-			? ['occurrence', entry.workoutId, entry.occurrenceId]
+		const occurrenceId = scheduleOccurrenceId(entry)
+		const dateWorkoutKey = JSON.stringify(occurrenceId
+			? ['occurrence', entry.workoutId, occurrenceId]
 			: ['legacy', entry.date, entry.workoutId])
 		if (seenDateWorkoutKeys.has(dateWorkoutKey)) continue
 		seenDateWorkoutKeys.add(dateWorkoutKey)

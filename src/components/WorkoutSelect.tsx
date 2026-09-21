@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { REST_ID, BLOCKER_ID } from '../model/index.js';
-import { matchesScheduledOccurrence, workoutCycleLabels } from '../model/schedule.js';
+import { matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 import type { ParsedLogRow } from '../model/index.js';
 import type { LogSession } from './CalendarView.js';
 import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
@@ -188,7 +188,7 @@ export function buildTodaysPlan({
 			items.push({
 				kind: 'strength', workoutId: wid, workout,
 				done: (logRows ?? []).some((row) => matchesScheduledOccurrence(e, row)),
-				...(e.occurrenceId ? { occurrenceId: e.occurrenceId } : {}),
+				...(scheduleOccurrenceId(e) ? { occurrenceId: scheduleOccurrenceId(e) } : {}),
 			});
 		}
 	}

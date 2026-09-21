@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
 import { createCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, validateCycle } from '../cycles.js';
 import { computeSetWeight } from '../compute.js';
+import { computeProgression } from '../progression.js';
 import { findPreviousWorkoutSets, buildLogRow } from '../logs.js';
 import type { CycleProgress, CycleSessionSnapshot, ExerciseTemplate, LiftConfig, SetResult, SetTemplate } from '../types.js';
 
@@ -140,7 +141,9 @@ describe('classic four-week training max cycle', () => {
 	it('never proposes ordinary bumps under TM policy even for eligible top-set basis and load overrides', () => {
 		const def = definition();
 		def.cycle!.weeks = [def.cycle!.weeks[0]];
-		def.cycle!.weeks[0].exposures[0].templates[0].sets = [{ ...set(1, 5), weightBasis: { kind: 'topSet' } }];
+		def.cycle!.weeks[0].exposures[0].templates[0].sets = [
+			{ ...set(1, 5), weightBasis: { kind: 'topSet' } }, set(.65, 5),
+		];
 		const snapshot = start(def);
 		const results = completed(snapshot);
 		results[0][0].actualWeight = 300;
@@ -148,6 +151,20 @@ describe('classic four-week training max cycle', () => {
 		const review = finishCycle(snapshot, results);
 		expect(review.proposals).toEqual([]);
 		expect(review.trainingMaxProposals[0].proposed).toBe(205);
+	});
+
+	it('omits absent slots from each exercise sequence instead of inventing skipped work', () => {
+		const def = definition();
+		const week = def.cycle!.weeks[0];
+		const squatTemplate = week.exposures[0].templates.pop()!;
+		week.exposures.push({ id: 'squat-only', name: 'B', templates: [squatTemplate] });
+		const first = start(def);
+		expect(first.workout.exercises.map((exercise) => exercise.cycleStage?.exposure)).toEqual([1, 2]);
+		const results = completed(first);
+		results[0].forEach((result) => { result.completed = false; });
+		const next = start(def, [bench, squat], finishCycle(first, results).progress);
+		expect(next.workout.exercises.map((exercise) => [exercise.cycleStage?.week, exercise.cycleStage?.exposure]))
+			.toEqual([[1, 1], [2, 1]]);
 	});
 
 	it('supports parallel named cycles and immutable idempotent completion', () => {
@@ -199,6 +216,69 @@ describe('normalization and policy compatibility', () => {
 		const last = start(def, [bench], review.progress);
 		expect(finishCycle(last, completed(last)).proposals[0].proposedTopSetWeight).toBe(152.5);
 	});
+	it('evaluates completed exposure results together so deload loads cannot replace earlier 100% references', () => {
+		const def = ordinary();
+		def.cycle = normalizeCycle(def);
+		def.cycle.weeks.push(structuredClone(def.cycle.weeks[0]));
+		def.cycle.weeks[1].exposures[0].templates[0].sets.forEach((set) => { set.percentage = .5; });
+		const first = start(def, [bench]);
+		const firstResults = completed(first);
+		firstResults[0][0].actualWeight = 175;
+		firstResults[0][1].actualWeight = 110;
+		const review = finishCycle(first, firstResults);
+		expect(review.proposals).toEqual([]);
+		expect(review.progress.exercises[0].completedResults).toHaveLength(1);
+		firstResults[0][0].actualWeight = 999;
+		const restored = JSON.parse(JSON.stringify(review.progress)) as CycleProgress;
+		const last = start(def, [{ ...bench, increment: 100 }], restored);
+		const deload = completed(last);
+		deload[0][0].actualWeight = 100; // At 50%, this is not a new 200-lb progression baseline.
+		deload[0][1].actualWeight = 70;
+		const boundary = finishCycle(last, deload);
+		expect(boundary.proposals[0]).toMatchObject({
+			currentTopSetWeight: 175, proposedTopSetWeight: 177.5,
+			currentBackoffWeight: 110, proposedBackoffWeight: 112.5,
+			topSetHit: true, backoffHit: true,
+		});
+		expect(boundary.progress.exercises[0].completedResults).toHaveLength(2);
+		expect(finishCycle(last, deload, boundary.progress).proposals).toEqual([]);
+		const next = start(def, [bench], boundary.progress);
+		expect(next.progress.exercises[0].completedResults).toBeUndefined();
+	});
+	it('does not accumulate partial exposure signals before the entire prescribed exposure is completed', () => {
+		const def = ordinary();
+		def.cycle = normalizeCycle(def);
+		def.cycle.weeks.push(structuredClone(def.cycle.weeks[0]));
+		const first = start(def, [bench]);
+		const partial = completed(first);
+		partial[0][1].completed = false;
+		const review = finishCycle(first, partial);
+		expect(review.progress.exercises[0].completedResults).toBeUndefined();
+		const retry = start(def, [bench], review.progress);
+		const failed = completed(retry);
+		failed[0][0].actualReps = 0;
+		const next = start(def, [bench], finishCycle(retry, failed).progress);
+		const nextResults = completed(next);
+		nextResults[0][0].actualReps = 0;
+		expect(finishCycle(next, nextResults).proposals[0].proposedTopSetWeight).toBe(150);
+	});
+	it('retains legacy shared-lift grouping and actual-weight override recovery across exercise rows', () => {
+		const def = ordinary();
+		const assistance = structuredClone(def.templates[0]);
+		assistance.role = 'assistance';
+		assistance.sets.forEach((set) => { set.percentage = .5; });
+		def.templates.push(assistance);
+		const snapshot = start(def, [bench]);
+		const results = completed(snapshot);
+		results[0][0].actualWeight = 175;
+		results[0][1].actualWeight = 110;
+		results[1][0].actualWeight = 110;
+		results[1][1].actualWeight = 80;
+		expect(finishCycle(snapshot, results).proposals).toEqual(
+			computeProgression(snapshot.workout.exercises, results, [bench], snapshot.templates),
+		);
+		expect(finishCycle(snapshot, results).proposals[0].proposedTopSetWeight).toBe(177.5);
+	});
 	it('requires programmed non-warmups, or all sets in warmup-only prescriptions', () => {
 		const template = ordinary().templates[0];
 		template.sets.unshift({ ...set(.5, 5), setType: 'warmup' });
@@ -217,6 +297,50 @@ describe('validation and history', () => {
 	});
 	it('never substitutes the normal increment for a missing separate TM increment', () => {
 		expect(() => start(definition(), [{ ...bench, trainingMaxIncrement: undefined }, squat])).toThrow('separate training-max increment');
+	});
+	it.each([-1, Infinity, NaN])('rejects invalid TM progression increment %s', (trainingMaxIncrement) => {
+		expect(() => start(definition(), [{ ...bench, trainingMaxIncrement }, squat])).toThrow('separate training-max increment');
+	});
+	it('accepts zero TM increment and only requires an increment when progressing TM-based work', () => {
+		const def = definition();
+		def.cycle!.weeks = [def.cycle!.weeks[0]];
+		const noBump = start(def, [{ ...bench, trainingMaxIncrement: 0 }, squat]);
+		expect(finishCycle(noBump, completed(noBump)).trainingMaxProposals[0]).toMatchObject({ current: 200, proposed: 200 });
+		def.cycle!.baseline = 'topSet';
+		const topSet = start(def, [
+			{ ...bench, trainingMaxIncrement: undefined }, { ...squat, trainingMaxIncrement: undefined },
+		]);
+		expect(finishCycle(topSet, completed(topSet)).trainingMaxProposals).toEqual([]);
+	});
+	it('does not require or bump TM for fixed/bodyweight or cross-reference-only assistance', () => {
+		const def = definition();
+		const assistance = { ...bench, id: 'assistance', name: 'Assistance', trainingMax: undefined, trainingMaxIncrement: undefined };
+		const referenced = { ...assistance, id: 'reference', name: 'Reference' };
+		for (const week of def.cycle!.weeks) {
+			week.exposures[0].templates.push(
+				{ id: 'assistance', liftId: 'assistance', name: 'Assistance', role: 'assistance',
+					sets: [{ ...set(1, 10), weightBasis: { kind: 'fixed', weight: 0 } }] },
+				{ id: 'reference', liftId: 'reference', name: 'Reference', role: 'assistance',
+					sets: [{ ...set(.5, 10), weightBasis: { kind: 'crossReference', liftId: 'bench' } }] },
+			);
+		}
+		let progress: CycleProgress | undefined;
+		for (let week = 0; week < 4; week++) {
+			const snapshot = start(def, [bench, squat, assistance, referenced], progress);
+			const review = finishCycle(snapshot, completed(snapshot));
+			expect(review.proposals).toEqual([]);
+			expect(review.trainingMaxProposals.map((proposal) => proposal.liftId)).toEqual(week === 3 ? ['bench', 'squat'] : []);
+			progress = review.progress;
+		}
+	});
+	it('requires TM for a TM warmup calculation but not a progression increment or TM bump', () => {
+		const def = definition();
+		def.cycle!.weeks = [def.cycle!.weeks[0]];
+		def.cycle!.weeks[0].exposures[0].templates = [def.cycle!.weeks[0].exposures[0].templates[0]];
+		def.cycle!.weeks[0].exposures[0].templates[0].sets = [{ ...set(.5, 5), setType: 'warmup' }];
+		const snapshot = start(def, [{ ...bench, trainingMaxIncrement: undefined }]);
+		expect(finishCycle(snapshot, completed(snapshot)).trainingMaxProposals).toEqual([]);
+		expect(() => start(def, [{ ...bench, trainingMax: undefined, trainingMaxIncrement: undefined }])).toThrow('training max');
 	});
 	it('uses rounding/minimums for TM and retains exact fixed/bar weights', () => {
 		const config = { ...bench, trainingMax: 101, minimumWeight: 45 };

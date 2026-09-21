@@ -14,6 +14,8 @@ test('backup scope contains only Stronger application data', () => {
 	assert.deepEqual(BACKUP_COLLECTIONS, [
 		'exercises',
 		'workouts',
+		'cycleProgress',
+		'workoutDrafts',
 		'workoutSessions',
 		'dayFlags',
 		'schedule',

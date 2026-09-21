@@ -12,8 +12,13 @@ export function createScheduleOpportunity(date: string, workoutId: string): Work
 		date,
 		workoutId,
 		cycleId: workoutId,
-		occurrenceId: crypto.randomUUID(),
+		strongerId: crypto.randomUUID(),
 	};
+}
+
+/** New appointments reuse their existing Google-sync identity; older explicit IDs stay readable. */
+export function scheduleOccurrenceId(entry: WorkoutScheduleEntry): string | undefined {
+	return entry.occurrenceId ?? (entry.cycleId ? entry.strongerId : undefined);
 }
 
 export function cycleOpportunityCount(definition: WorkoutDefinition): number {
@@ -56,8 +61,9 @@ export function matchesScheduledOccurrence(
 	row: Pick<ParsedLogRow, 'date' | 'workoutId' | 'occurrenceId'>,
 ): boolean {
 	if (entry.workoutId !== row.workoutId) return false;
-	return entry.occurrenceId
-		? entry.occurrenceId === row.occurrenceId
+	const occurrenceId = scheduleOccurrenceId(entry);
+	return occurrenceId
+		? occurrenceId === row.occurrenceId
 		: entry.date === row.date;
 }
 

@@ -10,7 +10,7 @@ import { CalendarSync } from './CalendarSync.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
 import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
-import { createScheduleOpportunity, formatCycleStage, matchesScheduledOccurrence, workoutCycleLabels } from '../model/schedule.js';
+import { createScheduleOpportunity, formatCycleStage, matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
@@ -662,7 +662,7 @@ export function CalendarView({
 		(workoutId: string) => {
 			if (addingForDate) {
 				const entry = createScheduleOpportunity(addingForDate, workoutId);
-				onAssign(addingForDate, workoutId, entry.occurrenceId);
+				onAssign(addingForDate, workoutId, scheduleOccurrenceId(entry));
 				setAddingForDate(null);
 			}
 		},
@@ -994,10 +994,11 @@ export function CalendarView({
 								<div className="calendar-workouts">
 									{scheduledWorkouts.map((entry, idx) => {
 										const wid = entry.workoutId;
+										const occurrenceId = scheduleOccurrenceId(entry);
 										const isCardio = wid.startsWith('cardio:');
 										const isRest = wid === REST_ID;
 										const isBlocker = wid === BLOCKER_ID;
-										const session = (entry.occurrenceId ? allSessions : dayInfo.sessions)
+										const session = (occurrenceId ? allSessions : dayInfo.sessions)
 											.find((session) => session.rows.some((row) => matchesScheduledOccurrence(entry, row)));
 										const hasLog = !!session;
 										const workout = workoutById.get(wid);
@@ -1011,7 +1012,7 @@ export function CalendarView({
 										const isEditingThisLabel = !isRest
 											&& editingLabel?.date === dayInfo.date
 											&& editingLabel.workoutId === wid
-											&& editingLabel.occurrenceId === entry.occurrenceId;
+											&& editingLabel.occurrenceId === occurrenceId;
 
 										if (isEditingThisLabel) {
 											return (
@@ -1144,7 +1145,7 @@ export function CalendarView({
 												) : (
 													<button
 														className="calendar-workout-link calendar-workout-link-strength"
-														onClick={() => onOpenWorkout(wid, entry.occurrenceId)}
+														onClick={() => onOpenWorkout(wid, occurrenceId)}
 														disabled={!workout || !!workout.error}
 													>
 														<Icon size={14} />
@@ -1160,7 +1161,7 @@ export function CalendarView({
 												)}
 												<button
 													className="calendar-label-edit-btn"
-													onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '', entry.occurrenceId)}
+													onClick={() => handleStartEditLabel(dayInfo.date, wid, customLabel ?? '', occurrenceId)}
 													aria-label={`Edit label for ${workoutName}`}
 												>
 													<Pencil size={14} />
@@ -1185,7 +1186,7 @@ export function CalendarView({
 												{!isPast && !hasLog && (
 													<button
 														className="calendar-remove-btn"
-														onClick={() => onRemove(dayInfo.date, wid, entry.occurrenceId)}
+														onClick={() => onRemove(dayInfo.date, wid, occurrenceId)}
 														aria-label={`Remove ${workoutName}`}
 													>
 														<X size={14} />

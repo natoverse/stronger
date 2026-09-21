@@ -20,6 +20,8 @@ const PAGE_SIZE = 1000
 export const BACKUP_COLLECTIONS = [
 	'exercises',
 	'workouts',
+	'cycleProgress',
+	'workoutDrafts',
 	'workoutSessions',
 	'dayFlags',
 	'schedule',
