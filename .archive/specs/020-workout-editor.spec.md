@@ -58,3 +58,9 @@ Saving persists the full workout definition to its Firestore document, replacing
 - The first set's up control and the last set's down control are disabled.
 - Reordering preserves all set fields and is saved through the existing workout definition flow.
 - Drag-and-drop reordering remains out of scope.
+
+### Internal workout IDs (2026-09-21)
+
+- Superseding the original slug/manual-entry option, new workout drafts receive random UUIDs automatically; the ID field and name-derived hint are removed.
+- Names can be reused without reusing a workout's identity or saved progress. Existing IDs remain unchanged when editing, and new IDs cannot collide with current definitions or reserved cycle progress.
+- Multi-week exercise copying is specified in `specs/060-multi-week-cycles.spec.md`.
