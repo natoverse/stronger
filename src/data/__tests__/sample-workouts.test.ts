@@ -82,7 +82,7 @@ describe('sampleWorkouts', () => {
 				const snapshot = createCycleSession(program, [config], progress);
 				expect(snapshot.workout.exercises[0].cycleStage).toMatchObject({ week, exposureCount: 1 });
 				const results = snapshot.workout.exercises.map((exercise) => exercise.sets.map((set) => ({
-					completed: true, reps: set.minReps,
+					completed: true, actualReps: set.minReps, actualWeight: set.weight, actualSetType: set.setType,
 				})));
 				const finish = finishCycle(snapshot, results);
 				expect(finish.trainingMaxProposals).toHaveLength(week === 4 ? 1 : 0);
