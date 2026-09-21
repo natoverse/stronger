@@ -104,6 +104,13 @@ These decisions supersede the earlier within-week exposure requirements and the 
 - Use the bundled-library alternative rather than arbitrary URL fetching. Repository JSON remains the source of default prescriptions; no new remote-fetch format, dependency, or automatic seeding is needed.
 - Regression coverage must verify single-workout authoring/planning, lossless legacy normalization and frozen-progress preservation, all four default programs' warmup/work percentages and reps, one-time 90% TM setup, AMRAP/deload behavior, and deeply independent copied drafts.
 
+### Exercise copying and internal workout IDs — 2026-09-21
+
+- Each exercise has a “Copy to all weeks” action, disabled for single-week cycles. Copy the selected week's current lift, role, and complete ordered set prescriptions to every other week, replacing the same exercise identity in place or appending it when absent. Different occurrences of the same lift remain separate; unrelated exercises, week order, and stage IDs do not change.
+- Copies retain the exercise identity for progression but deeply clone prescriptions, including weight bases and comments. Repeated copying updates rather than duplicates the exercise. Later edits remain independent, copying stays in the unsaved draft until Save, and frozen iterations/history are unaffected.
+- Workout IDs are internal, never an editor field or derived from a display name. New and copied editor drafts receive random UUIDs, excluding IDs belonging to current definitions or reserved progress. Renaming keeps the draft ID stable; editing an existing workout preserves its original ID, including legacy IDs, to avoid breaking schedules and history.
+- Regression coverage includes copying from a later week into earlier/empty weeks, replacement without disturbing other occurrences or ordering, deep independence, repeated copying, saved round-trips, hidden IDs, random-ID collisions/reservations, and existing-ID preservation.
+
 ## Notes
 
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.

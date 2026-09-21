@@ -1,42 +1,65 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
-	WorkoutEditor, nameToId, toEditable, fromEditable, moveSet, moveItem,
-	copyWeek, updateWeekExercises, validateEditableWorkout,
+	WorkoutEditor, initialEditableWorkout, toEditable, fromEditable, moveSet, moveItem,
+	copyWeek, copyExerciseToAllWeeks, updateWeekExercises, validateEditableWorkout,
 	previewExposure, weightBasisLabel,
 } from '../WorkoutEditor.js';
 import type { EditableWorkout } from '../WorkoutEditor.js';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
 import type { LiftConfig, SetTemplate } from '../../model/types.js';
 
-/* ------------------------------------------------------------------ */
-/*  nameToId – kebab-case slug generation                              */
-/* ------------------------------------------------------------------ */
-
-describe('nameToId', () => {
-	it('converts a simple name to kebab-case', () => {
-		expect(nameToId('Workout A')).toBe('workout-a');
+describe('initialEditableWorkout', () => {
+	const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+	it('generates distinct random IDs before a name is entered', () => {
+		const first = initialEditableWorkout();
+		const second = initialEditableWorkout();
+		expect(first.name).toBe('');
+		expect(first.id).toMatch(uuid);
+		expect(second.id).toMatch(uuid);
+		expect(first.id).not.toBe(second.id);
+		expect(fromEditable({ ...first, name: 'Renamed' }, []).id).toBe(first.id);
 	});
 
-	it('strips leading and trailing hyphens', () => {
-		expect(nameToId('  Workout A  ')).toBe('workout-a');
+	it('assigns a fresh random ID to each copied draft while preserving existing IDs', () => {
+		const source: WorkoutDefinition = { id: 'legacy-id', name: 'Workout A', templates: [] };
+		const first = initialEditableWorkout(undefined, source);
+		const second = initialEditableWorkout(undefined, source);
+		expect(first.id).toMatch(uuid);
+		expect(second.id).toMatch(uuid);
+		expect(first.id).not.toBe(second.id);
+		expect(first.name).toBe(source.name);
+		expect(source.id).toBe('legacy-id');
+		expect(initialEditableWorkout(source, undefined, [source.id]).id).toBe(source.id);
 	});
 
-	it('collapses multiple special characters into a single hyphen', () => {
-		expect(nameToId('Bench / Press')).toBe('bench-press');
+	it('retries collisions with existing definitions, reserved progress, or the copied source', () => {
+		const used = '00000000-0000-4000-8000-000000000001';
+		const reserved = '00000000-0000-4000-8000-000000000002';
+		const copied = '00000000-0000-4000-8000-000000000003';
+		const fresh = '00000000-0000-4000-8000-000000000004';
+		const random = vi.spyOn(crypto, 'randomUUID')
+			.mockReturnValueOnce(used)
+			.mockReturnValueOnce(reserved)
+			.mockReturnValueOnce(copied)
+			.mockReturnValueOnce(fresh);
+		try {
+			const draft = initialEditableWorkout(undefined, { id: copied, name: 'Copy', templates: [] }, [used, reserved]);
+			expect(draft.id).toBe(fresh);
+			expect(random).toHaveBeenCalledTimes(4);
+		} finally {
+			random.mockRestore();
+		}
 	});
 
-	it('returns empty string for empty input', () => {
-		expect(nameToId('')).toBe('');
-	});
-
-	it('handles names with em-dashes and special characters', () => {
-		expect(nameToId('Workout A — Bench / Press')).toBe('workout-a-bench-press');
-	});
-
-	it('preserves digits', () => {
-		expect(nameToId('Phase 2 Workout')).toBe('phase-2-workout');
+	it('never renders an ID field or name-derived ID hint for new or copied workouts', () => {
+		for (const initialDefinition of [undefined, { id: 'hidden-workout-id', name: 'Workout A', templates: [] }]) {
+			const markup = renderToStaticMarkup(createElement(WorkoutEditor, {
+				initialDefinition, allDefinitions: [], configs: [], onSave: () => {}, onCancel: () => {},
+			}));
+			expect(markup).not.toMatch(/editor-id-input|auto-generated from name|\(auto:|hidden-workout-id|Workout ID is required/);
+		}
 	});
 });
 
@@ -279,6 +302,78 @@ describe('fromEditable', () => {
 			expect(destination.exercises[0].sets[0].percentage).toBe(0.7);
 		});
 
+		it('copies a later week prescription everywhere without duplicating or changing other exercise slots', () => {
+			const draft = toEditable(definition());
+			const other = { ...structuredClone(draft.exercises[0]), id: 'bench-other', role: 'secondary' as const };
+			draft.cycle!.weeks[0].exposures[0].exercises.unshift(other);
+			draft.cycle!.weeks[1].exposures[0].exercises = [structuredClone(other)];
+			const source = draft.cycle!.weeks[2].exposures[0].exercises[0];
+			source.role = 'assistance';
+			source.sets[0] = {
+				...source.sets[0], weightBasis: { kind: 'relative', reference: 'backoff', offset: -15 },
+				minReps: 8, maxReps: 12, amrap: true, comment: 'Repeat assistance',
+			};
+			const before = structuredClone(draft);
+			const copied = copyExerciseToAllWeeks(draft, 2, 0);
+			const weeks = copied.cycle!.weeks;
+			expect(weeks.map((week) => week.id)).toEqual(draft.cycle!.weeks.map((week) => week.id));
+			expect(weeks.map((week) => week.name)).toEqual(draft.cycle!.weeks.map((week) => week.name));
+			expect(weeks.map((week) => week.exposures[0].id)).toEqual(draft.cycle!.weeks.map((week) => week.exposures[0].id));
+			expect(weeks.map((week) => week.exposures[0].exercises.map((exercise) => exercise.id)))
+				.toEqual([['bench-other', 'bench-main'], ['bench-other', 'bench-main'], ['bench-main']]);
+			for (const week of weeks) {
+				expect(week.exposures[0].exercises.find((exercise) => exercise.id === source.id)).toEqual(source);
+			}
+			expect(copied.exercises).toBe(weeks[0].exposures[0].exercises);
+			expect(copied.exercises[0]).toBe(other);
+			expect(weeks[2]).toBe(draft.cycle!.weeks[2]);
+			expect(draft).toEqual(before);
+			expect(copyExerciseToAllWeeks(copied, 2, 0)).toEqual(copied);
+			expect(validateEditableWorkout(copied, [config])).toEqual([]);
+			expect(toEditable(fromEditable(copied, [config], definition()))).toEqual(copied);
+		});
+
+		it('adds missing exercises to empty weeks with deeply independent prescriptions', () => {
+			const draft = toEditable(definition());
+			draft.cycle!.weeks[1].exposures[0].exercises = [];
+			draft.cycle!.weeks[2].exposures[0].exercises = [];
+			const copied = copyExerciseToAllWeeks(draft, 0, 0);
+			const firstCopy = copied.cycle!.weeks[1].exposures[0].exercises[0];
+			const secondCopy = copied.cycle!.weeks[2].exposures[0].exercises[0];
+			expect(firstCopy).toEqual(draft.exercises[0]);
+			expect(secondCopy).toEqual(draft.exercises[0]);
+			firstCopy.role = 'assistance';
+			firstCopy.sets[0].weightBasis.kind = 'trainingMax';
+			firstCopy.sets[0].comment = 'Only week 2';
+			firstCopy.sets.push(structuredClone(set));
+			expect(secondCopy).toEqual(draft.exercises[0]);
+			expect(draft.cycle!.weeks[1].exposures[0].exercises).toEqual([]);
+			expect(copied.exercises[0].sets).toHaveLength(3);
+			expect(copyExerciseToAllWeeks(copied, 1, 0).exercises[0]).toEqual(firstCopy);
+		});
+
+		it('does nothing for single-week workouts or invalid source selections', () => {
+			const draft = toEditable(definition());
+			expect(copyExerciseToAllWeeks(draft, -1, 0)).toBe(draft);
+			expect(copyExerciseToAllWeeks(draft, 0, 10)).toBe(draft);
+			draft.cycle!.weeks = draft.cycle!.weeks.slice(0, 1);
+			expect(copyExerciseToAllWeeks(draft, 0, 0)).toBe(draft);
+		});
+
+		it('provides the copy action for each exercise and disables it for single-week workouts', () => {
+			const def = definition();
+			def.cycle!.weeks[0].exposures[0].templates.push({
+				...structuredClone(def.cycle!.weeks[0].exposures[0].templates[0]), id: 'bench-assistance', role: 'assistance',
+			});
+			const render = () => renderToStaticMarkup(createElement(WorkoutEditor, {
+				existing: def, allDefinitions: [], configs: [config], onSave: () => {}, onCancel: () => {},
+			}));
+			expect(render().match(/Copy to all weeks/g)).toHaveLength(2);
+			expect(render()).not.toMatch(/class="btn-add-set" disabled=""/);
+			def.cycle!.weeks = def.cycle!.weeks.slice(0, 1);
+			expect(render().match(/class="btn-add-set" disabled=""/g)).toHaveLength(2);
+		});
+
 		it('reorders weeks without mutating them and mirrors the new first workout', () => {
 			const draft = toEditable(definition());
 			const originalWeeks = draft.cycle!.weeks;
@@ -296,15 +391,15 @@ describe('fromEditable', () => {
 			expect(weights).toEqual([[140, 140, 140], [150, 150, 150, 150], [160, 160, 160]]);
 			expect(draft).toEqual(before);
 		});
-		it('reserves deleted cycle IDs without blocking edits to the existing cycle', () => {
+		it('allows copies of deleted cycles without reusing their IDs or blocking existing edits', () => {
 			const def = definition();
 			const props = {
 				allDefinitions: [], reservedIds: [def.id], configs: [config],
 				onSave: () => {}, onCancel: () => {},
 			};
 			const recreated = renderToStaticMarkup(createElement(WorkoutEditor, { ...props, initialDefinition: def }));
-			expect(recreated).toContain('is already in use');
-			expect(recreated).toMatch(/class="btn-finish" disabled=""/);
+			expect(recreated).not.toContain('is already in use');
+			expect(recreated).not.toMatch(/class="btn-finish" disabled=""/);
 			const editing = renderToStaticMarkup(createElement(WorkoutEditor, { ...props, existing: def }));
 			expect(editing).not.toContain('is already in use');
 			expect(editing).not.toMatch(/class="btn-finish" disabled=""/);

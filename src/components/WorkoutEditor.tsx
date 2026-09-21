@@ -117,14 +117,6 @@ function RelativeOffsetInput({
 	);
 }
 
-/** Generate a kebab-case ID from a workout name. */
-export function nameToId(name: string): string {
-	return name
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, '-')
-		.replace(/^-|-$/g, '');
-}
-
 /** Default set template for newly added sets. */
 function defaultSet(): SetTemplate {
 	return {
@@ -210,6 +202,32 @@ export function updateWeekExercises(
 			exposures: week.exposures.map((exposure) => ({
 				...exposure, exercises: update(exposure.exercises),
 			})),
+		}),
+	};
+	return { ...workout, cycle, exercises: cycle.weeks[0]?.exposures[0]?.exercises ?? [] };
+}
+
+export function copyExerciseToAllWeeks(
+	workout: EditableWorkout,
+	weekIndex: number,
+	exerciseIndex: number,
+): EditableWorkout {
+	const source = workout.cycle?.weeks[weekIndex]?.exposures[0]?.exercises[exerciseIndex];
+	if (!source?.id || !workout.cycle || workout.cycle.weeks.length < 2) return workout;
+	const cycle = {
+		...workout.cycle,
+		weeks: workout.cycle.weeks.map((week, index) => index === weekIndex ? week : {
+			...week,
+			exposures: week.exposures.map((exposure) => {
+				const copy = structuredClone(source);
+				const exists = exposure.exercises.some((exercise) => exercise.id === source.id);
+				return {
+					...exposure,
+					exercises: exists
+						? exposure.exercises.map((exercise) => exercise.id === source.id ? copy : exercise)
+						: [...exposure.exercises, copy],
+				};
+			}),
 		}),
 	};
 	return { ...workout, cycle, exercises: cycle.weeks[0]?.exposures[0]?.exercises ?? [] };
@@ -340,13 +358,17 @@ export function previewExposure(exposure: EditableExposure, configs: LiftConfig[
 	});
 }
 
-function initialEditableWorkout(
+export function initialEditableWorkout(
 	existing?: WorkoutDefinition,
 	initialDefinition?: WorkoutDefinition,
+	reservedIds: string[] = [],
 ): EditableWorkout {
 	if (existing) return toEditable(existing);
-	if (initialDefinition) return toEditable(initialDefinition);
-	return toEditable({ id: '', name: '', templates: [] });
+	let id: string;
+	do {
+		id = crypto.randomUUID();
+	} while (reservedIds.includes(id) || id === initialDefinition?.id);
+	return toEditable({ ...(initialDefinition ?? { name: '', templates: [] }), id });
 }
 
 export function WorkoutEditor({
@@ -361,7 +383,7 @@ export function WorkoutEditor({
 	onDelete,
 }: WorkoutEditorProps) {
 	const [workout, setWorkout] = useState<EditableWorkout>(() =>
-		initialEditableWorkout(existing, initialDefinition),
+		initialEditableWorkout(existing, initialDefinition, [...allDefinitions.map((definition) => definition.id), ...reservedIds]),
 	);
 	const [saving, setSaving] = useState(false);
 	const [confirmDelete, setConfirmDelete] = useState(false);
@@ -398,11 +420,8 @@ export function WorkoutEditor({
 	}, [allDefinitions, existing, reservedIds]);
 
 	// Validation
-	const autoId = nameToId(workout.name);
-	const effectiveId = isNew ? (workout.id || autoId) : workout.id;
 	const errors = validateEditableWorkout(workout, configs);
-	if (!effectiveId) errors.push('Workout ID is required');
-	if (isNew && usedIds.has(effectiveId)) errors.push(`ID "${effectiveId}" is already in use`);
+	if (isNew && usedIds.has(workout.id)) errors.push('This workout is already in use. Reopen the editor to create a new copy.');
 	const isValid = errors.length === 0;
 
 	const preview = (() => {
@@ -446,10 +465,6 @@ export function WorkoutEditor({
 	// --- Workout-level updates ---
 	const updateName = useCallback((name: string) => {
 		setWorkout((prev) => ({ ...prev, name }));
-	}, []);
-
-	const updateId = useCallback((id: string) => {
-		setWorkout((prev) => ({ ...prev, id }));
 	}, []);
 
 	// --- Exercise-level updates ---
@@ -558,13 +573,9 @@ export function WorkoutEditor({
 	const handleSave = useCallback(() => {
 		if (!isValid || saving) return;
 		setSaving(true);
-		const def = fromEditable(
-			{ ...workout, id: effectiveId },
-			configs,
-			existing,
-		);
+		const def = fromEditable(workout, configs, existing);
 		onSave(def);
-	}, [isValid, saving, workout, effectiveId, configs, existing, onSave]);
+	}, [isValid, saving, workout, configs, existing, onSave]);
 
 	// --- Delete ---
 	const handleDelete = useCallback(() => {
@@ -607,20 +618,6 @@ export function WorkoutEditor({
 						onChange={(e) => updateName(e.target.value)}
 					/>
 				</label>
-				{isNew && (
-					<label className="editor-field">
-						<span className="editor-field-label">
-							ID <span className="editor-field-hint">{autoId ? `(auto: ${autoId})` : ''}</span>
-						</span>
-						<input
-							type="text"
-							className="editor-text-input editor-id-input"
-							value={workout.id}
-							placeholder={autoId || 'auto-generated from name'}
-							onChange={(e) => updateId(e.target.value)}
-						/>
-					</label>
-				)}
 				<label className="editor-field">
 					<span className="editor-field-label">Progression baseline</span>
 					<select className="editor-select" value={cycle.baseline} onChange={(event) =>
@@ -772,6 +769,15 @@ export function WorkoutEditor({
 									</select>
 								</label>
 							</div>
+							<button
+								type="button"
+								className="btn-add-set"
+								disabled={cycle.weeks.length < 2}
+								title="Replace this exercise in other weeks, or add it where missing"
+								onClick={() => setWorkout((previous) => copyExerciseToAllWeeks(previous, weekIndex, exerciseIdx))}
+							>
+								<Copy size={16} /> Copy to all weeks
+							</button>
 
 							{/* Sets */}
 							<div className="editor-sets">
