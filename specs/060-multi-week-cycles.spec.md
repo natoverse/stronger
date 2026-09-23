@@ -98,7 +98,7 @@ These decisions supersede the earlier within-week exposure requirements and the 
 
 - Each program week contains exactly one planned workout. Remove within-week session selection, names, and add/copy/reorder controls; exercises and sets belong directly to the selected week in the editor. Use separate cycles for additional weekly workouts. Whole-cycle planning creates one opportunity every seven days; actual progression remains completion-driven, not calendar-driven.
 - Retain the persisted exposure wrapper for compatibility, with one exposure per normalized week. Expand older multi-exposure definitions into successive single-workout weeks without dropping prescriptions. Existing frozen iterations, unfinished sessions, and historical stage identities remain unchanged until the next iteration.
-- Bundle four independently editable classic four-week 5/3/1 cycles: squat, bench press, deadlift, and overhead press. Each week includes warmups at 40% × 5, 50% × 5, and 60% × 3 of TM, followed by the three work sets in the table above. Only the final work set in weeks 1–3 is AMRAP; the deload is not.
+- Bundle four independently editable classic four-week 5/3/1 cycles: squat, bench press, deadlift, and overhead press. Each week includes warmups at the bar × 5, 40% × 5, 50% × 5, and 60% × 3 of TM, followed by the three work sets in the table above. Only the final work set in weeks 1–3 is AMRAP; the deload is not.
 - Provide an explicit exercise-editor calculator for starting TM: 90% of an entered one-rep max. Apply this reduction once when setting TM, then apply each set's percentage to that TM. Never assume top-set weight is 1RM, silently replace shared inputs during import, or apply another 90% reduction to an already configured TM. Existing rounding/minimum rules still apply.
 - Provide an always-available, initially collapsed default-program library alongside the user's workout library. It includes repository starter workouts and the four 5/3/1 cycles. Copy opens an independent draft with a fresh ID; review/edit/save explicitly before persisting. Imports never overwrite existing workouts, progress, or exercise weights. Missing exercises remain visible validation errors so users can map them before saving.
 - Use the bundled-library alternative rather than arbitrary URL fetching. Repository JSON remains the source of default prescriptions; no new remote-fetch format, dependency, or automatic seeding is needed.
@@ -110,6 +110,10 @@ These decisions supersede the earlier within-week exposure requirements and the 
 - Copies retain the exercise identity for progression but deeply clone prescriptions, including weight bases and comments. Repeated copying updates rather than duplicates the exercise. Later edits remain independent, copying stays in the unsaved draft until Save, and frozen iterations/history are unaffected.
 - Workout IDs are internal, never an editor field or derived from a display name. New and copied editor drafts receive random UUIDs, excluding IDs belonging to current definitions or reserved progress. Renaming keeps the draft ID stable; editing an existing workout preserves its original ID, including legacy IDs, to avoid breaking schedules and history.
 - Regression coverage includes copying from a later week into earlier/empty weeks, replacement without disturbing other occurrences or ordering, deep independence, repeated copying, saved round-trips, hidden IDs, random-ID collisions/reservations, and existing-ID preservation.
+
+### Warmup library refinement — 2026-09-23
+
+- The bundled 5/3/1 cycles now begin each exercise with a bar-only warmup for 5 reps before the percentage-based TM warmups. This is part of the editable default prescription copied from the library, not special-case runtime behavior.
 
 ## Notes
 
