@@ -49,13 +49,16 @@ describe('sampleWorkouts', () => {
 				expect(exercises).toHaveLength(1);
 				expect(exercises[0].id).toBe(program.templates[0].id);
 				const sets = exercises[0].sets;
-				expect(sets).toHaveLength(6);
-				expect(sets.map((set) => set.weightBasis)).toEqual(Array(6).fill({ kind: 'trainingMax' }));
-				expect(sets.map((set) => set.setType)).toEqual(['warmup', 'warmup', 'warmup', 'work', 'work', 'work']);
-				expect(sets.map((set) => set.percentage)).toEqual([.4, .5, .6, ...percentages[index]]);
-				expect(sets.map((set) => set.minReps)).toEqual([5, 5, 3, ...reps[index]]);
-				expect(sets.map((set) => set.maxReps)).toEqual([5, 5, 3, ...reps[index]]);
-				expect(sets.map((set) => set.amrap)).toEqual([false, false, false, false, false, index < 3]);
+				expect(sets).toHaveLength(7);
+				expect(sets.map((set) => set.weightBasis)).toEqual([
+					{ kind: 'barWeight' },
+					...Array(6).fill({ kind: 'trainingMax' }),
+				]);
+				expect(sets.map((set) => set.setType)).toEqual(['warmup', 'warmup', 'warmup', 'warmup', 'work', 'work', 'work']);
+				expect(sets.map((set) => set.percentage)).toEqual([1, .4, .5, .6, ...percentages[index]]);
+				expect(sets.map((set) => set.minReps)).toEqual([5, 5, 5, 3, ...reps[index]]);
+				expect(sets.map((set) => set.maxReps)).toEqual([5, 5, 5, 3, ...reps[index]]);
+				expect(sets.map((set) => set.amrap)).toEqual([false, false, false, false, false, false, index < 3]);
 			});
 		});
 
@@ -69,7 +72,8 @@ describe('sampleWorkouts', () => {
 			expect(config.trainingMax).toBe(180);
 			program.cycle!.weeks.forEach((week, index) => {
 				const computed = computeExercise(week.exposures[0].templates[0], new Map([[config.id, config]]))!;
-				computed.sets.forEach((set, si) => {
+				expect(computed.sets[0].weight).toBe(config.barWeight);
+				computed.sets.slice(1).forEach((set, si) => {
 					expect(set.weight).toBeCloseTo(180 * [.4, .5, .6, ...percentages[index]][si]);
 				});
 			});

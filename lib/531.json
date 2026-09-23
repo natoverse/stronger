@@ -7,6 +7,7 @@
 		{ "id": "overhead-press", "name": "Overhead Press" }
 	],
 	"warmups": [
+		{ "setType": "warmup", "percentage": 1, "weightBasis": { "kind": "barWeight" }, "minReps": 5, "maxReps": 5, "amrap": false },
 		{ "setType": "warmup", "percentage": 0.4, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
 		{ "setType": "warmup", "percentage": 0.5, "weightBasis": { "kind": "trainingMax" }, "minReps": 5, "maxReps": 5, "amrap": false },
 		{ "setType": "warmup", "percentage": 0.6, "weightBasis": { "kind": "trainingMax" }, "minReps": 3, "maxReps": 3, "amrap": false }
