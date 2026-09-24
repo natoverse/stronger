@@ -267,6 +267,18 @@ export function WorkoutSelect({
 		return [...byDate.values()].flat();
 	}, [logRows, workouts]);
 
+	const completedSessionsByWorkout = useMemo(() => {
+		const completed = new Map<string, LogSession>();
+		for (const session of sessions) {
+			if (session.key.date !== today) continue;
+			const previous = completed.get(session.key.workoutId);
+			if (!previous || previous.key.startTime <= session.key.startTime) {
+				completed.set(session.key.workoutId, session);
+			}
+		}
+		return completed;
+	}, [sessions, today]);
+
 	const handleTodayCardClick = (workout: Workout, done: boolean, occurrenceId?: string) => {
 		if (done && onViewSession) {
 			const matching = sessions.filter((session) => session.rows.some((row) =>
@@ -278,6 +290,15 @@ export function WorkoutSelect({
 			}
 		}
 		if (!workout.error) onSelect(workout, occurrenceId);
+	};
+
+	const handleWorkoutCardClick = (workout: Workout) => {
+		const session = completedSessionsByWorkout.get(workout.id);
+		if (session && onViewSession) {
+			onViewSession(session);
+			return;
+		}
+		if (!workout.error) onSelect(workout);
 	};
 
 	const [moreOpen, setMoreOpen] = useState(false);
@@ -343,7 +364,7 @@ export function WorkoutSelect({
 			) : (
 				<div className="workout-list">
 					{favorites.map((w) => (
-						<WorkoutCard key={w.id} w={w} onSelect={onSelect} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+						<WorkoutCard key={w.id} w={w} done={completedSessionsByWorkout.has(w.id)} onSelect={() => handleWorkoutCardClick(w)} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 					))}
 					{others.length > 0 && (
 						<>
@@ -356,7 +377,7 @@ export function WorkoutSelect({
 								<ChevronDown size={16} className={`more-chevron${moreOpen ? ' more-chevron-open' : ''}`} />
 							</button>
 							{moreOpen && others.map((w) => (
-								<WorkoutCard key={w.id} w={w} onSelect={onSelect} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+								<WorkoutCard key={w.id} w={w} done={completedSessionsByWorkout.has(w.id)} onSelect={() => handleWorkoutCardClick(w)} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 							))}
 						</>
 					)}
