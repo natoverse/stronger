@@ -27,3 +27,11 @@ page, in the same order the calendar uses.
 - **Styling.** New `.plan-info-card-*` rules reuse the existing workout card
   shell; blockers use `--color-danger`, rest uses muted text, cardio uses the
   primary neon cyan.
+
+## Iteration: completed sessions without schedule entries
+
+- Today's Plan includes completed strength sessions logged for today even when
+  no matching schedule entry remains, matching the calendar's unscheduled
+  completed-session behavior.
+- Scheduled occurrences that still match a log row remain occurrence-aware and
+  are not duplicated by the fallback completed-session card.
