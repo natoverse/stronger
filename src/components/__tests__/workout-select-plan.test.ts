@@ -51,6 +51,27 @@ describe('buildTodaysPlan', () => {
 		expect(plan[0]).toMatchObject({ kind: 'strength', done: true });
 	});
 
+	it('includes a completed strength session when no matching schedule entry remains', () => {
+		const plan = buildTodaysPlan({
+			date: '2026-01-02',
+			workoutSchedule: [],
+			workouts: [workout],
+			logRows: [{ date: '2026-01-02', workoutId: 'A', startTime: '09:00' } as never],
+		});
+		expect(plan).toMatchObject([{ kind: 'strength', workoutId: 'A', done: true }]);
+	});
+
+	it('does not duplicate a completed strength session that still matches the schedule', () => {
+		const plan = buildTodaysPlan({
+			date: '2026-01-02',
+			workoutSchedule: [{ date: '2026-01-02', workoutId: 'A', occurrenceId: 'first' }],
+			workouts: [workout],
+			logRows: [{ date: '2026-01-02', workoutId: 'A', startTime: '09:00', occurrenceId: 'first' } as never],
+		});
+		expect(plan).toHaveLength(1);
+		expect(plan[0]).toMatchObject({ kind: 'strength', workoutId: 'A', done: true, occurrenceId: 'first' });
+	});
+
 	it('marks a completed library workout done even without a scheduled occurrence', () => {
 		const now = new Date();
 		const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

@@ -153,7 +153,9 @@ export type TodayPlanItem =
 /**
  * Build the ordered list of items scheduled for a given date: blockers first,
  * then cardio, then strength workouts, then rest — matching the calendar's
- * ordering. Strength entries whose workout is unknown are dropped.
+ * ordering. Completed strength sessions for today are included even when their
+ * schedule entry was removed. Strength entries whose workout is unknown are
+ * dropped.
  */
 export function buildTodaysPlan({
 	date,
@@ -168,12 +170,13 @@ export function buildTodaysPlan({
 	cardioActivities?: CardioActivity[];
 	logRows?: ParsedLogRow[];
 }): TodayPlanItem[] {
-	if (!workoutSchedule) return [];
-	const entries = workoutSchedule.filter((e) => e.date === date && e.workoutId);
-	if (entries.length === 0) return [];
+	const entries = (workoutSchedule ?? []).filter((e) => e.date === date && e.workoutId);
+	const todaysLogRows = (logRows ?? []).filter((row) => row.date === date);
+	if (entries.length === 0 && todaysLogRows.length === 0) return [];
 
 	const workoutMap = new Map(workouts.map((w) => [w.id, w]));
 	const cardioNameByWorkoutId = new Map((cardioActivities ?? []).map((c) => [`cardio:${c.id}`, c.name]));
+	const todaysSessions = groupLogByDate(todaysLogRows).get(date) ?? [];
 
 	const items: TodayPlanItem[] = [];
 	for (const e of entries) {
@@ -194,6 +197,15 @@ export function buildTodaysPlan({
 				...(scheduleOccurrenceId(e) ? { occurrenceId: scheduleOccurrenceId(e) } : {}),
 			});
 		}
+	}
+	for (const session of todaysSessions) {
+		if (entries.some((entry) => session.rows.some((row) => matchesScheduledOccurrence(entry, row)))) continue;
+		const workout = workoutMap.get(session.key.workoutId);
+		if (!workout) continue;
+		items.push({
+			kind: 'strength', workoutId: session.key.workoutId, workout, done: true,
+			...(session.key.occurrenceId ? { occurrenceId: session.key.occurrenceId } : {}),
+		});
 	}
 
 	// Array.prototype.sort is stable, so ties keep their schedule order.
