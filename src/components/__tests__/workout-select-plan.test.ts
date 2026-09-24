@@ -55,7 +55,7 @@ describe('buildTodaysPlan', () => {
 		const now = new Date();
 		const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
-			workouts: [workout],
+			workouts: [{ ...workout, favorite: true }],
 			logRows: [{ date, workoutId: 'A', startTime: '09:00' } as never],
 			onSelect: () => undefined,
 			onViewSession: () => undefined,
