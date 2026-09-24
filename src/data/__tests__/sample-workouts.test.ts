@@ -107,7 +107,8 @@ describe('sampleWorkouts', () => {
 			first.templates[0].sets[0].weightBasis = { kind: 'fixed', weight: 999 };
 			expect(source).toEqual(original);
 			expect(second.cycle).toEqual(original.cycle);
-			expect(first.cycle!.weeks[1].exposures[0].templates[0].sets[0].percentage).toBe(.4);
+			expect(first.cycle!.weeks[1].exposures[0].templates[0].sets[0].percentage)
+				.toBe(original.cycle!.weeks[1].exposures[0].templates[0].sets[0].percentage);
 			const drafts = createDefaultWorkoutImportDrafts([source], () => 'bulk-id');
 			drafts[0].cycle!.weeks[0].exposures[0].templates[0].sets.pop();
 			expect(source).toEqual(original);
