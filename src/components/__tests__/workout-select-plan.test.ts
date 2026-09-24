@@ -50,6 +50,18 @@ describe('buildTodaysPlan', () => {
 		});
 		expect(plan[0]).toMatchObject({ kind: 'strength', done: true });
 	});
+
+	it('marks a completed library workout done even without a scheduled occurrence', () => {
+		const now = new Date();
+		const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
+			workouts: [workout],
+			logRows: [{ date, workoutId: 'A', startTime: '09:00' } as never],
+			onSelect: () => undefined,
+			onViewSession: () => undefined,
+		}));
+		expect(markup).toContain('workout-card-done');
+	});
 });
 
 describe('WorkoutSelect today plan rendering', () => {
