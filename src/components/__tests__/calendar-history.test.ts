@@ -263,10 +263,22 @@ describe('matchesGarminCardioActivity', () => {
 });
 
 describe('prioritizeCompletedWorkouts', () => {
+	it('keeps short ordered lists unchanged', () => {
+		const workouts = ['cardio:run', 'squat'];
+		expect(prioritizeCompletedWorkouts(workouts, new Set(['squat']))).toBe(workouts);
+	});
+
 	it('keeps a completed workout visible on a busy day while preserving calendar ordering', () => {
 		expect(prioritizeCompletedWorkouts(
 			['blocker', 'cardio:run', 'cardio:bike', 'squat', 'rest'],
 			new Set(['squat']),
 		)).toEqual(['blocker', 'cardio:run', 'squat']);
+	});
+
+	it('limits dense days to the first completed workouts in calendar order', () => {
+		expect(prioritizeCompletedWorkouts(
+			['cardio:run', 'cardio:bike', 'squat', 'bench', 'rest'],
+			new Set(['cardio:run', 'cardio:bike', 'squat', 'bench']),
+		)).toEqual(['cardio:run', 'cardio:bike', 'squat']);
 	});
 });
