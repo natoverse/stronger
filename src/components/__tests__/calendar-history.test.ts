@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid, includeCalendarDate, matchesGarminCardioActivity } from '../CalendarView.js';
+import {
+	generatePastDays,
+	groupLogByDate,
+	buildDayInfos,
+	buildMonthGrid,
+	includeCalendarDate,
+	matchesGarminCardioActivity,
+	prioritizeCompletedWorkouts,
+} from '../CalendarView.js';
 import type { LogSession } from '../CalendarView.js';
 import type { ParsedLogRow } from '../../model/index.js';
 
@@ -214,6 +222,15 @@ describe('buildDayInfos', () => {
 				[{ id: 'mtb', name: 'MTB' }],
 				activities,
 			)).toBe(true);
+		});
+
+		describe('prioritizeCompletedWorkouts', () => {
+			it('keeps a completed workout visible on a busy day while preserving calendar ordering', () => {
+				expect(prioritizeCompletedWorkouts(
+					['blocker', 'cardio:run', 'cardio:bike', 'squat', 'rest'],
+					new Set(['squat']),
+				)).toEqual(['blocker', 'cardio:run', 'squat']);
+			});
 		});
 
 		it('does not match another date or cardio type', () => {

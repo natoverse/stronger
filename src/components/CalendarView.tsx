@@ -108,6 +108,20 @@ export function matchesGarminCardioActivity(
 		getActivityDate(activity) === date && expectedTypes.has(canonicalCardioType(activity.activityType)));
 }
 
+export function prioritizeCompletedWorkouts(
+	orderedWorkoutIds: string[],
+	completedWorkoutIds: Set<string>,
+	limit = 3,
+): string[] {
+	if (orderedWorkoutIds.length <= limit) return orderedWorkoutIds;
+	const selected = [
+		...orderedWorkoutIds.filter((workoutId) => completedWorkoutIds.has(workoutId)),
+		...orderedWorkoutIds.filter((workoutId) => !completedWorkoutIds.has(workoutId)),
+	].slice(0, limit);
+	const selectedSet = new Set(selected);
+	return orderedWorkoutIds.filter((workoutId) => selectedSet.has(workoutId));
+}
+
 /** Format a YYYY-MM-DD string for display. */
 export function formatDate(dateStr: string): { weekday: string; display: string } {
 	const [y, m, d] = dateStr.split('-').map(Number);
@@ -927,6 +941,7 @@ export function CalendarView({
 											}
 										}
 									}
+									const displayed = prioritizeCompletedWorkouts(scheduled, completed);
 									const flags = date ? flagsMap.get(date) : undefined;
 									const dayLabels = date ? labelsMap.get(date) : undefined;
 									const location = date ? getDayLocation(flags) : null;
@@ -936,7 +951,7 @@ export function CalendarView({
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}${flags?.blocked ? ' calendar-month-day-blocked' : ''}`}
 											key={date}
 											onClick={() => setMonthDayScrollTarget({ date })}
-											aria-label={`${date}${scheduled.length > 0 ? `: ${scheduled.slice(0, 3).map(displayWorkoutName).join(', ')}` : ''}`}
+											aria-label={`${date}${displayed.length > 0 ? `: ${displayed.map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<div className="calendar-month-day-heading">
 												<div className="calendar-month-day-icons">
@@ -953,7 +968,7 @@ export function CalendarView({
 												<span className="calendar-month-day-number">{Number(date.slice(-2))}</span>
 											</div>
 											<div className="calendar-month-tags">
-												{scheduled.slice(0, 3).map((workoutId, tagIndex) => {
+												{displayed.map((workoutId, tagIndex) => {
 													const displayName = dayLabels?.[workoutId] || displayWorkoutName(workoutId);
 													return (
 														<span
