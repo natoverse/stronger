@@ -144,3 +144,9 @@
 
 - The monthly calendar initially renders the current month and the following two months.
 - The detailed day list retains its existing windowed-loading behavior.
+
+## Iteration: completed workout consistency
+
+- Monthly cells include completed strength sessions on their actual completion date even when no schedule entry exists.
+- Completed monthly tags use a completion treatment and do not duplicate a matching scheduled workout.
+- Scheduled cardio tags use same-day Garmin activity type matches to determine completion.

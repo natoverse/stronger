@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid, includeCalendarDate } from '../CalendarView.js';
+import {
+	generatePastDays,
+	groupLogByDate,
+	buildDayInfos,
+	buildMonthGrid,
+	includeCalendarDate,
+	matchesGarminCardioActivity,
+	prioritizeCompletedWorkouts,
+} from '../CalendarView.js';
 import type { LogSession } from '../CalendarView.js';
 import type { ParsedLogRow } from '../../model/index.js';
 
@@ -225,5 +233,52 @@ describe('buildDayInfos', () => {
 		const result = buildDayInfos(dates, scheduleMap, logByDate, undefined, labelsMap);
 		expect(result[0].labels).toEqual({ 'cardio:hike': "Angel's Rest Trail" });
 		expect(result[1].labels).toBeUndefined();
+	});
+});
+
+describe('matchesGarminCardioActivity', () => {
+	const activities = [
+		{
+			timestamp: '2026-04-01T07:00:00',
+			activityType: 'Mountain Biking',
+			duration: 3600,
+			distance: 15000,
+			elevationGain: 400,
+		},
+	];
+
+	it('matches normalized Garmin activity types on the same date', () => {
+		expect(matchesGarminCardioActivity(
+			'2026-04-01',
+			'cardio:mtb',
+			[{ id: 'mtb', name: 'MTB' }],
+			activities,
+		)).toBe(true);
+	});
+
+	it('does not match another date or cardio type', () => {
+		expect(matchesGarminCardioActivity('2026-04-02', 'cardio:mtb', [], activities)).toBe(false);
+		expect(matchesGarminCardioActivity('2026-04-01', 'cardio:run', [], activities)).toBe(false);
+	});
+});
+
+describe('prioritizeCompletedWorkouts', () => {
+	it('keeps short ordered lists unchanged', () => {
+		const workouts = ['cardio:run', 'squat'];
+		expect(prioritizeCompletedWorkouts(workouts, new Set(['squat']))).toBe(workouts);
+	});
+
+	it('keeps a completed workout visible on a busy day while preserving calendar ordering', () => {
+		expect(prioritizeCompletedWorkouts(
+			['blocker', 'cardio:run', 'cardio:bike', 'squat', 'rest'],
+			new Set(['squat']),
+		)).toEqual(['blocker', 'cardio:run', 'squat']);
+	});
+
+	it('limits dense days to the first completed workouts in calendar order', () => {
+		expect(prioritizeCompletedWorkouts(
+			['cardio:run', 'cardio:bike', 'squat', 'bench', 'rest'],
+			new Set(['cardio:run', 'cardio:bike', 'squat', 'bench']),
+		)).toEqual(['cardio:run', 'cardio:bike', 'squat']);
 	});
 });

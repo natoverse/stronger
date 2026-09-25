@@ -1370,6 +1370,10 @@ body {
 	background: var(--color-danger);
 }
 
+.calendar-month-tag-completed {
+	box-shadow: inset 3px 0 var(--color-completed);
+}
+
 .calendar-month-section .calendar-load-more {
 	margin: 0.75rem 0 0;
 }

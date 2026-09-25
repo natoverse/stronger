@@ -2015,6 +2015,7 @@ function AppContent() {
           workoutSchedule={workoutSchedule}
           dayFlags={dayFlags}
           logRows={logRows}
+          garminActivities={garminActivities}
           onAssign={handleScheduleAssign}
           onRemove={handleScheduleRemove}
           onUpdateLabel={handleUpdateLabel}
