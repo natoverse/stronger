@@ -204,41 +204,6 @@ describe('buildDayInfos', () => {
 		expect(result[2].sessions.length).toBe(0);
 	});
 
-	describe('matchesGarminCardioActivity', () => {
-		const activities = [
-			{
-				timestamp: '2026-04-01T07:00:00',
-				activityType: 'Mountain Biking',
-				duration: 3600,
-				distance: 15000,
-				elevationGain: 400,
-			},
-		];
-
-		it('matches normalized Garmin activity types on the same date', () => {
-			expect(matchesGarminCardioActivity(
-				'2026-04-01',
-				'cardio:mtb',
-				[{ id: 'mtb', name: 'MTB' }],
-				activities,
-			)).toBe(true);
-		});
-
-		describe('prioritizeCompletedWorkouts', () => {
-			it('keeps a completed workout visible on a busy day while preserving calendar ordering', () => {
-				expect(prioritizeCompletedWorkouts(
-					['blocker', 'cardio:run', 'cardio:bike', 'squat', 'rest'],
-					new Set(['squat']),
-				)).toEqual(['blocker', 'cardio:run', 'squat']);
-			});
-		});
-
-		it('does not match another date or cardio type', () => {
-			expect(matchesGarminCardioActivity('2026-04-02', 'cardio:mtb', [], activities)).toBe(false);
-			expect(matchesGarminCardioActivity('2026-04-01', 'cardio:run', [], activities)).toBe(false);
-		});
-	});
-
 	it('includes unscheduled logged sessions', () => {
 		const dates = ['2026-04-01'];
 		const scheduleMap = new Map<string, string[]>();
@@ -268,5 +233,40 @@ describe('buildDayInfos', () => {
 		const result = buildDayInfos(dates, scheduleMap, logByDate, undefined, labelsMap);
 		expect(result[0].labels).toEqual({ 'cardio:hike': "Angel's Rest Trail" });
 		expect(result[1].labels).toBeUndefined();
+	});
+});
+
+describe('matchesGarminCardioActivity', () => {
+	const activities = [
+		{
+			timestamp: '2026-04-01T07:00:00',
+			activityType: 'Mountain Biking',
+			duration: 3600,
+			distance: 15000,
+			elevationGain: 400,
+		},
+	];
+
+	it('matches normalized Garmin activity types on the same date', () => {
+		expect(matchesGarminCardioActivity(
+			'2026-04-01',
+			'cardio:mtb',
+			[{ id: 'mtb', name: 'MTB' }],
+			activities,
+		)).toBe(true);
+	});
+
+	it('does not match another date or cardio type', () => {
+		expect(matchesGarminCardioActivity('2026-04-02', 'cardio:mtb', [], activities)).toBe(false);
+		expect(matchesGarminCardioActivity('2026-04-01', 'cardio:run', [], activities)).toBe(false);
+	});
+});
+
+describe('prioritizeCompletedWorkouts', () => {
+	it('keeps a completed workout visible on a busy day while preserving calendar ordering', () => {
+		expect(prioritizeCompletedWorkouts(
+			['blocker', 'cardio:run', 'cardio:bike', 'squat', 'rest'],
+			new Set(['squat']),
+		)).toEqual(['blocker', 'cardio:run', 'squat']);
 	});
 });
