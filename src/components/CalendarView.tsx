@@ -11,6 +11,7 @@ import type { ClearOptions, ClearResult } from './CalendarClear.js';
 import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
 import { createScheduleOpportunity, formatCycleStage, matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
+import { getActivityDate, type StravaActivity } from '../model/strava.js';
 
 interface CalendarViewProps {
 	workouts: Workout[];
@@ -20,6 +21,7 @@ interface CalendarViewProps {
 	workoutSchedule: WorkoutScheduleEntry[];
 	dayFlags: DayFlagEntry[];
 	logRows: ParsedLogRow[];
+	garminActivities?: StravaActivity[];
 	onAssign: (date: string, workoutId: string, occurrenceId?: string) => void;
 	onRemove: (date: string, workoutId: string, occurrenceId?: string) => void;
 	onUpdateLabel: (date: string, workoutId: string, label: string, occurrenceId?: string) => void;
@@ -48,6 +50,62 @@ export type CalendarPanel = 'plan' | 'sync' | 'monthly';
 
 export function toggleCalendarPanel(current: CalendarPanel | null, selected: CalendarPanel): CalendarPanel | null {
 	return current === selected ? null : selected;
+}
+
+const CARDIO_TYPE_ALIASES: Record<string, string> = {
+	bike: 'bike',
+	biking: 'bike',
+	ride: 'bike',
+	cycling: 'bike',
+	roadbiking: 'bike',
+	indoorcycling: 'bike',
+	gravelcycling: 'bike',
+	mtb: 'mtb',
+	mountainbiking: 'mtb',
+	run: 'run',
+	running: 'run',
+	trailrun: 'trail-run',
+	trailrunning: 'trail-run',
+	hike: 'hike',
+	hiking: 'hike',
+	ruck: 'ruck',
+	rucking: 'ruck',
+	boulder: 'boulder',
+	bouldering: 'boulder',
+	climb: 'climb',
+	climbing: 'climb',
+	rockclimbing: 'climb',
+	indoorclimbing: 'climb',
+	kayak: 'kayak',
+	kayaking: 'kayak',
+	pickleball: 'pickleball',
+	sup: 'sup',
+	standuppaddleboarding: 'sup',
+	swim: 'swim',
+	swimming: 'swim',
+	yoga: 'yoga',
+};
+
+function canonicalCardioType(value: string): string {
+	const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, '');
+	return CARDIO_TYPE_ALIASES[normalized] ?? normalized;
+}
+
+export function matchesGarminCardioActivity(
+	date: string,
+	workoutId: string,
+	cardioActivities: CardioActivity[],
+	garminActivities: StravaActivity[],
+): boolean {
+	if (!workoutId.startsWith('cardio:')) return false;
+	const cardioId = workoutId.slice('cardio:'.length);
+	const definition = cardioActivities.find((activity) => activity.id === cardioId);
+	const expectedTypes = new Set([
+		canonicalCardioType(cardioId),
+		...(definition ? [canonicalCardioType(definition.name)] : []),
+	]);
+	return garminActivities.some((activity) =>
+		getActivityDate(activity) === date && expectedTypes.has(canonicalCardioType(activity.activityType)));
 }
 
 /** Format a YYYY-MM-DD string for display. */
@@ -502,6 +560,7 @@ export function CalendarView({
 	workoutSchedule,
 	dayFlags,
 	logRows,
+	garminActivities = [],
 	onAssign,
 	onRemove,
 	onUpdateLabel,
@@ -606,13 +665,16 @@ export function CalendarView({
 	const scheduledTypes = useMemo(() => {
 		const seen = new Set<string>();
 		const types: { id: string; name: string }[] = [];
-		for (const entry of workoutSchedule) {
-			if (!entry.workoutId || seen.has(entry.workoutId)) continue;
-			seen.add(entry.workoutId);
-			types.push({ id: entry.workoutId, name: displayWorkoutName(entry.workoutId) });
+		for (const workoutId of [
+			...workoutSchedule.map((entry) => entry.workoutId),
+			...logRows.map((row) => row.workoutId),
+		]) {
+			if (!workoutId || seen.has(workoutId)) continue;
+			seen.add(workoutId);
+			types.push({ id: workoutId, name: displayWorkoutName(workoutId) });
 		}
 		return types.sort((a, b) => a.name.localeCompare(b.name));
-	}, [workoutSchedule, displayWorkoutName]);
+	}, [workoutSchedule, logRows, displayWorkoutName]);
 	const [selectedWorkoutTypes, setSelectedWorkoutTypes] = useState<Set<string>>(
 		() => new Set(scheduledTypes.map((type) => type.id)),
 	);
@@ -850,11 +912,21 @@ export function CalendarView({
 									<span className="calendar-month-weekday" key={day}>{day}</span>
 								))}
 								{month.dates.map((date, index) => {
-									const scheduled = date
-										? orderScheduledWorkouts(
-											(scheduleMap.get(date) ?? []).filter((workoutId) => selectedWorkoutTypes.has(workoutId)),
-										)
+									const completedWorkoutIds = date
+										? (logByDate.get(date) ?? []).map((session) => session.key.workoutId)
 										: [];
+									const scheduled = date ? orderScheduledWorkouts(
+										[...new Set([...(scheduleMap.get(date) ?? []), ...completedWorkoutIds])]
+											.filter((workoutId) => selectedWorkoutTypes.has(workoutId)),
+									) : [];
+									const completed = new Set(completedWorkoutIds);
+									if (date) {
+										for (const workoutId of scheduleMap.get(date) ?? []) {
+											if (matchesGarminCardioActivity(date, workoutId, cardioActivities, garminActivities)) {
+												completed.add(workoutId);
+											}
+										}
+									}
 									const flags = date ? flagsMap.get(date) : undefined;
 									const dayLabels = date ? labelsMap.get(date) : undefined;
 									const location = date ? getDayLocation(flags) : null;
@@ -893,7 +965,7 @@ export function CalendarView({
 																		: workoutId.startsWith('cardio:')
 																			? 'cardio'
 																			: 'strength'
-															}`}
+															}${completed.has(workoutId) ? ' calendar-month-tag-completed' : ''}`}
 															key={`${workoutId}-${tagIndex}`}
 															title={displayName}
 															aria-label={displayName}
@@ -1001,6 +1073,12 @@ export function CalendarView({
 										const session = (occurrenceId ? allSessions : dayInfo.sessions)
 											.find((session) => session.rows.some((row) => matchesScheduledOccurrence(entry, row)));
 										const hasLog = !!session;
+										const hasGarminActivity = isCardio && matchesGarminCardioActivity(
+											dayInfo.date,
+											wid,
+											cardioActivities,
+											garminActivities,
+										);
 										const workout = workoutById.get(wid);
 										const cycleLabels = workout ? workoutCycleLabels(workout) : [];
 										const deleteKey = session ? sessionKeyStr(session) : null;
@@ -1057,15 +1135,13 @@ export function CalendarView({
 															{displayName}
 														</span>
 													</span>
-													{!isPast && (
-														<button
-															className="calendar-remove-btn"
-															onClick={() => onRemove(dayInfo.date, wid)}
-															aria-label={`Remove ${workoutName}`}
-														>
-															<X size={14} />
-														</button>
-													)}
+													<button
+														className="calendar-remove-btn"
+														onClick={() => onRemove(dayInfo.date, wid)}
+														aria-label={`Remove ${workoutName}`}
+													>
+														<X size={14} />
+													</button>
 												</div>
 											);
 										}
@@ -1086,15 +1162,13 @@ export function CalendarView({
 													>
 														<Pencil size={14} />
 													</button>
-													{!isPast && (
-														<button
-															className="calendar-remove-btn"
-															onClick={() => onRemove(dayInfo.date, wid)}
-															aria-label={`Remove ${workoutName}`}
-														>
-															<X size={14} />
-														</button>
-													)}
+													<button
+														className="calendar-remove-btn"
+														onClick={() => onRemove(dayInfo.date, wid)}
+														aria-label={`Remove ${workoutName}`}
+													>
+														<X size={14} />
+													</button>
 												</div>
 											);
 										}
@@ -1102,6 +1176,7 @@ export function CalendarView({
 										if (isCardio) {
 											return (
 												<div key={`sched-${wid}-${idx}`} className="calendar-workout-item">
+													{hasGarminActivity && <span className="calendar-completed-bar" />}
 													<span className="calendar-workout-link calendar-workout-link-cardio">
 														<Icon size={14} />
 														<span className="calendar-workout-name">
@@ -1115,7 +1190,7 @@ export function CalendarView({
 													>
 														<Pencil size={14} />
 													</button>
-													{!isPast && (
+													{!hasGarminActivity && (
 														<button
 															className="calendar-remove-btn"
 															onClick={() => onRemove(dayInfo.date, wid)}
@@ -1183,7 +1258,7 @@ export function CalendarView({
 														Delete
 													</button>
 												)}
-												{!isPast && !hasLog && (
+												{!hasLog && (
 													<button
 														className="calendar-remove-btn"
 														onClick={() => onRemove(dayInfo.date, wid, occurrenceId)}

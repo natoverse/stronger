@@ -59,3 +59,9 @@ Tapping a completed workout on a past day opens a read/edit view of that session
 ## Firestore-only iteration (2026-09-15)
 
 - Keep shared `ParsedLogRow` as a domain type for history and charts in `src/model/logs.ts`, exported through `src/model/index.ts`. Storage-specific row parsers are unnecessary; Firestore adapters flatten session objects for these consumers.
+
+## Iteration: completed workouts and past plans (2026-09-25)
+
+- Completed strength sessions appear on their actual session date in the monthly calendar, including sessions without a schedule entry.
+- Past scheduled items remain removable when no completed strength session or matching same-day Garmin cardio activity exists.
+- Scheduled cardio completion is inferred from the Garmin activity date and normalized activity type; completed items are retained while unmatched plans can be removed.

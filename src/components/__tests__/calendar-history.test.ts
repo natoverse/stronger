@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid, includeCalendarDate } from '../CalendarView.js';
+import { generatePastDays, groupLogByDate, buildDayInfos, buildMonthGrid, includeCalendarDate, matchesGarminCardioActivity } from '../CalendarView.js';
 import type { LogSession } from '../CalendarView.js';
 import type { ParsedLogRow } from '../../model/index.js';
 
@@ -194,6 +194,32 @@ describe('buildDayInfos', () => {
 		// Day 3: neither
 		expect(result[2].scheduled).toEqual([]);
 		expect(result[2].sessions.length).toBe(0);
+	});
+
+	describe('matchesGarminCardioActivity', () => {
+		const activities = [
+			{
+				timestamp: '2026-04-01T07:00:00',
+				activityType: 'Mountain Biking',
+				duration: 3600,
+				distance: 15000,
+				elevationGain: 400,
+			},
+		];
+
+		it('matches normalized Garmin activity types on the same date', () => {
+			expect(matchesGarminCardioActivity(
+				'2026-04-01',
+				'cardio:mtb',
+				[{ id: 'mtb', name: 'MTB' }],
+				activities,
+			)).toBe(true);
+		});
+
+		it('does not match another date or cardio type', () => {
+			expect(matchesGarminCardioActivity('2026-04-02', 'cardio:mtb', [], activities)).toBe(false);
+			expect(matchesGarminCardioActivity('2026-04-01', 'cardio:run', [], activities)).toBe(false);
+		});
 	});
 
 	it('includes unscheduled logged sessions', () => {

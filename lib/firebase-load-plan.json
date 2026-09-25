@@ -29,7 +29,7 @@
     "list": ["exercises", "workouts", "cycleProgress", "cardioActivities", "schedule", "workoutSessions", "settings"],
     "workout": ["exercises", "workouts", "cycleProgress", "workoutSessions", "settings"],
     "import": ["workouts", "exercises", "settings"],
-    "calendar": ["schedule", "dayFlags", "workoutSessions", "exercises", "workouts", "cycleProgress", "cardioActivities", "settings"],
+    "calendar": ["schedule", "dayFlags", "workoutSessions", "garminActivities", "exercises", "workouts", "cycleProgress", "cardioActivities", "settings"],
     "editor": ["workouts", "exercises", "cycleProgress", "settings"],
     "exercises": ["exercises", "settings"],
     "exerciseEditor": ["exercises", "settings"],

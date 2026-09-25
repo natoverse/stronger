@@ -32,13 +32,17 @@ describe('Firebase route load plan', () => {
 			{ dataset: 'schedule', scope: 'initialWindow' },
 			{ dataset: 'dayFlags', scope: 'initialWindow' },
 			{ dataset: 'workoutSessions', scope: 'currentYear' },
+			{ dataset: 'garminActivities', scope: 'currentYear' },
 			{ dataset: 'exercises', scope: 'all' },
 			{ dataset: 'workouts', scope: 'all' },
 			{ dataset: 'cycleProgress', scope: 'all' },
 			{ dataset: 'cardioActivities', scope: 'all' },
 			{ dataset: 'settings', scope: 'all' },
 		])
-		expect(queue.deferred[0]).toEqual({ dataset: 'workoutSessions', scope: 'otherYears' })
+		expect(queue.deferred.slice(0, 2)).toEqual([
+			{ dataset: 'workoutSessions', scope: 'otherYears' },
+			{ dataset: 'garminActivities', scope: 'otherYears' },
+		])
 		expect(queue.deferred).toContainEqual({ dataset: 'schedule', scope: 'all' })
 		expect(queue.deferred).toContainEqual({ dataset: 'dayFlags', scope: 'all' })
 		expect(queue.deferred).not.toContainEqual({ dataset: 'schedule', scope: 'initialWindow' })
