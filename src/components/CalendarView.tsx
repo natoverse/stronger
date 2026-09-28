@@ -10,7 +10,7 @@ import { CalendarSync } from './CalendarSync.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
 import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
-import { createScheduleOpportunity, formatCycleStage, matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
+import { createScheduleOpportunity, formatCycleStage, pairScheduledSessions, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 import { getActivityDate, type StravaActivity } from '../model/strava.js';
 
 interface CalendarViewProps {
@@ -1030,8 +1030,9 @@ export function CalendarView({
 					const isPast = dayInfo.date < todayStr();
 					const scheduledWorkouts = [...(scheduleEntriesByDate.get(dayInfo.date) ?? [])]
 						.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId));
-					const unscheduledSessions = dayInfo.sessions.filter((session) =>
-						!scheduledWorkouts.some((entry) => session.rows.some((row) => matchesScheduledOccurrence(entry, row))));
+					const sessionByEntry = pairScheduledSessions(scheduledWorkouts, allSessions);
+					const pairedSessions = new Set(sessionByEntry.values());
+					const unscheduledSessions = dayInfo.sessions.filter((session) => !pairedSessions.has(session));
 
 					return (
 						<div
@@ -1085,8 +1086,7 @@ export function CalendarView({
 										const isCardio = wid.startsWith('cardio:');
 										const isRest = wid === REST_ID;
 										const isBlocker = wid === BLOCKER_ID;
-										const session = (occurrenceId ? allSessions : dayInfo.sessions)
-											.find((session) => session.rows.some((row) => matchesScheduledOccurrence(entry, row)));
+										const session = sessionByEntry.get(entry);
 										const hasLog = !!session;
 										const hasGarminActivity = isCardio && matchesGarminCardioActivity(
 											dayInfo.date,

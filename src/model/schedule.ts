@@ -59,6 +59,42 @@ export function matchesScheduledOccurrence(
 		: entry.date === row.date;
 }
 
+type ScheduleSessionLike = {
+	key: { date: string; workoutId: string; occurrenceId?: string };
+	rows: Pick<ParsedLogRow, 'date' | 'workoutId' | 'occurrenceId'>[];
+};
+
+/**
+ * Pair schedule entries with completed sessions. Exact occurrence matches win;
+ * an occurrence-bound entry left unmatched then claims one same-day session of
+ * the same workout that was logged without occurrence identity (for example,
+ * started from the workout list), so it is not shown twice.
+ */
+export function pairScheduledSessions<S extends ScheduleSessionLike>(
+	entries: WorkoutScheduleEntry[],
+	sessions: S[],
+): Map<WorkoutScheduleEntry, S> {
+	const pairs = new Map<WorkoutScheduleEntry, S>();
+	const claimed = new Set<S>();
+	for (const entry of entries) {
+		const session = sessions.find((s) => s.rows.some((row) => matchesScheduledOccurrence(entry, row)));
+		if (session) {
+			pairs.set(entry, session);
+			claimed.add(session);
+		}
+	}
+	for (const entry of entries) {
+		if (pairs.has(entry) || !scheduleOccurrenceId(entry)) continue;
+		const session = sessions.find((s) => !claimed.has(s) && !s.key.occurrenceId
+			&& s.key.date === entry.date && s.key.workoutId === entry.workoutId);
+		if (session) {
+			pairs.set(entry, session);
+			claimed.add(session);
+		}
+	}
+	return pairs;
+}
+
 export function formatCycleStage(stage: ExerciseCycleStage): string {
 	return `Week ${stage.week}/${stage.weekCount}`
 		+ (stage.weekName ? ` — ${stage.weekName}` : '')
