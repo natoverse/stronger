@@ -35,3 +35,14 @@ page, in the same order the calendar uses.
   completed-session behavior.
 - Scheduled occurrences that still match a log row remain occurrence-aware and
   are not duplicated by the fallback completed-session card.
+
+## Iteration: sessions started outside the scheduled card
+
+- Starting a workout from the library list binds it to today's pending
+  scheduled occurrence of the same workout, so the log keeps occurrence identity.
+- For existing logs without occurrence identity, `pairScheduledSessions` lets an
+  unmatched occurrence-bound schedule entry claim one same-day session of the
+  same workout that has no `occurrenceId`. Today's Plan and the calendar then
+  show a single completed card instead of a completed card plus a pending card
+  prescribing the next cycle stage. Sessions bound to a different occurrence are
+  never claimed.

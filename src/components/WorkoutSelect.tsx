@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { REST_ID, BLOCKER_ID } from '../model/index.js';
-import { matchesScheduledOccurrence, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
+import { matchesScheduledOccurrence, pairScheduledSessions, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 import type { ParsedLogRow } from '../model/index.js';
 import type { LogSession } from './CalendarView.js';
 import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
@@ -176,7 +176,10 @@ export function buildTodaysPlan({
 
 	const workoutMap = new Map(workouts.map((w) => [w.id, w]));
 	const cardioNameByWorkoutId = new Map((cardioActivities ?? []).map((c) => [`cardio:${c.id}`, c.name]));
-	const todaysSessions = groupLogByDate(todaysLogRows).get(date) ?? [];
+	const allSessions = [...groupLogByDate(logRows ?? []).values()].flat();
+	const todaysSessions = allSessions.filter((session) => session.key.date === date);
+	const sessionByEntry = pairScheduledSessions(entries, allSessions);
+	const pairedSessions = new Set(sessionByEntry.values());
 
 	const items: TodayPlanItem[] = [];
 	for (const e of entries) {
@@ -193,13 +196,13 @@ export function buildTodaysPlan({
 			if (!workout) continue;
 			items.push({
 				kind: 'strength', workoutId: wid, workout,
-				done: (logRows ?? []).some((row) => matchesScheduledOccurrence(e, row)),
+				done: sessionByEntry.has(e),
 				...(scheduleOccurrenceId(e) ? { occurrenceId: scheduleOccurrenceId(e) } : {}),
 			});
 		}
 	}
 	for (const session of todaysSessions) {
-		if (entries.some((entry) => session.rows.some((row) => matchesScheduledOccurrence(entry, row)))) continue;
+		if (pairedSessions.has(session)) continue;
 		const workout = workoutMap.get(session.key.workoutId);
 		if (!workout) continue;
 		items.push({
@@ -295,7 +298,7 @@ export function WorkoutSelect({
 		if (done && onViewSession) {
 			const matching = sessions.filter((session) => session.rows.some((row) =>
 				matchesScheduledOccurrence({ date: today, workoutId: workout.id, occurrenceId }, row)));
-			const session = matching[matching.length - 1];
+			const session = matching[matching.length - 1] ?? completedSessionsByWorkout.get(workout.id);
 			if (session) {
 				onViewSession(session);
 				return;
@@ -310,7 +313,9 @@ export function WorkoutSelect({
 			onViewSession(session);
 			return;
 		}
-		if (!workout.error) onSelect(workout);
+		if (workout.error) return;
+		const pending = todaysPlan.find((item) => item.kind === 'strength' && item.workoutId === workout.id && !item.done);
+		onSelect(workout, pending?.kind === 'strength' ? pending.occurrenceId : undefined);
 	};
 
 	const [moreOpen, setMoreOpen] = useState(false);

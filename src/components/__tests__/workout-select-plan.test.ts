@@ -72,6 +72,32 @@ describe('buildTodaysPlan', () => {
 		expect(plan[0]).toMatchObject({ kind: 'strength', workoutId: 'A', done: true, occurrenceId: 'first' });
 	});
 
+	it('treats a same-day session logged without occurrence identity as completing the scheduled cycle occurrence', () => {
+		const plan = buildTodaysPlan({
+			date: '2026-01-02',
+			workoutSchedule: [
+				{ date: '2026-01-02', workoutId: 'A', cycleId: 'A', strongerId: 'first' },
+				{ date: '2026-01-02', workoutId: 'A', cycleId: 'A', strongerId: 'second' },
+			],
+			workouts: [workout],
+			logRows: [{ date: '2026-01-02', workoutId: 'A', startTime: '09:00' } as never],
+		});
+		expect(plan).toHaveLength(2);
+		expect(plan[0]).toMatchObject({ kind: 'strength', done: true, occurrenceId: 'first' });
+		expect(plan[1]).toMatchObject({ kind: 'strength', done: false, occurrenceId: 'second' });
+	});
+
+	it('does not claim a session bound to a different occurrence', () => {
+		const plan = buildTodaysPlan({
+			date: '2026-01-02',
+			workoutSchedule: [{ date: '2026-01-02', workoutId: 'A', occurrenceId: 'first' }],
+			workouts: [workout],
+			logRows: [{ date: '2026-01-02', workoutId: 'A', startTime: '09:00', occurrenceId: 'other' } as never],
+		});
+		expect(plan).toHaveLength(2);
+		expect(plan.map((item) => item.kind === 'strength' && item.done)).toEqual([false, true]);
+	});
+
 	it('marks a completed library workout done even without a scheduled occurrence', () => {
 		const now = new Date();
 		const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
