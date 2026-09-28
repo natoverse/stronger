@@ -154,6 +154,7 @@ function AppContent() {
   const calendarWindowRef = useRef(initialDateWindow());
   const calendarWindowLoadRef = useRef(Promise.resolve());
   const calendarMutationRef = useRef<Promise<unknown>>(Promise.resolve());
+  const scheduleMutationVersionRef = useRef(0);
   const connectedUserRef = useRef<string | null>(null);
   const connectionGenerationRef = useRef(0);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
@@ -642,11 +643,15 @@ function AppContent() {
     connectionGeneration = connectionGenerationRef.current,
     source: FirestoreReadSource = 'cacheFirst',
   ) => {
+    const mutationVersion = scheduleMutationVersionRef.current;
     try {
       const schedule = await readWorkoutSchedule(userId, window, source);
       if (
         connectedUserRef.current !== userId
         || connectionGenerationRef.current !== connectionGeneration
+        // A newer local schedule mutation started after this read began — applying
+        // this now-stale snapshot would clobber the more recent optimistic update.
+        || scheduleMutationVersionRef.current !== mutationVersion
       ) return;
       setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
     } catch (error) {
@@ -794,6 +799,7 @@ function AppContent() {
   const handleScheduleAssign = useCallback(
     (date: string, workoutId: string, occurrenceId?: string) => {
       const userId = firebaseUid;
+      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
         const persisted = userId
@@ -814,6 +820,7 @@ function AppContent() {
   const handleBulkSchedule = useCallback(
     (entries: WorkoutScheduleEntry[]) => {
       const userId = firebaseUid;
+      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const changedDates = [...new Set(entries.map((entry) => entry.date))].sort();
         if (changedDates.length === 0) return;
@@ -859,6 +866,7 @@ function AppContent() {
   const handleScheduleRemove = useCallback(
     (date: string, workoutId: string, occurrenceId?: string) => {
       const userId = firebaseUid;
+      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
         const persisted = userId
@@ -887,6 +895,7 @@ function AppContent() {
     (date: string, workoutId: string, label: string, occurrenceId?: string) => {
       const trimmed = label.trim();
       const userId = firebaseUid;
+      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
         const persisted = userId
@@ -1056,147 +1065,150 @@ function AppContent() {
   );
 
   const handleClearSchedule = useCallback(
-    (options: ClearOptions): Promise<ClearResult> => queueCalendarMutation(async () => {
-      const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
-      const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
-      const calendarId = shouldClearSchedule ? calendarSyncId : null;
-      let calendarAuthorized = false;
-      if (calendarId) {
-        try {
-          await authorizeCalendar();
-          calendarAuthorized = true;
-        } catch (err) {
-          result.errors.push(`Could not authorize Google Calendar cleanup: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-
-      // Compute date range
-      const [sy, sm, sd] = startDate.split('-').map(Number);
-      const start = new Date(sy, sm - 1, sd);
-      const dateSet = new Set<string>();
-      for (let i = 0; i < weeks * 7; i++) {
-        const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        dateSet.add(dateStr);
-      }
-      // End date for calendar API queries (one day past the range)
-      const rangeEnd = new Date(sy, sm - 1, sd + weeks * 7);
-      const endDate = `${rangeEnd.getFullYear()}-${String(rangeEnd.getMonth() + 1).padStart(2, '0')}-${String(rangeEnd.getDate()).padStart(2, '0')}`;
-      const dateWindow = { startDate, endDate };
-      const [persistedFlags, persistedSchedule] = await Promise.all([
-        shouldClearFlags && firebaseUid
-          ? readFlags(firebaseUid, dateWindow)
-          : Promise.resolve([]),
-        shouldClearSchedule && firebaseUid
-          ? readWorkoutSchedule(firebaseUid, dateWindow)
-          : Promise.resolve([]),
-      ]);
-      if (firebaseUid && connectedUserRef.current !== firebaseUid) {
-        throw new Error('Firebase user changed while clearing the calendar.');
-      }
-      // Clear flags
-      if (shouldClearFlags) {
-        const before = persistedFlags.length;
-        const updatedFlags = persistedFlags.filter((e) => !dateSet.has(e.date));
-        result.flagsCleared = before - updatedFlags.length;
-        setDayFlags((existing) => mergeDateWindowEntries(existing, updatedFlags, dateWindow));
-        if (firebaseUid) {
+    (options: ClearOptions): Promise<ClearResult> => {
+      scheduleMutationVersionRef.current += 1;
+      return queueCalendarMutation(async () => {
+        const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
+        const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
+        const calendarId = shouldClearSchedule ? calendarSyncId : null;
+        let calendarAuthorized = false;
+        if (calendarId) {
           try {
-            await writeFlagDates(firebaseUid, updatedFlags, dateSet);
+            await authorizeCalendar();
+            calendarAuthorized = true;
           } catch (err) {
-            result.errors.push(`Failed to write flags: ${err instanceof Error ? err.message : String(err)}`);
+            result.errors.push(`Could not authorize Google Calendar cleanup: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
-      }
 
-      // Clear workout schedule
-      if (shouldClearSchedule) {
-        // Collect entries in the date range that have workoutIds
-        const entriesToClear = persistedSchedule.filter((e) => dateSet.has(e.date) && e.workoutId);
-        result.scheduleCleared = entriesToClear.length;
-
-        // Blank out workoutIds (preserves calendarEventId/strongerId for cleanup)
-        const updatedSchedule = persistedSchedule.map((e) => {
-          if (dateSet.has(e.date) && e.workoutId) {
-            return { ...e, workoutId: '' };
-          }
-          return e;
-        });
-
-        // Try to delete Google Calendar events for cleared entries
-        const deletedEventIds = new Set<string>();
-        if (calendarId && calendarAuthorized) {
-          const gapi = window.gapi;
-          if (gapi) {
-            // Delete events we have direct references to
-            for (const entry of entriesToClear) {
-              if (entry.calendarEventId) {
-                try {
-                  await gapi.client.calendar.events.delete({
-                    calendarId,
-                    eventId: entry.calendarEventId,
-                  });
-                  deletedEventIds.add(entry.calendarEventId);
-                  result.calendarEventsDeleted++;
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  result.errors.push(`Delete event ${entry.calendarEventId}: ${msg}`);
-                }
-              }
-            }
-
-            // Also delete orphaned Stronger events in the date range that have
-            // no schedule entry (e.g., pushed from Planner without sync)
+        // Compute date range
+        const [sy, sm, sd] = startDate.split('-').map(Number);
+        const start = new Date(sy, sm - 1, sd);
+        const dateSet = new Set<string>();
+        for (let i = 0; i < weeks * 7; i++) {
+          const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          dateSet.add(dateStr);
+        }
+        // End date for calendar API queries (one day past the range)
+        const rangeEnd = new Date(sy, sm - 1, sd + weeks * 7);
+        const endDate = `${rangeEnd.getFullYear()}-${String(rangeEnd.getMonth() + 1).padStart(2, '0')}-${String(rangeEnd.getDate()).padStart(2, '0')}`;
+        const dateWindow = { startDate, endDate };
+        const [persistedFlags, persistedSchedule] = await Promise.all([
+          shouldClearFlags && firebaseUid
+            ? readFlags(firebaseUid, dateWindow)
+            : Promise.resolve([]),
+          shouldClearSchedule && firebaseUid
+            ? readWorkoutSchedule(firebaseUid, dateWindow)
+            : Promise.resolve([]),
+        ]);
+        if (firebaseUid && connectedUserRef.current !== firebaseUid) {
+          throw new Error('Firebase user changed while clearing the calendar.');
+        }
+        // Clear flags
+        if (shouldClearFlags) {
+          const before = persistedFlags.length;
+          const updatedFlags = persistedFlags.filter((e) => !dateSet.has(e.date));
+          result.flagsCleared = before - updatedFlags.length;
+          setDayFlags((existing) => mergeDateWindowEntries(existing, updatedFlags, dateWindow));
+          if (firebaseUid) {
             try {
-              const allEvents = await listEventsInRange(calendarId, startDate, endDate);
-              for (const calEvent of allEvents) {
-                if (!calEvent.id || deletedEventIds.has(calEvent.id)) continue;
-                if (calEvent.status === 'cancelled') continue;
-                const eventDate = getEventDate(calEvent);
-                if (!eventDate || !dateSet.has(eventDate)) continue;
-                if (!isStrongerEvent(calEvent)) continue;
-                try {
-                  await gapi.client.calendar.events.delete({
-                    calendarId,
-                    eventId: calEvent.id,
-                  });
-                  result.calendarEventsDeleted++;
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : String(err);
-                  result.errors.push(`Delete orphaned event ${calEvent.id}: ${msg}`);
+              await writeFlagDates(firebaseUid, updatedFlags, dateSet);
+            } catch (err) {
+              result.errors.push(`Failed to write flags: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
+
+        // Clear workout schedule
+        if (shouldClearSchedule) {
+          // Collect entries in the date range that have workoutIds
+          const entriesToClear = persistedSchedule.filter((e) => dateSet.has(e.date) && e.workoutId);
+          result.scheduleCleared = entriesToClear.length;
+
+          // Blank out workoutIds (preserves calendarEventId/strongerId for cleanup)
+          const updatedSchedule = persistedSchedule.map((e) => {
+            if (dateSet.has(e.date) && e.workoutId) {
+              return { ...e, workoutId: '' };
+            }
+            return e;
+          });
+
+          // Try to delete Google Calendar events for cleared entries
+          const deletedEventIds = new Set<string>();
+          if (calendarId && calendarAuthorized) {
+            const gapi = window.gapi;
+            if (gapi) {
+              // Delete events we have direct references to
+              for (const entry of entriesToClear) {
+                if (entry.calendarEventId) {
+                  try {
+                    await gapi.client.calendar.events.delete({
+                      calendarId,
+                      eventId: entry.calendarEventId,
+                    });
+                    deletedEventIds.add(entry.calendarEventId);
+                    result.calendarEventsDeleted++;
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    result.errors.push(`Delete event ${entry.calendarEventId}: ${msg}`);
+                  }
                 }
               }
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : String(err);
-              result.errors.push(`Failed to list calendar events for orphan cleanup: ${msg}`);
+
+              // Also delete orphaned Stronger events in the date range that have
+              // no schedule entry (e.g., pushed from Planner without sync)
+              try {
+                const allEvents = await listEventsInRange(calendarId, startDate, endDate);
+                for (const calEvent of allEvents) {
+                  if (!calEvent.id || deletedEventIds.has(calEvent.id)) continue;
+                  if (calEvent.status === 'cancelled') continue;
+                  const eventDate = getEventDate(calEvent);
+                  if (!eventDate || !dateSet.has(eventDate)) continue;
+                  if (!isStrongerEvent(calEvent)) continue;
+                  try {
+                    await gapi.client.calendar.events.delete({
+                      calendarId,
+                      eventId: calEvent.id,
+                    });
+                    result.calendarEventsDeleted++;
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    result.errors.push(`Delete orphaned event ${calEvent.id}: ${msg}`);
+                  }
+                }
+              } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                result.errors.push(`Failed to list calendar events for orphan cleanup: ${msg}`);
+              }
+            } else {
+              result.errors.push('Google Calendar client did not initialize for cleanup.');
             }
-          } else {
-            result.errors.push('Google Calendar client did not initialize for cleanup.');
+          }
+
+          // After deleting calendar events, remove entries that no longer serve a purpose
+          // (those with no workoutId and whose calendar events were deleted or had none)
+          const finalSchedule = updatedSchedule.filter((e) => {
+            if (!dateSet.has(e.date)) return true; // keep entries outside range
+            if (e.workoutId) return true; // keep entries with workoutIds
+            // Retain linkage unless the referenced event was confirmed deleted.
+            if (e.calendarEventId && !deletedEventIds.has(e.calendarEventId)) return true;
+            return false;
+          });
+
+          setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, finalSchedule, dateWindow));
+          if (firebaseUid) {
+            try {
+              await writeWorkoutScheduleDates(firebaseUid, finalSchedule, dateSet);
+            } catch (err) {
+              result.errors.push(`Failed to write schedule: ${err instanceof Error ? err.message : String(err)}`);
+            }
           }
         }
 
-        // After deleting calendar events, remove entries that no longer serve a purpose
-        // (those with no workoutId and whose calendar events were deleted or had none)
-        const finalSchedule = updatedSchedule.filter((e) => {
-          if (!dateSet.has(e.date)) return true; // keep entries outside range
-          if (e.workoutId) return true; // keep entries with workoutIds
-          // Retain linkage unless the referenced event was confirmed deleted.
-          if (e.calendarEventId && !deletedEventIds.has(e.calendarEventId)) return true;
-          return false;
-        });
-
-        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, finalSchedule, dateWindow));
-        if (firebaseUid) {
-          try {
-            await writeWorkoutScheduleDates(firebaseUid, finalSchedule, dateSet);
-          } catch (err) {
-            result.errors.push(`Failed to write schedule: ${err instanceof Error ? err.message : String(err)}`);
-          }
-        }
-      }
-
-      return result;
-    }),
+        return result;
+      });
+    },
     [queueCalendarMutation, firebaseUid, calendarSyncId],
   );
 
