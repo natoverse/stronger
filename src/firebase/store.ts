@@ -519,6 +519,28 @@ export async function writeCycleDraftResults(
 	})
 }
 
+export async function discardCycleSessionDraft(
+	uid: string,
+	snapshot: CycleSessionSnapshot,
+	nextProgress: CycleProgress,
+): Promise<void> {
+	validateCycleSnapshot(snapshot)
+	if (nextProgress.workoutId !== snapshot.workout.id || nextProgress.revision !== snapshot.progress.revision + 1) {
+		throw new Error('Discarding a workout must advance its cycle revision once.')
+	}
+	const progress = frozenValue(nextProgress)
+	const workoutId = idPart(snapshot.workout.id)
+	await trackMutation(uid, `cycleDiscard:${snapshot.id}`, () => {
+		const batch = writeBatch(firestore)
+		batch.set(doc(userCollection(uid, 'cycleProgress'), workoutId), progress)
+		batch.delete(doc(userCollection(uid, 'workoutDrafts'), workoutId))
+		return batch.commit()
+	}, {
+		receipt: { path: ['users', uid, 'cycleProgress', workoutId], field: 'revision', value: progress.revision },
+		supersedes: [`cycleStart:${snapshot.id}`, `cycleDraft:${snapshot.id}`],
+	})
+}
+
 export async function finishCycleSession(
 	uid: string,
 	snapshot: StoredCycleDraft,

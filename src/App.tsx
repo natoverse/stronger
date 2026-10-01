@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { REST_ID } from './model/index.js';
 import type { CycleProgress, CycleSessionSnapshot } from './model/types.js';
-import { createCycleSession, finishCycle, previewCycles } from './model/cycles.js';
+import { createCycleSession, discardCycleSession, finishCycle, previewCycles } from './model/cycles.js';
 import { getTrainingMax } from './model/training-max.js';
 import type { BaselineUpdate, CycleFinish } from './model/cycles.js';
 import { createScheduleOpportunity, scheduleOccurrenceId } from './model/schedule.js';
-import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, finishCycleSession } from './firebase/index.js';
+import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, discardCycleSessionDraft, finishCycleSession } from './firebase/index.js';
 import type { StoredCycleDraft } from './firebase/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './model/index.js';
 import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries } from './firebase/index.js';
@@ -518,6 +518,38 @@ function AppContent() {
     setDraftResults(null);
     navigateTo({ view: 'list' });
   }, [navigateTo]);
+
+  const handleDiscard = useCallback(() => {
+    const workoutId = activeWorkout?.id ?? activeSnapshot?.workout.id;
+    if (!workoutId) return;
+    const uid = firebaseUid ?? 'mock';
+    clearDraft(uid, workoutId);
+    clearTimerSentinel();
+    if (activeSnapshot) {
+      const current = cycleProgressRef.current.find((item) => item.workoutId === workoutId);
+      // Only release progress that still belongs to this session.
+      if (!current || current.revision === activeSnapshot.progress.revision) {
+        const released = discardCycleSession(activeSnapshot);
+        const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workoutId), released];
+        cycleProgressRef.current = updated;
+        cycleMutationVersionRef.current += 1;
+        setCycleProgress(updated);
+        if (firebaseUid) {
+          const snapshot = activeSnapshot;
+          void queueSessionMutation(`cycle:${workoutId}`, () => discardCycleSessionDraft(firebaseUid, snapshot, released))
+            .catch((error) => setDataLoadError(String(error)));
+        }
+      }
+      cycleDraftsRef.current = cycleDraftsRef.current.filter((item) => item.workout.id !== workoutId);
+    }
+    setActiveSnapshot(null);
+    setActiveWorkout(null);
+    setStartTime(null);
+    setPreviousSets(null);
+    setDraftResults(null);
+    setFinishError(null);
+    navigateTo({ view: 'list' });
+  }, [activeWorkout, activeSnapshot, firebaseUid, queueSessionMutation, navigateTo]);
 
   const loadExercisesData = useCallback(async (
     userId: string,
@@ -1908,6 +1940,7 @@ function AppContent() {
         configs={configs}
         onBack={handleBack}
         onFinish={handleFinish}
+        onDiscard={handleDiscard}
         userId={firebaseUid ?? 'mock'}
         onDraftChange={handleDraftChange}
       />

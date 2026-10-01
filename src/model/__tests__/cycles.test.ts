@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
-import { createCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, validateCycle, workoutFromProgress } from '../cycles.js';
+import { createCycleSession, discardCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, validateCycle, workoutFromProgress } from '../cycles.js';
 import { computeSetWeight } from '../compute.js';
 import { computeProgression } from '../progression.js';
 import { findPreviousWorkoutSets, buildLogRow } from '../logs.js';
@@ -530,5 +530,38 @@ describe('validation and history', () => {
 		expect(findPreviousWorkoutSets([row], next.workout.id, next)?.[0][0]).toBeUndefined();
 		const changed = { ...row, plannedTemplate: { ...row.plannedTemplate!, minReps: 99 } };
 		expect(findPreviousWorkoutSets([changed], first.workout.id, first)?.[0][0]).toBeUndefined();
+	});
+});
+
+describe('discarding an unfinished session', () => {
+	it('releases first-stage iterations so edits apply, but keeps mid-iteration exercises frozen', () => {
+		const first = start();
+		const discarded = discardCycleSession(first);
+		expect(discarded.revision).toBe(first.progress.revision + 1);
+		expect(discarded.exercises).toEqual([]);
+		const edited = definition();
+		for (const template of edited.cycle!.weeks[0].exposures[0].templates) template.sets[0].percentage = .5;
+		const restarted = start(edited, [bench, squat], discarded);
+		expect(restarted.workout.exercises[0].sets[0].weight).toBe(100);
+		expect(restarted.workout.exercises[0].cycleStage).toMatchObject({ week: 1, iteration: 1 });
+
+		// Complete bench only; squat stays on its first stage.
+		const results = completed(restarted);
+		results[1] = results[1].map((value) => ({ ...value, completed: false }));
+		const advanced = finishCycle(restarted, results).progress;
+		const second = start(definition(), [bench, squat], advanced);
+		const released = discardCycleSession(second);
+		expect(released.exercises.map((item) => [item.exerciseId, item.cursor])).toEqual([['bench', 1]]);
+		const again = start(edited, [bench, squat], released);
+		expect(again.workout.exercises.map((exercise) => exercise.cycleStage?.week)).toEqual([2, 1]);
+		expect(again.workout.exercises[1].sets[0].weight).toBe(150);
+	});
+
+	it('keeps iteration numbering when releasing a later iteration', () => {
+		const snapshot = start();
+		snapshot.progress.exercises = snapshot.progress.exercises.map((item) => ({ ...item, iteration: 3 }));
+		const released = discardCycleSession(snapshot);
+		expect(released.exercises.every((item) => item.complete && item.iteration === 2)).toBe(true);
+		expect(start(definition(), [bench, squat], released).workout.exercises[0].cycleStage?.iteration).toBe(3);
 	});
 });
