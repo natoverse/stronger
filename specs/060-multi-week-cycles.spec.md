@@ -115,6 +115,12 @@ These decisions supersede the earlier within-week exposure requirements and the 
 
 - The bundled 5/3/1 cycles now begin each exercise with a bar-only warmup for 5 reps before the percentage-based TM warmups. This is part of the editable default prescription copied from the library, not special-case runtime behavior.
 
+### Discarding an unfinished workout — 2026-10-01
+
+- Starting a session freezes its draft (local and `workoutDrafts`) and the cycle progress, so later setup edits were invisible until the session was finished. The workout view now has a confirmed “Discard Workout” action that clears the local draft, rest-timer sentinel, and remote draft without logging a session.
+- Discarding releases exercise iterations still on their first stage (cursor 0): they have no completed progression, so the next start re-captures the current definition and shared inputs. Released iterations keep their iteration number. Mid-iteration exercises (cursor > 0) stay frozen per the policy above.
+- The progress write and draft deletion are one batch that advances the revision, so stale copies of the discarded draft on other devices cannot finish against it.
+
 ## Notes
 
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.

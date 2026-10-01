@@ -244,6 +244,22 @@ export function createCycleSession(
 	};
 }
 
+/**
+ * Abandon an unfinished session. Iterations still on their first stage have no
+ * completed progression, so they are released and the next start captures the
+ * current definition and shared inputs. Mid-iteration exercises stay frozen.
+ * The revision advances so stale copies of the discarded draft cannot finish.
+ */
+export function discardCycleSession(snapshot: CycleSessionSnapshot): CycleProgress {
+	const progress = structuredClone(snapshot.progress);
+	progress.revision += 1;
+	progress.exercises = progress.exercises.flatMap((item) => {
+		if (item.complete || item.cursor > 0) return [item];
+		return item.iteration > 1 ? [{ ...item, iteration: item.iteration - 1, complete: true }] : [];
+	});
+	return progress;
+}
+
 export function exerciseCompleted(template: ExerciseTemplate, results: SetResult[] = []): boolean {
 	const nonWarmup = template.sets.map((set, index) => ({ set, index })).filter(({ set }) => set.setType !== 'warmup');
 	const required = nonWarmup.length ? nonWarmup : template.sets.map((set, index) => ({ set, index }));

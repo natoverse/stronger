@@ -17,6 +17,8 @@ interface WorkoutViewProps {
 	configs: LiftConfig[];
 	onBack: () => void;
 	onFinish: (workout: Workout, results: SetResult[][]) => void;
+	/** Throw away the saved in-progress session so the next start uses the current setup. */
+	onDiscard?: () => void;
 	userId?: string;
 	onDraftChange?: (workout: Workout, results: SetResult[][]) => void;
 }
@@ -75,7 +77,7 @@ function initResults(workout: Workout): SetResult[][] {
 	);
 }
 
-export function WorkoutView({ workout, previousSets, startTime, draftResults, appSettings, configs, onBack, onFinish, userId, onDraftChange }: WorkoutViewProps) {
+export function WorkoutView({ workout, previousSets, startTime, draftResults, appSettings, configs, onBack, onFinish, onDiscard, userId, onDraftChange }: WorkoutViewProps) {
 	const { active: wakeLockActive, reacquire: reacquireWakeLock } = useWakeLock(appSettings.keepScreenOn);
 
 	const [results, setResults] = useState<SetResult[][]>(() => {
@@ -226,6 +228,13 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 	function handleFinish() {
 		restTimer.stop();
 		onFinish(effectiveWorkout, results);
+	}
+
+	function handleDiscard() {
+		if (!onDiscard) return;
+		if (!window.confirm('Discard this workout? Logged sets will not be saved. Exercises still in their first cycle week will pick up your latest setup next time.')) return;
+		restTimer.stop();
+		onDiscard();
 	}
 
 	return (
@@ -446,6 +455,12 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 			>
 				<Plus size={16} /> Add Exercise
 			</button>
+
+			{onDiscard && (
+				<button type="button" className="btn-danger btn-discard-workout" onClick={handleDiscard}>
+					Discard Workout
+				</button>
+			)}
 
 			{showExercisePicker && (
 				<div className="exercise-picker-overlay" onClick={() => setShowExercisePicker(false)}>

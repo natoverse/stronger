@@ -27,6 +27,7 @@ export {
 	readCycleDrafts,
 	writeCycleStart,
 	writeCycleDraftResults,
+	discardCycleSessionDraft,
 	finishCycleSession,
 	readWorkoutDefs,
 	writeWorkoutDefs,
