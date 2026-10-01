@@ -79,6 +79,7 @@ function AppContent() {
   const [finishSaving, setFinishSaving] = useState(false);
   const finishSavingRef = useRef(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
   const [previousSets, setPreviousSets] = useState<PreviousSetData[][] | null>(null);
   const [sessionReady, setSessionReady] = useState(mockMode);
   const [workouts, setWorkouts] = useState<Workout[]>(() => mockData?.workouts ?? []);
@@ -414,6 +415,7 @@ function AppContent() {
       setActiveWorkout(draft?.executionWorkout ?? snapshot.workout);
       setPreviousSets(null);
       setFinishError(null);
+      setResetError(null);
       navigateTo({ view: 'workout', workoutId: workout.id });
       if (firebaseUid) void loadPreviousSets(firebaseUid, workout.id, snapshot);
     } catch (error) {
@@ -556,7 +558,7 @@ function AppContent() {
     const workoutId = activeSnapshot.workout.id;
     const current = cycleProgressRef.current.find((item) => item.workoutId === workoutId);
     if (current?.revision !== activeSnapshot.progress.revision) {
-      setDataLoadError('This workout no longer matches current cycle progress. Resume the current session before resetting.');
+      setResetError('This workout no longer matches current cycle progress. Resume the current session before resetting.');
       return;
     }
     try {
@@ -580,13 +582,14 @@ function AppContent() {
       setDraftResults(null);
       setPreviousSets(null);
       setFinishError(null);
+      setResetError(null);
       if (firebaseUid) {
         void queueSessionMutation(`cycle:${workoutId}`, () => resetCycleSessionDraft(firebaseUid, activeSnapshot, { ...next, startTime: now }))
           .catch((error) => setDataLoadError(String(error)));
         void loadPreviousSets(firebaseUid, workoutId, next);
       }
     } catch (error) {
-      setDataLoadError(error instanceof Error ? error.message : String(error));
+      setResetError(error instanceof Error ? error.message : String(error));
     }
   }, [activeSnapshot, configs, definitions, firebaseUid, loadPreviousSets, queueSessionMutation]);
 
@@ -1982,6 +1985,7 @@ function AppContent() {
         onFinish={handleFinish}
         onDiscard={handleDiscard}
         onResetCycle={handleResetCycle}
+        resetError={resetError}
         userId={firebaseUid ?? 'mock'}
         onDraftChange={handleDraftChange}
       />
