@@ -260,6 +260,24 @@ export function discardCycleSession(snapshot: CycleSessionSnapshot): CycleProgre
 	return progress;
 }
 
+/** Replace an unfinished session with a fresh first-stage draft without completing an iteration. */
+export function resetCycleSession(
+	snapshot: CycleSessionSnapshot,
+	definition: WorkoutDefinition,
+	configs: LiftConfig[],
+	options: { roundWarmupPlateMath?: boolean } = {},
+	createId: () => string = () => crypto.randomUUID(),
+): CycleSessionSnapshot {
+	if (snapshot.progress.workoutId !== definition.id) throw new Error('Cycle progress belongs to a different workout.');
+	const previous = structuredClone(snapshot.progress);
+	previous.exercises = previous.exercises.map((item) => ({
+		...item, complete: true, iteration: item.complete ? item.iteration : item.iteration - 1,
+	}));
+	return createCycleSession(definition, configs, previous, {
+		...options, ...(snapshot.occurrenceId ? { occurrenceId: snapshot.occurrenceId } : {}),
+	}, createId);
+}
+
 export function exerciseCompleted(template: ExerciseTemplate, results: SetResult[] = []): boolean {
 	const nonWarmup = template.sets.map((set, index) => ({ set, index })).filter(({ set }) => set.setType !== 'warmup');
 	const required = nonWarmup.length ? nonWarmup : template.sets.map((set, index) => ({ set, index }));

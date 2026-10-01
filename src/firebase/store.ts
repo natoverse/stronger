@@ -541,6 +541,32 @@ export async function discardCycleSessionDraft(
 	})
 }
 
+export async function resetCycleSessionDraft(
+	uid: string,
+	oldSnapshot: CycleSessionSnapshot,
+	newSnapshot: StoredCycleDraft,
+): Promise<void> {
+	validateCycleSnapshot(oldSnapshot)
+	validateCycleSnapshot(newSnapshot)
+	if (newSnapshot.id === oldSnapshot.id || newSnapshot.progress.workoutId !== oldSnapshot.progress.workoutId
+		|| newSnapshot.progress.revision !== oldSnapshot.progress.revision + 1) {
+		throw new Error('Resetting a workout must replace its session and advance its cycle revision once.')
+	}
+	const frozen = recoveryDraft(uid, newSnapshot)
+	const workoutId = idPart(oldSnapshot.workout.id)
+	await trackMutation(uid, `cycleReset:${newSnapshot.id}`, () => {
+		const batch = writeBatch(firestore)
+		batch.set(doc(userCollection(uid, 'cycleProgress'), workoutId), frozen.progress)
+		batch.set(doc(userCollection(uid, 'workoutDrafts'), workoutId), serializeCycleDraft(frozen))
+		return batch.commit()
+	}, {
+		receipt: { path: ['users', uid, 'workoutDrafts', workoutId], field: 'id', value: newSnapshot.id },
+		recovery: frozen,
+		onRejected: () => restoreRecoveryDraft(uid, frozen),
+		supersedes: [`cycleStart:${oldSnapshot.id}`, `cycleDraft:${oldSnapshot.id}`],
+	})
+}
+
 export async function finishCycleSession(
 	uid: string,
 	snapshot: StoredCycleDraft,
