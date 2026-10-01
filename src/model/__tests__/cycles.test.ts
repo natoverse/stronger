@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
-import { createCycleSession, discardCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, validateCycle, workoutFromProgress } from '../cycles.js';
+import { createCycleSession, discardCycleSession, exerciseCompleted, finishCycle, normalizeCycle, previewCycles, resetCycleSession, validateCycle, workoutFromProgress } from '../cycles.js';
 import { computeSetWeight } from '../compute.js';
 import { computeProgression } from '../progression.js';
 import { findPreviousWorkoutSets, buildLogRow } from '../logs.js';
@@ -555,6 +555,46 @@ describe('discarding an unfinished session', () => {
 		const again = start(edited, [bench, squat], released);
 		expect(again.workout.exercises.map((exercise) => exercise.cycleStage?.week)).toEqual([2, 1]);
 		expect(again.workout.exercises[1].sets[0].weight).toBe(150);
+	});
+
+	describe('resetting an unfinished cycle', () => {
+		it('replaces mixed frozen stages with current first-week prescriptions without advancing iterations', () => {
+			const first = start();
+			const results = completed(first);
+			results[1][0].completed = false;
+			const advanced = finishCycle(first, results).progress;
+			const active = start(definition(), [bench, squat], advanced);
+			const edited = definition();
+			edited.cycle!.weeks[0].exposures[0].templates[0].sets[0].percentage = .5;
+			const reset = resetCycleSession(active, edited, [{ ...bench, trainingMax: 250 }, squat], {}, ids);
+			expect(reset.id).not.toBe(active.id);
+			expect(reset.progress.revision).toBe(active.progress.revision + 1);
+			expect(reset.progress.exercises.map((item) => [item.cursor, item.iteration, item.complete]))
+				.toEqual([[0, 1, false], [0, 1, false]]);
+			expect(reset.workout.exercises.map((exercise) => exercise.cycleStage?.week)).toEqual([1, 1]);
+			expect(reset.workout.exercises[0].sets[0].weight).toBe(125);
+			expect(reset.progress.exercises[0].completedResults).toBeUndefined();
+			expect(() => finishCycle(active, completed(active), reset.progress)).toThrow('current cycle progress');
+			expect(active.workout.exercises[0].cycleStage?.week).toBe(2);
+		});
+
+		it('keeps the current iteration number and calendar occurrence when restarting a later iteration', () => {
+			const active = start();
+			active.progress.exercises[0].iteration = 3;
+			active.occurrenceId = 'scheduled';
+			const reset = resetCycleSession(active, definition(), [bench, squat], {}, ids);
+			expect(reset.occurrenceId).toBe('scheduled');
+			expect(reset.workout.exercises[0].cycleStage).toMatchObject({ week: 1, iteration: 3 });
+			expect(reset.workout.exercises[1].cycleStage).toMatchObject({ week: 1, iteration: 1 });
+		});
+
+		it('leaves the active draft intact when the edited first week cannot be resolved', () => {
+			const active = start();
+			const broken = definition();
+			broken.cycle!.weeks[0].exposures[0].templates[0].sets = [];
+			expect(() => resetCycleSession(active, broken, [bench, squat])).toThrow();
+			expect(active.progress.exercises[0].complete).toBe(false);
+		});
 	});
 
 	it('keeps iteration numbering when releasing a later iteration', () => {

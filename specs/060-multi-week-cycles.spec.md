@@ -121,6 +121,12 @@ These decisions supersede the earlier within-week exposure requirements and the 
 - Discarding releases exercise iterations still on their first stage (cursor 0): they have no completed progression, so the next start re-captures the current definition and shared inputs. Released iterations keep their iteration number. Mid-iteration exercises (cursor > 0) stay frozen per the policy above.
 - The progress write and draft deletion are one batch that advances the revision, so stale copies of the discarded draft on other devices cannot finish against it.
 
+### Resetting a cycle — 2026-10-01
+
+- A confirmed “Reset Cycle” action beside “Discard Workout” replaces the unfinished session with a new first-week draft. All exercises restart from their first prescribed stage using the current cycle definition and shared exercise inputs, including exercises previously partway through a frozen iteration.
+- Reset does not log the abandoned workout, change shared weights, erase completed history, or count the abandoned iteration as completed. Each exercise retains its iteration number; the new session keeps the original calendar occurrence, if any. Any unsaved sets in the abandoned draft are lost.
+- The new session and progress are saved together with an advanced revision, invalidating the old draft. Invalid current definitions leave the old draft untouched; unlike Discard Workout, Reset Cycle immediately reloads the new first-week prescription on screen.
+
 ## Notes
 
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.
