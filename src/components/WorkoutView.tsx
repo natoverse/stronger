@@ -19,6 +19,7 @@ interface WorkoutViewProps {
 	onFinish: (workout: Workout, results: SetResult[][]) => void;
 	/** Throw away the saved in-progress session so the next start uses the current setup. */
 	onDiscard?: () => void;
+	onResetCycle?: () => void;
 	userId?: string;
 	onDraftChange?: (workout: Workout, results: SetResult[][]) => void;
 }
@@ -77,7 +78,7 @@ function initResults(workout: Workout): SetResult[][] {
 	);
 }
 
-export function WorkoutView({ workout, previousSets, startTime, draftResults, appSettings, configs, onBack, onFinish, onDiscard, userId, onDraftChange }: WorkoutViewProps) {
+export function WorkoutView({ workout, previousSets, startTime, draftResults, appSettings, configs, onBack, onFinish, onDiscard, onResetCycle, userId, onDraftChange }: WorkoutViewProps) {
 	const { active: wakeLockActive, reacquire: reacquireWakeLock } = useWakeLock(appSettings.keepScreenOn);
 
 	const [results, setResults] = useState<SetResult[][]>(() => {
@@ -235,6 +236,13 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 		if (!window.confirm('Discard this workout? Logged sets will not be saved. Exercises still in their first cycle week will pick up your latest setup next time.')) return;
 		restTimer.stop();
 		onDiscard();
+	}
+
+	function handleResetCycle() {
+		if (!onResetCycle) return;
+		if (!window.confirm('Reset this cycle to its first week? This unfinished workout and its logged sets will be replaced. Completed workout history and exercise weights will not change.')) return;
+		restTimer.stop();
+		onResetCycle();
 	}
 
 	return (
@@ -457,9 +465,10 @@ export function WorkoutView({ workout, previousSets, startTime, draftResults, ap
 			</button>
 
 			{onDiscard && (
-				<button type="button" className="btn-danger btn-discard-workout" onClick={handleDiscard}>
-					Discard Workout
-				</button>
+				<div className="workout-end-actions">
+					{onResetCycle && <button type="button" className="btn-danger" onClick={handleResetCycle}>Reset Cycle</button>}
+					<button type="button" className="btn-danger" onClick={handleDiscard}>Discard Workout</button>
+				</div>
 			)}
 
 			{showExercisePicker && (

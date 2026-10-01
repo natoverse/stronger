@@ -2,11 +2,11 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Workout, LiftConfig, SetResult, ComputedSet, PreviousSetData, ProgressionProposal, DayFlags, DayFlagEntry, WorkoutScheduleEntry, CardioActivity, AppSettings, AppBooleanSettingKey, AppNumericSettingKey, GarminWellnessEntry } from './model/index.js';
 import { REST_ID } from './model/index.js';
 import type { CycleProgress, CycleSessionSnapshot } from './model/types.js';
-import { createCycleSession, discardCycleSession, finishCycle, previewCycles } from './model/cycles.js';
+import { createCycleSession, discardCycleSession, finishCycle, previewCycles, resetCycleSession } from './model/cycles.js';
 import { getTrainingMax } from './model/training-max.js';
 import type { BaselineUpdate, CycleFinish } from './model/cycles.js';
 import { createScheduleOpportunity, scheduleOccurrenceId } from './model/schedule.js';
-import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, discardCycleSessionDraft, finishCycleSession } from './firebase/index.js';
+import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, discardCycleSessionDraft, resetCycleSessionDraft, finishCycleSession } from './firebase/index.js';
 import type { StoredCycleDraft } from './firebase/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './model/index.js';
 import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries } from './firebase/index.js';
@@ -550,6 +550,45 @@ function AppContent() {
     setFinishError(null);
     navigateTo({ view: 'list' });
   }, [activeWorkout, activeSnapshot, firebaseUid, queueSessionMutation, navigateTo]);
+
+  const handleResetCycle = useCallback(() => {
+    if (!activeSnapshot) return;
+    const workoutId = activeSnapshot.workout.id;
+    const current = cycleProgressRef.current.find((item) => item.workoutId === workoutId);
+    if (current?.revision !== activeSnapshot.progress.revision) {
+      setDataLoadError('This workout no longer matches current cycle progress. Resume the current session before resetting.');
+      return;
+    }
+    try {
+      const definition = definitions.find((item) => item.id === workoutId);
+      if (!definition) throw new Error('This cycle definition is missing.');
+      const next = resetCycleSession(activeSnapshot, definition, configs, {
+        roundWarmupPlateMath: roundWarmupPlateMathRef.current,
+      });
+      const now = new Date().toISOString();
+      const uid = firebaseUid ?? 'mock';
+      clearTimerSentinel();
+      saveDraft({ workoutId, startTime: now, results: [], snapshot: next }, uid);
+      const updated = [...cycleProgressRef.current.filter((item) => item.workoutId !== workoutId), next.progress];
+      cycleProgressRef.current = updated;
+      cycleMutationVersionRef.current += 1;
+      cycleDraftsRef.current = [...cycleDraftsRef.current.filter((item) => item.workout.id !== workoutId), { ...next, startTime: now }];
+      setCycleProgress(updated);
+      setActiveSnapshot(next);
+      setActiveWorkout(next.workout);
+      setStartTime(now);
+      setDraftResults(null);
+      setPreviousSets(null);
+      setFinishError(null);
+      if (firebaseUid) {
+        void queueSessionMutation(`cycle:${workoutId}`, () => resetCycleSessionDraft(firebaseUid, activeSnapshot, { ...next, startTime: now }))
+          .catch((error) => setDataLoadError(String(error)));
+        void loadPreviousSets(firebaseUid, workoutId, next);
+      }
+    } catch (error) {
+      setDataLoadError(error instanceof Error ? error.message : String(error));
+    }
+  }, [activeSnapshot, configs, definitions, firebaseUid, loadPreviousSets, queueSessionMutation]);
 
   const loadExercisesData = useCallback(async (
     userId: string,
@@ -1932,6 +1971,7 @@ function AppContent() {
   if (activeWorkout) {
     return (
       <WorkoutView
+        key={activeSnapshot?.id}
         workout={activeWorkout}
         previousSets={previousSets}
         startTime={startTime ?? new Date().toISOString()}
@@ -1941,6 +1981,7 @@ function AppContent() {
         onBack={handleBack}
         onFinish={handleFinish}
         onDiscard={handleDiscard}
+        onResetCycle={handleResetCycle}
         userId={firebaseUid ?? 'mock'}
         onDraftChange={handleDraftChange}
       />
