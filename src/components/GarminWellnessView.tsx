@@ -30,7 +30,7 @@ import {
   goalColorFromKey,
 } from '../model/wellness.js';
 import { useChartTooltip } from '../hooks/useChartTooltip.js';
-import { formatFreshnessLabel } from '../model/freshness.js';
+import { formatFreshnessLabel, formatShortDate } from '../model/freshness.js';
 
 /* ------------------------------------------------------------------ */
 /*  Color constants                                                    */
@@ -361,9 +361,11 @@ interface WellnessChartHeaderProps {
   label: string;
   summaryLabel?: string;
   legendItems?: LegendItem[];
+  averageLabel?: string;
+  averageColor?: string;
 }
 
-function WellnessChartHeader({ label, summaryLabel, legendItems }: WellnessChartHeaderProps) {
+function WellnessChartHeader({ label, summaryLabel, legendItems, averageLabel, averageColor }: WellnessChartHeaderProps) {
   const [legendOpen, setLegendOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const legendId = useId();
@@ -408,6 +410,7 @@ function WellnessChartHeader({ label, summaryLabel, legendItems }: WellnessChart
           label
         )}
         {summaryLabel ? <span className="strava-chart-total">{summaryLabel}</span> : null}
+        {averageLabel ? <span className="wellness-average-label" style={{ color: averageColor }}>Avg {averageLabel}</span> : null}
       </h3>
       {legendItems && legendOpen ? (
         <div
@@ -561,8 +564,10 @@ interface BarChartProps {
   /** Per-value color function. Falls back to ACCENT. */
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
+  formatAverageValue?: (value: number) => string;
   renderAsDots?: boolean;
   showAverage?: boolean;
+  averageColorFn?: (value: number) => string;
   /**
    * Fixed y-axis domain. When set, the axis ignores the data extent: values
    * outside the domain are clamped to the nearest bound, and bars that exceed
@@ -571,19 +576,21 @@ interface BarChartProps {
   domain?: ChartDomain | null;
 }
 
-function WellnessAverageLine({ buckets, enabled, min, max, yPos, formatValue }: {
-  buckets: { value: number | null }[];
-  enabled: boolean;
+function bucketAverage(buckets: { value: number | null }[]): number | null {
+  const values = buckets.map((bucket) => bucket.value)
+    .filter((value): value is number => value !== null && Number.isFinite(value));
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+}
+
+function WellnessAverageLine({ average, color, min, max, yPos, formatValue }: {
+  average: number | null;
+  color: string;
   min: number;
   max: number;
   yPos: (value: number) => number;
   formatValue: (value: number | null) => string;
 }) {
-  if (!enabled) return null;
-  const values = buckets.map((bucket) => bucket.value)
-    .filter((value): value is number => value !== null && Number.isFinite(value));
-  if (values.length === 0) return null;
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (average === null) return null;
   if (average < min || average > max) return null;
   const label = `Average: ${formatValue(average)}`;
   return (
@@ -591,6 +598,7 @@ function WellnessAverageLine({ buckets, enabled, min, max, yPos, formatValue }: 
       x1={CHART_PADDING.left} y1={yPos(average)}
       x2={VIEW_BOX_W - CHART_PADDING.right} y2={yPos(average)}
       className="strava-goal-line wellness-average-line"
+      style={{ stroke: color }}
       aria-label={label}
     >
       <title>{label}</title>
@@ -598,10 +606,12 @@ function WellnessAverageLine({ buckets, enabled, min, max, yPos, formatValue }: 
   );
 }
 
-function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue, renderAsDots = false, showAverage = false, domain = null }: BarChartProps) {
+function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, averageColorFn, formatValue, formatAverageValue = (value) => formatValue(Math.round(value)), renderAsDots = false, showAverage = false, domain = null }: BarChartProps) {
   const n = buckets.length;
   const overflowPatternId = useId();
   if (n === 0) return null;
+  const average = showAverage ? bucketAverage(buckets) : null;
+  const averageColor = average === null ? GRAY : (averageColorFn ?? colorFn)?.(average) ?? GRAY;
 
   const dataMax = Math.max(...buckets.map((b) => b.value ?? 0).filter(Number.isFinite), 0.001);
   const yMin = domain ? domain.min : 0;
@@ -648,7 +658,8 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
 
   return (
     <div className="strava-chart-card">
-      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems} />
+      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems}
+        averageLabel={average === null ? undefined : formatAverageValue(average)} averageColor={averageColor} />
 
       <div className="strava-chart-container" {...containerHandlers}>
         <svg
@@ -764,7 +775,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
 
           {/* Cumulative weekly-total overlay line (day aggregation only) */}
           <WellnessAverageLine
-            buckets={buckets} enabled={showAverage}
+            average={average} color={averageColor}
             min={yMin} max={yMax} yPos={yBar} formatValue={formatValue}
           />
           {cumulativePath && <path d={cumulativePath} className="wellness-cumulative-line" fill="none" />}
@@ -1155,6 +1166,7 @@ interface LoadFocusChartProps {
   /** Fixed y-axis domain. When set, values outside it are clamped to the bounds. */
   domain?: ChartDomain | null;
   showAverage?: boolean;
+  averageColorFn?: (value: number, min: number | null, max: number | null) => string;
 }
 
 function WellnessLoadFocusChart({
@@ -1167,9 +1179,16 @@ function WellnessLoadFocusChart({
   colorFn = loadFocusColor,
   domain = null,
   showAverage = false,
+  averageColorFn = loadFocusColor,
 }: LoadFocusChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
+  const averageBuckets = buckets.filter((bucket) => bucket.value !== null && Number.isFinite(bucket.value));
+  const average = showAverage ? bucketAverage(averageBuckets) : null;
+  const averageMin = bucketAverage(averageBuckets.map((bucket) => ({ value: bucket.min })));
+  const averageMax = bucketAverage(averageBuckets.map((bucket) => ({ value: bucket.max })));
+  const averageColor = average === null || (averageMin === null && averageMax === null)
+    ? GRAY : averageColorFn(average, averageMin, averageMax);
 
   // Y domain spans 0 → max of every value/min/max so dots and band both fit,
   // unless an explicit domain is supplied.
@@ -1209,7 +1228,8 @@ function WellnessLoadFocusChart({
 
   return (
     <div className="strava-chart-card">
-      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems} />
+      <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems}
+        averageLabel={average === null ? undefined : formatValue(Math.round(average))} averageColor={averageColor} />
 
       <div className="strava-chart-container" {...containerHandlers}>
         <svg
@@ -1288,7 +1308,7 @@ function WellnessLoadFocusChart({
 
           {/* Dynamic min/max reference lines — trace per-bucket optimal range */}
           <WellnessAverageLine
-            buckets={buckets} enabled={showAverage}
+            average={average} color={averageColor}
             min={yMin} max={maxBar} yPos={yBar} formatValue={formatValue}
           />
           {(['min', 'max'] as const).map((key) => {
@@ -1639,10 +1659,13 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   const [showAverages, setShowAverages] = useState(false);
   const today = useMemo(() => new Date(), []);
 
-  const freshness = useMemo(
-    () => formatFreshnessLabel(entries.map((e) => e.date)),
-    [entries],
-  );
+  const freshness = useMemo(() => {
+    const syncTimes = entries.map((entry) => Date.parse(entry.syncedAt ?? '')).filter(Number.isFinite);
+    if (!syncTimes.length) return formatFreshnessLabel(entries.map((entry) => entry.date));
+    const synced = new Date(Math.max(...syncTimes));
+    const localDate = `${synced.getFullYear()}-${String(synced.getMonth() + 1).padStart(2, '0')}-${String(synced.getDate()).padStart(2, '0')}`;
+    return `${formatShortDate(localDate)} · ${synced.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  }, [entries]);
 
   // Build chart data
   const readinessData   = useMemo(() => buildWellnessChartData(entries, 'readinessScore',       range, aggregation, today), [entries, range, aggregation, today]);
@@ -1761,16 +1784,20 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
 
   return (
     <div className={embedded ? 'strava-subview' : 'strava-view'}>
-      {freshness && <p className="strava-freshness">{freshness}</p>}
-      <div className="progress-toggle-group">
-        <button
-          type="button"
-          className={`progress-toggle${showAverages ? ' active' : ''}`}
-          aria-pressed={showAverages}
-          onClick={() => setShowAverages((shown) => !shown)}
-        >
-          Show averages
-        </button>
+      <div className="wellness-sync-row">
+        {freshness && <p className="strava-freshness">{freshness}</p>}
+        <label className="wellness-average-toggle">
+          Averages
+          <input
+            type="checkbox"
+            role="switch"
+            className="settings-toggle-input"
+            aria-label="Show averages"
+            checked={showAverages}
+            onChange={(event) => setShowAverages(event.target.checked)}
+          />
+          <span className="settings-toggle-switch" aria-hidden="true" />
+        </label>
       </div>
 
       {/* Section: Training */}
@@ -1803,6 +1830,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={LOAD_RATIO_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
         formatValue={formatWellnessRatio}
+        formatAverageValue={formatWellnessRatio}
         renderAsDots
       />
       {loadFocusData.map((data) => {
@@ -1948,6 +1976,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('hrvWeeklyAvg')}
         rangeLabel="baseline"
         colorFn={(_, __, ___, key) => key ? hrvStatusColor(key) : ACCENT}
+        averageColorFn={(value, min, max) => min !== null && value < min ? RED : max !== null && value > max ? YELLOW : GREEN}
         domain={hrvDomain}
       />
       <WellnessBarChart
@@ -2011,6 +2040,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('sleepDurationSec')}
         legendItems={sleepHoursGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? sleepGoalColor(v, sleepHoursGoal) : GRAY}
+        averageColorFn={(value) => goalColor(value, sleepHoursGoal, 'day', GRAY)}
       />
       <WellnessBarChart
         label={WELLNESS_METRIC_LABELS.sleepScore}
@@ -2038,6 +2068,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('steps')}
         legendItems={stepsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? goalColor(v, stepsGoal, aggregation, ACCENT) : GRAY}
+        averageColorFn={(value) => goalColor(value, stepsGoal, aggregation, GRAY)}
         domain={stepsDomain}
       />
       <WellnessBarChart
@@ -2049,6 +2080,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('floors')}
         legendItems={floorsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v) => v !== null ? goalColor(v, floorsGoal, aggregation, ACCENT) : GRAY}
+        averageColorFn={(value) => goalColor(value, floorsGoal, aggregation, GRAY)}
         domain={floorsDomain}
       />
       <WellnessBarChart
@@ -2060,6 +2092,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         formatValue={numFmt('intensityMinModerate')}
         legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
         colorFn={(v, key) => goalColorFromKey(key, v !== null ? ACCENT : GRAY)}
+        averageColorFn={(value) => goalColor(value, weeklyIntensityMinGoal / 7, aggregation, GRAY)}
         domain={intensityDomain}
       />
       <WellnessStackedCaloriesChart

@@ -487,6 +487,8 @@ export type AppNumericSettingKey =
 export interface GarminWellnessEntry {
 	/** ISO date string (YYYY-MM-DD). */
 	date: string;
+	/** Sync timestamp from the containing Firestore year bucket, when available. */
+	syncedAt?: string;
 
 	// HRV
 	/** Rolling 5-day weekly HRV average, in ms. */

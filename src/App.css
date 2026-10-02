@@ -4009,6 +4009,51 @@ body {
 	stroke-dasharray: 6 4;
 }
 
+.wellness-average-label {
+	font-size: 0.8rem;
+	margin-left: 0.5rem;
+}
+
+.wellness-sync-row {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	margin-bottom: 8px;
+}
+
+.wellness-sync-row .strava-freshness {
+	margin: 0;
+}
+
+.wellness-average-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	margin-left: auto;
+	color: var(--color-text-muted);
+	font-size: 0.75rem;
+	cursor: pointer;
+}
+
+.wellness-average-toggle .settings-toggle-switch {
+	width: 32px;
+	height: 18px;
+}
+
+.wellness-average-toggle .settings-toggle-switch::after {
+	width: 14px;
+	height: 14px;
+}
+
+.wellness-average-toggle .settings-toggle-input:checked + .settings-toggle-switch::after {
+	transform: translateX(14px);
+}
+
+.wellness-average-toggle .settings-toggle-input:focus-visible + .settings-toggle-switch {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 3px;
+}
+
 .strava-week-boundary-line {
 	stroke: rgba(255, 255, 255, 0.12);
 	stroke-width: 1;

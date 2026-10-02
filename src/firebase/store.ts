@@ -198,24 +198,32 @@ async function readYearBucketCollection<T extends DatedEntry>(
 	name: CollectionName,
 	scope: YearBucketReadScope = 'all',
 	source: FirestoreReadSource = 'cacheFirst',
+	mapEntry?: (entry: T, bucketData: DocumentData) => T,
 ): Promise<T[]> {
 	const collectionRef = userCollection(uid, name)
 	const currentYear = String(new Date().getFullYear())
 	const cacheKey = hydrationKey(uid, name, scope)
 	let buckets: StoredYearBucket<T>[]
+	const decodeBucket = (data: DocumentData): StoredYearBucket<T> => {
+		const bucket = cleanValue<StoredYearBucket<T>>(data)
+		return mapEntry
+			? { ...bucket, entries: bucket.entries.map((entry) => mapEntry(entry, data)) }
+			: bucket
+	}
 	if (scope === 'currentYear') {
 		const snapshot = await readDocument(doc(collectionRef, currentYear), source, cacheKey)
 		buckets = snapshot.exists()
-			? [cleanValue<StoredYearBucket<T>>(snapshot.data())]
+			? [decodeBucket(snapshot.data())]
 			: []
 	} else if (scope === 'otherYears') {
 		const [past, future] = await Promise.all([
 			readQuery(query(collectionRef, where(documentId(), '<', currentYear)), source, `${cacheKey}:past`),
 			readQuery(query(collectionRef, where(documentId(), '>', currentYear)), source, `${cacheKey}:future`),
 		])
-		buckets = [...past.docs, ...future.docs].map((item) => clean<StoredYearBucket<T>>(item))
+		buckets = [...past.docs, ...future.docs].map((item) => decodeBucket(item.data()))
 	} else {
-		buckets = await readCollection<StoredYearBucket<T>>(uid, name, source, cacheKey)
+		const snapshot = await readQuery(collectionRef, source, cacheKey)
+		buckets = snapshot.docs.map((item) => decodeBucket(item.data()))
 	}
 	return flattenYearBuckets(buckets)
 }
@@ -1008,7 +1016,10 @@ export function readGarminWellnessEntries(
 	scope: YearBucketReadScope = 'all',
 	source: FirestoreReadSource = 'cacheFirst',
 ): Promise<GarminWellnessEntry[]> {
-	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness', scope, source)
+	return readYearBucketCollection<GarminWellnessEntry>(uid, 'garminWellness', scope, source,
+		(entry, bucket) => typeof bucket.updatedAt === 'string'
+			? { ...entry, syncedAt: bucket.updatedAt }
+			: entry)
 }
 
 export function writeGarminWellnessEntries(uid: string, items: GarminWellnessEntry[]): Promise<void> {
