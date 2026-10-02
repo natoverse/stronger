@@ -2,6 +2,7 @@ import { createElement, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { GarminWellnessEntry } from '../../model/types.js';
+import { formatShortDate } from '../../model/freshness.js';
 import {
   GarminWellnessView,
   TRAINING_STATUS_LEGEND_ITEMS,
@@ -185,7 +186,17 @@ describe('GarminWellnessView', () => {
     expect(line('Steps')).toContain('style="stroke:rgba(255,255,255,0.25)"');
     expect(line('Low Aerobic Load')).toContain('style="stroke:rgba(255,255,255,0.25)"');
     expect(chartCard(markup, 'Stress')).toContain('>Avg 26</span>');
-    expect(chartCard(markup, 'Load Ratio')).toContain('>Avg 1.00</span>');
+    expect(chartCard(markup, 'Load Ratio')).toContain('>Avg 1</span>');
+  });
+
+  it('retains rounded fractional precision in the load-ratio average header', () => {
+    const markup = renderWithAverages('day', [
+      { ...averageEntry, trainingAcuteLoad: 100, trainingChronicLoad: 100 },
+      { ...averageEntry, date: '2025-01-02', trainingAcuteLoad: 75, trainingChronicLoad: 100 },
+    ]);
+    expect(chartCard(markup, 'Load Ratio')).toContain('>Avg 0.88</span>');
+    expect(chartCard(markup, 'Load Ratio').match(/<line[^>]*wellness-average-line[^>]*>/)![0])
+      .toContain('style="stroke:#00e676"');
   });
 
   it('colors goal averages by the mean rather than the latest reading', () => {
@@ -221,7 +232,8 @@ describe('GarminWellnessView', () => {
       { ...entry, syncedAt: 'invalid' },
     ]);
     const localTime = synced.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-    expect(markup).toContain(` · ${localTime}</p>`);
+    const localDate = `${synced.getFullYear()}-${String(synced.getMonth() + 1).padStart(2, '0')}-${String(synced.getDate()).padStart(2, '0')}`;
+    expect(markup).toContain(`${formatShortDate(localDate)} · ${localTime}</p>`);
     expect(markup.indexOf(localTime)).toBeLessThan(markup.indexOf('class="wellness-average-toggle"'));
     expect(render('day', [{ ...entry, syncedAt: 'invalid' }])).toContain('Wednesday, Jan. 1st</p>');
   });

@@ -9,11 +9,11 @@ vi.mock('firebase/firestore', () => ({
 	collection: (parent: { path: string }, name: string) => ({ path: `${parent.path}/${name}` }),
 	doc: (parent: { path: string }, ...parts: string[]) => ({ path: `${parent.path}/${parts.join('/')}` }),
 	documentId: () => '__name__',
-	where: () => ({}),
+	where: (_field: unknown, operator: string) => operator,
 	query: (reference: { path: string }, filter: unknown) => ({ ...reference, filter }),
 	getDocFromServer: async () => ({ exists: () => true, data: () => state.bucket }),
-	getDocsFromServer: async (reference: { filter?: unknown }) => ({
-		docs: reference.filter ? [] : [{ data: () => state.bucket }],
+	getDocsFromServer: async (reference: { filter?: string }) => ({
+		docs: reference.filter === '>' ? [] : [{ data: () => state.bucket }],
 	}),
 }))
 
@@ -29,7 +29,7 @@ describe('wellness sync metadata', () => {
 		}
 	})
 
-	it.each(['all', 'currentYear'] as const)('preserves bucket sync time for %s reads', async (scope) => {
+	it.each(['all', 'currentYear', 'otherYears'] as const)('preserves bucket sync time for %s reads', async (scope) => {
 		const entries = await readGarminWellnessEntries('test-user', scope, 'server')
 		expect(entries).toEqual([{
 			date: `${new Date().getFullYear()}-01-01`,

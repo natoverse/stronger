@@ -564,6 +564,7 @@ interface BarChartProps {
   /** Per-value color function. Falls back to ACCENT. */
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
+  formatAverageValue?: (value: number) => string;
   renderAsDots?: boolean;
   showAverage?: boolean;
   averageColorFn?: (value: number) => string;
@@ -605,7 +606,7 @@ function WellnessAverageLine({ average, color, min, max, yPos, formatValue }: {
   );
 }
 
-function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, averageColorFn, formatValue, renderAsDots = false, showAverage = false, domain = null }: BarChartProps) {
+function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, averageColorFn, formatValue, formatAverageValue = (value) => formatValue(Math.round(value)), renderAsDots = false, showAverage = false, domain = null }: BarChartProps) {
   const n = buckets.length;
   const overflowPatternId = useId();
   if (n === 0) return null;
@@ -658,7 +659,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
   return (
     <div className="strava-chart-card">
       <WellnessChartHeader label={label} summaryLabel={summaryLabel} legendItems={legendItems}
-        averageLabel={average === null ? undefined : formatValue(Math.round(average))} averageColor={averageColor} />
+        averageLabel={average === null ? undefined : formatAverageValue(average)} averageColor={averageColor} />
 
       <div className="strava-chart-container" {...containerHandlers}>
         <svg
@@ -1829,6 +1830,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         legendItems={LOAD_RATIO_LEGEND_ITEMS}
         colorFn={(v) => v !== null ? trainingLoadRatioColor(v) : GRAY}
         formatValue={formatWellnessRatio}
+        formatAverageValue={formatWellnessRatio}
         renderAsDots
       />
       {loadFocusData.map((data) => {
