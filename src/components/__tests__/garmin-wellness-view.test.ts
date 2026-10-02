@@ -1,4 +1,4 @@
-import { createElement } from 'react';
+import { createElement, useState } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { GarminWellnessEntry } from '../../model/types.js';
@@ -32,6 +32,11 @@ import {
 vi.mock('../../hooks/useChartTooltip.js', () => ({
   useChartTooltip: () => ({ activeIndex: 0, svgRef: { current: null }, containerHandlers: {} }),
 }));
+
+vi.mock('react', async (importOriginal) => {
+  const react = await importOriginal<typeof import('react')>();
+  return { ...react, useState: vi.fn(react.useState) };
+});
 
 describe('GarminWellnessView', () => {
   const entry: GarminWellnessEntry = {
@@ -75,6 +80,90 @@ describe('GarminWellnessView', () => {
   };
   const chartCard = (markup: string, title: string) =>
     markup.split('class="strava-chart-card"').find((card) => card.includes(title))!;
+
+  const averageEntry: GarminWellnessEntry = {
+    ...entry,
+    restingHR: 60, sleepDurationSec: 7 * 3600, sleepScore: 80,
+    steps: 1000, floors: 10, avgStress: 20, hrvWeeklyAvg: 50,
+    hrvBaselineMin: 30, hrvBaselineMax: 70,
+    trainingAcuteLoad: 100, trainingChronicLoad: 100,
+    loadFocusAerobicLow: 100, loadFocusAerobicHigh: 200, loadFocusAnaerobic: 50,
+    intensityMinModerate: 10, intensityMinVigorous: 20,
+  };
+  const averageTitles = [
+    'Resting Heart Rate', 'Sleep Duration', 'Sleep Score', 'Steps', 'Floors',
+    'Load Ratio', 'Low Aerobic Load', 'High Aerobic Load', 'Anaerobic Load',
+    'Stress', 'HRV Status', 'Intensity Minutes',
+  ];
+  function renderWithAverages(aggregation: 'day' | 'week' | 'month', entries = [averageEntry], range = '2025') {
+    vi.mocked(useState).mockReturnValueOnce([true, vi.fn()]);
+    return render(aggregation, entries, range);
+  }
+
+  it('defaults average overlays off and exposes a top-level toggle', () => {
+    const markup = render('day', [averageEntry]);
+    expect(markup).toContain('aria-pressed="false">Show averages</button>');
+    expect(markup).not.toContain('wellness-average-line');
+    expect(markup.indexOf('Show averages')).toBeLessThan(markup.indexOf('>Training</h2>'));
+  });
+
+  it.each(['day', 'week', 'month'] as const)('adds averages only to requested charts in %s view', (aggregation) => {
+    const markup = renderWithAverages(aggregation);
+    expect(markup).toContain('aria-pressed="true">Show averages</button>');
+    expect(markup.match(/wellness-average-line/g)).toHaveLength(averageTitles.length);
+    for (const title of averageTitles) {
+      expect(chartCard(markup, title)).toContain('class="strava-goal-line wellness-average-line"');
+    }
+    expect(chartCard(markup, 'Resting Heart Rate')).toContain('aria-label="Average: 60"');
+    expect(chartCard(markup, 'Sleep Duration')).toContain('aria-label="Average: 7h"');
+    expect(chartCard(markup, 'Intensity Minutes')).toContain('aria-label="Average: 30"');
+    expect(chartCard(markup, 'VO₂ Max (Running)')).not.toContain('wellness-average-line');
+    // Existing sleep-schedule averages and HRV baseline references are independent.
+    expect(chartCard(markup, 'Sleep Schedule')).toContain('aria-label="Average start:');
+    expect(chartCard(markup, 'HRV Status')).toContain('<path');
+  });
+
+  it('averages only finite available readings in the selected range, including zero', () => {
+    const entries = [
+      averageEntry,
+      { ...entry, date: '2025-01-02', restingHR: 70, steps: 0 },
+      { ...entry, date: '2025-01-03' },
+      { ...entry, date: '2025-01-04', steps: NaN },
+      { ...averageEntry, date: '2024-01-01', restingHR: 90, steps: 5000 },
+      { ...averageEntry, date: '2026-01-01', restingHR: 100, steps: 9000 },
+    ];
+    const markup = renderWithAverages('day', entries);
+    expect(chartCard(markup, 'Resting Heart Rate')).toContain('aria-label="Average: 65"');
+    expect(chartCard(markup, 'Steps')).toContain('aria-label="Average: 500"');
+    const averageLine = chartCard(markup, 'Steps').match(/<line[^>]*wellness-average-line[^>]*>/)![0];
+    expect(averageLine).not.toContain('NaN');
+    const otherRange = renderWithAverages('day', entries, '2024');
+    expect(chartCard(otherRange, 'Resting Heart Rate')).toContain('aria-label="Average: 90"');
+  });
+
+  it.each(['day', 'week', 'month'] as const)('omits averages for missing %s data', (aggregation) => {
+    const markup = renderWithAverages(aggregation, [{ ...entry, sleepDurationSec: null }]);
+    expect(markup).not.toContain('wellness-average-line');
+  });
+
+  it.each(['day', 'week', 'month'] as const)('averages bucket totals rather than the range total in %s view', (aggregation) => {
+    const markup = renderWithAverages(aggregation, [
+      averageEntry,
+      { ...averageEntry, date: '2025-02-01', steps: 3000, floors: 30,
+        intensityMinModerate: 30, intensityMinVigorous: 60 },
+    ]);
+    expect(chartCard(markup, 'Steps')).toContain('aria-label="Average: 2000"');
+    expect(chartCard(markup, 'Floors')).toContain('aria-label="Average: 20"');
+    expect(chartCard(markup, 'Intensity Minutes')).toContain('aria-label="Average: 60"');
+  });
+
+  it('does not clamp an off-axis average to a misleading value', () => {
+    const markup = renderWithAverages('day', [
+      { ...averageEntry, restingHR: 100 },
+      { ...averageEntry, date: '2025-01-02', restingHR: 50 },
+    ]);
+    expect(chartCard(markup, 'Resting Heart Rate')).not.toContain('wellness-average-line');
+  });
 
   it.each(['day', 'week', 'month'] as const)(
     'shows prior sparse readings only in headers for %s aggregation',
