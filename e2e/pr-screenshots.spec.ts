@@ -134,6 +134,29 @@ test('set starting TM to 90% of 1RM once and preview default work sets', async (
 	await expect(weights).toHaveText(['95 lbs', '95 lbs', '110 lbs', '115 lbs', '135 lbs', '155 lbs'])
 })
 
+test('toggle wellness averages without changing existing reference lines', async ({ page }) => {
+	await page.goto('?mock=1#/garmin')
+	const toggle = page.getByRole('button', { name: 'Show averages', exact: true })
+	const averages = page.locator('.wellness-average-line')
+	const sleepReferences = page.locator('svg[aria-label="Sleep Schedule"] line.strava-goal-line')
+	await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+	await expect(averages).toHaveCount(0)
+	await expect(sleepReferences).toHaveCount(2)
+	await toggle.click()
+	await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+	await expect(averages.first()).toBeAttached()
+	await expect(averages.first()).toHaveCSS('stroke-dasharray', '6px, 4px')
+	for (const aggregation of ['Week', 'Month', 'Day']) {
+		await page.locator('.strava-agg-group').getByRole('button', { name: aggregation, exact: true }).click()
+		await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+		await expect(averages.first()).toBeAttached()
+	}
+	await toggle.click()
+	await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+	await expect(averages).toHaveCount(0)
+	await expect(sleepReferences).toHaveCount(2)
+})
+
 for (const view of views) {
 	test(`capture ${view.name}`, async ({ page }, testInfo) => {
 		await page.goto(`?mock=1#${view.hash}`)

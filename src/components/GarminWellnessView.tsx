@@ -562,6 +562,7 @@ interface BarChartProps {
   colorFn?: (value: number | null, colorKey?: string) => string;
   formatValue: (v: number | null) => string;
   renderAsDots?: boolean;
+  showAverage?: boolean;
   /**
    * Fixed y-axis domain. When set, the axis ignores the data extent: values
    * outside the domain are clamped to the nearest bound, and bars that exceed
@@ -570,12 +571,39 @@ interface BarChartProps {
   domain?: ChartDomain | null;
 }
 
-function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue, renderAsDots = false, domain = null }: BarChartProps) {
+function WellnessAverageLine({ buckets, enabled, min, max, yPos, formatValue }: {
+  buckets: { value: number | null }[];
+  enabled: boolean;
+  min: number;
+  max: number;
+  yPos: (value: number) => number;
+  formatValue: (value: number | null) => string;
+}) {
+  if (!enabled) return null;
+  const values = buckets.map((bucket) => bucket.value)
+    .filter((value): value is number => value !== null && Number.isFinite(value));
+  if (values.length === 0) return null;
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (average < min || average > max) return null;
+  const label = `Average: ${formatValue(average)}`;
+  return (
+    <line
+      x1={CHART_PADDING.left} y1={yPos(average)}
+      x2={VIEW_BOX_W - CHART_PADDING.right} y2={yPos(average)}
+      className="strava-goal-line wellness-average-line"
+      aria-label={label}
+    >
+      <title>{label}</title>
+    </line>
+  );
+}
+
+function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, colorFn, formatValue, renderAsDots = false, showAverage = false, domain = null }: BarChartProps) {
   const n = buckets.length;
   const overflowPatternId = useId();
   if (n === 0) return null;
 
-  const dataMax = Math.max(...buckets.map((b) => b.value ?? 0), 0.001);
+  const dataMax = Math.max(...buckets.map((b) => b.value ?? 0).filter(Number.isFinite), 0.001);
   const yMin = domain ? domain.min : 0;
   const yMax = domain ? Math.max(domain.max, domain.min + 0.001) : dataMax;
   const span = yMax - yMin;
@@ -703,7 +731,7 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
 
           {/* Values */}
           {buckets.map((b, i) => {
-            if (b.value === null) return null;
+            if (b.value === null || !Number.isFinite(b.value)) return null;
             const val = b.value;
             const fill = colorFn ? colorFn(b.value, b.colorKey) : ACCENT;
             if (renderAsDots) {
@@ -735,6 +763,10 @@ function WellnessBarChart({ label, unit, buckets, summaryLabel, legendItems, col
           })}
 
           {/* Cumulative weekly-total overlay line (day aggregation only) */}
+          <WellnessAverageLine
+            buckets={buckets} enabled={showAverage}
+            min={yMin} max={yMax} yPos={yBar} formatValue={formatValue}
+          />
           {cumulativePath && <path d={cumulativePath} className="wellness-cumulative-line" fill="none" />}
           {hasCumulative && buckets.map((b, i) => (
             b.cumulative === undefined || b.cumulative === null ? null : (
@@ -1122,6 +1154,7 @@ interface LoadFocusChartProps {
   colorFn?: (value: number | null, min: number | null, max: number | null, colorKey?: string) => string;
   /** Fixed y-axis domain. When set, values outside it are clamped to the bounds. */
   domain?: ChartDomain | null;
+  showAverage?: boolean;
 }
 
 function WellnessLoadFocusChart({
@@ -1133,13 +1166,14 @@ function WellnessLoadFocusChart({
   rangeLabel = 'optimal',
   colorFn = loadFocusColor,
   domain = null,
+  showAverage = false,
 }: LoadFocusChartProps) {
   const n = buckets.length;
   if (n === 0) return null;
 
   // Y domain spans 0 → max of every value/min/max so dots and band both fit,
   // unless an explicit domain is supplied.
-  const domainValues = buckets.flatMap((b) => [b.value, b.min, b.max]).filter((v): v is number => v !== null);
+  const domainValues = buckets.flatMap((b) => [b.value, b.min, b.max]).filter((v): v is number => v !== null && Number.isFinite(v));
   const autoMax = domainValues.length > 0 ? Math.max(...domainValues, 0.001) : 0.001;
   const yMin = domain ? domain.min : 0;
   const maxBar = domain ? Math.max(domain.max, domain.min + 0.001) : autoMax;
@@ -1239,7 +1273,7 @@ function WellnessLoadFocusChart({
 
           {/* Daily load dots */}
           {buckets.map((b, i) => {
-            if (b.value === null) return null;
+            if (b.value === null || !Number.isFinite(b.value)) return null;
             return (
               <circle
                 key={`dot-${i}`}
@@ -1253,6 +1287,10 @@ function WellnessLoadFocusChart({
           })}
 
           {/* Dynamic min/max reference lines — trace per-bucket optimal range */}
+          <WellnessAverageLine
+            buckets={buckets} enabled={showAverage}
+            min={yMin} max={maxBar} yPos={yBar} formatValue={formatValue}
+          />
           {(['min', 'max'] as const).map((key) => {
             const cmds: string[] = [];
             let lastWasNull = true;
@@ -1598,6 +1636,7 @@ interface Props {
 }
 
 export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, sleepHoursGoal = 0, weeklyIntensityMinGoal = 0 }: Props) {
+  const [showAverages, setShowAverages] = useState(false);
   const today = useMemo(() => new Date(), []);
 
   const freshness = useMemo(
@@ -1723,6 +1762,16 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
   return (
     <div className={embedded ? 'strava-subview' : 'strava-view'}>
       {freshness && <p className="strava-freshness">{freshness}</p>}
+      <div className="progress-toggle-group">
+        <button
+          type="button"
+          className={`progress-toggle${showAverages ? ' active' : ''}`}
+          aria-pressed={showAverages}
+          onClick={() => setShowAverages((shown) => !shown)}
+        >
+          Show averages
+        </button>
+      </div>
 
       {/* Section: Training */}
       <h2 className="strava-section-title">Training</h2>
@@ -1744,6 +1793,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label="Load Ratio"
         unit=""
         buckets={trainingLoadRatioData.buckets}
+        showAverage={showAverages}
         summaryLabel={withLegendLabel(
           formatWellnessRatio(summaryValue(trainingLoadRatioData)),
           aggregation === 'day' && summaryValue(trainingLoadRatioData) !== null
@@ -1766,6 +1816,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
             key={data.area}
             label={LOAD_FOCUS_AREA_LABELS[data.area]}
             buckets={data.buckets}
+            showAverage={showAverages}
             summaryLabel={withLegendLabel(loadStr, rangeStr || null)}
             legendItems={LOAD_FOCUS_LEGEND_ITEMS}
             formatValue={loadFocusFmt}
@@ -1872,6 +1923,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.avgStress}
         unit={WELLNESS_METRIC_UNITS.avgStress}
         buckets={stressData.buckets}
+        showAverage={showAverages}
         summaryLabel={withLegendLabel(
           summaryStr(summaryValue(stressData), 'avgStress', WELLNESS_METRIC_UNITS.avgStress),
           aggregation === 'day' && summaryValue(stressData) !== null ? stressLegendLabel(summaryValue(stressData)!) : null,
@@ -1884,6 +1936,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
       <WellnessLoadFocusChart
         label="HRV Status"
         buckets={hrvData.buckets}
+        showAverage={showAverages}
         summaryLabel={withLegendLabel(
           summaryStr(summaryValue(hrvData), 'hrvWeeklyAvg', WELLNESS_METRIC_UNITS.hrvWeeklyAvg),
           [
@@ -1901,6 +1954,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.restingHR}
         unit={WELLNESS_METRIC_UNITS.restingHR}
         buckets={rhrData.buckets}
+        showAverage={showAverages}
         summaryLabel={summaryStr(summaryValue(rhrData), 'restingHR', WELLNESS_METRIC_UNITS.restingHR)}
         formatValue={numFmt('restingHR')}
         renderAsDots
@@ -1952,6 +2006,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.sleepDurationSec}
         unit={WELLNESS_METRIC_UNITS.sleepDurationSec}
         buckets={sleepDurData.buckets}
+        showAverage={showAverages}
         summaryLabel={summaryStr(summaryValue(sleepDurData), 'sleepDurationSec', WELLNESS_METRIC_UNITS.sleepDurationSec)}
         formatValue={numFmt('sleepDurationSec')}
         legendItems={sleepHoursGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
@@ -1961,6 +2016,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.sleepScore}
         unit={WELLNESS_METRIC_UNITS.sleepScore}
         buckets={sleepScoreData.buckets}
+        showAverage={showAverages}
         summaryLabel={withLegendLabel(
           summaryStr(summaryValue(sleepScoreData), 'sleepScore', ''),
           aggregation === 'day' && summaryValue(sleepScoreData) !== null ? sleepScoreLegendLabel(summaryValue(sleepScoreData)!) : null,
@@ -1977,6 +2033,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.steps}
         unit={WELLNESS_METRIC_UNITS.steps}
         buckets={stepsData.buckets}
+        showAverage={showAverages}
         summaryLabel={goalSummaryLabel(summaryValue(stepsData), stepsGoal, aggregation, 'steps', '')}
         formatValue={numFmt('steps')}
         legendItems={stepsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
@@ -1987,6 +2044,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label={WELLNESS_METRIC_LABELS.floors}
         unit={WELLNESS_METRIC_UNITS.floors}
         buckets={floorsData.buckets}
+        showAverage={showAverages}
         summaryLabel={goalSummaryLabel(summaryValue(floorsData), floorsGoal, aggregation, 'floors', '')}
         formatValue={numFmt('floors')}
         legendItems={floorsGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
@@ -1997,6 +2055,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
         label="Intensity Minutes"
         unit={WELLNESS_METRIC_UNITS.intensityMinModerate}
         buckets={intensityData.buckets}
+        showAverage={showAverages}
         summaryLabel={intensityGoalSummaryLabel(summaryValue(intensityData), intensityWeekTotal, weeklyIntensityMinGoal)}
         formatValue={numFmt('intensityMinModerate')}
         legendItems={weeklyIntensityMinGoal > 0 ? GOAL_COLOR_LEGEND_ITEMS : undefined}
