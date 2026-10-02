@@ -102,14 +102,17 @@ describe('GarminWellnessView', () => {
 
   it('defaults average overlays off and exposes a top-level toggle', () => {
     const markup = render('day', [averageEntry]);
-    expect(markup).toContain('aria-pressed="false">Show averages</button>');
+    expect(markup).toContain('role="switch"');
+    expect(markup).toContain('aria-label="Show averages"');
+    expect(markup).not.toContain('checked=""');
+    expect(markup).toContain('class="wellness-sync-row"');
     expect(markup).not.toContain('wellness-average-line');
     expect(markup.indexOf('Show averages')).toBeLessThan(markup.indexOf('>Training</h2>'));
   });
 
   it.each(['day', 'week', 'month'] as const)('adds averages only to requested charts in %s view', (aggregation) => {
     const markup = renderWithAverages(aggregation);
-    expect(markup).toContain('aria-pressed="true">Show averages</button>');
+    expect(markup).toContain('aria-label="Show averages" checked=""');
     expect(markup.match(/wellness-average-line/g)).toHaveLength(averageTitles.length);
     for (const title of averageTitles) {
       expect(chartCard(markup, title)).toContain('class="strava-goal-line wellness-average-line"');
@@ -117,6 +120,9 @@ describe('GarminWellnessView', () => {
     expect(chartCard(markup, 'Resting Heart Rate')).toContain('aria-label="Average: 60"');
     expect(chartCard(markup, 'Sleep Duration')).toContain('aria-label="Average: 7h"');
     expect(chartCard(markup, 'Intensity Minutes')).toContain('aria-label="Average: 30"');
+    for (const title of averageTitles) {
+      expect(chartCard(markup, title)).toContain('class="wellness-average-label"');
+    }
     expect(chartCard(markup, 'VO₂ Max (Running)')).not.toContain('wellness-average-line');
     // Existing sleep-schedule averages and HRV baseline references are independent.
     expect(chartCard(markup, 'Sleep Schedule')).toContain('aria-label="Average start:');
@@ -144,6 +150,7 @@ describe('GarminWellnessView', () => {
   it.each(['day', 'week', 'month'] as const)('omits averages for missing %s data', (aggregation) => {
     const markup = renderWithAverages(aggregation, [{ ...entry, sleepDurationSec: null }]);
     expect(markup).not.toContain('wellness-average-line');
+    expect(markup).not.toContain('class="wellness-average-label"');
   });
 
   it.each(['day', 'week', 'month'] as const)('averages bucket totals rather than the range total in %s view', (aggregation) => {
@@ -163,6 +170,60 @@ describe('GarminWellnessView', () => {
       { ...averageEntry, date: '2025-01-02', restingHR: 50 },
     ]);
     expect(chartCard(markup, 'Resting Heart Rate')).not.toContain('wellness-average-line');
+    expect(chartCard(markup, 'Resting Heart Rate')).toContain('>Avg 75</span>');
+  });
+
+  it('colors threshold averages using the unrounded mean and falls back to gray', () => {
+    const markup = renderWithAverages('day', [
+      { ...averageEntry, avgStress: 25, sleepScore: 50 },
+      { ...averageEntry, date: '2025-01-02', avgStress: 26, sleepScore: 100 },
+    ]);
+    const line = (title: string) => chartCard(markup, title).match(/<line[^>]*wellness-average-line[^>]*>/)![0];
+    expect(line('Stress')).toContain('style="stroke:#2196f3"');
+    expect(line('Load Ratio')).toContain('style="stroke:#00e676"');
+    expect(line('Resting Heart Rate')).toContain('style="stroke:rgba(255,255,255,0.25)"');
+    expect(line('Steps')).toContain('style="stroke:rgba(255,255,255,0.25)"');
+    expect(line('Low Aerobic Load')).toContain('style="stroke:rgba(255,255,255,0.25)"');
+    expect(chartCard(markup, 'Stress')).toContain('>Avg 26</span>');
+    expect(chartCard(markup, 'Load Ratio')).toContain('>Avg 1.00</span>');
+  });
+
+  it('colors goal averages by the mean rather than the latest reading', () => {
+    vi.mocked(useState).mockReturnValueOnce([true, vi.fn()]);
+    const markup = renderToStaticMarkup(createElement(GarminWellnessView, {
+      entries: [averageEntry, { ...averageEntry, date: '2025-01-02', steps: 3000, sleepDurationSec: 9 * 3600 }],
+      range: '2025', aggregation: 'day', stepsGoal: 2000, sleepHoursGoal: 8, weeklyIntensityMinGoal: 210,
+    }));
+    for (const title of ['Steps', 'Sleep Duration', 'Intensity Minutes']) {
+      const line = chartCard(markup, title).match(/<line[^>]*wellness-average-line[^>]*>/)![0];
+      expect(line).toContain('style="stroke:#00e676"');
+    }
+  });
+
+  it('compares load-focus and HRV averages with available mean range boundaries', () => {
+    const markup = renderWithAverages('day', [
+      { ...averageEntry, loadFocusAerobicLowMin: 50, loadFocusAerobicLowMax: 150, hrvWeeklyAvg: 20 },
+      { ...averageEntry, date: '2025-01-02', loadFocusAerobicLow: 200,
+        loadFocusAerobicLowMin: 150, loadFocusAerobicLowMax: 250, hrvWeeklyAvg: 40 },
+    ]);
+    expect(chartCard(markup, 'Low Aerobic Load').match(/<line[^>]*wellness-average-line[^>]*>/)![0])
+      .toContain('style="stroke:#00e676"');
+    expect(chartCard(markup, 'HRV Status').match(/<line[^>]*wellness-average-line[^>]*>/)![0])
+      .toContain('style="stroke:#00e676"');
+  });
+
+  it('shows the latest actual sync date and local time, falling back for legacy timestamps', () => {
+    const timestamp = '2025-01-03T01:45:00Z';
+    const synced = new Date(timestamp);
+    const markup = render('day', [
+      { ...entry, syncedAt: timestamp },
+      { ...entry, date: '2025-01-02', syncedAt: '2025-01-02T01:45:00Z' },
+      { ...entry, syncedAt: 'invalid' },
+    ]);
+    const localTime = synced.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    expect(markup).toContain(` · ${localTime}</p>`);
+    expect(markup.indexOf(localTime)).toBeLessThan(markup.indexOf('class="wellness-average-toggle"'));
+    expect(render('day', [{ ...entry, syncedAt: 'invalid' }])).toContain('Wednesday, Jan. 1st</p>');
   });
 
   it.each(['day', 'week', 'month'] as const)(
