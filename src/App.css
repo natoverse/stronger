@@ -566,10 +566,14 @@ body {
 	background: var(--color-surface);
 }
 
-.btn-discard-workout {
-	display: block;
-	width: 100%;
+.workout-end-actions {
+	display: flex;
+	gap: 0.5rem;
 	margin-top: 1.5rem;
+}
+
+.workout-end-actions > button {
+	flex: 1;
 }
 
 .exercise-picker-overlay {

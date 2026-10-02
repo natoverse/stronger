@@ -52,7 +52,7 @@ import { trackMutation } from '../offline.ts'
 import { clearDraft, loadDraft, saveDraft } from '../../hooks/useWorkoutDraft.ts'
 import {
 	finishCycleSession, flattenWorkoutSessions, groupWorkoutSessionRows, readCycleDrafts,
-	readCycleProgress, writeCycleDraftResults, writeCycleStart, updateLogRows, deleteLogSession,
+	readCycleProgress, writeCycleDraftResults, writeCycleStart, resetCycleSessionDraft, updateLogRows, deleteLogSession,
 } from '../store.ts'
 
 const config: LiftConfig = {
@@ -172,6 +172,21 @@ describe('cycle storage', () => {
 		await writeCycleStart('alice', snapshot)
 		expect((state.commits[0][0].data as CycleProgress).revision).toBe(3)
 		expect((state.commits[0][1].data as CycleSessionSnapshot).progress).toEqual(snapshot.progress)
+	})
+
+	it('atomically replaces the active draft and progress when resetting without logging a session', async () => {
+		const old = makeSnapshot()
+		const replacement = { ...makeSnapshot(), id: 'session-2', progress: { ...old.progress, revision: 2 } }
+		await resetCycleSessionDraft('alice', old, { ...replacement, startTime: 'new-start' })
+		expect(state.commits[0]).toEqual([
+			{ type: 'set', path: '/users/alice/cycleProgress/531', data: replacement.progress },
+			{ type: 'set', path: '/users/alice/workoutDrafts/531', data: { ...replacement, startTime: 'new-start' } },
+		])
+		expect(trackMutation).toHaveBeenCalledWith('alice', 'cycleReset:session-2', expect.any(Function), expect.objectContaining({
+			supersedes: ['cycleStart:session-1', 'cycleDraft:session-1'],
+		}))
+		await expect(resetCycleSessionDraft('alice', old, { ...replacement, progress: old.progress })).rejects.toThrow('revision once')
+		expect(state.commits).toHaveLength(1)
 	})
 
 	it('preserves occurrence, exercise stage, and each planned template through row grouping', () => {
