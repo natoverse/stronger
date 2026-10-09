@@ -150,6 +150,17 @@ describe('GarminWellnessView', () => {
     expect(summaryCard(markup, 'VO₂ Max')).toContain('style="color:#00e676">45.0</p>');
   });
 
+  it('includes older readings when All is selected', () => {
+    const markup = render('day', [
+      { ...averageEntry, date: '2020-01-01', hrvStatus: 'BALANCED', vo2Max: 45 },
+      { ...entry, date: '2099-01-01', restingHR: 90 },
+    ], 'all');
+    expect(summaryCard(markup, 'HRV Status')).toContain('style="color:#00e676">50</p>');
+    expect(summaryCard(markup, 'Resting Heart Rate')).toContain('>60</p>');
+    expect(summaryCard(markup, 'VO₂ Max')).toContain('>45.0</p>');
+    expect(summaryCard(markup, 'Sleep Score')).toContain('>80</p>');
+  });
+
   const averageTitles = [
     'Resting Heart Rate', 'Sleep Duration', 'Sleep Score', 'Steps', 'Floors',
     'Load Ratio', 'Low Aerobic Load', 'High Aerobic Load', 'Anaerobic Load',

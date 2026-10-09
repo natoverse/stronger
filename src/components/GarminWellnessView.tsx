@@ -1665,7 +1665,7 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
     const end = getRangeEnd(range, today);
     const recentEntries = entries.filter(({ date }) => {
       const day = new Date(`${date}T00:00:00`);
-      return day >= start && day <= end;
+      return (range === 'all' || day >= start) && day <= end;
     }).sort((a, b) => b.date.localeCompare(a.date));
     return ([
       { metric: 'hrvWeeklyAvg', label: 'HRV Status', color: (_value: number, entry?: GarminWellnessEntry) => hrvStatusColor(entry?.hrvStatus ?? '') },
