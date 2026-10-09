@@ -3839,8 +3839,7 @@ body {
 	grid-template-rows: repeat(2, 1fr);
 	gap: 8px;
 	aspect-ratio: 400 / 180;
-	min-height: 180px;
-	margin-bottom: 16px;
+	margin: 0 13px 16px;
 }
 
 .wellness-summary-card {
