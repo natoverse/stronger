@@ -12,6 +12,8 @@ import type { WellnessAggregation, WellnessTimeRange, WellnessBucket, WellnessSt
 import {
   buildWellnessChartData,
   getWellnessHeaderFallback,
+  getRangeStart,
+  getRangeEnd,
   buildTrainingLoadRatioChartData,
   buildStatusChartData,
   buildIntensityMinCombinedChartData,
@@ -1658,6 +1660,24 @@ interface Props {
 export function GarminWellnessView({ entries, range, aggregation, embedded = false, stepsGoal = 0, floorsGoal = 0, sleepHoursGoal = 0, weeklyIntensityMinGoal = 0 }: Props) {
   const [showAverages, setShowAverages] = useState(false);
   const today = useMemo(() => new Date(), []);
+  const summaryCards = useMemo(() => {
+    const start = getRangeStart(range, today);
+    const end = getRangeEnd(range, today);
+    const recentEntries = entries.filter(({ date }) => {
+      const day = new Date(`${date}T00:00:00`);
+      return day >= start && day <= end;
+    }).sort((a, b) => b.date.localeCompare(a.date));
+    return ([
+      { metric: 'hrvWeeklyAvg', label: 'HRV Status', color: (_value: number, entry?: GarminWellnessEntry) => hrvStatusColor(entry?.hrvStatus ?? '') },
+      { metric: 'restingHR', label: 'Resting Heart Rate', color: () => ACCENT },
+      { metric: 'vo2Max', label: 'VO₂ Max', color: vo2MaxColor },
+      { metric: 'sleepScore', label: 'Sleep Score', color: sleepScoreColor },
+    ] as const).map(({ metric, label, color }) => {
+      const entry = recentEntries.find((entry) => typeof entry[metric] === 'number' && Number.isFinite(entry[metric]));
+      const value = entry?.[metric] ?? getWellnessHeaderFallback(entries, metric, range, today);
+      return { label, value: formatWellnessValue(value, metric), color: value === null ? GRAY : color(value, entry) };
+    });
+  }, [entries, range, today]);
 
   const freshness = useMemo(() => {
     const syncTimes = entries.map((entry) => Date.parse(entry.syncedAt ?? '')).filter(Number.isFinite);
@@ -1799,6 +1819,15 @@ export function GarminWellnessView({ entries, range, aggregation, embedded = fal
           <span className="settings-toggle-switch" aria-hidden="true" />
         </label>
       </div>
+
+      <section className="wellness-summary-grid" aria-label="Latest wellness metrics">
+        {summaryCards.map(({ label, value, color }) => (
+          <article key={label} className="wellness-summary-card">
+            <h2 className="wellness-summary-label">{label}</h2>
+            <p className="wellness-summary-value" style={{ color }}>{value}</p>
+          </article>
+        ))}
+      </section>
 
       {/* Section: Training */}
       <h2 className="strava-section-title">Training</h2>

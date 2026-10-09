@@ -80,7 +80,7 @@ describe('GarminWellnessView', () => {
     restingHR: 60,
   };
   const chartCard = (markup: string, title: string) =>
-    markup.split('class="strava-chart-card"').find((card) => card.includes(title))!;
+    markup.split('class="strava-chart-card"').slice(1).find((card) => card.includes(title))!;
 
   const averageEntry: GarminWellnessEntry = {
     ...entry,
@@ -91,6 +91,65 @@ describe('GarminWellnessView', () => {
     loadFocusAerobicLow: 100, loadFocusAerobicHigh: 200, loadFocusAnaerobic: 50,
     intensityMinModerate: 10, intensityMinVigorous: 20,
   };
+  const summaryGrid = (markup: string) =>
+    markup.split('<section class="wellness-summary-grid"')[1].split('</section>')[0];
+  const summaryCard = (markup: string, title: string) =>
+    summaryGrid(markup).split('<article').find((card) => card.includes(`>${title}</h2>`))!;
+
+  it('places four numeric summary cards above Training without replacing charts', () => {
+    const markup = render('day', [{ ...averageEntry, hrvStatus: 'BALANCED', vo2Max: 48.2 }]);
+    expect(summaryGrid(markup).match(/class="wellness-summary-card"/g)).toHaveLength(4);
+    expect(markup.indexOf('wellness-summary-grid')).toBeLessThan(markup.indexOf('>Training</h2>'));
+    expect(summaryCard(markup, 'HRV Status')).toContain('style="color:#00e676">50</p>');
+    expect(summaryCard(markup, 'Resting Heart Rate')).toContain('style="color:#ff2d7b">60</p>');
+    expect(summaryCard(markup, 'VO₂ Max')).toContain('style="color:#2196f3">48.2</p>');
+    expect(summaryCard(markup, 'Sleep Score')).toContain('style="color:#00e676">80</p>');
+    expect(summaryGrid(markup)).not.toMatch(/<svg|bpm|mL\/kg\/min|Balanced/);
+    expect(chartCard(markup, 'HRV Status')).toContain('<svg');
+  });
+
+  it.each(['day', 'week', 'month'] as const)('uses latest individual readings rather than %s averages', (aggregation) => {
+    const markup = render(aggregation, [
+      { ...averageEntry, date: '2025-01-03', hrvWeeklyAvg: null, restingHR: 55, vo2Max: null, sleepScore: null },
+      { ...averageEntry, date: '2025-01-02', hrvWeeklyAvg: 45, hrvStatus: 'LOW', vo2Max: 40, sleepScore: 70 },
+      { ...averageEntry, hrvStatus: 'BALANCED', vo2Max: 48 },
+      { ...averageEntry, date: '2024-12-31', restingHR: 90, hrvWeeklyAvg: 90, sleepScore: 95 },
+    ]);
+    expect(summaryCard(markup, 'HRV Status')).toContain('style="color:#ff1744">45</p>');
+    expect(summaryCard(markup, 'Resting Heart Rate')).toContain('>55</p>');
+    expect(summaryCard(markup, 'VO₂ Max')).toContain('style="color:#ffab40">40.0</p>');
+    expect(summaryCard(markup, 'Sleep Score')).toContain('style="color:#ffab40">70</p>');
+  });
+
+  it('keeps the HRV color paired with its reading, not an older status', () => {
+    const markup = render('day', [
+      { ...averageEntry, hrvStatus: 'LOW' },
+      { ...averageEntry, date: '2025-01-02', hrvWeeklyAvg: 60, hrvStatus: '' },
+      { ...entry, date: '2025-01-03', hrvStatus: 'BALANCED' },
+    ]);
+    expect(summaryCard(markup, 'HRV Status')).toContain('style="color:#ff2d7b">60</p>');
+  });
+
+  it('shows missing readings as gray dashes and ignores nonfinite and future readings', () => {
+    const markup = render('day', [
+      entry,
+      { ...entry, date: '2025-01-02', hrvWeeklyAvg: NaN, restingHR: Infinity, vo2Max: NaN, sleepScore: -Infinity },
+      { ...averageEntry, date: '2099-01-01', vo2Max: 50 },
+    ]);
+    expect(summaryGrid(markup).match(/style="color:rgba\(255,255,255,0.25\)">—<\/p>/g)).toHaveLength(4);
+  });
+
+  it('retains zero readings and the sparse VO₂ Max fallback', () => {
+    const markup = render('day', [
+      oldReading,
+      { ...entry, hrvWeeklyAvg: 0, hrvStatus: 'UNBALANCED', restingHR: 0, sleepScore: 0 },
+    ]);
+    expect(summaryCard(markup, 'HRV Status')).toContain('style="color:#ffea00">0</p>');
+    expect(summaryCard(markup, 'Resting Heart Rate')).toContain('>0</p>');
+    expect(summaryCard(markup, 'Sleep Score')).toContain('style="color:#ff1744">0</p>');
+    expect(summaryCard(markup, 'VO₂ Max')).toContain('style="color:#00e676">45.0</p>');
+  });
+
   const averageTitles = [
     'Resting Heart Rate', 'Sleep Duration', 'Sleep Score', 'Steps', 'Floors',
     'Load Ratio', 'Low Aerobic Load', 'High Aerobic Load', 'Anaerobic Load',

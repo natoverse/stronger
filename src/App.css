@@ -3824,12 +3824,48 @@ body {
 }
 
 /* Chart card */
-.strava-chart-card {
+.strava-chart-card,
+.wellness-summary-card {
 	background: var(--color-surface);
 	border: 1px solid rgba(255, 255, 255, 0.08);
 	border-radius: var(--radius);
 	padding: 12px;
 	margin-bottom: 16px;
+}
+
+.wellness-summary-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	grid-template-rows: repeat(2, 1fr);
+	gap: 8px;
+	aspect-ratio: 400 / 180;
+	min-height: 180px;
+	margin-bottom: 16px;
+}
+
+.wellness-summary-card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 0;
+	padding: 8px;
+	text-align: center;
+}
+
+.wellness-summary-label {
+	color: var(--color-text-muted);
+	font-size: 0.8rem;
+	font-weight: 500;
+	margin: 0 0 4px;
+}
+
+.wellness-summary-value {
+	font-size: 2rem;
+	font-weight: 700;
+	line-height: 1;
+	font-variant-numeric: tabular-nums;
+	margin: 0;
 }
 
 .strava-chart-header {
