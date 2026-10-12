@@ -4178,7 +4178,7 @@ body {
 
 .activity-list-averages {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+	grid-template-columns: repeat(4, minmax(0, 1fr));
 	gap: 0.75rem;
 	margin: 0 0 0.75rem;
 	padding: 0.75rem 0.85rem;
@@ -4197,6 +4197,12 @@ body {
 	font-size: 0.95rem;
 	font-weight: 600;
 	color: var(--color-text);
+}
+
+@media (max-width: 480px) {
+	.activity-list-averages {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
 }
 
 .activity-list-controls {
