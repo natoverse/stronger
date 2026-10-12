@@ -4176,6 +4176,35 @@ body {
 	margin-top: 1rem;
 }
 
+.activity-list-averages {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 0.75rem;
+	margin: 0 0 0.75rem;
+	padding: 0.75rem 0.85rem;
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius);
+}
+
+.activity-list-averages dt {
+	font-size: 0.78rem;
+	color: var(--color-text-muted);
+}
+
+.activity-list-averages dd {
+	margin: 0.25rem 0 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+	color: var(--color-text);
+}
+
+@media (max-width: 480px) {
+	.activity-list-averages {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
 .activity-list-controls {
 	display: flex;
 	align-items: center;
