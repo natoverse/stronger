@@ -66,6 +66,28 @@ export function formatActivityCount(count: number): string {
   return `${count} activit${count === 1 ? 'y' : 'ies'}`;
 }
 
+export function getActivityAverages(activities: StravaActivity[]) {
+  const average = (metric: 'distance' | 'duration' | 'elevationGain' | 'elevationLoss'): number | null => {
+    let total = 0;
+    let count = 0;
+    for (const activity of activities) {
+      const value = activity[metric];
+      if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+        total += value;
+        count++;
+      }
+    }
+    return count > 0 ? total / count : null;
+  };
+
+  return {
+    distance: average('distance'),
+    duration: average('duration'),
+    elevationGain: average('elevationGain'),
+    elevationLoss: average('elevationLoss'),
+  };
+}
+
 function formatDate(iso: string): string {
   // YYYY-MM-DD → e.g. "Jul 18, 2026"
   const [year, month, day] = iso.split('-').map(Number);
@@ -219,6 +241,7 @@ export function GarminActivitiesListView({ activities, range, selectedTypes, que
   const displayed = useMemo(() => {
     return getDisplayedActivities(activities, range, selectedTypes, query, today);
   }, [activities, range, selectedTypes, query, today]);
+  const averages = useMemo(() => getActivityAverages(displayed), [displayed]);
 
   return (
     <div className="activity-list-view">
@@ -226,6 +249,29 @@ export function GarminActivitiesListView({ activities, range, selectedTypes, que
         Activity Log
         <span className="strava-section-count">{formatActivityCount(displayed.length)}</span>
       </h3>
+
+      <dl
+        className="activity-list-averages"
+        aria-label="Activity averages"
+        title="Average per displayed activity, excluding missing measurements."
+      >
+        <div>
+          <dt>Avg distance</dt>
+          <dd>{averages.distance === null ? '—' : formatDistance(averages.distance) || '0.00mi'}</dd>
+        </div>
+        <div>
+          <dt>Avg time (h:mm)</dt>
+          <dd>{averages.duration === null ? '—' : averages.duration === 0 ? '0:00' : formatDuration(averages.duration)}</dd>
+        </div>
+        <div>
+          <dt>Avg elevation gain</dt>
+          <dd>{averages.elevationGain === null ? '—' : formatElevation(averages.elevationGain) || '0‘'}</dd>
+        </div>
+        <div>
+          <dt>Avg elevation loss</dt>
+          <dd>{averages.elevationLoss === null ? '—' : formatElevation(averages.elevationLoss) || '0‘'}</dd>
+        </div>
+      </dl>
 
       {displayed.length === 0 ? (
         <p className="strava-empty">
