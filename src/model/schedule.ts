@@ -104,9 +104,15 @@ export function formatCycleStage(stage: ExerciseCycleStage): string {
 }
 
 /** One-week cards stay familiar; independently progressing exercises must not imply a global stage. */
-export function workoutCycleLabels(workout: Workout): string[] {
-	if (!workout.exercises.some((exercise) => (exercise.cycleStage?.weekCount ?? 1) > 1)) return [];
-	const stages = workout.exercises.map((exercise) => exercise.cycleStage);
+export function workoutCycleLabels(workout: Workout, completedRows?: ParsedLogRow[]): string[] {
+	const exercises = completedRows
+		? [...new Map(completedRows.map((row) => [
+			row.cycleStage?.exerciseId ?? `${row.liftId}:${row.exerciseName}`,
+			{ name: row.exerciseName, cycleStage: row.cycleStage },
+		])).values()]
+		: workout.exercises;
+	if (!exercises.some((exercise) => (exercise.cycleStage?.weekCount ?? 1) > 1)) return [];
+	const stages = exercises.map((exercise) => exercise.cycleStage);
 	const first = stages[0];
 	if (first && stages.every((stage) => stage
 		&& stage.week === first.week && stage.weekCount === first.weekCount
@@ -115,7 +121,7 @@ export function workoutCycleLabels(workout: Workout): string[] {
 		return [`Week ${first.week}/${first.weekCount}`
 			+ (first.exposureCount > 1 ? ` · Exposure ${first.exposure}/${first.exposureCount}` : '')];
 	}
-	return workout.exercises.map((exercise) => `${exercise.name}: ${exercise.cycleStage
+	return exercises.map((exercise) => `${exercise.name}: ${exercise.cycleStage
 		? `${formatCycleStage(exercise.cycleStage)} · Iteration ${exercise.cycleStage.iteration}`
 		: 'Stage unavailable'}`);
 }

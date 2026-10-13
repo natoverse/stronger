@@ -176,6 +176,69 @@ describe('cycle stage labels and history', () => {
 		expect(markup).toContain('Week 2/4');
 	});
 
+	it('uses logged stages instead of the next prescription on reloaded completed home cards', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(2026, 8, 21, 12));
+		const logged = JSON.parse(JSON.stringify(row({
+			occurrenceId: 'finished', cycleStage: stage({ week: 1 }),
+		}))) as ParsedLogRow;
+		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
+			workouts: [workout],
+			workoutSchedule: [{ date: logged.date, workoutId: workout.id, occurrenceId: 'finished' }],
+			logRows: [logged], onSelect: () => undefined, onViewSession: () => undefined,
+		}));
+		expect(markup.match(/class="workout-card workout-card-done"/g)).toHaveLength(2);
+		expect(markup.match(/Week 1\/4/g)).toHaveLength(2);
+		expect(markup).not.toContain('Week 2/4');
+	});
+
+	it('keeps a distinct pending same-day occurrence on its next stage', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(2026, 8, 21, 12));
+		const logged = row({ occurrenceId: 'finished', cycleStage: stage({ week: 1 }) });
+		const plan = buildTodaysPlan({
+			date: logged.date, workouts: [workout],
+			workoutSchedule: ['finished', 'pending'].map((occurrenceId) => ({
+				date: logged.date, workoutId: workout.id, occurrenceId,
+			})),
+			logRows: [logged],
+		});
+		expect(plan[0]).toMatchObject({ done: true, session: { rows: [logged] } });
+		expect(plan[1]).toMatchObject({ done: false });
+		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
+			workouts: [workout],
+			workoutSchedule: ['finished', 'pending'].map((occurrenceId) => ({
+				date: logged.date, workoutId: workout.id, occurrenceId,
+			})),
+			logRows: [logged], onSelect: () => undefined,
+		}));
+		expect(markup.match(/Week 1\/4/g)).toHaveLength(2);
+		expect(markup.match(/Week 2\/4/g)).toHaveLength(1);
+	});
+
+	it('deduplicates logged sets and preserves independently completed exercise stages', () => {
+		const logged = row({ cycleStage: stage({ week: 1 }) });
+		expect(workoutCycleLabels(workout, [
+			logged, { ...logged, setNumber: 2 },
+			row({ exerciseName: 'Bench', liftId: 'bench', cycleStage: stage({ exerciseId: 'bench', week: 3 }) }),
+		])).toEqual([
+			'Squat: Week 1/4 — 3s · Iteration 1',
+			'Bench: Week 3/4 — 3s · Iteration 1',
+		]);
+		expect(workoutCycleLabels(workout, [row()])).toEqual([]);
+		expect(workoutCycleLabels(workout, [])).toEqual([]);
+	});
+
+	it('does not show the next cycle stage for legacy completed sessions without stage data', () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date(2026, 8, 21, 12));
+		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
+			workouts: [workout], logRows: [row()], onSelect: () => undefined,
+		}));
+		expect(markup).toContain('workout-card-done');
+		expect(markup).not.toContain('Week 2/4');
+	});
+
 	it('shows individual stages when exercise weeks or exposures diverge', () => {
 		const mixed = {
 			...workout, exercises: [...workout.exercises, {
