@@ -26,22 +26,10 @@ interface WorkoutViewProps {
 }
 
 /**
- * Build a comment string that includes rep-range / AMRAP hints (when present)
- * merged with any existing set comment.
+ * Build a comment string from the set's note and AMRAP flag.
  */
 function buildComment(set: ComputedSet): string | undefined {
 	const parts: string[] = [];
-	if (set.prescription) {
-		const { percentage, weightBasis } = set.prescription;
-		if (['trainingMax', 'topSet', 'backoff', 'crossReference'].includes(weightBasis.kind)) {
-			const label = weightBasis.kind === 'trainingMax' ? 'Training max (TM)' : weightBasis.kind;
-			parts.push(`${Math.round(percentage * 10000) / 100}% ${label}`);
-		}
-	}
-	const hasRange = set.minReps !== set.maxReps;
-	if (hasRange) {
-		parts.push(`${set.minReps}–${set.maxReps} reps`);
-	}
 	if (set.amrap) {
 		parts.push('AMRAP');
 	}
