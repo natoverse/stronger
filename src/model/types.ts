@@ -424,7 +424,7 @@ export interface WithingsMeasurement {
 export interface AppSettings {
 	/** Whether to show the between-set rest timer in the workout view. */
 	showRestTimer: boolean;
-	/** Whether to show set comments (rep ranges, AMRAP, notes) in the workout view. */
+	/** Whether to show set comments (AMRAP and notes) in the workout view. */
 	showSetComments: boolean;
 	/** Whether to acquire a wake lock to prevent the phone from sleeping during workouts. */
 	keepScreenOn: boolean;
