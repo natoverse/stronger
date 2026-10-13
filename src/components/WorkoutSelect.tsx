@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import type { Workout, WorkoutScheduleEntry, CardioActivity } from '../model/index.js';
 import { REST_ID, BLOCKER_ID } from '../model/index.js';
-import { matchesScheduledOccurrence, pairScheduledSessions, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
+import { pairScheduledSessions, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 import type { ParsedLogRow } from '../model/index.js';
 import type { LogSession } from './CalendarView.js';
 import { groupLogByDate, scheduledWorkoutRank } from './CalendarView.js';
@@ -43,6 +43,7 @@ function WorkoutCard({
 	onDelete,
 	onToggleFavorite,
 	done,
+	completedSession,
 }: {
 	w: Workout;
 	onSelect: (w: Workout) => void;
@@ -52,6 +53,7 @@ function WorkoutCard({
 	onDelete?: (id: string) => void;
 	onToggleFavorite?: (id: string, fav: boolean) => void;
 	done?: boolean;
+	completedSession?: LogSession;
 }) {
 	const [menuOpen, setMenuOpen] = useState(false);
 	const menuRef = useRef<HTMLDivElement>(null);
@@ -68,7 +70,7 @@ function WorkoutCard({
 	}, [menuOpen]);
 
 	const hasMenu = onEdit || onDuplicate || onShare || onDelete;
-	const cycleLabels = workoutCycleLabels(w);
+	const cycleLabels = workoutCycleLabels(w, done ? completedSession?.rows ?? [] : undefined);
 
 	return (
 		<>
@@ -147,7 +149,7 @@ function todayDateString(): string {
 
 /** A single item in today's plan, shown on the home page. */
 export type TodayPlanItem =
-	| { kind: 'strength'; workoutId: string; workout: Workout; done: boolean; occurrenceId?: string }
+	| { kind: 'strength'; workoutId: string; workout: Workout; done: boolean; occurrenceId?: string; session?: LogSession }
 	| { kind: 'cardio' | 'rest' | 'blocker'; workoutId: string; name: string };
 
 /**
@@ -194,9 +196,11 @@ export function buildTodaysPlan({
 		} else {
 			const workout = workoutMap.get(wid);
 			if (!workout) continue;
+			const session = sessionByEntry.get(e);
 			items.push({
 				kind: 'strength', workoutId: wid, workout,
-				done: sessionByEntry.has(e),
+				done: !!session,
+				...(session ? { session } : {}),
 				...(scheduleOccurrenceId(e) ? { occurrenceId: scheduleOccurrenceId(e) } : {}),
 			});
 		}
@@ -206,7 +210,7 @@ export function buildTodaysPlan({
 		const workout = workoutMap.get(session.key.workoutId);
 		if (!workout) continue;
 		items.push({
-			kind: 'strength', workoutId: session.key.workoutId, workout, done: true,
+			kind: 'strength', workoutId: session.key.workoutId, workout, done: true, session,
 			...(session.key.occurrenceId ? { occurrenceId: session.key.occurrenceId } : {}),
 		});
 	}
@@ -294,15 +298,10 @@ export function WorkoutSelect({
 		return completed;
 	}, [sessions, today]);
 
-	const handleTodayCardClick = (workout: Workout, done: boolean, occurrenceId?: string) => {
-		if (done && onViewSession) {
-			const matching = sessions.filter((session) => session.rows.some((row) =>
-				matchesScheduledOccurrence({ date: today, workoutId: workout.id, occurrenceId }, row)));
-			const session = matching[matching.length - 1] ?? completedSessionsByWorkout.get(workout.id);
-			if (session) {
-				onViewSession(session);
-				return;
-			}
+	const handleTodayCardClick = (workout: Workout, done: boolean, occurrenceId?: string, session?: LogSession) => {
+		if (done && session && onViewSession) {
+			onViewSession(session);
+			return;
 		}
 		if (!workout.error) onSelect(workout, occurrenceId);
 	};
@@ -334,8 +333,9 @@ export function WorkoutSelect({
 								<WorkoutCard
 									key={`plan-${item.workoutId}-${idx}`}
 									w={item.workout}
-									onSelect={() => handleTodayCardClick(item.workout, item.done, item.occurrenceId)}
+									onSelect={() => handleTodayCardClick(item.workout, item.done, item.occurrenceId, item.session)}
 									done={item.done}
+									completedSession={item.session}
 								/>
 							) : (
 								<PlanInfoCard key={`plan-${item.workoutId}-${idx}`} kind={item.kind} name={item.name} />
@@ -381,7 +381,7 @@ export function WorkoutSelect({
 			) : (
 				<div className="workout-list">
 					{favorites.map((w) => (
-						<WorkoutCard key={w.id} w={w} done={completedSessionsByWorkout.has(w.id)} onSelect={() => handleWorkoutCardClick(w)} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+						<WorkoutCard key={w.id} w={w} done={completedSessionsByWorkout.has(w.id)} completedSession={completedSessionsByWorkout.get(w.id)} onSelect={() => handleWorkoutCardClick(w)} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 					))}
 					{others.length > 0 && (
 						<>
@@ -394,7 +394,7 @@ export function WorkoutSelect({
 								<ChevronDown size={16} className={`more-chevron${moreOpen ? ' more-chevron-open' : ''}`} />
 							</button>
 							{moreOpen && others.map((w) => (
-								<WorkoutCard key={w.id} w={w} done={completedSessionsByWorkout.has(w.id)} onSelect={() => handleWorkoutCardClick(w)} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
+								<WorkoutCard key={w.id} w={w} done={completedSessionsByWorkout.has(w.id)} completedSession={completedSessionsByWorkout.get(w.id)} onSelect={() => handleWorkoutCardClick(w)} onEdit={onEdit} onDuplicate={onDuplicate} onShare={onShare} onDelete={onDelete} onToggleFavorite={onToggleFavorite} />
 							))}
 						</>
 					)}

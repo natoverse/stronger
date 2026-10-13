@@ -127,6 +127,12 @@ These decisions supersede the earlier within-week exposure requirements and the 
 - Reset does not log the abandoned workout, change shared weights, erase completed history, or count the abandoned iteration as completed. Each exercise retains its iteration number; the new session keeps the original calendar occurrence, if any. Any unsaved sets in the abandoned draft are lost.
 - The new session and progress are saved together with an advanced revision, invalidating the old draft. Invalid current definitions leave the old draft untouched; unlike Discard Workout, Reset Cycle immediately reloads the new first-week prescription on screen.
 
+### Completed cards after reload — 2026-10-13
+
+- Today's Plan and same-day completed library cards display the exercise stages saved in the completed session, not the next prescription from current cycle progress. Legacy logs without stage data omit week labels rather than implying another workout is due today.
+- Keep the session paired to each scheduled occurrence for both its labels and history action. Other pending occurrences still preview the next prescription; completing one opportunity does not reschedule or complete another one.
+- Regression coverage includes rendering from reloaded log rows, distinct completed/pending same-day occurrences, independently completed exercise stages, repeated set rows, and legacy sessions.
+
 ## Notes
 
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.
