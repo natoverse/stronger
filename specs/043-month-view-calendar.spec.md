@@ -150,3 +150,15 @@
 - Monthly cells include completed strength sessions on their actual completion date even when no schedule entry exists.
 - Completed monthly tags use a completion treatment and do not duplicate a matching scheduled workout.
 - Scheduled cardio tags use same-day Garmin activity type matches to determine completion.
+
+## Iteration: reliable edits beyond the initial window
+
+- There is no future-date editing limit. Selecting a month day requests the
+  entire detailed date range through that month's end before showing its cards.
+- Month and detail-list expansion request the dates actually rendered, rather
+  than assuming a calendar month is always 30 days.
+- Flag and schedule edits use cached data plus the latest local edits; an empty
+  date must not trigger a network request that blocks the mutation queue.
+- In-flight calendar reads preserve newer local edits and deletions. Rapid
+  edits on the same date compose even before Firestore updates its local cache.
+- Calendar load and mutation failures remain visible and retryable.

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getDocs, getDocsFromServer } from 'firebase/firestore'
 
 const mockState = vi.hoisted(() => ({
 	docsByCollection: new Map<string, Array<{ id: string; ref: { path: string } }>>(),
@@ -18,7 +19,7 @@ vi.mock('firebase/firestore', () => ({
 	getDocs: vi.fn(async (ref: { path: string }) => ({
 		docs: mockState.docsByCollection.get(ref.path) ?? [],
 	})),
-	getDocsFromCache: vi.fn(),
+	getDocsFromCache: vi.fn(async () => ({ docs: [], empty: true })),
 	getDocsFromServer: vi.fn(),
 	query: vi.fn((ref: { path: string }) => ref),
 	runTransaction: vi.fn(async (_firestore: unknown, update: (transaction: {
@@ -59,7 +60,7 @@ import type { WorkoutDefinition } from '../../data/sample-workouts.ts'
 import { buildLogRow } from '../../model/logs.ts'
 import { authorizeCalendar, clearAuth } from '../../google/auth.ts'
 import { trackMutation } from '../offline.ts'
-import { appendLogRows, writeDefaultWorkoutDefs } from '../store.ts'
+import { appendLogRows, readFlags, readWorkoutSchedule, writeDefaultWorkoutDefs } from '../store.ts'
 
 const defaultWorkout: WorkoutDefinition = {
 	id: 'A',
@@ -67,6 +68,18 @@ const defaultWorkout: WorkoutDefinition = {
 	templates: [],
 	favorite: false,
 }
+
+describe('calendar mutation cache reads', () => {
+	it('never requests the network for empty future schedule or flag dates', async () => {
+		vi.mocked(getDocs).mockClear()
+		vi.mocked(getDocsFromServer).mockClear()
+		const window = { startDate: '2030-01-01', endDate: '2030-01-02' }
+		expect(await readFlags('alice', window, 'cache')).toEqual([])
+		expect(await readWorkoutSchedule('alice', window, 'cache')).toEqual([])
+		expect(getDocs).not.toHaveBeenCalled()
+		expect(getDocsFromServer).not.toHaveBeenCalled()
+	})
+})
 
 describe('Firestore default seeding writes', () => {
 	beforeEach(() => {

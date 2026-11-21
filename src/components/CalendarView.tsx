@@ -8,7 +8,8 @@ import { CalendarPlus, X, ChevronRight, ChevronLeft, ChevronDown, Dumbbell, Save
 import { CalendarPush } from './CalendarPush.js';
 import { CalendarSync } from './CalendarSync.js';
 import type { ClearOptions, ClearResult } from './CalendarClear.js';
-import { DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
+import { addDateDays, DATE_WINDOW_INCREMENT_DAYS, initialFutureDayCount } from '../firebase/load-plan.js';
+import type { DateWindow } from '../firebase/store.js';
 import type { WorkoutDefinition } from '../data/sample-workouts.js';
 import { createScheduleOpportunity, formatCycleStage, pairScheduledSessions, scheduleOccurrenceId, workoutCycleLabels } from '../model/schedule.js';
 import { getActivityDate, type StravaActivity } from '../model/strava.js';
@@ -42,8 +43,8 @@ interface CalendarViewProps {
 	onSyncCalendar: (calendarId: string) => Promise<CalendarSyncResult>;
 	calendarSyncId?: string | null;
 	onClearSchedule: (options: ClearOptions) => Promise<ClearResult>;
-	onLoadMoreDays?: () => Promise<void>;
-	onLoadPreviousDays?: () => Promise<void>;
+	onLoadDateRange?: (window: DateWindow) => Promise<void>;
+	mutationError?: string | null;
 }
 
 export type CalendarPanel = 'plan' | 'sync' | 'monthly';
@@ -586,8 +587,8 @@ export function CalendarView({
 	onSyncCalendar,
 	calendarSyncId = null,
 	onClearSchedule,
-	onLoadMoreDays,
-	onLoadPreviousDays,
+	onLoadDateRange,
+	mutationError,
 }: CalendarViewProps) {
 	const [addingForDate, setAddingForDate] = useState<string | null>(null);
 	const [activePanel, setActivePanel] = useState<CalendarPanel | null>('monthly');
@@ -750,34 +751,36 @@ export function CalendarView({
 		if (loadingDateWindow) return;
 		setLoadingDateWindow(true);
 		try {
-			await onLoadPreviousDays?.();
+			const oldest = pastDays[pastDays.length - 1] ?? todayStr();
+			const previous = generatePastDays(oldest, DATE_WINDOW_INCREMENT_DAYS);
+			await onLoadDateRange?.({ startDate: previous[previous.length - 1], endDate: oldest });
 			setDateWindowError(null);
-			setPastDays((prev) => {
-				const oldest = prev[prev.length - 1] ?? todayStr();
-				return [...prev, ...generatePastDays(oldest, DATE_WINDOW_INCREMENT_DAYS)];
-			});
+			setPastDays((prev) => [...prev, ...previous]);
 		} catch {
 			setDateWindowError('Could not load more calendar days. Try again.');
 		} finally {
 			setLoadingDateWindow(false);
 		}
-	}, [loadingDateWindow, onLoadPreviousDays]);
+	}, [loadingDateWindow, onLoadDateRange, pastDays]);
 
-	// Keep month and list expansion on the same 30-day data window.
+	// Load through the appended month's end, even when it exceeds 30 days.
 	const handleLoadMoreFuture = useCallback(async () => {
 		if (loadingDateWindow) return;
 		setLoadingDateWindow(true);
 		try {
-			await onLoadMoreDays?.();
+			const nextOffset = Math.max(...visibleMonthOffsets) + 1;
+			const monthDates = buildMonthGrid(new Date(), nextOffset).dates.filter((date): date is string => date !== null);
+			const days = includeCalendarDate(generateFutureDays(futureDayCount + DATE_WINDOW_INCREMENT_DAYS), monthDates[monthDates.length - 1]);
+			await onLoadDateRange?.({ startDate: addDateDays(futureDays[futureDays.length - 1], 1), endDate: addDateDays(days[days.length - 1], 1) });
 			setDateWindowError(null);
-			setFutureDayCount((prev) => prev + DATE_WINDOW_INCREMENT_DAYS);
-			setVisibleMonthOffsets((offsets) => [...offsets, Math.max(...offsets) + 1]);
+			setFutureDayCount(days.length);
+			setVisibleMonthOffsets((offsets) => [...offsets, nextOffset]);
 		} catch {
 			setDateWindowError('Could not load more calendar days. Try again.');
 		} finally {
 			setLoadingDateWindow(false);
 		}
-	}, [loadingDateWindow, onLoadMoreDays]);
+	}, [loadingDateWindow, onLoadDateRange, futureDayCount, futureDays, visibleMonthOffsets]);
 
 	// Build day infos for both past and future
 	const allDays = useMemo(() => {
@@ -787,6 +790,24 @@ export function CalendarView({
 		}
 		return buildDayInfos(combined, scheduleMap, logByDate, flagsMap, labelsMap);
 	}, [pastDays, futureDays, monthDayScrollTarget, scheduleMap, logByDate, flagsMap, labelsMap]);
+
+	const handleSelectMonthDay = useCallback(async (date: string) => {
+		if (loadingDateWindow) return;
+		setLoadingDateWindow(true);
+		try {
+			const dates = includeCalendarDate(allDays.map((day) => day.date), date);
+			await onLoadDateRange?.({ startDate: dates[0], endDate: addDateDays(dates[dates.length - 1], 1) });
+			setDateWindowError(null);
+			const today = todayStr();
+			setPastDays(dates.filter((day) => day < today).reverse());
+			setFutureDayCount(dates.filter((day) => day >= today).length);
+			setMonthDayScrollTarget({ date });
+		} catch {
+			setDateWindowError('Could not load more calendar days. Try again.');
+		} finally {
+			setLoadingDateWindow(false);
+		}
+	}, [allDays, loadingDateWindow, onLoadDateRange]);
 
 	useEffect(() => {
 		if (!monthDayScrollTarget) return;
@@ -950,7 +971,8 @@ export function CalendarView({
 											type="button"
 											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}${flags?.blocked ? ' calendar-month-day-blocked' : ''}`}
 											key={date}
-											onClick={() => setMonthDayScrollTarget({ date })}
+											onClick={() => void handleSelectMonthDay(date)}
+											disabled={loadingDateWindow}
 											aria-label={`${date}${displayed.length > 0 ? `: ${displayed.map(displayWorkoutName).join(', ')}` : ''}`}
 										>
 											<div className="calendar-month-day-heading">
@@ -1012,6 +1034,7 @@ export function CalendarView({
 
 			<div className="calendar-days-scroll">
 				{dateWindowError && <p className="auth-error" role="alert">{dateWindowError}</p>}
+				{mutationError && <p className="auth-error" role="alert">{mutationError}</p>}
 				<div className="calendar-load-more">
 					<button
 						className="calendar-load-more-btn"

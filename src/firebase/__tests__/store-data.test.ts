@@ -14,6 +14,63 @@ import {
 	mergeWorkoutSessionRows,
 	scheduleDayDocumentId,
 } from '../store.ts'
+import { CalendarDateState } from '../calendar-state.ts'
+
+describe('calendar reads racing local edits', () => {
+	const window = { startDate: '2027-03-01', endDate: '2027-04-01' }
+
+	it('preserves newer flag changes while loading other dates from a stale snapshot', () => {
+		const state = new CalendarDateState([{ date: '2027-03-15', value: false }])
+		const version = state.version
+		state.update([{ date: '2027-03-15', value: true }], window, ['2027-03-15'])
+		expect(state.load([
+			{ date: '2027-03-15', value: false },
+			{ date: '2027-03-16', value: true },
+		], window, version)).toEqual([
+			{ date: '2027-03-15', value: true },
+			{ date: '2027-03-16', value: true },
+		])
+	})
+
+	it('does not resurrect a deleted flag date from a late full-collection read', () => {
+		const entry = { date: '2027-03-15', value: true }
+		const state = new CalendarDateState([entry])
+		const version = state.version
+		state.update([], window, [entry.date])
+		expect(state.load([entry], undefined, version)).toEqual([])
+		expect(state.mutationBase([entry], window)).toEqual([])
+	})
+
+	it('protects reads that begin while an optimistic edit is entering the durable queue', () => {
+		const entry = { date: '2027-03-15', value: true }
+		const state = new CalendarDateState<typeof entry>()
+		state.update([entry], window, [entry.date], true)
+		const duringWrite = state.version
+		expect(state.load([], window, duringWrite)).toEqual([entry])
+		state.finishMutation([entry.date])
+		expect(state.load([], window, duringWrite)).toEqual([entry])
+		expect(state.load([entry], window, state.version)).toEqual([entry])
+	})
+
+	it('composes rapid same-day assignments before the cache contains the preceding write', () => {
+		const first = { date: '2027-03-15', workoutId: 'A' }
+		const second = { ...first, workoutId: 'B' }
+		const state = new CalendarDateState<typeof first>()
+		state.update([first], window, [first.date])
+		const next = [...state.mutationBase([], window), second]
+		state.update(next, window, [first.date])
+		expect(state.mutationBase([first], window)).toEqual([first, second])
+	})
+
+	it('accepts subsequent authoritative changes and preserves dates outside a loaded window', () => {
+		const outside = { date: '2027-05-01', value: 'outside' }
+		const state = new CalendarDateState([outside])
+		state.update([{ date: '2027-03-15', value: 'local' }], window, ['2027-03-15'])
+		expect(state.load([{ date: '2027-03-15', value: 'remote' }], window, state.version)).toEqual([
+			{ date: '2027-03-15', value: 'remote' }, outside,
+		])
+	})
+})
 
 describe('Firestore data identifiers', () => {
 	it('groups workout sessions into yearly buckets', () => {

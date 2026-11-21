@@ -9,10 +9,11 @@ import { createScheduleOpportunity, scheduleOccurrenceId } from './model/schedul
 import { readCycleProgress, readCycleDrafts, writeCycleStart, writeCycleDraftResults, discardCycleSessionDraft, resetCycleSessionDraft, finishCycleSession } from './firebase/index.js';
 import type { StoredCycleDraft } from './firebase/index.js';
 import { buildLogRow, findPreviousWorkoutSets, goalsFromSettings, goalsToSettings, bodyGoalsFromSettings, bodyGoalsToSettings, liftGoalsFromSettings, liftGoalsToSettings, DEFAULT_APP_SETTINGS, appSettingsFromMap, appSettingsToMap } from './model/index.js';
-import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, writeCardioActivities, readCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeDateWindowEntries, mergeWorkoutSessionRows, mergeYearScopedEntries } from './firebase/index.js';
+import { appendLogRows, clearOfflineUserState, ensureUser, hasPendingMutations, readConfigZone, readLogZone, setActiveSyncUser, writeConfigValues, writeDefaultConfig, readFlags, writeFlagDates, readWorkoutSchedule, writeWorkoutScheduleDates, writeWorkoutDefs, readWorkoutDefs, writeDefaultWorkoutDefs, updateLogRows, deleteLogSession, readCardioActivities, writeCardioActivities, writeDefaultCardioActivities, readGarminActivities, readGarminWellnessEntries, readWithingsMeasurements, readSettings, writeSettings, mergeWorkoutSessionRows, mergeYearScopedEntries } from './firebase/index.js';
 import type { DateWindow, FirestoreReadSource, YearBucketReadScope } from './firebase/index.js';
-import { DATE_WINDOW_INCREMENT_DAYS, addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
+import { addDateDays, buildFirebaseLoadQueue, initialDateWindow, runFirebaseLoadQueue } from './firebase/load-plan.js';
 import type { FirebaseLoadRequest } from './firebase/load-plan.js';
+import { CalendarDateState } from './firebase/calendar-state.js';
 import { withTimeout } from './firebase/timeout.js';
 import type { LiftGoal } from './model/index.js';
 import { signOutOfStronger } from './firebase/index.js';
@@ -137,6 +138,7 @@ function AppContent() {
   const [calendarSyncId, setCalendarSyncId] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(mockMode);
   const [dataLoadError, setDataLoadError] = useState<string | null>(null);
+  const [calendarMutationError, setCalendarMutationError] = useState<string | null>(null);
   const [priorityLoadPending, setPriorityLoadPending] = useState(false);
   const [onlineGeneration, setOnlineGeneration] = useState(0);
   const [showDefaultWorkoutImportPrompt, setShowDefaultWorkoutImportPrompt] = useState(false);
@@ -155,7 +157,8 @@ function AppContent() {
   const calendarWindowRef = useRef(initialDateWindow());
   const calendarWindowLoadRef = useRef(Promise.resolve());
   const calendarMutationRef = useRef<Promise<unknown>>(Promise.resolve());
-  const scheduleMutationVersionRef = useRef(0);
+  const scheduleStateRef = useRef(new CalendarDateState(workoutSchedule));
+  const flagsStateRef = useRef(new CalendarDateState(dayFlags));
   const connectedUserRef = useRef<string | null>(null);
   const connectionGenerationRef = useRef(0);
   const sessionMutationRef = useRef(new Map<string, Promise<void>>());
@@ -205,10 +208,29 @@ function AppContent() {
   }, []);
 
   const queueCalendarMutation = useCallback(<T,>(mutation: () => Promise<T>): Promise<T> => {
+    const userId = connectedUserRef.current;
+    const generation = connectionGenerationRef.current;
     const queued = calendarMutationRef.current
       .catch(() => undefined)
-      .then(mutation);
+      .then(async () => {
+        if (connectedUserRef.current !== userId || connectionGenerationRef.current !== generation) {
+          throw new Error('Firebase user changed before calendar changes could be saved.');
+        }
+        const result = await mutation();
+        if (connectedUserRef.current === userId && connectionGenerationRef.current === generation) {
+          setCalendarMutationError(null);
+        }
+        return result;
+      })
+      .catch((error: unknown) => {
+        if (connectedUserRef.current === userId && connectionGenerationRef.current === generation) {
+          setCalendarMutationError(`Could not save calendar changes: ${error instanceof Error ? error.message : String(error)}`);
+        }
+        throw error;
+      });
     calendarMutationRef.current = queued;
+    // Void event handlers still report errors without an unhandled rejection.
+    void queued.catch(() => undefined);
     return queued;
   }, []);
 
@@ -224,6 +246,7 @@ function AppContent() {
       setSessionReady(true);
       setNeedsSetup(false);
       setDataLoadError(null);
+      setCalendarMutationError(null);
       setPriorityLoadPending(true);
       setShowDefaultWorkoutImportPrompt(false);
       setDefaultWorkoutImportError(null);
@@ -236,6 +259,9 @@ function AppContent() {
       calendarWindowRef.current = initialDateWindow();
       calendarWindowLoadRef.current = Promise.resolve();
       calendarMutationRef.current = Promise.resolve();
+      setCalendarMutationError(null);
+      scheduleStateRef.current = new CalendarDateState<WorkoutScheduleEntry>();
+      flagsStateRef.current = new CalendarDateState<DayFlagEntry>();
       setSettingsLoaded(false);
       cycleProgressRef.current = [];
       cycleMutationVersionRef.current += 1;
@@ -329,6 +355,8 @@ function AppContent() {
     calendarWindowRef.current = initialDateWindow();
     calendarWindowLoadRef.current = Promise.resolve();
     calendarMutationRef.current = Promise.resolve();
+    scheduleStateRef.current = new CalendarDateState<WorkoutScheduleEntry>();
+    flagsStateRef.current = new CalendarDateState<DayFlagEntry>();
     setSettingsLoaded(false);
     replaceTo({ view: 'list' });
   }, [replaceTo]);
@@ -697,13 +725,15 @@ function AppContent() {
     connectionGeneration = connectionGenerationRef.current,
     source: FirestoreReadSource = 'cacheFirst',
   ) => {
+    const state = flagsStateRef.current;
+    const readVersion = state.version;
     try {
       const flags = await readFlags(userId, window, source);
       if (
         connectedUserRef.current !== userId
         || connectionGenerationRef.current !== connectionGeneration
       ) return;
-      setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
+      setDayFlags(state.load(flags, window, readVersion));
     } catch (error) {
       if (window && required) throw error;
       // Silently ignore — flags data is optional
@@ -717,17 +747,15 @@ function AppContent() {
     connectionGeneration = connectionGenerationRef.current,
     source: FirestoreReadSource = 'cacheFirst',
   ) => {
-    const mutationVersion = scheduleMutationVersionRef.current;
+    const state = scheduleStateRef.current;
+    const readVersion = state.version;
     try {
       const schedule = await readWorkoutSchedule(userId, window, source);
       if (
         connectedUserRef.current !== userId
         || connectionGenerationRef.current !== connectionGeneration
-        // A newer local schedule mutation started after this read began — applying
-        // this now-stale snapshot would clobber the more recent optimistic update.
-        || scheduleMutationVersionRef.current !== mutationVersion
       ) return;
-      setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
+      setWorkoutSchedule(state.load(schedule, window, readVersion));
     } catch (error) {
       if (window && required) throw error;
       // Silently ignore — schedule data is optional
@@ -841,30 +869,29 @@ function AppContent() {
     }
   }, []);
 
-  const loadCalendarWindow = useCallback((direction: 'future' | 'past'): Promise<void> => {
+  const loadCalendarWindow = useCallback((requestedWindow: DateWindow): Promise<void> => {
     const userId = firebaseUid;
     if (!userId) return Promise.resolve();
+    const generation = connectionGenerationRef.current;
     const pending = calendarWindowLoadRef.current.then(async () => {
+      if (connectedUserRef.current !== userId || connectionGenerationRef.current !== generation) return;
       const current = calendarWindowRef.current;
-      const window = direction === 'future'
-        ? {
-            startDate: current.endDate,
-            endDate: addDateDays(current.endDate, DATE_WINDOW_INCREMENT_DAYS),
-          }
-        : {
-            startDate: addDateDays(current.startDate, -DATE_WINDOW_INCREMENT_DAYS),
-            endDate: current.startDate,
-          };
-      const [schedule, flags] = await Promise.all([
-        readWorkoutSchedule(userId, window),
-        readFlags(userId, window),
-      ]);
-      if (connectedUserRef.current !== userId) return;
-      setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, schedule, window));
-      setDayFlags((existing) => mergeDateWindowEntries(existing, flags, window));
-      calendarWindowRef.current = direction === 'future'
-        ? { ...current, endDate: window.endDate }
-        : { ...current, startDate: window.startDate };
+      const scheduleState = scheduleStateRef.current;
+      const flagsState = flagsStateRef.current;
+      const scheduleVersion = scheduleState.version;
+      const flagsVersion = flagsState.version;
+      const source = navigator.onLine ? 'server' : 'cache';
+      const [schedule, flags] = await withTimeout(Promise.all([
+        readWorkoutSchedule(userId, requestedWindow, source),
+        readFlags(userId, requestedWindow, source),
+      ]), FIREBASE_LOAD_TIMEOUT_MS, 'Loading calendar dates timed out. Try again.');
+      if (connectedUserRef.current !== userId || connectionGenerationRef.current !== generation) return;
+      setWorkoutSchedule(scheduleState.load(schedule, requestedWindow, scheduleVersion));
+      setDayFlags(flagsState.load(flags, requestedWindow, flagsVersion));
+      calendarWindowRef.current = {
+        startDate: requestedWindow.startDate < current.startDate ? requestedWindow.startDate : current.startDate,
+        endDate: requestedWindow.endDate > current.endDate ? requestedWindow.endDate : current.endDate,
+      };
     });
     calendarWindowLoadRef.current = pending.catch(() => undefined);
     return pending;
@@ -873,18 +900,20 @@ function AppContent() {
   const handleScheduleAssign = useCallback(
     (date: string, workoutId: string, occurrenceId?: string) => {
       const userId = firebaseUid;
-      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
-        const persisted = userId
-          ? await readWorkoutSchedule(userId, window)
-          : [];
+        const persisted = scheduleStateRef.current.mutationBase(userId
+          ? await readWorkoutSchedule(userId, window, 'cache')
+          : undefined, window);
         if (userId && connectedUserRef.current !== userId) return;
         const opportunity = createScheduleOpportunity(date, workoutId);
         const updatedDate = [...persisted, { ...opportunity, strongerId: occurrenceId ?? opportunity.strongerId ?? generateStrongerId() }];
-        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
-        if (userId) {
-          await writeWorkoutScheduleDates(userId, updatedDate, [date]);
+        const state = scheduleStateRef.current;
+        setWorkoutSchedule(state.update(updatedDate, window, [date], true));
+        try {
+          if (userId) await writeWorkoutScheduleDates(userId, updatedDate, [date]);
+        } finally {
+          state.finishMutation([date]);
         }
       });
     },
@@ -894,7 +923,6 @@ function AppContent() {
   const handleBulkSchedule = useCallback(
     (entries: WorkoutScheduleEntry[]) => {
       const userId = firebaseUid;
-      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const changedDates = [...new Set(entries.map((entry) => entry.date))].sort();
         if (changedDates.length === 0) return;
@@ -902,9 +930,9 @@ function AppContent() {
           startDate: changedDates[0],
           endDate: addDateDays(changedDates[changedDates.length - 1], 1),
         };
-        const persisted = userId
-          ? await readWorkoutSchedule(userId, window)
-          : [];
+        const persisted = scheduleStateRef.current.mutationBase(userId
+          ? await readWorkoutSchedule(userId, window, 'cache')
+          : undefined, window);
         if (userId && connectedUserRef.current !== userId) return;
         const datesToRest = new Set(
           entries.filter((entry) => entry.workoutId === '__rest__').map((entry) => entry.date),
@@ -928,9 +956,12 @@ function AppContent() {
             updatedRange.push({ ...opportunity, ...entry, strongerId: entry.strongerId ?? entry.occurrenceId ?? opportunity.strongerId ?? generateStrongerId() });
           }
         }
-        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedRange, window));
-        if (userId) {
-          await writeWorkoutScheduleDates(userId, updatedRange, changedDates);
+        const state = scheduleStateRef.current;
+        setWorkoutSchedule(state.update(updatedRange, window, changedDates, true));
+        try {
+          if (userId) await writeWorkoutScheduleDates(userId, updatedRange, changedDates);
+        } finally {
+          state.finishMutation(changedDates);
         }
       });
     },
@@ -940,12 +971,11 @@ function AppContent() {
   const handleScheduleRemove = useCallback(
     (date: string, workoutId: string, occurrenceId?: string) => {
       const userId = firebaseUid;
-      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
-        const persisted = userId
-          ? await readWorkoutSchedule(userId, window)
-          : [];
+        const persisted = scheduleStateRef.current.mutationBase(userId
+          ? await readWorkoutSchedule(userId, window, 'cache')
+          : undefined, window);
         if (userId && connectedUserRef.current !== userId) return;
         let blanked = false;
         const updatedDate = persisted.map((entry) => {
@@ -956,9 +986,12 @@ function AppContent() {
           return entry;
         });
         if (!blanked) return;
-        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
-        if (userId) {
-          await writeWorkoutScheduleDates(userId, updatedDate, [date]);
+        const state = scheduleStateRef.current;
+        setWorkoutSchedule(state.update(updatedDate, window, [date], true));
+        try {
+          if (userId) await writeWorkoutScheduleDates(userId, updatedDate, [date]);
+        } finally {
+          state.finishMutation([date]);
         }
       });
     },
@@ -969,12 +1002,11 @@ function AppContent() {
     (date: string, workoutId: string, label: string, occurrenceId?: string) => {
       const trimmed = label.trim();
       const userId = firebaseUid;
-      scheduleMutationVersionRef.current += 1;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
-        const persisted = userId
-          ? await readWorkoutSchedule(userId, window)
-          : [];
+        const persisted = scheduleStateRef.current.mutationBase(userId
+          ? await readWorkoutSchedule(userId, window, 'cache')
+          : undefined, window);
         if (userId && connectedUserRef.current !== userId) return;
         let updated = false;
         const updatedDate = persisted.map((entry) => {
@@ -985,9 +1017,12 @@ function AppContent() {
           return entry;
         });
         if (!updated) return;
-        setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, updatedDate, window));
-        if (userId) {
-          await writeWorkoutScheduleDates(userId, updatedDate, [date]);
+        const state = scheduleStateRef.current;
+        setWorkoutSchedule(state.update(updatedDate, window, [date], true));
+        try {
+          if (userId) await writeWorkoutScheduleDates(userId, updatedDate, [date]);
+        } finally {
+          state.finishMutation([date]);
         }
       });
     },
@@ -999,9 +1034,9 @@ function AppContent() {
       const userId = firebaseUid;
       void queueCalendarMutation(async () => {
         const window = { startDate: date, endDate: addDateDays(date, 1) };
-        const persisted = userId
-          ? await readFlags(userId, window)
-          : [];
+        const persisted = flagsStateRef.current.mutationBase(userId
+          ? await readFlags(userId, window, 'cache')
+          : undefined, window);
         if (userId && connectedUserRef.current !== userId) return;
         const currentFlags = persisted[0]?.flags ?? {
           home: false,
@@ -1031,9 +1066,12 @@ function AppContent() {
         }
         const hasFlags = Object.values(flags).some(Boolean);
         const updatedDate = hasFlags ? [{ date, flags }] : [];
-        setDayFlags((existing) => mergeDateWindowEntries(existing, updatedDate, window));
-        if (userId) {
-          await writeFlagDates(userId, updatedDate, [date]);
+        const state = flagsStateRef.current;
+        setDayFlags(state.update(updatedDate, window, [date], true));
+        try {
+          if (userId) await writeFlagDates(userId, updatedDate, [date]);
+        } finally {
+          state.finishMutation([date]);
         }
       });
     },
@@ -1061,7 +1099,7 @@ function AppContent() {
           + 'Select the configured calendar before syncing.',
         );
       }
-      const persistedSchedule = await readWorkoutSchedule(syncUserId);
+      const persistedSchedule = scheduleStateRef.current.mutationBase(await readWorkoutSchedule(syncUserId));
       if (connectedUserRef.current !== syncUserId) {
         throw new Error('Firebase user changed during calendar sync.');
       }
@@ -1099,7 +1137,7 @@ function AppContent() {
           new Set(scheduleWithIds.map((entry) => entry.date)),
         );
         if (connectedUserRef.current !== syncUserId) throw new Error('Firebase user changed during calendar sync.');
-        setWorkoutSchedule(scheduleWithIds);
+        setWorkoutSchedule(scheduleStateRef.current.update(scheduleWithIds));
       }
 
       const hasLinkedEntries = scheduleWithIds.some((entry) => Boolean(entry.calendarEventId));
@@ -1132,7 +1170,7 @@ function AppContent() {
         settingsRef.current = latestSettings;
         setCalendarSyncId(calendarId);
       }
-      setWorkoutSchedule(updatedSchedule);
+      setWorkoutSchedule(scheduleStateRef.current.update(updatedSchedule));
       return result;
     }),
     [queueCalendarMutation, workouts, cardioActivities, firebaseUid, calendarSyncId],
@@ -1140,7 +1178,6 @@ function AppContent() {
 
   const handleClearSchedule = useCallback(
     (options: ClearOptions): Promise<ClearResult> => {
-      scheduleMutationVersionRef.current += 1;
       return queueCalendarMutation(async () => {
         const { startDate, weeks, clearFlags: shouldClearFlags, clearSchedule: shouldClearSchedule } = options;
         const result: ClearResult = { flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] };
@@ -1168,7 +1205,7 @@ function AppContent() {
         const rangeEnd = new Date(sy, sm - 1, sd + weeks * 7);
         const endDate = `${rangeEnd.getFullYear()}-${String(rangeEnd.getMonth() + 1).padStart(2, '0')}-${String(rangeEnd.getDate()).padStart(2, '0')}`;
         const dateWindow = { startDate, endDate };
-        const [persistedFlags, persistedSchedule] = await Promise.all([
+        const [loadedFlags, loadedSchedule] = await Promise.all([
           shouldClearFlags && firebaseUid
             ? readFlags(firebaseUid, dateWindow)
             : Promise.resolve([]),
@@ -1179,18 +1216,22 @@ function AppContent() {
         if (firebaseUid && connectedUserRef.current !== firebaseUid) {
           throw new Error('Firebase user changed while clearing the calendar.');
         }
+        const persistedFlags = flagsStateRef.current.mutationBase(loadedFlags, dateWindow);
+        const persistedSchedule = scheduleStateRef.current.mutationBase(loadedSchedule, dateWindow);
         // Clear flags
         if (shouldClearFlags) {
           const before = persistedFlags.length;
           const updatedFlags = persistedFlags.filter((e) => !dateSet.has(e.date));
           result.flagsCleared = before - updatedFlags.length;
-          setDayFlags((existing) => mergeDateWindowEntries(existing, updatedFlags, dateWindow));
+          const state = flagsStateRef.current;
+          setDayFlags(state.update(updatedFlags, dateWindow, dateSet, true));
           if (firebaseUid) {
             try {
               await writeFlagDates(firebaseUid, updatedFlags, dateSet);
             } catch (err) {
               result.errors.push(`Failed to write flags: ${err instanceof Error ? err.message : String(err)}`);
             }
+            state.finishMutation(dateSet);
           }
         }
 
@@ -1270,13 +1311,15 @@ function AppContent() {
             return false;
           });
 
-          setWorkoutSchedule((existing) => mergeDateWindowEntries(existing, finalSchedule, dateWindow));
+          const state = scheduleStateRef.current;
+          setWorkoutSchedule(state.update(finalSchedule, dateWindow, dateSet, true));
           if (firebaseUid) {
             try {
               await writeWorkoutScheduleDates(firebaseUid, finalSchedule, dateSet);
             } catch (err) {
               result.errors.push(`Failed to write schedule: ${err instanceof Error ? err.message : String(err)}`);
             }
+            state.finishMutation(dateSet);
           }
         }
 
@@ -2117,8 +2160,8 @@ function AppContent() {
           onSyncCalendar={handleSyncCalendar}
           calendarSyncId={calendarSyncId}
           onClearSchedule={handleClearSchedule}
-          onLoadMoreDays={() => loadCalendarWindow('future')}
-          onLoadPreviousDays={() => loadCalendarWindow('past')}
+          onLoadDateRange={loadCalendarWindow}
+          mutationError={calendarMutationError}
         />
       </>
     );

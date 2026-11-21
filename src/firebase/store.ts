@@ -36,7 +36,7 @@ export const SCHEMA_VERSION = 2
 const BATCH_WRITE_LIMIT = 400
 const TRANSACTIONAL_WRITE_LIMIT = 250
 export type YearBucketReadScope = 'all' | 'currentYear' | 'otherYears'
-export type FirestoreReadSource = 'cacheFirst' | 'server'
+export type FirestoreReadSource = 'cache' | 'cacheFirst' | 'server'
 export type StoredCycleDraft = CycleSessionSnapshot & { results?: SetResult[][]; startTime?: string; executionWorkout?: CycleSessionSnapshot['workout']; draftVersion?: number }
 export type CycleConfigUpdate = { topSetWeight?: number; backoffWeight?: number; trainingMax?: number }
 type FirestoreCycleDraft = Omit<StoredCycleDraft, 'results'> & { results?: Array<{ sets: SetResult[] }> }
@@ -247,6 +247,7 @@ async function readQuery(
 		return server
 	}
 	const cached = await getDocsFromCache(reference)
+	if (source === 'cache') return cached
 	return cached.empty && !isHydrated(cacheKey)
 		&& (typeof navigator === 'undefined' || navigator.onLine)
 		? getDocs(reference).then((server) => {
@@ -261,6 +262,7 @@ async function readDocument(
 	source: FirestoreReadSource,
 	cacheKey?: string,
 ) {
+	if (source === 'cache') return getDocFromCache(reference)
 	if (source === 'server') {
 		const server = await getDocFromServer(reference)
 		markHydrated(cacheKey)
