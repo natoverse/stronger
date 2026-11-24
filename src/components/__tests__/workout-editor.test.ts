@@ -2,9 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import {
-	WorkoutEditor, initialEditableWorkout, toEditable, fromEditable, moveSet, moveItem,
+	WorkoutEditor, CyclePreview, initialEditableWorkout, toEditable, fromEditable, moveSet, moveItem,
 	copyWeek, copyExerciseToAllWeeks, updateWeekExercises, validateEditableWorkout,
-	previewExposure, weightBasisLabel,
+	previewExposure,
 } from '../WorkoutEditor.js';
 import type { EditableWorkout } from '../WorkoutEditor.js';
 import type { WorkoutDefinition } from '../../data/sample-workouts.js';
@@ -391,6 +391,34 @@ describe('fromEditable', () => {
 			expect(weights).toEqual([[140, 140, 140], [150, 150, 150, 150], [160, 160, 160]]);
 			expect(draft).toEqual(before);
 		});
+
+		it('renders every week compactly with ordered reps, weights, set types and AMRAP', () => {
+			const draft = toEditable(definition());
+			const sets = draft.cycle!.weeks[0].exposures[0].exercises[0].sets;
+			sets[0] = { ...sets[0], setType: 'warmup', minReps: 3, maxReps: 5 };
+			sets[1].amrap = true;
+			const before = structuredClone(draft);
+			const markup = renderToStaticMarkup(createElement(CyclePreview, { workout: draft, configs: [config] }));
+			expect(markup).toContain('Week 1: Volume');
+			expect(markup).toContain('Week 2: Strength');
+			expect(markup).toContain('Week 3: Peak');
+			expect(markup).toContain('3–5 × 140 lbs');
+			expect(markup).toContain('8+ × 140 lbs');
+			expect(markup).toContain('6 × 150 lbs');
+			expect(markup).toContain('5 × 160 lbs');
+			expect(markup).toContain('Warm-up');
+			expect(markup).not.toContain('%');
+			expect(draft).toEqual(before);
+		});
+
+		it('shows a week error without hiding other weeks', () => {
+			const draft = toEditable(definition());
+			draft.cycle!.weeks[1].exposures[0].exercises[0].sets = [];
+			const markup = renderToStaticMarkup(createElement(CyclePreview, { workout: draft, configs: [config] }));
+			expect(markup).toContain('Week 2, exercise 1: add at least one set');
+			expect(markup).toContain('8 × 140 lbs');
+			expect(markup).toContain('5 × 160 lbs');
+		});
 		it('allows copies of deleted cycles without reusing their IDs or blocking existing edits', () => {
 			const def = definition();
 			const props = {
@@ -450,7 +478,6 @@ describe('fromEditable', () => {
 				expect(sets.map((set) => set.amrap)).toEqual([false, false, wi < 3]);
 				expect(sets.every((set) => set.weightBasis.kind === 'trainingMax')).toBe(true);
 			});
-			expect(weightBasisLabel(saved.templates[0].sets[0], [config])).toBe('65% of Training Max (TM)');
 		});
 
 		it('validates all stages rather than only the selected or compatibility templates', () => {
@@ -547,7 +574,7 @@ describe('fromEditable', () => {
 			const markup = renderToStaticMarkup(createElement(WorkoutEditor, {
 				existing: definition(), allDefinitions: [], configs: [config], onSave: () => {}, onCancel: () => {},
 			}));
-			for (const text of ['Progression baseline', 'Training Max (TM)', 'Duplicate week', 'Copy week from', 'Preview week', 'Pending prescriptions and unfinished sessions stay frozen', 'Each program week contains one workout', 'Use separate cycles for additional weekly workouts']) {
+			for (const text of ['Progression baseline', 'Training Max (TM)', 'Duplicate week', 'Copy week from', 'Preview cycle', 'Pending prescriptions and unfinished sessions stay frozen', 'Each program week contains one workout', 'Use separate cycles for additional weekly workouts']) {
 				expect(markup).toContain(text);
 			}
 			expect(markup).not.toMatch(/Within-week|Session name|Add session|Duplicate session|Copy session|Move session|Delete session|Preview session/);

@@ -329,19 +329,6 @@ export function validateEditableWorkout(workout: EditableWorkout, configs: LiftC
 	return errors;
 }
 
-export function weightBasisLabel(set: SetTemplate, configs: LiftConfig[]): string {
-	const basis = set.weightBasis;
-	switch (basis.kind) {
-		case 'fixed': return `Fixed ${basis.weight} lbs`;
-		case 'barWeight': return 'Bar weight';
-		case 'relative': return `${basis.reference === 'topSet' ? 'Top set' : 'Backoff'} ${basis.offset < 0 ? '−' : '+'} ${Math.abs(basis.offset)} lbs`;
-		case 'crossReference': return `${set.percentage * 100}% of ${configs.find((config) => config.id === basis.liftId)?.name ?? basis.liftId} top set`;
-		case 'trainingMax': return `${Number((set.percentage * 100).toFixed(4))}% of Training Max (TM)`;
-		case 'backoff': return `${Number((set.percentage * 100).toFixed(4))}% of backoff`;
-		case 'topSet': return `${Number((set.percentage * 100).toFixed(4))}% of top set`;
-	}
-}
-
 export function previewExposure(exposure: EditableExposure, configs: LiftConfig[], roundWarmupPlateMath = false) {
 	const configMap = new Map(configs.map((config) => [config.id, config]));
 	return exposure.exercises.map((exercise) => {
@@ -352,10 +339,46 @@ export function previewExposure(exposure: EditableExposure, configs: LiftConfig[
 			sets: exercise.sets.map((set) => {
 				const weight = computeSetWeight(set, config, configMap, { roundWarmupPlateMath });
 				if (weight === null || !Number.isFinite(weight)) throw new Error(`${config.name}: check this set's weight basis and shared exercise settings`);
-				return { ...set, weight, basisLabel: weightBasisLabel(set, configs) };
+				return { ...set, weight };
 			}),
 		};
 	});
+}
+
+export function CyclePreview({ workout, configs, roundWarmupPlateMath = false }: {
+	workout: EditableWorkout;
+	configs: LiftConfig[];
+	roundWarmupPlateMath?: boolean;
+}) {
+	const cycle = workout.cycle!;
+	return <>
+		<p className="cycle-editor-hint">Preview uses current shared inputs and rounding/minimum settings; + means AMRAP. It never starts or advances an exercise. Pending snapshots may differ.</p>
+		{cycle.weeks.length === 0 && <p className="editor-error" role="alert">Add at least one week</p>}
+		{cycle.weeks.map((week, weekIndex) => {
+			const errors = validateEditableWorkout({
+				...workout, cycle: { ...cycle, weeks: [week] },
+			}, configs).map((error) => error.replace(/^Week 1(?=[:,])/, `Week ${weekIndex + 1}`));
+			let exercises: ReturnType<typeof previewExposure> = [];
+			if (!errors.length) {
+				try {
+					exercises = previewExposure(week.exposures[0], configs, roundWarmupPlateMath);
+				} catch (error) {
+					errors.push(error instanceof Error ? error.message : 'Check shared exercise weight settings');
+				}
+			}
+			return <div className="cycle-preview-week" key={week.id}>
+				<h3>Week {weekIndex + 1}: {week.name || 'Unnamed week'}</h3>
+				{errors.length > 0 && <div role="alert">{errors.map((error, index) => <p className="editor-error" key={index}>{error}</p>)}</div>}
+				{exercises.map((exercise, index) => <div className="cycle-preview-exercise" key={index}>
+					<h4>{exercise.name}</h4>
+					<ol className="cycle-preview-sets">{exercise.sets.map((set, setIndex) => <li key={setIndex}>
+						<span>{setTypeLabel(set.setType)}</span>{' '}
+						<strong>{set.amrap ? `${set.minReps}+` : set.minReps === set.maxReps ? set.minReps : `${set.minReps}–${set.maxReps}`} × {set.weight} lbs</strong>
+					</li>)}</ol>
+				</div>)}
+			</div>;
+		})}
+	</>;
 }
 
 export function initialEditableWorkout(
@@ -423,19 +446,6 @@ export function WorkoutEditor({
 	const errors = validateEditableWorkout(workout, configs);
 	if (isNew && usedIds.has(workout.id)) errors.push('This workout is already in use. Reopen the editor to create a new copy.');
 	const isValid = errors.length === 0;
-
-	const preview = (() => {
-		if (!showPreview || !week || !exposure) return { exercises: [], errors: [] };
-		const previewErrors = validateEditableWorkout({
-			...workout, cycle: { ...cycle, weeks: [{ ...week, exposures: [exposure] }] },
-		}, configs);
-		if (previewErrors.length) return { exercises: [], errors: previewErrors };
-		try {
-			return { exercises: previewExposure(exposure, configs, roundWarmupPlateMath), errors: [] };
-		} catch (error) {
-			return { exercises: [], errors: [error instanceof Error ? error.message : 'Check shared exercise weight settings'] };
-		}
-	})();
 
 	const updateWeeks = (update: (weeks: EditableWeek[]) => EditableWeek[]) => {
 		setCommentTarget(null);
@@ -643,7 +653,7 @@ export function WorkoutEditor({
 			<section className="editor-section cycle-stage-editor" aria-label="Cycle weeks">
 				<h2>Program weeks</h2>
 				<label className="editor-field">
-					<span className="editor-field-label">Week to edit or preview</span>
+					<span className="editor-field-label">Week to edit</span>
 					<select className="editor-select" value={week?.id ?? ''} onChange={(event) => {
 						setWeekIndex(cycle.weeks.findIndex((item) => item.id === event.target.value));
 						setCommentTarget(null);
@@ -691,24 +701,13 @@ export function WorkoutEditor({
 				</p>
 			</section>
 
-			{exposure && <section className="editor-section cycle-preview">
-				<h2>Week {weekIndex + 1} of {cycle.weeks.length}: {week.name}</h2>
+			<section className="editor-section cycle-preview">
+				<h2>Cycle preview</h2>
 				<button type="button" className="btn-add-exercise" aria-expanded={showPreview} onClick={() => setShowPreview(!showPreview)}>
-					<Eye size={18} /> {showPreview ? 'Hide preview' : 'Preview week'}
+					<Eye size={18} /> {showPreview ? 'Hide preview' : 'Preview cycle'}
 				</button>
-				{showPreview && <>
-					<p className="cycle-editor-hint">Preview uses current shared inputs and rounding/minimum settings. It never starts or advances an exercise. Pending snapshots may differ.</p>
-					{preview.errors.length > 0 && <div role="alert">{preview.errors.map((error, index) => <p className="editor-error" key={index}>{error}</p>)}</div>}
-					{preview.exercises.map((exercise, index) => <div key={index}>
-						<h3>{exercise.name}</h3>
-						<ol className="cycle-preview-sets">{exercise.sets.map((set, index) => <li key={index}>
-							<span>{setTypeLabel(set.setType)} · {set.amrap ? `${set.minReps}+ (AMRAP)` : set.minReps === set.maxReps ? set.minReps : `${set.minReps}–${set.maxReps}`} reps</span>
-							<span>{set.basisLabel}</span>
-							<strong>{set.weight} lbs</strong>
-						</li>)}</ol>
-					</div>)}
-				</>}
-			</section>}
+				{showPreview && <CyclePreview workout={workout} configs={configs} roundWarmupPlateMath={roundWarmupPlateMath} />}
+			</section>
 
 			{/* Exercises */}
 			<>

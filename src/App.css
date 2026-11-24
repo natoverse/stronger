@@ -4514,18 +4514,37 @@ body {
 	padding-top: 1rem;
 }
 
+.cycle-preview-week {
+	border-top: 1px solid var(--color-border, #333);
+	margin-top: 0.75rem;
+	padding-top: 0.75rem;
+}
+
+.cycle-preview-week h3 {
+	font-size: 0.95rem;
+	margin: 0 0 0.5rem;
+}
+
+.cycle-preview-exercise h4 {
+	font-size: 0.85rem;
+	margin: 0.5rem 0 0.25rem;
+}
+
 .cycle-preview-sets {
-	padding-left: 1.5rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem 0.75rem;
+	list-style: none;
+	margin: 0;
+	padding: 0;
 }
 
 .cycle-preview-sets li {
-	margin: 0.75rem 0;
+	font-size: 0.8rem;
 }
 
 .cycle-preview-sets span {
-	display: block;
-	font-size: 0.85rem;
-	line-height: 1.5;
+	color: var(--color-text-muted, #aaa);
 }
 
 .cycle-preview-sets strong {

@@ -133,6 +133,11 @@ These decisions supersede the earlier within-week exposure requirements and the 
 - Keep the session paired to each scheduled occurrence for both its labels and history action. Other pending occurrences still preview the next prescription; completing one opportunity does not reschedule or complete another one.
 - Regression coverage includes rendering from reloaded log rows, distinct completed/pending same-day occurrences, independently completed exercise stages, repeated set rows, and legacy sessions.
 
+### Compact cycle preview — 2026-11-24
+
+- The builder's collapsed preview opens the entire cycle in programming order, independent of the selected editing week. Each week lists its exercises and ordered sets as set type and reps × resolved weight, including ranges and AMRAP (+), without percentages or weight-basis labels.
+- Resolve every week from current shared inputs and existing rounding/minimum settings, without advancing progression or changing frozen snapshots. Show actionable errors for an incomplete week without hiding other valid weeks.
+
 ## Notes
 
 - Aligns with the manifesto's phone-first, data-driven plans rather than protocol-specific application logic.
