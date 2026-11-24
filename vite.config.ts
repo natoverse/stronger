@@ -33,17 +33,28 @@ self.addEventListener('fetch', event => {
   event.respondWith(caches.open(CACHE).then(cache =>
     cache.match(url.pathname, { ignoreSearch: true })).then(cached => {
     if (cached && url.pathname.includes('/assets/')) return cached;
-    const refresh = fetch(event.request).then(response => {
-      if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
+    const controller = new AbortController();
+    const timeout = event.request.mode === 'navigate'
+      ? setTimeout(() => controller.abort(), 3000) : null;
+    const refresh = fetch(event.request, { cache: 'no-cache', signal: controller.signal }).then(async response => {
+      if (response.ok) {
+        const cache = await caches.open(CACHE);
+        await cache.put(event.request.mode === 'navigate' ? url.pathname : event.request, response.clone());
+      }
       return response;
+    }).finally(() => {
+      if (timeout !== null) clearTimeout(timeout);
     });
+    if (event.request.mode === 'navigate') {
+      return refresh.catch(async () => cached
+        || await caches.match('/stronger/index.html')
+        || Response.error());
+    }
     if (cached) {
       event.waitUntil(refresh.catch(() => undefined));
       return cached;
     }
-    return refresh.catch(() => event.request.mode === 'navigate'
-      ? caches.match('/stronger/index.html')
-      : Response.error());
+    return refresh.catch(() => Response.error());
   }));
 });`,
       })

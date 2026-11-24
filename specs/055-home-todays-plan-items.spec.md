@@ -36,6 +36,14 @@ page, in the same order the calendar uses.
 - Scheduled occurrences that still match a log row remain occurrence-aware and
   are not duplicated by the fallback completed-session card.
 
+## Iteration: alphabetical visible-name ordering
+
+- Today's Plan retains blocker, cardio, strength, and rest groups, sorting by
+  displayed name within each group rather than stored schedule order.
+- The home workout library sorts alphabetically by workout name independently
+  within Favorites and More. The default-program and cardio lists also sort by
+  their visible names. Sorting never changes stored identities or source arrays.
+
 ## Iteration: sessions started outside the scheduled card
 
 - Starting a workout from the library list binds it to today's pending

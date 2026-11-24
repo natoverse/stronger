@@ -16,6 +16,50 @@ test.beforeEach(async ({ page }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' })
 })
 
+test('sorts visible workout names across home and calendar assignment controls', async ({ page }) => {
+	await page.goto('?mock=1#/')
+	for (const [oldName, newName] of [['Lower Strength', 'Zulu workout'], ['Upper Strength', 'Alpha workout']]) {
+		await page.getByRole('button', { name: `Actions for ${oldName}`, exact: true }).click()
+		await page.getByRole('button', { name: 'Edit', exact: true }).click()
+		await page.getByLabel('Workout Name', { exact: true }).fill(newName)
+		await page.getByRole('button', { name: 'Save', exact: true }).click()
+	}
+	const libraryNames = page.locator('.workout-select > .workout-list .workout-name')
+	await expect(libraryNames).toHaveText(['Alpha workout', 'Zulu workout'])
+	for (const name of ['Alpha workout', 'Zulu workout']) {
+		await page.getByRole('button', { name: `Remove ${name} from favorites`, exact: true }).click()
+	}
+	await page.getByRole('button', { name: 'More…', exact: true }).click()
+	await expect(libraryNames).toHaveText(['Alpha workout', 'Zulu workout'])
+
+	await page.evaluate(() => { window.location.hash = '/calendar' })
+	await page.locator('.calendar-add-btn').first().click()
+	await expect(page.locator('.calendar-picker-item-strength')).toHaveText(['Alpha workout', 'Zulu workout'])
+	await expect(page.locator('.calendar-picker-item-cardio')).toHaveText(['Bike', 'Hike', 'Run'])
+	await page.getByRole('button', { name: 'Plan', exact: true }).click()
+	const firstDay = page.locator('.calendar-push-day-row select').first()
+	await expect(firstDay.locator('optgroup[label="Strength"] option')).toHaveText(['Alpha workout', 'Zulu workout'])
+	await expect(firstDay.locator('optgroup[label="Cardio"] option')).toHaveText(['Bike', 'Hike', 'Run'])
+	await page.getByLabel('Planning mode').selectOption('cycle')
+	await expect(page.getByLabel('Named workout / cycle').locator('option')).toHaveText([
+		'Choose a workout', 'Alpha workout', 'Zulu workout',
+	])
+})
+
+test('legacy blocked flags do not change calendar date colors', async ({ page }) => {
+	await page.clock.install({ time: new Date('2026-11-21T12:00:00-08:00') })
+	await page.goto('?mock=1#/calendar')
+	const blockedDay = page.getByRole('button', { name: /^2026-11-22/ })
+	const ordinaryDay = page.getByRole('button', { name: /^2026-11-23/ })
+	const dateColors = await Promise.all([blockedDay, ordinaryDay].map((day) =>
+		day.locator('.calendar-month-day-number').evaluate((element) => getComputedStyle(element).color)))
+	expect(dateColors[0]).toBe(dateColors[1])
+	await expect(blockedDay).not.toHaveClass(/blocked/)
+	await expect(page.getByRole('button', { name: 'Toggle blocked', exact: true })).toHaveCount(0)
+	await page.locator('.calendar-add-btn').first().click()
+	await expect(page.getByRole('button', { name: 'Blocker', exact: true })).toBeVisible()
+})
+
 test('edit future calendar dates beyond the initial window without losing earlier changes', async ({ page }) => {
 	await page.clock.install({ time: new Date('2026-11-21T12:00:00-08:00') })
 	await page.goto('?mock=1#/calendar')

@@ -28,6 +28,25 @@ describe('buildTodaysPlan', () => {
 			.toEqual(['Dentist', 'Riverside loop', 'Squat Day', 'Rest']);
 	});
 
+	it('sorts each plan group by the rendered name rather than ID or schedule order', () => {
+		const plan = buildTodaysPlan({
+			date: '2026-01-02',
+			workouts: [
+				{ ...workout, id: 'a', name: 'Zulu workout' },
+				{ ...workout, id: 'z', name: 'Alpha workout' },
+			],
+			cardioActivities: [{ id: 'a', name: 'Alpha activity' }, { id: 'z', name: 'Zulu activity' }],
+			workoutSchedule: [
+				{ date: '2026-01-02', workoutId: 'a' },
+				{ date: '2026-01-02', workoutId: 'z' },
+				{ date: '2026-01-02', workoutId: 'cardio:a', label: 'Zulu route' },
+				{ date: '2026-01-02', workoutId: 'cardio:z', label: 'Alpha route' },
+			],
+		});
+		expect(plan.map((item) => item.kind === 'strength' ? item.workout.name : item.name))
+			.toEqual(['Alpha route', 'Zulu route', 'Alpha workout', 'Zulu workout']);
+	});
+
 	it('falls back to the cardio activity name and skips unknown workouts', () => {
 		const plan = buildTodaysPlan({
 			date: '2026-01-02',
@@ -112,6 +131,18 @@ describe('buildTodaysPlan', () => {
 });
 
 describe('WorkoutSelect today plan rendering', () => {
+	it('sorts favorite cards by displayed names rather than generated IDs', () => {
+		const workouts: Workout[] = [
+			{ ...workout, id: 'generated-a', name: 'Zulu', favorite: true },
+			{ ...workout, id: 'generated-z', name: 'Alpha', favorite: true },
+		];
+		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
+			workouts, onSelect: () => undefined,
+		}));
+		expect(markup.indexOf('>Alpha</span>')).toBeLessThan(markup.indexOf('>Zulu</span>'));
+		expect(workouts.map((w) => w.name)).toEqual(['Zulu', 'Alpha']);
+	});
+
 	it.each([{ workouts: [] }, { workouts: [workout] }])('offers a collapsed defaults library with or without user workouts', ({ workouts }) => {
 		const markup = renderToStaticMarkup(createElement(WorkoutSelect, {
 			workouts, defaultPrograms: defaultWorkoutLibrary,

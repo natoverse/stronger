@@ -66,10 +66,10 @@ empty cache or unusable browser storage replaces the application UI.
 ## Application Shell
 
 The production build emits a service worker with a versioned precache manifest.
-Installation fills the replacement cache before activation. Navigation uses a
-cached response immediately and refreshes it in the background; immutable build
-assets are cache-first. Old caches are deleted only after the new cache has
-installed successfully.
+Installation fills the replacement cache before activation. Navigation checks
+for the current online page, falling back to the cached shell when offline or
+after a three-second network timeout; immutable build assets are cache-first.
+Old caches are deleted only after the new cache has installed successfully.
 
 ## Out of Scope
 
@@ -95,3 +95,11 @@ installed successfully.
   labels and tooltips retain the full state text and pending-write count.
 - The status control's outer diameter matches the 20px GitHub logo beside it so
   the offline indicator does not visually dominate the toolbar.
+
+## Iteration: fresh online navigation
+
+- Reloading online revalidates the page instead of returning stale HTML that
+  can keep removed calendar flag styling and old workout ordering visible.
+- Navigation refreshes the cached page before resolving, so the subsequent
+  offline reload uses the latest successfully loaded shell.
+- Open pages are not automatically reloaded or interrupted by deployment.
