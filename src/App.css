@@ -1328,10 +1328,6 @@ body {
 	stroke-width: 3;
 }
 
-.calendar-month-day-blocked .calendar-month-day-number {
-	color: var(--color-danger);
-}
-
 .calendar-month-day-today .calendar-month-day-number {
 	display: inline-flex;
 	align-items: center;
@@ -1765,11 +1761,6 @@ body {
 
 .calendar-flag-active.calendar-flag-alcohol {
 	color: #1565c0;
-	opacity: 1;
-}
-
-.calendar-flag-active.calendar-flag-blocked {
-	color: #ff1744;
 	opacity: 1;
 }
 

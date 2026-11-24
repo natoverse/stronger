@@ -27,6 +27,9 @@ function today(): string {
 }
 
 export function CalendarPush({ workouts, definitions = [], cardioActivities, onUpdateSchedule, onClear }: CalendarPushProps) {
+  const sortedWorkouts = [...workouts].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedCardioActivities = [...cardioActivities].sort((a, b) => a.name.localeCompare(b.name));
+  const sortedDefinitions = [...definitions].sort((a, b) => a.name.localeCompare(b.name));
   // Weekly day → activity mapping (7 entries)
   // '' = no action (skip), '__rest__' = clear workouts, REST_ID = plan a Rest day, otherwise = workout/cardio id
   const [daySlots, setDaySlots] = useState<string[]>(Array(7).fill(''));
@@ -105,7 +108,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
           <select id="push-cycle" className="calendar-push-select" value={cycleId}
             onChange={(event) => setCycleId(event.target.value)}>
             <option value="">Choose a workout</option>
-            {definitions.map((definition) => (
+            {sortedDefinitions.map((definition) => (
               <option key={definition.id} value={definition.id}>{definition.name}</option>
             ))}
           </select>
@@ -141,7 +144,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
                 <option value={REST_ID}>Rest</option>
                 <option value={BLOCKER_ID}>Blocker</option>
                 <optgroup label="Strength">
-                  {workouts.map((w) => (
+                  {sortedWorkouts.map((w) => (
                     <option key={w.id} value={w.id}>
                       {w.name}
                     </option>
@@ -149,7 +152,7 @@ export function CalendarPush({ workouts, definitions = [], cardioActivities, onU
                 </optgroup>
                 {cardioActivities.length > 0 && (
                   <optgroup label="Cardio">
-                    {cardioActivities.map((c) => (
+                    {sortedCardioActivities.map((c) => (
                       <option key={c.id} value={`cardio:${c.id}`}>
                         {c.name}
                       </option>

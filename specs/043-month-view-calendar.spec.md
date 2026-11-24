@@ -162,3 +162,13 @@
 - In-flight calendar reads preserve newer local edits and deletions. Rapid
   edits on the same date compose even before Firestore updates its local cache.
 - Calendar load and mutation failures remain visible and retryable.
+
+## Iteration: hide blocked flag and sort names
+
+- The blocked day flag is no longer shown or editable in the calendar; existing
+  flag data is preserved. The separately scheduled Blocker remains available.
+- Workout and cardio choices in the day picker and weekly planner are sorted
+  alphabetically by name within their groups; the cycle selector is also sorted
+  by name.
+- Scheduled entries in month cells and day cards retain their existing type
+  order, but sort alphabetically by their visible labels within each type.

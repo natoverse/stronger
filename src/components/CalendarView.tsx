@@ -395,8 +395,9 @@ export function scheduledWorkoutRank(workoutId: string): number {
 	return 1;
 }
 
-export function orderScheduledWorkouts(workoutIds: string[]): string[] {
-	return workoutIds.slice().sort((a, b) => scheduledWorkoutRank(a) - scheduledWorkoutRank(b));
+export function orderScheduledWorkouts(workoutIds: string[], displayName: (workoutId: string) => string): string[] {
+	return workoutIds.slice().sort((a, b) =>
+		scheduledWorkoutRank(a) - scheduledWorkoutRank(b) || displayName(a).localeCompare(displayName(b)));
 }
 
 export function getDayLocation(flags?: DayFlags): LocationFlag {
@@ -412,7 +413,6 @@ const DAY_FLAG_OPTIONS: [keyof DayFlags, string, typeof House][] = [
 	['elsewhere', 'Elsewhere', Palmtree],
 	['travel', 'Travel', Plane],
 	['visitors', 'Visitors', Users],
-	['blocked', 'Blocked', Ban],
 ];
 
 /** Detail/edit view for a single past workout session. */
@@ -676,6 +676,8 @@ export function CalendarView({
 			workoutNames.get(workoutId) ?? (workoutId.startsWith('cardio:') ? workoutId.slice('cardio:'.length) : workoutId),
 		[workoutNames],
 	);
+	const sortedWorkouts = useMemo(() => [...workouts].sort((a, b) => a.name.localeCompare(b.name)), [workouts]);
+	const sortedCardioActivities = useMemo(() => [...cardioActivities].sort((a, b) => a.name.localeCompare(b.name)), [cardioActivities]);
 
 	const scheduledTypes = useMemo(() => {
 		const seen = new Set<string>();
@@ -950,9 +952,11 @@ export function CalendarView({
 									const completedWorkoutIds = date
 										? (logByDate.get(date) ?? []).map((session) => session.key.workoutId)
 										: [];
+									const dayLabels = date ? labelsMap.get(date) : undefined;
 									const scheduled = date ? orderScheduledWorkouts(
 										[...new Set([...(scheduleMap.get(date) ?? []), ...completedWorkoutIds])]
 											.filter((workoutId) => selectedWorkoutTypes.has(workoutId)),
+										(workoutId) => dayLabels?.[workoutId] || displayWorkoutName(workoutId),
 									) : [];
 									const completed = new Set(completedWorkoutIds);
 									if (date) {
@@ -964,12 +968,11 @@ export function CalendarView({
 									}
 									const displayed = prioritizeCompletedWorkouts(scheduled, completed);
 									const flags = date ? flagsMap.get(date) : undefined;
-									const dayLabels = date ? labelsMap.get(date) : undefined;
 									const location = date ? getDayLocation(flags) : null;
 									return date ? (
 										<button
 											type="button"
-											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}${flags?.blocked ? ' calendar-month-day-blocked' : ''}`}
+											className={`calendar-month-day${isToday(date) ? ' calendar-month-day-today' : ''}`}
 											key={date}
 											onClick={() => void handleSelectMonthDay(date)}
 											disabled={loadingDateWindow}
@@ -1051,9 +1054,11 @@ export function CalendarView({
 					const today = isToday(dayInfo.date);
 					const weekend = isWeekend(dayInfo.date);
 					const isPast = dayInfo.date < todayStr();
-					const scheduledWorkouts = [...(scheduleEntriesByDate.get(dayInfo.date) ?? [])]
-						.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId));
-					const sessionByEntry = pairScheduledSessions(scheduledWorkouts, allSessions);
+					const entries = scheduleEntriesByDate.get(dayInfo.date) ?? [];
+					const sessionByEntry = pairScheduledSessions(entries, allSessions);
+					const scheduledWorkouts = [...entries].sort((a, b) =>
+						scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId)
+						|| (a.label || displayWorkoutName(a.workoutId)).localeCompare(b.label || displayWorkoutName(b.workoutId)));
 					const pairedSessions = new Set(sessionByEntry.values());
 					const unscheduledSessions = dayInfo.sessions.filter((session) => !pairedSessions.has(session));
 
@@ -1383,7 +1388,7 @@ export function CalendarView({
 										{workouts.length > 0 && (
 											<div className="calendar-picker-divider">Strength</div>
 										)}
-										{workouts.map((w) => (
+										{sortedWorkouts.map((w) => (
 											<button
 												key={w.id}
 												className="calendar-picker-item calendar-picker-item-strength"
@@ -1396,7 +1401,7 @@ export function CalendarView({
 										{cardioActivities.length > 0 && (
 											<>
 												<div className="calendar-picker-divider">Cardio</div>
-												{cardioActivities.map((c) => (
+												{sortedCardioActivities.map((c) => (
 													<button
 														key={c.id}
 														className="calendar-picker-item calendar-picker-item-cardio"

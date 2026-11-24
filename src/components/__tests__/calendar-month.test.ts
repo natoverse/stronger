@@ -35,34 +35,38 @@ describe('CalendarView month schedule', () => {
 		expect(getDayLocation()).toBe('home');
 	});
 
-	it('orders cardio before strength and rest without changing order within each type', () => {
-		expect(orderScheduledWorkouts([
-			'strength-b',
-			'rest',
-			'cardio:run',
-			'strength-a',
-			'cardio:bike',
-		])).toEqual([
+	it('orders each activity type by its visible name without changing the input', () => {
+		const ids = ['strength-b', 'rest', 'cardio:run', 'strength-a', 'cardio:bike', 'blocker'];
+		const names: Record<string, string> = {
+			'strength-b': 'Alpha', 'strength-a': 'Zulu', 'cardio:run': 'Bike', 'cardio:bike': 'Run',
+		};
+		expect(orderScheduledWorkouts(ids, (id) => names[id] ?? id)).toEqual([
+			'blocker',
 			'cardio:run',
 			'cardio:bike',
 			'strength-b',
 			'strength-a',
 			'rest',
 		]);
+		expect(ids).toEqual(['strength-b', 'rest', 'cardio:run', 'strength-a', 'cardio:bike', 'blocker']);
 	});
 
-	it('orders blocker before cardio, strength, and rest', () => {
-		expect(orderScheduledWorkouts([
-			'strength-a',
-			'rest',
-			'cardio:run',
-			'blocker',
-		])).toEqual([
-			'blocker',
-			'cardio:run',
-			'strength-a',
-			'rest',
-		]);
+	it('sorts weekly planner choices by name within their groups', () => {
+		const workouts = [
+			{ id: 'a', name: 'Zulu', exercises: [], favorite: false },
+			{ id: 'z', name: 'Alpha', exercises: [], favorite: false },
+		];
+		const cardioActivities = [{ id: 'a', name: 'Run' }, { id: 'z', name: 'Bike' }];
+		const markup = renderToStaticMarkup(createElement(CalendarPush, {
+			workouts,
+			cardioActivities,
+			onUpdateSchedule: () => undefined,
+			onClear: async () => ({ flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] }),
+		}));
+		expect(markup.indexOf('value="z">Alpha')).toBeLessThan(markup.indexOf('value="a">Zulu'));
+		expect(markup.indexOf('value="cardio:z">Bike')).toBeLessThan(markup.indexOf('value="cardio:a">Run'));
+		expect(workouts[0].name).toBe('Zulu');
+		expect(cardioActivities[0].name).toBe('Run');
 	});
 
 	it('renders up to three color-coded workout tags and day status icons in the current month', () => {
@@ -154,7 +158,8 @@ describe('CalendarView month schedule', () => {
 		expect(markup).toContain('calendar-month-location-travel');
 		expect(markup).toContain('calendar-month-visitors');
 		expect(markup).toContain('aria-label="visitors"');
-		expect(markup).toContain('calendar-month-day-blocked');
+		expect(markup).not.toContain('calendar-month-day-blocked');
+		expect(markup).not.toContain('aria-label="Toggle blocked"');
 		expect(markup.match(/aria-label="(home|elsewhere|travel)"/g)).toHaveLength(visibleDays);
 		expect(markup).not.toContain('calendar-month-flag');
 		expect(markup).not.toContain('calendar-month-flag-alcohol');
@@ -254,5 +259,43 @@ describe('CalendarView month schedule', () => {
 		expect(markup).not.toContain('>Blocker</span>');
 		expect(markup).toContain('lucide-ban');
 		expect(markup).toContain('calendar-label-edit-btn');
+	});
+
+	it('sorts scheduled entries by custom display labels in month and day views', () => {
+		const now = new Date();
+		const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+		const markup = renderToStaticMarkup(createElement(CalendarView, {
+			workouts: [
+				{ id: 'a', name: 'Alpha workout', exercises: [], favorite: false },
+				{ id: 'z', name: 'Zulu workout', exercises: [], favorite: false },
+			],
+			cardioActivities: [{ id: 'run', name: 'Run' }],
+			workoutSchedule: [
+				{ date: today, workoutId: 'a', label: 'Zulu label' },
+				{ date: today, workoutId: 'z', label: 'Alpha label' },
+				{ date: today, workoutId: 'cardio:run' },
+			],
+			dayFlags: [],
+			logRows: [],
+			onAssign: () => undefined,
+			onRemove: () => undefined,
+			onUpdateLabel: () => undefined,
+			onOpenWorkout: () => undefined,
+			onUpdateLogRows: async () => undefined,
+			onDeleteSession: async () => undefined,
+			onBulkSchedule: () => undefined,
+			onUpdateFlags: () => undefined,
+			onSyncCalendar: async () => ({
+				created: 0, updated: 0, deleted: 0, pulledCreations: 0, pulledDateChanges: 0, pulledDeletions: 0, errors: [],
+			}),
+			onClearSchedule: async () => ({ flagsCleared: 0, scheduleCleared: 0, calendarEventsDeleted: 0, errors: [] }),
+		}));
+		const month = markup.slice(markup.indexOf(`aria-label="${today}:`), markup.indexOf(`data-calendar-date="${today}"`));
+		const day = markup.slice(markup.indexOf(`data-calendar-date="${today}"`));
+		for (const section of [month, day]) {
+			expect(section.indexOf('>Run</span>')).toBeLessThan(section.indexOf('>Alpha label</span>'));
+			expect(section.indexOf('>Alpha label</span>')).toBeLessThan(section.indexOf('>Zulu label</span>'));
+			expect(section).toContain('>Zulu label</span>');
+		}
 	});
 });
