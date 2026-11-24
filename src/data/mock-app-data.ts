@@ -245,7 +245,7 @@ export function createMockAppData(anchor = new Date()): MockAppData {
 					travel: true,
 					visitors: false,
 					alcohol: false,
-					blocked: false,
+					blocked: true,
 				},
 			},
 		],

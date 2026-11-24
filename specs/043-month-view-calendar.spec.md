@@ -172,3 +172,5 @@
   by name.
 - Scheduled entries in month cells and day cards retain their existing type
   order, but sort alphabetically by their visible labels within each type.
+- Browser coverage checks both assignment controls against their rendered
+  names, and confirms that saved blocked flags have no date-color effect.

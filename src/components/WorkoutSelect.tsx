@@ -215,8 +215,9 @@ export function buildTodaysPlan({
 		});
 	}
 
-	// Array.prototype.sort is stable, so ties keep their schedule order.
-	return items.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId));
+	const displayName = (item: TodayPlanItem) => item.kind === 'strength' ? item.workout.name : item.name;
+	return items.sort((a, b) => scheduledWorkoutRank(a.workoutId) - scheduledWorkoutRank(b.workoutId)
+		|| displayName(a).localeCompare(displayName(b)));
 }
 
 const PLAN_ITEM_ICONS = {
@@ -268,6 +269,8 @@ export function WorkoutSelect({
 			if (w.favorite) favorites.push(w);
 			else others.push(w);
 		}
+		favorites.sort((a, b) => a.name.localeCompare(b.name));
+		others.sort((a, b) => a.name.localeCompare(b.name));
 		return { favorites, others };
 	}, [workouts]);
 
@@ -419,7 +422,7 @@ export function WorkoutSelect({
 						use TM; your exercise rounding and minimum weights still apply.
 					</p>
 					<div className="workout-list">
-						{defaultPrograms.map((program) => (
+						{[...defaultPrograms].sort((a, b) => a.name.localeCompare(b.name)).map((program) => (
 							<button
 								key={program.id}
 								type="button"
@@ -523,7 +526,7 @@ function CardioSection({ activities, onSave }: { activities: CardioActivity[]; o
 			</button>
 			{open && (
 				<div className="cardio-list">
-					{activities.map((a) => (
+					{[...activities].sort((a, b) => a.name.localeCompare(b.name)).map((a) => (
 						<div key={a.id} className="cardio-item">
 							{editingId === a.id ? (
 								<div className="cardio-edit-row">
