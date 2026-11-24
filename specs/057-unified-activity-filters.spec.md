@@ -28,3 +28,8 @@ Make the Activities page search, activity-type selection, and time range a singl
 - Use the activity cards' units and precision: miles, hours:minutes, and feet. Keep the four metrics readable on narrow screens.
 - Include recorded zeroes in averages. Exclude missing, non-finite, or negative values separately for each metric, rather than treating unknown measurements (especially optional elevation loss) as zero.
 - Show an em dash when no displayed activity has a valid value for a metric, including an empty result set. Show explicit zero values when recorded averages are zero.
+
+## Iteration: Search uses all-time range
+
+- Entering a non-empty Activities search switches its time range to All so older matching activities are included.
+- Keep the Activities range independent from Garmin wellness range state.

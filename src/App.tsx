@@ -110,6 +110,7 @@ function AppContent() {
   );
   const [chartRange, setChartRange] = useState<StravaTimeRange>(String(new Date().getFullYear()));
   const [garminRange, setGarminRange] = useState<StravaTimeRange>('month');
+  const [garminActivitiesRange, setGarminActivitiesRange] = useState<StravaTimeRange>('month');
   const [garminActivityQuery, setGarminActivityQuery] = useState('');
   const [selectedGarminActivityTypes, setSelectedGarminActivityTypes] = useState<Set<string>>(
     () => new Set(getSelectableActivityTypes(mockData?.garminActivities ?? [])),
@@ -2298,7 +2299,7 @@ function AppContent() {
           onOpenSettings={handleOpenSettings}
         />
         <div className="chart-controls-sticky">
-          <DateRangeSelector value={garminRange} onChange={setGarminRange} />
+          <DateRangeSelector value={garminActivitiesRange} onChange={setGarminActivitiesRange} />
           <div className="strava-agg-group">
             {(['day', 'week', 'month'] as StravaAggregation[]).map((agg) => (
               <button
@@ -2317,12 +2318,15 @@ function AppContent() {
             selectedTypes={selectedGarminActivityTypes}
             query={garminActivityQuery}
             onSelectedTypesChange={setSelectedGarminActivityTypes}
-            onQueryChange={setGarminActivityQuery}
+            onQueryChange={(query) => {
+              setGarminActivityQuery(query);
+              if (query.trim()) setGarminActivitiesRange('all');
+            }}
           />
           <ActivitiesView
             activities={garminActivities}
             goals={stravaGoals}
-            range={garminRange}
+            range={garminActivitiesRange}
             aggregation={chartAggregation}
             selectedTypes={selectedGarminActivityTypes}
             query={garminActivityQuery}
@@ -2333,7 +2337,7 @@ function AppContent() {
           />
           <GarminActivitiesListView
             activities={garminActivities}
-            range={garminRange}
+            range={garminActivitiesRange}
             selectedTypes={selectedGarminActivityTypes}
             query={garminActivityQuery}
           />
